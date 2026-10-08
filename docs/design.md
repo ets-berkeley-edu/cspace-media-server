@@ -370,6 +370,9 @@ The design went through several versions in Google Drive before this file:
 - **Placeholders.** One placeholder, or different ones for "taken down" and "not found"?
 - **Admin app sign-in.** CalNet, CollectionSpace credentials, or something else.
 - **CloudFront cache key.** Confirm that signed-URL query parameters are left out of the cache key.
+- **Single-use signed URLs.** Can a signed URL be made to work only once, so that no client can use it twice and,
+  if several clients get the same URL, only the first one to use it gets a response? To discuss (raised October 8,
+  2026).
 - **Sync thresholds.** The share of rows that may change in a night before the Sync stops.
 - **Image validation of existing derivatives.** Whether CollectionSpace's derivatives for very large originals are
   worth caching or should be refused by size.
