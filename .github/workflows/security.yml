@@ -1,0 +1,33 @@
+# Security checks on every pull request and every push to main, whatever changed. Nothing in this file may be
+# limited by paths, paths-ignore or a "documentation only" condition: README and docs files are where a secret or
+# personal data most often leaks. (ci.yml's `dependencies` job is the other always-on check: pip-audit.)
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+# The workflow's token can only read the repository: no job here writes to GitHub.
+permissions:
+  contents: read
+jobs:
+  gitleaks:
+    # Scans every commit reachable from the checkout (for a pull request: main plus all of the PR's commits, so a
+    # secret added in one commit and removed in a later one is still found). --redact keeps any secret found out of
+    # the log, which is public.
+    # Known false positives go in .gitleaksignore, by fingerprint; a change to that file needs a careful review.
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      # From the release's gitleaks_8.30.1_checksums.txt (linux_x64). Change both together.
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Install gitleaks (pinned version, checksum verified)
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: No secrets in the repository's history
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --exit-code 1 .'

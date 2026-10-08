@@ -1,0 +1,132 @@
+name: CI
+on:
+  # Pushes to main only; a PR branch is covered by its pull_request run.
+  push:
+    branches: [main]
+  pull_request:
+# The workflow's token can only read the repository: no job here writes to GitHub.
+permissions:
+  contents: read
+# A pull request that changes only documentation skips `backend`. It is skipped with `if:`, not left out with
+# paths-ignore, so it still reports (as skipped, which counts as passing) and a required check never waits on
+# "Expected". The `dependencies` job and everything in security.yml run on every pull request and every push,
+# whatever changed: README and docs files are where a secret or personal data most often leaks.
+#
+# UNTIL THE FIRST CODE: there is no backend/ yet, so `backend` and `dependencies` each start with a step that reports
+# "nothing to check yet" and skips the rest. The pull request that adds backend/pyproject.toml removes those steps
+# and their `if:` lines, so that a missing file can never again turn into a passing check.
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      # A pull request's checkout is its merge commit with the base branch, whose first parent is the base: the diff
+      # between the two is exactly what merging would change.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with: { fetch-depth: 2, persist-credentials: false }
+      - name: Documentation only?
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          # Pushes to main always run everything.
+          if [ "$EVENT" != pull_request ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # --no-renames: a rename counts as its old path and its new one, so code renamed to .md is a code change.
+          mapfile -t files < <(git diff --name-only --no-renames HEAD^1 HEAD)
+          docs_only=true
+          [ "${#files[@]}" -gt 0 ] || docs_only=false
+          for f in "${files[@]}"; do
+            # Documentation: docs/, any .md file, LICENSE, and issue or pull request templates. Anything else under
+            # .github/ (workflows, dependabot.yml) is checked before the .md rule, so it always runs everything.
+            # A file name git had to quote (newlines, control characters) starts with " and so counts as code.
+            case "$f" in
+              .github/ISSUE_TEMPLATE/* | .github/PULL_REQUEST_TEMPLATE/* | .github/pull_request_template.md) kind=docs ;;
+              .github/*) kind=code ;;
+              docs/* | *.md | LICENSE) kind=docs ;;
+              *) kind=code ;;
+            esac
+            [ "$kind" = docs ] || docs_only=false
+            # Indented, so a file name can't be read as a workflow command (those start at the beginning of a line).
+            printf '  %-4s  %s\n' "$kind" "$f"
+          done
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "Documentation only: $docs_only"
+
+  backend:
+    needs: changes
+    # Runs unless `changes` said "documentation only". If `changes` itself fails, its output is empty and this runs:
+    # a broken classifier must never turn into a skipped (passing) required check.
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Is there code yet? (remove with the first code pull request)
+        id: code
+        working-directory: .
+        run: |
+          if [ -f backend/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No backend/pyproject.toml yet: no tests, lint or type check to run."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.code.outputs.present == 'true'
+        with: { python-version-file: .python-version }
+      # Only the pinned versions, checked against their hashes (requirements files: see pin-requirements.sh).
+      - if: steps.code.outputs.present == 'true'
+        run: pip install --require-hashes -r requirements-dev.txt
+      - if: steps.code.outputs.present == 'true'
+        run: pip install --no-deps --no-build-isolation -e .
+      - name: Lint
+        if: steps.code.outputs.present == 'true'
+        run: ruff check .
+      - name: Type check
+        if: steps.code.outputs.present == 'true'
+        run: mypy
+      - name: Tests
+        if: steps.code.outputs.present == 'true'
+        run: pytest -q
+  dependencies:
+    # Security: always runs (pip-audit, and the hash-pinned requirements files in step). No `needs`, no `if`.
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Is there code yet? (remove with the first code pull request)
+        id: code
+        working-directory: .
+        run: |
+          if [ -f backend/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No backend/pyproject.toml yet: no Python packages to audit."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.code.outputs.present == 'true'
+        with: { python-version-file: .python-version }
+      - if: steps.code.outputs.present == 'true'
+        run: pip install --require-hashes -r requirements-tools.txt
+      - name: The requirements files match pyproject.toml and requirements-tools.in
+        if: steps.code.outputs.present == 'true'
+        run: |
+          ./pin-requirements.sh
+          git diff --exit-code -- . || {
+            echo "::error::The requirements files are out of step. Run backend/pin-requirements.sh and commit the result."
+            exit 1
+          }
+      - name: No known vulnerabilities in the pinned Python packages
+        if: steps.code.outputs.present == 'true'
+        run: |
+          # The tools are audited apart from the app, as in the BMU: pip-audit refuses a package pinned twice.
+          pip-audit --require-hashes --disable-pip -r requirements.txt -r requirements-dev.txt
+          pip-audit --require-hashes --disable-pip -r requirements-tools.txt
