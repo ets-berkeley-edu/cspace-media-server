@@ -7,8 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Serena, the new image server for UC Berkeley's CollectionSpace museums (BAMPFA, the Botanical Garden, Cinefiles,
 PAHMA, UCJEPS), replacing the legacy `imageserver` Django webapp in `cspace-webapps-common`. It serves the images
 the museums' public Glimmer portals show, deciding what may be served from the nightly Solr ETL's output. Nothing is
-built yet: the design document comes first (`docs/design.md`, in its own pull request). `README.md` describes what it
-will do.
+built yet; the design is `docs/design.md`. `README.md` describes what it will do.
 
 ## Rules that are not negotiable
 
@@ -54,7 +53,7 @@ While working, run only the test files a change affects. Run the full suite once
 
 ## Documents kept in step with the code
 
-- **Design document** — `docs/design.md` (to come). Change it in the same pull request as the code it describes.
+- **Design document** — `docs/design.md`. Change it in the same pull request as the code it describes.
 - **Testing checklist** — `docs/testing-checklist.md`: the checks to do by hand. A pull request that needs checks
   by hand adds a section to it.
 - **README.md** — what Serena does and the repository's layout.
