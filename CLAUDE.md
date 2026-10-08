@@ -59,6 +59,21 @@ While working, run only the test files a change affects. Run the full suite once
 - **README.md** — what Serena does and the repository's layout.
 - Update the documents once per pull request, not alongside each change.
 
+### Keeping the design document current
+
+- `docs/design.md` on `main` is the only current design. The earlier Google Drive proposals are history. If notes,
+  memory or a conversation disagree with it, the document wins: point out the conflict instead of choosing.
+- Before any work, `git fetch` and read the current `docs/design.md`. If the owner edited it, build on his version;
+  never overwrite it.
+- A decision made before there is code goes in on a docs-only branch once it's settled; small ones can be grouped.
+  A code change updates the document in the same pull request.
+- A settled open question moves out of "Open questions and findings" into the section it belongs in, with the date it
+  was decided (for example "decided October 8, 2026").
+- Before a pull request that includes code, check that the document matches the code, and list any differences in
+  the pull request description.
+- The repository is public: live security problems, hostnames, account details and anything else sensitive stay out
+  of the document.
+
 ## License
 
 Copyright ©2026 The Regents of the University of California. `LICENSE` is the same license as UC Berkeley RTL's
