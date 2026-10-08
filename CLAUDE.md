@@ -7,8 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Serena, the new image server for UC Berkeley's CollectionSpace museums (BAMPFA, the Botanical Garden, Cinefiles,
 PAHMA, UCJEPS), replacing the legacy `imageserver` Django webapp in `cspace-webapps-common`. It serves the images
 the museums' public Glimmer portals show, deciding what may be served from the nightly Solr ETL's output. Nothing is
-built yet: the design document comes first (`docs/design.md`, in its own pull request). `README.md` describes what it
-will do.
+built yet; the design is `docs/design.md`. `README.md` describes what it will do.
 
 ## Rules that are not negotiable
 
@@ -54,11 +53,26 @@ While working, run only the test files a change affects. Run the full suite once
 
 ## Documents kept in step with the code
 
-- **Design document** — `docs/design.md` (to come). Change it in the same pull request as the code it describes.
+- **Design document** — `docs/design.md`. Change it in the same pull request as the code it describes.
 - **Testing checklist** — `docs/testing-checklist.md`: the checks to do by hand. A pull request that needs checks
   by hand adds a section to it.
 - **README.md** — what Serena does and the repository's layout.
 - Update the documents once per pull request, not alongside each change.
+
+### Keeping the design document current
+
+- `docs/design.md` on `main` is the only current design. The earlier Google Drive proposals are history. If notes,
+  memory or a conversation disagree with it, the document wins: point out the conflict instead of choosing.
+- Before any work, `git fetch` and read the current `docs/design.md`. If the owner edited it, build on his version;
+  never overwrite it.
+- A decision made before there is code goes in on a docs-only branch once it's settled; small ones can be grouped.
+  A code change updates the document in the same pull request.
+- A settled open question moves out of "Open questions and findings" into the section it belongs in, with the date it
+  was decided (for example "decided October 8, 2026").
+- Before a pull request that includes code, check that the document matches the code, and list any differences in
+  the pull request description.
+- The repository is public: live security problems, hostnames, account details and anything else sensitive stay out
+  of the document.
 
 ## License
 
