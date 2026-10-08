@@ -1,0 +1,16 @@
+.env
+*.env
+!.env.example
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.DS_Store
+# Terraform: downloaded providers, state and saved plans (state lives in S3, never in the repository)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

@@ -4,7 +4,8 @@ Serena is the new image server for UC Berkeley's CollectionSpace museums: BAMPFA
 PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
-Nothing is built yet. The design document will be `docs/design.md`.
+Nothing is built yet. The design document will be `docs/design.md`; until then, `CLAUDE.md` holds the rules the
+design must keep.
 
 ## What it will do
 
@@ -15,6 +16,16 @@ Nothing is built yet. The design document will be `docs/design.md`.
 - Fetch an image from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
 - Add a watermark for the museums that want one.
+
+## Layout
+
+| Path | What |
+| --- | --- |
+| `docs/testing-checklist.md` | Checks to do by hand |
+| `docs/design.md` | The design document (to come) |
+| `backend/` | The Python 3.11 app, its tests and its pinned requirements (to come) |
+| `deploy/` | The AWS deployment: Terraform and the production image (to come) |
+| `.github/workflows/` | CI (`ci.yml`), the weekly dependency audit (`audit.yml`) and the secret scan (`security.yml`) |
 
 ## License
 
