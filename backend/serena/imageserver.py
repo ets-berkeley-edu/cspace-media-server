@@ -10,7 +10,7 @@ from importlib import resources
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, Response
 
-from . import paths
+from . import paths, servability
 from .museum import Museum
 from .unserved import Reason, Recorder, report
 
@@ -49,8 +49,11 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
         parsed = paths.parse(museum, rest)
         if isinstance(parsed, paths.Refused):
             return _unavailable(request, tenant, parsed.reason)
-        # Servability (design: The steps, step 2) comes with the nightly records: until then nothing is servable.
-        return _unavailable(request, tenant, Reason.NOT_SERVABLE)
+        decision = servability.decide(museum, parsed, request.app.state.store)
+        if decision.reason is not None:
+            return _unavailable(request, tenant, decision.reason)
+        # Servable. Finding or fetching the file and redirecting to it arrive with the cache (pull request 7).
+        return _unavailable(request, tenant, Reason.SERVING_NOT_BUILT)
     except Exception:
         log.exception("internal error", extra={"museum": tenant, "path": paths.log_path(request.url.path)})
         return _unavailable(request, tenant, Reason.INTERNAL_ERROR)

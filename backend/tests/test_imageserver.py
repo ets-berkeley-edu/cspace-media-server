@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from serena import logs, paths
 from serena.app import create_app
 from serena.config import Settings
+from serena.store import Store
 from serena.unserved import MemoryRecorder, Reason
 
 CSID = "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b"  # synthetic
@@ -19,8 +20,8 @@ def recorder() -> MemoryRecorder:
 
 
 @pytest.fixture
-def client(settings: Settings, recorder: MemoryRecorder) -> TestClient:
-    return TestClient(create_app(settings, recorder), follow_redirects=False)
+def client(settings: Settings, store: Store, recorder: MemoryRecorder) -> TestClient:
+    return TestClient(create_app(settings, store, recorder), follow_redirects=False)
 
 
 def _last(recorder: MemoryRecorder) -> tuple[str | None, Reason, str]:
@@ -37,16 +38,15 @@ def _last(recorder: MemoryRecorder) -> tuple[str | None, Reason, str]:
         f"/cinefiles/imageserver/blobs/{CSID}/content/linked_pdf:{EMAIL}",
         f"/cinefiles/imageserver/blobs/{CSID}/content/inline_pdf:{EMAIL}",
         f"/cinefiles/imageserver/blobs/{CSID}/content/linked_pdf:",
-        f"/bampfa/imageserver/blobs/{CSID}/content",  # the original: decided by the Blob's kind, with servability
     ],
 )
-def test_well_formed_requests_are_not_servable_yet(client: TestClient, recorder: MemoryRecorder, path: str) -> None:
+def test_well_formed_requests_not_listed(client: TestClient, recorder: MemoryRecorder, path: str) -> None:
     response = client.get(path)
     assert response.status_code == 302
     tenant = path.split("/")[1]
     assert response.headers["location"] == f"/unavailable/{tenant}.svg"
     assert response.headers["cache-control"] == "no-store"
-    assert _last(recorder)[:2] == (tenant, Reason.NOT_SERVABLE)
+    assert _last(recorder)[:2] == (tenant, Reason.NOT_LISTED)
 
 
 @pytest.mark.parametrize(
@@ -91,13 +91,13 @@ def test_head_is_answered_like_get(client: TestClient) -> None:
 def test_the_query_string_is_ignored(client: TestClient, recorder: MemoryRecorder) -> None:
     response = client.get(f"/pahma/imageserver/blobs/{CSID}/content?x=1")
     assert response.status_code == 302
-    assert _last(recorder)[1] == Reason.NOT_SERVABLE
+    assert _last(recorder)[1] == Reason.NOT_LISTED
 
 
-def test_the_unavailable_base_url_in_aws(recorder: MemoryRecorder) -> None:
+def test_the_unavailable_base_url_in_aws(store: Store, recorder: MemoryRecorder) -> None:
     settings = Settings(tenants={"pahma": "https://pahma.cspace.test"}, unavailable_base_url="https://cdn.test/u/",
                         _env_file=None)
-    client = TestClient(create_app(settings, recorder), follow_redirects=False)
+    client = TestClient(create_app(settings, store, recorder), follow_redirects=False)
     response = client.get(f"/pahma/imageserver/blobs/{CSID}/content")
     assert response.headers["location"] == "https://cdn.test/u/pahma/unavailable.svg"
 
@@ -133,12 +133,12 @@ def test_an_internal_error_fails_closed(
     assert "boom" not in response.text
 
 
-def test_a_failure_to_record_doesnt_change_the_answer(settings: Settings) -> None:
+def test_a_failure_to_record_doesnt_change_the_answer(settings: Settings, store: Store) -> None:
     class Broken:
         def record(self, entry: object) -> None:
             raise RuntimeError("table unavailable")
 
-    client = TestClient(create_app(settings, Broken()), follow_redirects=False)
+    client = TestClient(create_app(settings, store, Broken()), follow_redirects=False)
     response = client.get(f"/pahma/imageserver/blobs/{CSID}/content")
     assert response.status_code == 302
 

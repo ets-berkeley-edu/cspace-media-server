@@ -251,8 +251,10 @@ sequenceDiagram
 1. **Parse.** Check the path's shape, the tenant, the CSID's format and the derivative name. If any fails: the
    unavailable image.
 2. **Servability.** Read the servability record for `<tenant>#<blob CSID>`; it must exist, its kind must be one Serena
-   serves, and its access must be public. Then read the takedown record for its Media CSID; an active takedown means
-   not servable. If not servable: the unavailable image.
+   serves, and its access must be public. The request must fit the kind: a derivative only of an image or card, and
+   an image's or card's original file only where the museum serves originals. Then read the takedown record for its
+   Media CSID, strongly consistent, so a takedown takes effect on the next request; an active takedown means not
+   servable. If not servable: the unavailable image, with the reason (see Requests Serena doesn't serve).
 3. **Cache index.** Look up `<tenant>#<blob CSID>#<derivative>`, or for a watermarking museum the watermarked entry for
    the museum's current watermark settings. On a hit, go to step 6. If only the watermarked copy is missing and the
    unwatermarked copy is stored, make the watermarked copy from it (see Watermarks), without steps 4 and 5.
@@ -296,11 +298,28 @@ Serena never returns an error page or a stack trace to the browser.
 ### Requests Serena doesn't serve
 
 Every request answered with the unavailable image is logged with its reason, and counted (decided October 9, 2026).
-The reasons are: unknown museum, unknown path, bad CSID, derivative not served, not servable (no servability record,
-a kind Serena doesn't serve, restricted access, a takedown, or the original file where the museum doesn't serve it),
-no derivatives for this kind (a derivative of a 3D or PDF Blob), and internal error; the fetch on a miss adds its own (see Image fetch). They are counted
-per museum, reason and path, in short time buckets (for example 5 minutes), with a few recent samples per reason, all
-expiring after 30 days. The records hold no IP addresses and no email addresses, and the PDF link suffix is removed.
+Each case has its own reason, so the admin app can say why a file isn't served:
+
+| Reason | When |
+| --- | --- |
+| `unknown_museum` | A museum Serena doesn't serve |
+| `unknown_path` | Not one of the shapes in URLs |
+| `bad_csid` | The CSID isn't in CollectionSpace's format |
+| `derivative_not_served` | A derivative not on the museum's list |
+| `not_listed` | The Blob isn't in the last applied Blob-to-Media file |
+| `kind_not_served` | Audio or video, for now |
+| `restricted` | Access restricted (Cinefiles' PDFs other than code 4) |
+| `no_derivatives_for_kind` | A derivative of a 3D or PDF Blob |
+| `original_not_served` | An image's or card's original file, where the museum doesn't serve originals |
+| `taken_down` | The Media record has an active takedown in Serena |
+| `restricted_image_not_uploaded` | The museum's restricted-image Blob, before an admin uploads its files |
+| `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
+
+The fetch on a miss adds its own reasons (see Image fetch). Each task counts them in memory and writes the totals to
+the Unserved requests table every minute: one item per museum, 5-minute bucket and reason, with its count and the
+five most recent paths, expiring after 30 days (decided October 9, 2026). A task that stops abruptly loses at most a
+minute of counts. Paths aren't counted one by one, because there is no bound on how many different paths a crawler
+asks for. The records hold no IP addresses and no email addresses, and the PDF link suffix is removed.
 The admin app shows them as a page of recent unserved requests, and a list of files Serena knows it can't serve, and
 why (for example restricted PDFs, files that failed their checks, fetch errors).
 
@@ -333,19 +352,23 @@ for "taken down" than for "not found" is an open question.
 
 ### Records
 
-| Table | Key | Fields |
-| --- | --- | --- |
-| Servability | `<tenant>#<blob CSID>` | Media CSID, kind, access; indexed by Media CSID |
-| Takedowns | `<tenant>#<media CSID>` | state (taken down, or unlocked), who, when, why |
-| Runs | `<tenant>#<run ID>` | night, state, file name and hash, row counts, preflight result, timestamps, reasons |
-| Settings | `<tenant>` | watchdog deadline, ETL poll interval and step timeout, size limits; an admin's value overrides the starting value in configuration |
-| Alerts | `<tenant>#<time>` | kind, message, acknowledged by and when |
-| Unserved requests | `<tenant>#<bucket>` | counts by reason and path, samples; expire after 30 days |
-| Cache index | see Storage | |
-| Audit log | `<time>#<admin>` | every admin action |
+One DynamoDB table each, named `<prefix>-<name>` (the prefix per environment), on-demand. Keys are a partition key and,
+where the table is read as a list, a sort key:
+
+| Table | Partition key | Sort key | Fields |
+| --- | --- | --- | --- |
+| Servability | `<tenant>#<blob CSID>` | | Media CSID, kind, access; indexed by `<tenant>#<media CSID>` |
+| Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
+| Runs | `<tenant>` | run ID | night, state, file name and hash, row counts, preflight result, timestamps, reasons |
+| Settings | `<tenant>` | | an admin's values for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; each task reads them again after a minute |
+| Alerts | `<tenant>` | time | kind, message, acknowledged by and when |
+| Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
+| Cache index | see Storage | | |
+| Audit log | `<tenant>` | `<time>#<admin>` | every admin action |
 
 A Blob is servable when its servability record exists, its kind is served, its access is public, and its Media CSID
-has no active takedown. The table holds the Blobs in the last applied night's file.
+has no active takedown. The table holds the Blobs in the last applied night's file. The museum's restricted-image Blob
+must be listed there too, like any other (decided October 9, 2026).
 
 ### The Blob-to-Media file
 

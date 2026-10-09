@@ -1,29 +1,55 @@
 """The web app: built by create_app(), served by uvicorn (serena.main:app)."""
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import imageserver, logs, museum
+from . import imageserver, logs, museum, tables
 from .config import Settings, get_settings
-from .unserved import MemoryRecorder, Recorder
+from .museum_settings import MuseumSettings
+from .store import Store, dynamodb_client
+from .unserved import DynamoRecorder, Recorder
 
 log = logging.getLogger("serena.app")
 
 
-def create_app(settings: Settings | None = None, unserved: Recorder | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, store: Store | None = None,
+               unserved: Recorder | None = None) -> FastAPI:
+    """The app. Tests pass their own store (moto) and recorder; otherwise both use DynamoDB."""
     settings = settings or get_settings()
     logs.configure(settings.log_level)
     museums = museum.load_all(settings.tenants)
+    if store is None:
+        client = dynamodb_client(settings)
+        if settings.create_tables:
+            created = tables.create_all(client, settings.table_prefix)
+            if created:
+                log.info("created tables", extra={"tables": created})
+        store = Store(client, settings.table_prefix)
+    recorder = unserved or DynamoRecorder(store.client, store.table(tables.UNSERVED))
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        flusher = asyncio.create_task(_flush_unserved(recorder, settings.unserved_flush_seconds))
+        try:
+            yield
+        finally:
+            flusher.cancel()
+            await asyncio.to_thread(_flush_now, recorder)
 
     # No interactive API documentation here: the ETL API's description is generated into docs/api/ (design: The ETL
     # API), and the admin app has its own button for it.
-    app = FastAPI(title="Serena", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Serena", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.settings = settings
     app.state.museums = museums
-    app.state.unserved = unserved or MemoryRecorder()
+    app.state.store = store
+    app.state.museum_settings = MuseumSettings(store, settings.settings_cache_seconds)
+    app.state.unserved = recorder
 
     @app.get("/health", include_in_schema=False)
     def health() -> PlainTextResponse:
@@ -34,3 +60,18 @@ def create_app(settings: Settings | None = None, unserved: Recorder | None = Non
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})
     return app
+
+
+def _flush_now(recorder: Recorder) -> None:
+    flush = getattr(recorder, "flush", None)
+    if flush is not None:
+        try:
+            flush()
+        except Exception:
+            log.exception("could not write unserved-request counts")
+
+
+async def _flush_unserved(recorder: Recorder, every_seconds: float) -> None:
+    while True:
+        await asyncio.sleep(every_seconds)
+        await asyncio.to_thread(_flush_now, recorder)
