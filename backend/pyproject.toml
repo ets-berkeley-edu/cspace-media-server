@@ -31,7 +31,7 @@ build-backend = "setuptools.build_meta"
 include = ["serena*"]
 
 [tool.setuptools.package-data]
-serena = ["museums/*.yaml"]
+serena = ["museums/*.yaml", "static/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

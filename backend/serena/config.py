@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Which environment this is (for example "QA"), shown in the admin app; empty: none.
     env_label: str = ""
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Where the unavailable images are: <base>/<tenant>/unavailable.svg, served by CloudFront without a signature.
+    # Empty (local development, tests): Serena serves them itself at /unavailable/<tenant>.svg.
+    unavailable_base_url: str = ""
     aws_region: str = "us-west-2"
 
     @field_validator("tenants")
@@ -28,6 +31,13 @@ class Settings(BaseSettings):
             if not url.startswith(("https://", "http://")):
                 raise ValueError(f"the CollectionSpace server for {tenant} must be an http(s) URL")
         return {tenant: url.rstrip("/") for tenant, url in tenants.items()}
+
+    @field_validator("unavailable_base_url")
+    @classmethod
+    def _base_url(cls, url: str) -> str:
+        if url and not url.startswith("https://"):
+            raise ValueError("unavailable_base_url must be an https URL")
+        return url.rstrip("/")
 
 
 @lru_cache

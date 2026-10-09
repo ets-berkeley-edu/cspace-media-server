@@ -4,7 +4,8 @@ The code never hands a password, token, signed URL or visitor's email address to
 field is the backstop for the mistake nobody has made yet. Tracebacks are scrubbed too.
 
 Uvicorn's access log is turned off: it would log each request's raw path, and Cinefiles' PDF links carry the visitor's
-email address after linked_pdf: or inline_pdf:. Serena logs requests itself, with the suffix removed."""
+email address after linked_pdf: or inline_pdf:. Serena logs requests itself, with the suffix removed. httpx's own
+request logging is turned down to warnings for the same reason."""
 from __future__ import annotations
 
 import json
@@ -92,5 +93,8 @@ def configure(level: str = "INFO") -> None:
         logger.handlers = []
         logger.propagate = True
     logging.getLogger("uvicorn.access").disabled = True
+    # httpx and httpcore log every request's URL at INFO and DEBUG: Serena logs its own calls, without them.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     if logging.lastResort is not None:
         logging.lastResort.setFormatter(JsonFormatter())

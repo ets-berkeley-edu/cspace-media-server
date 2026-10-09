@@ -74,5 +74,6 @@ def test_configure_turns_off_the_access_log_and_sends_uvicorn_through_json() -> 
     for name in ("uvicorn", "uvicorn.error"):
         assert logging.getLogger(name).handlers == []
         assert logging.getLogger(name).propagate
+    assert logging.getLogger("httpx").level == logging.WARNING
     (handler,) = logging.getLogger().handlers
     assert isinstance(handler.formatter, logs.JsonFormatter)
