@@ -36,8 +36,10 @@ at a time, following the plan; the design is `docs/design.md`. `README.md` descr
 - **No personal data in logs.** The PDF link suffix carries a visitor's email address: strip it before anything is
   logged or recorded, and never forward it. Never log the signature on a signed PDF link, and don't log or record the
   reader's `uid` unless the design says so.
-- **Restricted PDFs only with a valid signed link** from Glimmer (see "Restricted PDFs" in the design). Fail closed:
-  a missing, malformed, expired or unmatched signature gets the unavailable image.
+- **The ETL decides what is restricted, per museum.** Never put a museum's rule (an access code, a sensitivity flag)
+  in Serena: it acts only on the nightly file's listing and `access` value.
+- **Restricted files only with a valid signed link,** for a kind the museum allows signed access to (see "Restricted
+  files" in the design). Fail closed: a missing, malformed, expired or unmatched signature gets the unavailable image.
 - **Don't describe security weaknesses of the legacy imageserver in this repository** (it's public). Describe Serena's
   own rules instead.
 - **Never commit to `main`.** Work on a feature branch and open a pull request. Before committing to a branch,
