@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Serena, the new media server for UC Berkeley's CollectionSpace museums (BAMPFA, the Botanical Garden, Cinefiles,
 PAHMA, UCJEPS), replacing the legacy `imageserver` Django webapp in `cspace-webapps-common`. It serves the images and
 documents that the museums' public portals (Glimmer, and any other client of the public Solr cores) link to, deciding
-what may be served from the nightly Solr ETL's output, and has an admin web app. Nothing is built yet; the design is
-`docs/design.md`. `README.md` describes what it will do.
+what may be served from the nightly Solr ETL's output, and has an admin web app. It is being built one pull request
+at a time, following the plan; the design is `docs/design.md`. `README.md` describes what it does.
 
 ## Rules that are not negotiable
 
@@ -44,24 +44,39 @@ what may be served from the nightly Solr ETL's output, and has an admin web app.
 
 ## Commands
 
-Nothing to run yet. When the code arrives it follows the BMU (`ets-berkeley-edu/cspace-bulk-media-uploader`): Python
-3.11 (`.python-version`) in `backend/`, installed only from hash-pinned requirements files generated from
-`backend/pyproject.toml` by `backend/pin-requirements.sh` and never edited by hand. The admin web app (Vue,
-TypeScript, Vuetify) goes in `admin/` (the BMU's `frontend/` is the model), with npm dependencies pinned by its lockfile
-and installed with `npm ci`; CI will add its lint, type check, unit tests and `npm audit`.
+The code follows the BMU (`ets-berkeley-edu/cspace-bulk-media-uploader`): Python 3.11 (`.python-version`) in
+`backend/`, the package `serena/` with its tests in `tests/`. Install only from the hash-pinned requirements files,
+which `backend/pin-requirements.sh` generates from `backend/pyproject.toml` (and `requirements-tools.in`); never edit
+them by hand.
 
-CI (`.github/workflows/ci.yml`) will run, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`
+```sh
+cd backend
+pip install --require-hashes -r requirements-dev.txt
+pip install --no-deps --no-build-isolation -e .
+ruff check . && mypy && pytest -q          # what CI runs
+pytest -q tests/test_logs.py               # one test file
+SERENA_TENANTS='{"pahma": "http://localhost:8180"}' uvicorn serena.main:app --no-access-log
+```
+
+To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with the tools installed
+(`pip install --require-hashes -r requirements-tools.txt`). Each museum's configuration is
+`backend/serena/museums/<tenant>.yaml`.
+
+The admin web app (Vue, TypeScript, Vuetify) will go in `admin/` (the BMU's `frontend/` is the model), with npm
+dependencies pinned by its lockfile and installed with `npm ci`; CI will add its lint, type check, unit tests and
+`npm audit`.
+
+CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`
 job), and a `dependencies` job: the requirements files are in step and `pip-audit` finds no known vulnerabilities.
-Until `backend/pyproject.toml` exists, both jobs report "nothing to check yet" and pass; the pull request that adds
-it removes those guard steps (in `audit.yml` too). `.github/workflows/audit.yml` repeats the audit every Monday.
+`.github/workflows/audit.yml` repeats the audit every Monday.
 
 A pull request that changes only documentation (`docs/`, `*.md`, `LICENSE`, issue/PR templates) skips `backend`;
 the `changes` job decides, and a skipped job counts as passing. `dependencies` and
 `.github/workflows/security.yml` (`gitleaks` over the whole history) run on every pull request and push, whatever
 changed: never add a path filter or a docs-only condition to them. A gitleaks match that isn't a secret goes in
 `.gitleaksignore`, by fingerprint, with a comment saying why. Actions are pinned by commit SHA with the version in a
-comment; Dependabot (`.github/dependabot.yml`, weekly, grouped) moves both. Its pip and Docker entries are
-commented out until there are files for them to read.
+comment; Dependabot (`.github/dependabot.yml`, weekly, grouped) moves both. Its Docker entry is commented
+out until there is a Dockerfile.
 
 While working, run only the test files a change affects. Run the full suite once before each commit.
 

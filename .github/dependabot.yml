@@ -1,9 +1,8 @@
 # Weekly update pull requests (Mondays), grouped so there are few of them. Each one runs CI like any other PR.
 #
-# UNTIL THE FIRST CODE: only GitHub Actions has anything to update. The pull request that adds backend/ uncomments
-# the pip entry, and the one that adds the first Dockerfile uncomments the docker entry (with its directories).
+# The docker entry is commented out until the pull request that adds the first Dockerfile (with its directories).
 #
-# Python: the requirements files will be pip-compile output (backend/pin-requirements.sh, as in the BMU); Dependabot
+# Python: the requirements files are pip-compile output (backend/pin-requirements.sh, as in the BMU); Dependabot
 # reruns pip-compile with the options in each file's header. Base images: only patch updates are offered, so Python
 # stays on .python-version's 3.11; moving it is a deliberate change.
 version: 2
@@ -15,12 +14,12 @@ updates:
       actions:
         patterns: ["*"]
 
-  # - package-ecosystem: pip
-  #   directory: /backend
-  #   schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
-  #   groups:
-  #     python:
-  #       patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /backend
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    groups:
+      python:
+        patterns: ["*"]
 
   # - package-ecosystem: docker
   #   directories: [/backend, /deploy]

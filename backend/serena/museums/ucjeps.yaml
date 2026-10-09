@@ -1,0 +1,20 @@
+# UCJEPS: Serena's configuration (design: URLs, Restricted-image Blob, Records). The settings are starting values;
+# an admin's value in the admin app overrides them.
+key: ucjeps
+name: UCJEPS
+# Derivatives served, from what the portal can request today (design: URLs; to revisit from the access logs)
+derivatives: [Thumbnail, Small, Medium, FullHD, OriginalJpeg]
+# Whether the original file (…/blobs/<CSID>/content) is served for images and catalog cards
+original: true
+# No restricted-image Blob: the ETL leaves non-public images out of the public core
+restricted_image_blob_csid: null
+settings:
+  watchdog_deadline: "08:00"          # Pacific time: the night's run must be applied or abandoned by then
+  etl_poll_interval_seconds: 15       # returned to the ETL in every run response
+  etl_step_timeout_seconds: 1800
+  change_threshold_percent: 5         # preflight fails if added + removed + changed rows exceed this share
+  size_limit_mb:                      # largest file fetched, by kind (starting values, to confirm for production)
+    image: 500
+    card: 500
+    3D: 1024
+    pdf: 200

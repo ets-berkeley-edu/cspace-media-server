@@ -96,6 +96,7 @@ What Serena improves:
 | The ETL runs nightly, starting at 03:01 for all museums in parallel. It empties each core and reloads it; if a load fails it reloads the previous night's data. Its output is immutable. | New files appear, and CollectionSpace-driven takedowns take effect, within about 24 hours. |
 | CollectionSpace is hosted at Lyrasis. Designs assume only HTTP Basic authentication (newer CollectionSpace versions also have OAuth2, not checked for the hosted version). | Serena uses one read-only service account per museum, password in Secrets Manager. |
 | CollectionSpace generates the image derivatives (Thumbnail, Small, Medium, FullHD, OriginalJpeg) itself. | Serena never resizes. It makes only watermarked copies. |
+| Most CSIDs are UUIDs, but CollectionSpace doesn't require it: a record created by an import keeps the CSID it was given. PAHMA's restricted-image Blob has the shorter CSID `59a733dd-d641-4e1a-8552`. | Serena doesn't require a CSID to be a UUID (see URLs). |
 
 Museum users' tolerances: up to 24 hours for new content to appear; 1 to 2 hours for a takedown. The 24-hour
 takedown window through CollectionSpace is accepted for now (October 8, 2026); the admin app's takedown covers the
@@ -176,6 +177,11 @@ Serena answers the paths its clients build today, under each museum's prefix:
 Anything else under `imageserver/` gets the unavailable image. Serena accepts only these shapes, with a CSID in
 CollectionSpace's format and a derivative name from the museum's list.
 
+A CSID is 1 to 64 letters, digits and hyphens (decided October 9, 2026). That covers the usual UUIDs and the CSIDs
+that aren't UUIDs, such as PAHMA's restricted-image Blob. The same rule applies to the CSIDs in the Blob-to-Media file
+and in each museum's configuration. It keeps malformed paths out; whether a Blob is served is decided only by the
+nightly file.
+
 Each museum's list of derivatives (decided October 9, 2026):
 
 | Museum | Derivatives served | Original file (`/content`) |
@@ -201,7 +207,9 @@ Each Blob in the Blob-to-Media file has a kind (decided October 9, 2026):
 | audio, video | Not yet (see Open questions) | n/a | n/a | No |
 
 A request for a derivative of a 3D or PDF Blob gets the unavailable image (reason "no derivatives for this kind").
-Size limits are per museum, set in the admin app.
+Size limits are per museum, set in the admin app. The starting values are 500 MB for images and cards, 1 GB for 3D
+files and 200 MB for PDFs, for every museum (decided October 9, 2026); the values for production are to be confirmed
+(see Open questions).
 
 A restricted PDF (access restricted) gets the unavailable image for now. Signed-in access for Glimmer users is a
 later step on Glimmer's timeline: short-lived links that Glimmer signs for its signed-in users, which Serena would
@@ -448,7 +456,9 @@ per environment to the team's mailing list. The subscription requires authentica
 
 ### Restricted-image Blob
 
-Each museum's restricted-image Blob CSID is in its configuration. An admin uploads its files in the admin app, one per
+Each museum's restricted-image Blob CSID is in its configuration. Only PAHMA's ETL uses one, for the "Image
+restricted" picture it lists in place of a non-public image; the other museums' ETL leaves non-public images out of
+the public core, so they have none, and Serena raises no alert for it (decided October 9, 2026). An admin uploads its files in the admin app, one per
 derivative the museum serves (and the original, where the museum allows it); Serena stores them in S3 and indexes
 them, and watermarks them for a watermarking museum. Before the upload, requests for it get the unavailable image and
 raise an alert. (Decided October 9, 2026.)
@@ -539,7 +549,15 @@ reachable only from campus networks.
 - **Logs and metrics.** Structured JSON logs to CloudWatch and embedded metrics: requests, hits, misses, unserved
   requests by reason, fetch time, upstream errors by cause, duplicate fetches, run outcomes. No passwords, tokens,
   signed URLs or personal data in logs: the PDF link suffix is removed before anything is logged. The load balancer's
-  access logs stay off, and WAF logging leaves the suffix out.
+  access logs stay off, and WAF logging leaves the suffix out. Uvicorn's access log is off too, since it would log the
+  raw path; Serena logs requests itself. As a backstop, every log field and traceback is scrubbed of credentials,
+  tokens, signed-URL signatures, the PDF link suffix and email addresses.
+- **Configuration.** Settings come from environment variables prefixed `SERENA_` (never a secret: those are in
+  Secrets Manager). Each museum has a YAML file in `backend/serena/museums/`: its derivatives, whether it serves the
+  original file, its restricted-image Blob CSID, and the starting values of its settings (watchdog deadline, the
+  ETL's poll interval and step timeout, the change threshold and size limits), which an admin's values override.
+- **Health check.** `GET /health` answers `ok` with `Cache-Control: no-store`, for the load balancer, and says
+  nothing else about Serena.
 - **Local development.** Docker Compose with a CollectionSpace simulator and the admin app's development server, as in
   the BMU, and a fake ETL that runs whole nights through the API.
 
@@ -598,6 +616,8 @@ The F numbers follow the team's list of follow-ups.
   whether clients other than Glimmer request them. The nightly file lists them either way.
 - **URL forms in use.** Confirm from the access logs which URL shapes and derivative names are requested, and which
   clients use the legacy imageserver. This sets each museum's exact list of sizes.
+- **Size limits.** Confirm with the museums and the DevOps team the size limits for production (starting values in
+  Kinds).
 - **Image validation.** Which further checks to run on a fetched file (dimensions, a refusal size for very large
   originals).
 - **Sensitive derivatives.** Check that the ETL treats every derivative of a sensitive image as sensitive, and that
