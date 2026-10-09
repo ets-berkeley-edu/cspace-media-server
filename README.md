@@ -1,6 +1,6 @@
 # Serena: the new CollectionSpace media server
 
-Serena is the new image server for UC Berkeley's CollectionSpace museums: BAMPFA, the Botanical Garden, Cinefiles,
+Serena is the new media server for UC Berkeley's CollectionSpace museums: BAMPFA, the Botanical Garden, Cinefiles,
 PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
@@ -8,21 +8,27 @@ Nothing is built yet. The design is `docs/design.md`.
 
 ## What it will do
 
-- Serve the images that the museums' public portals ([Glimmer](https://github.com/cspace-deployment/glimmer)) show,
-  at the same addresses the legacy imageserver uses, so the portals keep working unchanged.
-- Serve only what the nightly Solr ETL ([cspace-solr-ucb](https://github.com/cspace-deployment/cspace-solr-ucb)) has
-  made public, unless the image has been taken down in Serena. Anything else gets the museum's placeholder image.
-- Fetch an image from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
+- Serve the images, 3D files and documents that the museums' public portals
+  ([Glimmer](https://github.com/cspace-deployment/glimmer)) and other clients link to, at the same addresses the
+  legacy imageserver uses, so they keep working unchanged.
+- Serve only what the nightly Solr ETL ([cspace-solr-ucb](https://github.com/cspace-deployment/cspace-solr-ucb))
+  lists as public, unless it has been taken down in Serena. Anything else gets the museum's unavailable image.
+- Take in each night's ETL output through its ETL API, in step with the public Solr core's load.
+- Fetch a file from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
 - Add a watermark for the museums that want one.
+- Give admins a web app to follow nightly runs and alerts, see why a file is or isn't served, take files down and
+  change settings.
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `docs/testing-checklist.md` | Checks to do by hand |
 | `docs/design.md` | The design document |
+| `docs/testing-checklist.md` | Checks to do by hand |
+| `docs/api/` | The ETL API's description, generated from the code (to come) |
 | `backend/` | The Python 3.11 app, its tests and its pinned requirements (to come) |
+| `admin/` | The admin web app: Vue, TypeScript and Vuetify (to come) |
 | `deploy/` | The AWS deployment: Terraform and the production image (to come) |
 | `.github/workflows/` | CI (`ci.yml`), the weekly dependency audit (`audit.yml`) and the secret scan (`security.yml`) |
 
