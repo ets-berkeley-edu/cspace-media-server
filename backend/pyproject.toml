@@ -52,3 +52,8 @@ python_version = "3.11"
 files = ["serena", "tests"]
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# No type information for these: their values are Any, so code using them keeps its own annotations.
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "moto"]
+ignore_missing_imports = true

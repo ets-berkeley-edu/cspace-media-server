@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     # Empty (local development, tests): Serena serves them itself at /unavailable/<tenant>.svg.
     unavailable_base_url: str = ""
     aws_region: str = "us-west-2"
+    # DynamoDB: every table is <table_prefix>-<name> (serena/tables.py); Terraform sets the prefix per environment.
+    table_prefix: str = "serena-local"
+    dynamodb_endpoint: str | None = None  # local development only (DynamoDB Local)
+    create_tables: bool = False  # local development only: create missing tables at start-up
+    # How long each task keeps a museum's settings before reading the Settings table again
+    settings_cache_seconds: float = 60.0
+    # How often each task writes its counts of unserved requests to their table
+    unserved_flush_seconds: float = 60.0
 
     @field_validator("tenants")
     @classmethod
