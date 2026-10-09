@@ -3,4 +3,4 @@
 pip-tools
 pip-audit
 # click 8.5 makes pip-tools 7.6.1 write a wrong "--no-index" into the requirements files' headers.
-click<8.5
+click<8.6
