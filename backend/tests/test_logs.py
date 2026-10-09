@@ -26,13 +26,16 @@ EMAIL = "visitor" + "@" + "example.org"
         ("https://cdn.test/objects/ab?Expires=1&Signature=Zm9v~&Key-Pair-Id=K123",
          "https://cdn.test/objects/ab?Expires=1&Signature=[removed]&Key-Pair-Id=[removed]"),
         (f"from {EMAIL} today", "from [removed] today"),
+        ("/cinefiles/imageserver/blobs/abc/content/linked_pdf:?exp=1791590400&uid=12345&kid=k1&sig=pZqh6CO0MnUTOb6m",
+         "/cinefiles/imageserver/blobs/abc/content/linked_pdf:[removed]?exp=1791590400&uid=[removed]&kid=k1"
+         "&sig=[removed]"),
     ],
 )
 def test_scrub(text: str, expected: str) -> None:
     assert logs.scrub(text) == expected
 
 
-@pytest.mark.parametrize("text", ["basic checks passed", "Basic Authentication", "fetched 3 tokens of work",
+@pytest.mark.parametrize("text", ["basic checks passed", "Basic Authentication", "fetched 3 tokens of work", "guid=abc",
                                   "blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/derivatives/Medium/content"])
 def test_ordinary_text_is_left_alone(text: str) -> None:
     assert logs.scrub(text) == text
