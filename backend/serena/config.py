@@ -6,7 +6,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     # DynamoDB: every table is <table_prefix>-<name> (serena/tables.py); Terraform sets the prefix per environment.
     table_prefix: str = "serena-local"
     dynamodb_endpoint: str | None = None  # local development only (DynamoDB Local)
-    create_tables: bool = False  # local development only: create missing tables at start-up
+    # Local development only: create missing tables at start-up. Allowed only with dynamodb_endpoint, so it can never
+    # create tables in AWS (Terraform does that there).
+    create_tables: bool = False
     # How long each task keeps a museum's settings before reading the Settings table again
     settings_cache_seconds: float = 60.0
     # How often each task writes its counts of unserved requests to their table
@@ -46,6 +48,12 @@ class Settings(BaseSettings):
         if url and not url.startswith("https://"):
             raise ValueError("unavailable_base_url must be an https URL")
         return url.rstrip("/")
+
+    @model_validator(mode="after")
+    def _tables_only_locally(self) -> Settings:
+        if self.create_tables and not self.dynamodb_endpoint:
+            raise ValueError("create_tables is for local development: set dynamodb_endpoint (DynamoDB Local) too")
+        return self
 
 
 @lru_cache

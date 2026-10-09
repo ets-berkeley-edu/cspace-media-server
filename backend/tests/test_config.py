@@ -19,3 +19,10 @@ def test_defaults() -> None:
 def test_a_collectionspace_server_must_be_a_url() -> None:
     with pytest.raises(ValidationError, match="http"):
         Settings(tenants={"pahma": "pahma.cspace.test"}, _env_file=None)
+
+
+def test_tables_are_created_only_against_a_local_dynamodb() -> None:
+    with pytest.raises(ValidationError, match="local development"):
+        Settings(create_tables=True, _env_file=None)
+    settings = Settings(create_tables=True, dynamodb_endpoint="http://localhost:8000", _env_file=None)
+    assert settings.create_tables

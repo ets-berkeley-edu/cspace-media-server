@@ -92,7 +92,7 @@ What Serena improves:
 | Replacing a Media record's image always creates a new Blob record. The old Blob is left orphaned; CollectionSpace doesn't delete it. | A Blob CSID is never reused for different content. |
 | The Media service serves a Media record's current file: `media/<csid>/blob/content` and `media/<csid>/blob/derivatives/<name>/content`. It also returns soft-deleted Media records and their files. | Serena fetches through the Media service, after checking the record isn't deleted. |
 | Publication (`approvedforweb` / `postToPublic`) and sensitivity (for PAHMA, the related Object's status) live on the Media and Object records, not on the Blob. | Serena doesn't evaluate them. The ETL does, per museum, in `cspace-solr-ucb`. |
-| The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. Images that aren't public appear as the museum's restricted-image Blob. Cinefiles documents carry an access code; only code 4 ("World") is public. | The Blob-to-Media file mirrors these fields, with a kind and an access value per Blob. |
+| The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its restricted-image Blob; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The Blob-to-Media file mirrors these fields, with a kind and an access value per Blob. |
 | The ETL runs nightly, starting at 03:01 for all museums in parallel. It empties each core and reloads it; if a load fails it reloads the previous night's data. Its output is immutable. | New files appear, and CollectionSpace-driven takedowns take effect, within about 24 hours. |
 | CollectionSpace is hosted at Lyrasis. Designs assume only HTTP Basic authentication (newer CollectionSpace versions also have OAuth2, not checked for the hosted version). | Serena uses one read-only service account per museum, password in Secrets Manager. |
 | CollectionSpace generates the image derivatives (Thumbnail, Small, Medium, FullHD, OriginalJpeg) itself. | Serena never resizes. It makes only watermarked copies. |
@@ -110,7 +110,8 @@ Goals:
 - Serve only what the ETL lists as public and Serena hasn't taken down.
 - Make a repeated request cheap: CollectionSpace is normally asked for a given file only once, ever.
 - Watermark for any museum that wants it, now or later, at no per-request cost.
-- Scale horizontally; keep all state outside the app's tasks.
+- Scale horizontally; keep all state outside the app's tasks, apart from short-lived caches and counts that a task
+  can lose without harm (a museum's settings for a minute, unserved-request counts until the next write).
 - Show what's happening, to the team and to museum admins: requests, cache hits and misses, files not served and why,
   fetch times and errors, nightly runs.
 
@@ -186,7 +187,7 @@ nightly file.
 
 Each museum's list of derivatives (decided October 9, 2026):
 
-| Museum | Derivatives served | Original file (`/content`) |
+| Museum | Derivatives served | Original file of images and cards (`/content`) |
 | --- | --- | --- |
 | BAMPFA | Thumbnail, Medium | No |
 | Botanical Garden | Thumbnail, Medium, OriginalJpeg | No |
@@ -194,7 +195,8 @@ Each museum's list of derivatives (decided October 9, 2026):
 | PAHMA | Thumbnail, Small, Medium, FullHD, OriginalJpeg | Yes |
 | UCJEPS | Thumbnail, Small, Medium, FullHD, OriginalJpeg | Yes |
 
-The lists match what each museum's portal can request today. Each museum's exact list is to be revisited once
+3D files and PDFs are served as their original file at every museum, whatever this table says (see Kinds). The lists
+match what each museum's portal can request today. Each museum's exact list is to be revisited once
 the access logs show which sizes are requested (see Open questions).
 
 ### Kinds
@@ -317,7 +319,8 @@ Each case has its own reason, so the admin app can say why a file isn't served:
 
 The fetch on a miss adds its own reasons (see Image fetch). Each task counts them in memory and writes the totals to
 the Unserved requests table every minute: one item per museum, 5-minute bucket and reason, with its count and the
-five most recent paths, expiring after 30 days (decided October 9, 2026). A task that stops abruptly loses at most a
+five most recent paths, expiring after 30 days (decided October 9, 2026). A request under a museum Serena doesn't
+serve is counted under `default`. A task that stops abruptly loses at most a
 minute of counts. Paths aren't counted one by one, because there is no bound on how many different paths a crawler
 asks for. The records hold no IP addresses and no email addresses, and the PDF link suffix is removed.
 The admin app shows them as a page of recent unserved requests, and a list of files Serena knows it can't serve, and
@@ -344,8 +347,10 @@ Each museum has its unavailable image (today `404.svg`, the same file for every 
 CloudFront serves without a signature: `<base URL>/<tenant>/unavailable.svg`, where the base URL is a setting
 (`SERENA_UNAVAILABLE_BASE_URL`). A museum Serena doesn't serve gets `<base URL>/default/unavailable.svg`. Without a
 base URL (local development and tests), Serena serves the file itself at `/unavailable/<tenant>.svg`, as an SVG that
-can run and load nothing. (Decided October 9, 2026.) It is distinct from the restricted-image Blob, which is a real Blob in the
-public core that Serena serves like any other (see Servability). Whether museums want a different unavailable image
+can run and load nothing. (Decided October 9, 2026.)
+
+The unavailable image is distinct from the restricted-image Blob, which is a real Blob in the public core that Serena
+serves like any other (see Servability). Whether museums want a different unavailable image
 for "taken down" than for "not found" is an open question.
 
 ## Servability
@@ -360,7 +365,7 @@ where the table is read as a list, a sort key:
 | Servability | `<tenant>#<blob CSID>` | | Media CSID, kind, access; indexed by `<tenant>#<media CSID>` |
 | Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
 | Runs | `<tenant>` | run ID | night, state, file name and hash, row counts, preflight result, timestamps, reasons |
-| Settings | `<tenant>` | | an admin's values for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; each task reads them again after a minute |
+| Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | time | kind, message, acknowledged by and when |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
 | Cache index | see Storage | | |
@@ -488,11 +493,13 @@ per environment to the team's mailing list. The subscription requires authentica
 ### Restricted-image Blob
 
 Each museum's restricted-image Blob CSID is in its configuration. Only PAHMA's ETL uses one, for the "Image
-restricted" picture it lists in place of a non-public image; the other museums' ETL leaves non-public images out of
-the public core, so they have none, and Serena raises no alert for it (decided October 9, 2026). An admin uploads its files in the admin app, one per
-derivative the museum serves (and the original, where the museum allows it); Serena stores them in S3 and indexes
-them, and watermarks them for a watermarking museum. Before the upload, requests for it get the unavailable image and
-raise an alert. (Decided October 9, 2026.)
+restricted" picture it lists in place of a non-public image. The other museums' ETL leaves non-public images out of
+the public core, so they have none, and Serena raises no alert about it (decided October 9, 2026).
+
+An admin uploads its files in the admin app, one per derivative the museum serves (and the original, where the museum
+allows it); Serena stores them in S3 and indexes them, and watermarks them for a watermarking museum. Before the
+upload, requests for it get the unavailable image (reason `restricted_image_not_uploaded`) and raise an alert.
+(Decided October 9, 2026.)
 
 ## Image fetch
 
@@ -573,10 +580,12 @@ reachable only from campus networks.
 - **Routing.** The legacy imageserver's paths on each museum's webapps host are routed to Serena's ALB, one museum at
   a time. The ALB accepts `/etl/` only from the ETL server and `/admin` only from campus networks.
 - **Infrastructure as code.** Terraform, in `deploy/`, with state in S3. No secrets in Terraform files or state.
-- **Least privilege.** The app's task role can read the servability, takedown and settings tables, read and write the
-  cache index, runs, alerts, unserved-request counts and audit log, read and put objects (reading is needed to make
-  watermarked copies), use the KMS key and read its own secrets. The worker's role can write servability, runs and
-  alerts, read and put the applied files in S3, and publish to the SNS topic. Neither can delete S3 objects.
+- **Least privilege.** The app's task role can read the servability table; read and write the takedown and settings
+  tables (the admin app's takedowns and settings are served by the app), the cache index, runs, alerts,
+  unserved-request counts and audit log; read and put objects (reading is needed to make watermarked copies) and the
+  uploaded Blob-to-Media files; use the KMS key; and read its own secrets. The worker's role can read and write
+  servability (deleting rows included, for an apply), runs and alerts, read the settings, read and put the applied
+  files in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
 - **Logs and metrics.** Structured JSON logs to CloudWatch and embedded metrics: requests, hits, misses, unserved
   requests by reason, fetch time, upstream errors by cause, duplicate fetches, run outcomes. No passwords, tokens,
   signed URLs or personal data in logs: the PDF link suffix is removed before anything is logged. The load balancer's

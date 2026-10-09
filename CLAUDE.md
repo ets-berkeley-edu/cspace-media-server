@@ -55,8 +55,12 @@ pip install --require-hashes -r requirements-dev.txt
 pip install --no-deps --no-build-isolation -e .
 ruff check . && mypy && pytest -q          # what CI runs
 pytest -q tests/test_logs.py               # one test file
-SERENA_TENANTS='{"pahma": "http://localhost:8180"}' uvicorn serena.main:app --no-access-log
 ```
+
+To run the app locally before Docker Compose exists (pull request 10), point it at DynamoDB Local, never at AWS:
+`SERENA_TENANTS='{"pahma": "http://localhost:8180"}' SERENA_DYNAMODB_ENDPOINT=http://localhost:8000
+SERENA_CREATE_TABLES=true uvicorn serena.main:app --no-access-log`. Serena refuses to create tables without a
+DynamoDB endpoint.
 
 To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with the tools installed
 (`pip install --require-hashes -r requirements-tools.txt`). Each museum's configuration is
