@@ -4,27 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Serena, the new image server for UC Berkeley's CollectionSpace museums (BAMPFA, the Botanical Garden, Cinefiles,
-PAHMA, UCJEPS), replacing the legacy `imageserver` Django webapp in `cspace-webapps-common`. It serves the images
-the museums' public Glimmer portals show, deciding what may be served from the nightly Solr ETL's output. Nothing is
-built yet; the design is `docs/design.md`. `README.md` describes what it will do.
+Serena, the new media server for UC Berkeley's CollectionSpace museums (BAMPFA, the Botanical Garden, Cinefiles,
+PAHMA, UCJEPS), replacing the legacy `imageserver` Django webapp in `cspace-webapps-common`. It serves the images and
+documents that the museums' public portals (Glimmer, and any other client of the public Solr cores) link to, deciding
+what may be served from the nightly Solr ETL's output, and has an admin web app. Nothing is built yet; the design is
+`docs/design.md`. `README.md` describes what it will do.
 
 ## Rules that are not negotiable
 
 - **Serena never reads CollectionSpace's Postgres.** Only the nightly Solr ETL
   (`cspace-deployment/cspace-solr-ucb`) does. Serena uses the CollectionSpace API, with a read-only service account
   per museum: HTTP Basic, its password a secret in AWS Secrets Manager, never stored anywhere else and never logged.
-- **The ETL's nightly output is the first source of what may be served.** A Blob CSID is servable only if it appears
-  in the museum's public Solr core (`blob_ss`, `card_ss`, the primary image field, and the audio, video and 3D CSID
-  fields) and has no active takedown in Serena. Takedowns are the only override. Serena never changes the ETL's
-  output.
-- **Serena keeps serving the legacy URLs the Glimmer portals use**
-  (`…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content`). Anything Serena won't serve gets the
-  museum's placeholder image.
-- **Never serve an orphaned Blob.** On a cache miss, GET the Media record and confirm its `blobcsid` still matches
-  the Blob asked for. The Media CSID comes from the ETL (the change in Jira CSW-1027).
-- **Cached images are never deleted.** A takedown stops serving them; it doesn't remove them.
+  Every call to CollectionSpace goes through the Media service, by Media CSID.
+- **The ETL's nightly output is the first source of what may be served.** Each night the ETL hands Serena, through
+  Serena's ETL API, a Blob-to-Media file listing every Blob in the museum's public Solr core (`blob_ss`, `card_ss`,
+  the primary image field, the audio, video and 3D CSID fields, and `pdf_ss`) with its Media CSID, kind and access. A
+  Blob CSID is servable only if that file lists it as public, its kind is one Serena serves, and its Media record has
+  no active takedown in Serena. Takedowns are the only override. Serena never changes the ETL's output, and never
+  reads Solr.
+- **Serena depends on the public core, not on Glimmer.** Glimmer is one client of the public core; assume there are
+  others. Changes on Glimmer's side follow Glimmer's own timeline.
+- **Serena keeps serving the legacy URLs its clients use**
+  (`…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content`, `…/blobs/<blob CSID>/content`, and
+  Cinefiles' PDF links with a `linked_pdf:` or `inline_pdf:` suffix). Anything Serena won't serve gets the museum's
+  unavailable image (not to be confused with the restricted-image Blob, a real Blob that Serena serves).
+- **The light check on a cache miss.** GET the Media record (its Media CSID comes from the ETL's file) and fetch only
+  if it exists and isn't soft-deleted; then fetch through the Media service, which returns the record's current file.
+  Never compare the record's `blobCsid` with the Blob asked for.
+- **Cached files are never deleted.** A takedown stops serving them; it doesn't remove them.
 - **Never read `.env` files, and never put a login, token, key or personal data in the repo, a test or a chat.**
+- **No personal data in logs.** The PDF link suffix carries a visitor's email address: strip it before anything is
+  logged or recorded, and never forward it.
+- **Don't describe security weaknesses of the legacy imageserver in this repository** (it's public). Describe Serena's
+  own rules instead.
 - **Never commit to `main`.** Work on a feature branch and open a pull request. Before committing to a branch,
   `git fetch` and check whether it was already pushed or merged; never amend or rebase a pushed branch.
 - The repository owner runs `git push`, `gh pr create` and every AWS command himself: give him the exact commands
@@ -34,7 +46,9 @@ built yet; the design is `docs/design.md`. `README.md` describes what it will do
 
 Nothing to run yet. When the code arrives it follows the BMU (`ets-berkeley-edu/cspace-bulk-media-uploader`): Python
 3.11 (`.python-version`) in `backend/`, installed only from hash-pinned requirements files generated from
-`backend/pyproject.toml` by `backend/pin-requirements.sh` and never edited by hand.
+`backend/pyproject.toml` by `backend/pin-requirements.sh` and never edited by hand. The admin web app (Vue,
+TypeScript, Vuetify) goes in `admin/` (the BMU's `frontend/` is the model), with npm dependencies pinned by its lockfile
+and installed with `npm ci`; CI will add its lint, type check, unit tests and `npm audit`.
 
 CI (`.github/workflows/ci.yml`) will run, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`
 job), and a `dependencies` job: the requirements files are in step and `pip-audit` finds no known vulnerabilities.
@@ -54,6 +68,8 @@ While working, run only the test files a change affects. Run the full suite once
 ## Documents kept in step with the code
 
 - **Design document** — `docs/design.md`. Change it in the same pull request as the code it describes.
+- **API documentation** — `docs/api/` (from pull request 4): the OpenAPI description generated from the code, which CI
+  checks is current.
 - **Testing checklist** — `docs/testing-checklist.md`: the checks to do by hand. A pull request that needs checks
   by hand adds a section to it.
 - **README.md** — what Serena does and the repository's layout.

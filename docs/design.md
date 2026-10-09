@@ -7,34 +7,61 @@ Richard Millet · started October 8, 2026 · for later changes see this file's h
 
 ## Summary
 
-Serena serves the images that the UC Berkeley museums' public Glimmer portals show, at the URLs the legacy
+Serena serves the images and documents that the UC Berkeley museums' public portals show, at the URLs the legacy
 `imageserver` uses today. It decides what it may serve from the nightly Solr ETL's output, keeps its own private copy
-of every image it has served, and hands browsers short-lived signed links to that copy.
+of every file it has served, and hands browsers short-lived signed links to that copy.
 
-It runs as an AWS service: a Flask app on ECS Fargate behind a load balancer, a nightly Servability Sync, DynamoDB
-for its records, private S3 buckets for the images and CloudFront for delivery.
+It runs as an AWS service: a FastAPI app on ECS Fargate behind a load balancer, a worker that takes in each night's
+ETL output, an admin web app, DynamoDB for its records, private S3 buckets for the files and CloudFront for delivery.
 
 Key decisions:
 
-- **Same URLs, keyed by Blob CSID.** Glimmer keeps linking to
-  `…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content`; nothing in Glimmer changes.
-- **The ETL decides what is public.** A Blob CSID is servable only if it appears in last night's public Solr core
-  and its Media record has no active takedown in Serena. Takedowns are the only override. Serena never changes the
-  ETL's output and never reads CollectionSpace's Postgres.
+- **Same URLs, keyed by Blob CSID.** Glimmer and any other client keep requesting
+  `…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content` and `…/blobs/<blob CSID>/content`; nothing
+  in Glimmer changes. A URL keyed by Media CSID is added for clients that want it.
+- **The ETL decides what is public.** Each night the ETL hands Serena a Blob-to-Media file listing every Blob in the
+  public core, with its Media CSID, kind and access. Serena serves a Blob only if that file lists it as public, in a
+  kind Serena serves, and its Media record has no takedown in Serena. Serena never reads Solr or CollectionSpace's
+  Postgres.
+- **The ETL and Serena move together.** The ETL drives each night through Serena's ETL API: a night succeeds only
+  when both the public core and Serena have taken it in. If Serena can't be reached, the public core is loaded
+  anyway and Serena catches up.
 - **Checked on every request.** Every request, cache hit or miss, goes through the servability check.
-- **Never serve an orphaned Blob.** On a cache miss, Serena GETs the Media record through the CollectionSpace API
-  and fetches the image only if the record's `blobcsid` still matches. The Media CSID comes from the ETL (Jira
-  CSW-1027).
-- **Fill on demand, keep forever.** The first request for an image fetches it from CollectionSpace with a read-only
+- **All calls to CollectionSpace go through the Media service.** On a cache miss Serena checks that the Media
+  record exists and isn't deleted (the light check), then fetches the Media record's current file. It never compares
+  Blob CSIDs.
+- **Fill on demand, keep forever.** The first request for a file fetches it from CollectionSpace with a read-only
   service account and stores it in Serena's own private, KMS-encrypted S3 bucket, keyed by its content hash. Nothing
   is pre-warmed, and nothing cached is ever deleted: a takedown stops serving it.
 - **Signed links.** Serena answers a servable request with a 302 redirect to a CloudFront signed URL, issued in
-  15-minute windows and valid for 15 to 30 minutes. Anything it won't serve gets a 302 to the museum's placeholder
+  15-minute windows and valid for 15 to 30 minutes. Anything it won't serve gets a 302 to the museum's unavailable
   image, never an error.
 - **Watermarks are made once.** For a museum that watermarks, Serena makes the watermarked copy the first time it's
-  needed, stores it like any other image, and never serves an unwatermarked copy of a size it watermarks.
-- **Takedowns within 24 hours.** A takedown in CollectionSpace reaches Serena with the next ETL run. Faster paths (a
-  manual takedown in a Serena admin app, CollectionSpace Listeners, an ETL-side poller) are optional and come later.
+  needed, stores it like any other file, and never serves an unwatermarked copy of a size it watermarks.
+- **An admin web app from the start.** Museum and team admins see runs, alerts and why a file is or isn't served;
+  they take files down, change settings and recover from failed nights.
+- **No personal data in logs.**
+
+## Serena and its clients
+
+Three things are easy to blur, and this design keeps them apart:
+
+| Part | What it is | Reads | Produces |
+| --- | --- | --- | --- |
+| The ETL (`cspace-solr-ucb`) | A nightly job per museum | CollectionSpace's Postgres | The public Solr core, and the Blob-to-Media file for Serena |
+| The public core | Data | n/a | What every client of the core sees |
+| Glimmer, and other clients | Applications | The public core, live | Requests to Serena's URLs |
+| Serena | The media server | The Blob-to-Media file (never Solr) | Images and documents |
+
+Glimmer is the client we know; others may read the public cores, and this design assumes they do. Serena depends
+only on the public core, through the Blob-to-Media file, never on Glimmer. Changes on Glimmer's side (new URL
+shapes, a move to Media CSIDs) follow Glimmer's own timeline.
+
+Two rules follow (decided October 9, 2026):
+
+- **Each night:** the public core and Serena's records describe the same ETL run, except on a "partial" night (see
+  The nightly sequence).
+- **Each release:** Serena serves every URL shape and kind its clients build.
 
 ## Background: the legacy imageserver
 
@@ -42,124 +69,143 @@ The legacy `imageserver` is a Django view in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common) (`imageserver/views.py`),
 deployed per museum from [cspace-webapps-ucb](https://github.com/cspace-deployment/cspace-webapps-ucb).
 
-- **Flow.** It fetches the requested image from the museum's CollectionSpace with one shared service account (HTTP
-  Basic, password in a `.cfg` file on the server), and returns the bytes. Every request goes to CollectionSpace: there
-  is no caching anywhere.
-- **Sizes.** For anonymous visitors, a per-museum list (`derivatives_served`) limits which sizes may be fetched.
-  A size not on the list gets a small "[not authorized]" HTML block, not the placeholder. Signed-in Django users can
-  fetch any size.
+- **Flow.** It fetches the requested file from the museum's CollectionSpace with a service account and returns the
+  bytes. Every request goes to CollectionSpace: there is no caching anywhere.
+- **Sizes.** A per-museum setting (`derivatives_served`) names the sizes it serves.
 - **Watermarks.** A museum can turn on watermarking (today only the Botanical Garden does). The watermark is
   composited with ImageMagick on every request.
-- **Failures.** Any error, of any kind, returns the museum's "image unavailable" placeholder (`404.svg`).
+- **Failures.** Any error returns the museum's "image unavailable" picture (`404.svg`).
 
-Problems this design fixes:
+What Serena improves:
 
-- **Speed and cost.** No caching, a new connection and login per request, whole images buffered in memory, and
-  watermarks recomputed on every request. Crawlers walking the catalog make every request a slow trip to
-  CollectionSpace.
-- **Takedowns.** Serena checks every request against the ETL's public core and its own takedowns, so it can stop
-  serving an image.
-- **Secrets.** A plaintext service-account password on each server; Serena keeps it in AWS Secrets Manager.
-- **Failures you can't see.** One bare `except:` hides timeouts, bad IDs and outages alike; Serena logs and counts
-  each cause.
+- **Speed and cost.** No caching, a new connection and login per request, whole files held in memory, and watermarks
+  recomputed on every request. Crawlers walking the catalog make every request a slow trip to CollectionSpace.
+  Serena fetches a file once and serves it from S3 through CloudFront.
+- **Failures you can see.** Serena logs and counts each cause of a file not being served, and shows them in its admin
+  app.
 
 ## CollectionSpace and ETL facts this design depends on
 
 | Fact | Consequence for Serena |
 | --- | --- |
-| A Media record links to at most one Blob through its `blobcsid` field. A Blob has no field pointing back. | Serena needs the ETL to tell it each Blob's Media CSID (CSW-1027). |
-| Replacing a Media record's image always creates a new Blob record. The old Blob is left orphaned; CollectionSpace doesn't delete it. | A Blob CSID is never reused for different content, so a cached image never goes stale. An orphaned Blob must not be served. |
-| Publication (`approvedforweb` / `postToPublic`) and sensitivity (for PAHMA, the related Object's status) live on the Media and Object records, not on the Blob. | Serena doesn't evaluate them itself. The ETL already does, per museum, in `cspace-solr-ucb`. |
-| The public Solr core lists only public Blob CSIDs, in `blob_ss`, `card_ss`, the primary image field, and the audio, video and 3D CSID fields. Non-public images are replaced by the museum's placeholder Blob. | The public core is Serena's list of what may be served. |
-| The ETL runs nightly and its output is immutable. The team won't run it more often. | New images appear within 24 hours; takedowns through CollectionSpace take effect within 24 hours. |
+| A Media record links to at most one Blob through its `blobCsid` field. A Blob has no field pointing back. | Serena needs the ETL to tell it each Blob's Media CSID (Jira CSW-1027). |
+| Replacing a Media record's image always creates a new Blob record. The old Blob is left orphaned; CollectionSpace doesn't delete it. | A Blob CSID is never reused for different content. |
+| The Media service serves a Media record's current file: `media/<csid>/blob/content` and `media/<csid>/blob/derivatives/<name>/content`. It also returns soft-deleted Media records and their files. | Serena fetches through the Media service, after checking the record isn't deleted. |
+| Publication (`approvedforweb` / `postToPublic`) and sensitivity (for PAHMA, the related Object's status) live on the Media and Object records, not on the Blob. | Serena doesn't evaluate them. The ETL does, per museum, in `cspace-solr-ucb`. |
+| The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. Images that aren't public appear as the museum's restricted-image Blob. Cinefiles documents carry an access code; only code 4 ("World") is public. | The Blob-to-Media file mirrors these fields, with a kind and an access value per Blob. |
+| The ETL runs nightly, starting at 03:01 for all museums in parallel. It empties each core and reloads it; if a load fails it reloads the previous night's data. Its output is immutable. | New files appear, and CollectionSpace-driven takedowns take effect, within about 24 hours. |
 | CollectionSpace is hosted at Lyrasis. Designs assume only HTTP Basic authentication (newer CollectionSpace versions also have OAuth2, not checked for the hosted version). | Serena uses one read-only service account per museum, password in Secrets Manager. |
-| CollectionSpace generates the derivatives (Thumbnail, Medium, OriginalJpeg and so on) itself. | Serena never resizes. It makes only watermarked copies. |
+| CollectionSpace generates the image derivatives (Thumbnail, Small, Medium, FullHD, OriginalJpeg) itself. | Serena never resizes. It makes only watermarked copies. |
 
 Museum users' tolerances: up to 24 hours for new content to appear; 1 to 2 hours for a takedown. The 24-hour
-takedown window through CollectionSpace is accepted for now (October 8, 2026); the admin app's manual takedown covers
-the urgent case once it exists.
+takedown window through CollectionSpace is accepted for now (October 8, 2026); the admin app's takedown covers the
+urgent case.
 
 ## Goals, non-goals and constraints
 
 Goals:
 
-- Serve every image URL Glimmer builds today, unchanged, for all five museums.
-- Serve only what the ETL made public and Serena hasn't taken down. Never serve an orphaned Blob.
-- Make a repeated request cheap: CollectionSpace is normally asked for a given image only once, ever.
+- Serve every URL shape and kind Serena's clients build today, unchanged, for all five museums.
+- Serve only what the ETL lists as public and Serena hasn't taken down.
+- Make a repeated request cheap: CollectionSpace is normally asked for a given file only once, ever.
 - Watermark for any museum that wants it, now or later, at no per-request cost.
 - Scale horizontally; keep all state outside the app's tasks.
-- Show what's happening: hits, misses, placeholders by reason, fetch time and errors by cause.
+- Show what's happening, to the team and to museum admins: requests, cache hits and misses, files not served and why,
+  fetch times and errors, nightly runs.
 
 Non-goals:
 
-- Audio and video. PAHMA's portal plays them through a cspace-services blob proxy, outside Serena. Tracked
-  separately.
 - Deciding what is public. That stays in the ETL.
 - Cleaning up orphaned Blobs in CollectionSpace. That belongs to whoever runs CollectionSpace.
 - Any change to Lyrasis's buckets or configuration.
+- Changes to Glimmer.
 
 Constraints (also in `CLAUDE.md`):
 
-- Serena never reads CollectionSpace's Postgres; only the ETL does.
-- The ETL's output is the first source of servability. Changes to the ETL for Serena must be additive and keep
-  Glimmer working unchanged.
-- Cached images are never deleted.
+- Serena never reads CollectionSpace's Postgres or Solr; only the ETL reads Postgres.
+- The ETL's output is the first source of servability. Changes to the ETL for Serena must be additive and leave every
+  reader of the public core working unchanged.
+- Cached files are never deleted.
 - No secret or personal data in the repository, a log or a test.
 
 ## Architecture overview
 
 ```mermaid
 flowchart LR
-  B[Browser on a Glimmer page] -->|legacy image URL| A[Load balancer + WAF]
-  A --> S[Serena app: Flask on ECS Fargate]
+  B[Browser on a portal page] -->|image or document URL| A[Load balancer + WAF]
+  A --> S[Serena app: FastAPI on ECS Fargate]
   S -->|servability, takedowns, cache index| D[(DynamoDB)]
-  S -->|on a miss: Media record, then image| C[CollectionSpace at Lyrasis]
+  S -->|on a miss: Media record, then file| C[CollectionSpace at Lyrasis]
   S -->|store by content hash| K[(S3: private, KMS)]
   S -.->|302 to signed URL| B
   B -->|signed URL| F[CloudFront]
   F -->|origin access control| K
-  E[Nightly Solr ETL: public core + Blob-to-Media artifact] --> Y[Servability Sync]
-  Y --> D
-  M[Admin app, later] --> D
+  E[Nightly ETL] -->|public core| P[(Solr)]
+  P --> G[Glimmer and other clients]
+  E -->|ETL API: Blob-to-Media file| A
+  W[Serena worker: preflight, apply, watchdog] --> D
+  W -->|alarms| N[SNS email]
+  M[Admin web app] --> A
 ```
 
 | Component | What it does |
 | --- | --- |
-| Serena app | Answers image requests: checks servability, finds or fetches the image, redirects |
-| Servability Sync | Nightly, per museum: loads the ETL's Blob-to-Media artifact into the servability table |
-| DynamoDB | Servability records, takedowns, the cache index, sync status |
-| S3 buckets | One private, KMS-encrypted bucket per museum, holding every image Serena has fetched or watermarked |
-| CloudFront | Delivers images from S3 to browsers, only through signed URLs; serves the placeholder prefix without a signature |
-| Admin app (later) | Manual takedowns and unlocks |
+| Serena app | Answers file requests (checks servability, finds or fetches the file, redirects); serves the ETL API and the admin app |
+| Worker | Preflights and applies each night's Blob-to-Media file; runs the watchdog |
+| DynamoDB | Servability records, takedowns, runs, settings, alerts, unserved-request counts, the cache index, the audit log |
+| S3 buckets | One private, KMS-encrypted bucket per museum, holding every file Serena has fetched or watermarked, and each applied Blob-to-Media file |
+| CloudFront | Delivers files from S3 to browsers, only through signed URLs; serves the unavailable images without a signature |
+| Admin web app | Runs and alerts, settings, takedowns, restricted-image Blobs, why a file is or isn't served |
+| SNS | Emails alarms to the team's mailing list |
 
 ## Serving a request
 
 ### URLs
 
-Serena answers the paths Glimmer builds today, under each museum's prefix:
+Serena answers the paths its clients build today, under each museum's prefix:
 
 - `…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<derivative>/content`
-- `…/<tenant>/imageserver/blobs/<blob CSID>/content` (the original file), for museums whose legacy
-  `derivatives_served` allows `content`
+- `…/<tenant>/imageserver/blobs/<blob CSID>/content` (the original file)
+- Cinefiles only: `…/cinefiles/imageserver/blobs/<blob CSID>/content/linked_pdf:<suffix>` and
+  `…/content/inline_pdf:<suffix>`, which Glimmer builds for PDFs. The suffix is a bounded string with no slash; Serena
+  accepts and ignores it, and never logs it, because it carries the signed-in visitor's email address.
+- Added for clients that use Media CSIDs (pull request 15 in the plan):
+  `…/<tenant>/imageserver/media/<media CSID>/blob/derivatives/<derivative>/content` and
+  `…/media/<media CSID>/blob/content`.
 
-Anything else under `imageserver/` gets the placeholder. Serena accepts only these two shapes, with a CSID in
+Anything else under `imageserver/` gets the unavailable image. Serena accepts only these shapes, with a CSID in
 CollectionSpace's format and a derivative name from the museum's list.
 
-Each museum's list of derivatives starts as its legacy `derivatives_served` setting:
+Each museum's list of derivatives (decided October 9, 2026):
 
-| Museum | Derivatives served |
-| --- | --- |
-| BAMPFA | Thumbnail, Medium |
-| Botanical Garden | Thumbnail, Medium, OriginalJpeg |
-| Cinefiles | Thumbnail, Medium, Original, content |
-| PAHMA | Thumbnail, Medium, OriginalJpeg, content |
-| UCJEPS | Thumbnail, Medium, OriginalJpeg, content |
+| Museum | Derivatives served | Original file (`/content`) |
+| --- | --- | --- |
+| BAMPFA | Thumbnail, Medium | No |
+| Botanical Garden | Thumbnail, Medium, OriginalJpeg | No |
+| Cinefiles | Thumbnail, Small, Medium, FullHD, OriginalJpeg | Yes |
+| PAHMA | Thumbnail, Small, Medium, FullHD, OriginalJpeg | Yes |
+| UCJEPS | Thumbnail, Small, Medium, FullHD, OriginalJpeg | Yes |
 
-The legacy check looks for these words anywhere in the path, as substrings, and every image URL ends in `/content`.
-So today PAHMA, Cinefiles and UCJEPS allow every size, and Cinefiles' `Original` also matches `OriginalJpeg`.
-Decided October 8, 2026: each museum's exact list will be set from what Glimmer builds and the access logs show is
-requested. Until then, Serena matches today's behavior: every size CollectionSpace makes for the museums whose list
-includes `content`, and `OriginalJpeg` too for Cinefiles. To revisit once the logs are checked.
+The lists match what each museum's portal can request today. Each museum's exact list is to be revisited once
+the access logs show which sizes are requested (see Open questions).
+
+### Kinds
+
+Each Blob in the Blob-to-Media file has a kind (decided October 9, 2026):
+
+| Kind | Served | As | Checks on fetch | Watermarked |
+| --- | --- | --- | --- | --- |
+| image, card | Yes | Derivatives, and the original where the museum allows it | Image content type, decodable, size limit | If the museum watermarks that size |
+| 3D | Yes | The original file only | An allowlist of 3D content types, size limit | No |
+| pdf | Yes, if its access is public | The original file only | `application/pdf`, size limit | No |
+| audio, video | Not yet (see Open questions) | n/a | n/a | No |
+
+A request for a derivative of a 3D or PDF Blob gets the unavailable image (reason "no derivatives for this kind").
+Size limits are per museum, set in the admin app.
+
+A restricted PDF (access restricted) gets the unavailable image for now. Signed-in access for Glimmer users is a
+later step on Glimmer's timeline: short-lived links that Glimmer signs for its signed-in users, which Serena would
+verify. The access column already tells Serena which PDFs are restricted, so that step needs no further ETL change.
 
 ### The steps
 
@@ -173,17 +219,17 @@ sequenceDiagram
   B->>S: GET blobs/<blob>/derivatives/<size>/content
   S->>D: servability record for <blob>, takedown for its Media
   alt not servable
-    S-->>B: 302 to placeholder
+    S-->>B: 302 to the unavailable image
   else servable
-    S->>D: cache index for <blob, size, watermark version>
+    S->>D: cache index for <blob, size, watermark>
     alt hit
       S-->>B: 302 to signed URL
     else miss
       S->>C: GET media/<media CSID>
-      alt blobcsid differs, or Media gone
-        S-->>B: 302 to placeholder
-      else matches
-        S->>C: GET blobs/<blob>/derivatives/<size>/content
+      alt Media gone or soft-deleted
+        S-->>B: 302 to the unavailable image
+      else exists
+        S->>C: GET media/<media CSID>/blob/derivatives/<size>/content
         S->>K: PUT objects/<sha256> (and the watermarked copy)
         S->>D: write cache index
         S-->>B: 302 to signed URL
@@ -192,36 +238,58 @@ sequenceDiagram
   end
 ```
 
-1. **Parse.** Check the path's shape, the tenant, the CSID's format and the derivative name. If any fails:
-   placeholder.
-2. **Servability.** Read the servability record for `<tenant>#<blob CSID>`; it must exist. Then read the takedown record
-   for its Media CSID; an active takedown means not servable. If not servable: placeholder.
-3. **Cache index.** Look up `<tenant>#<blob CSID>#<derivative>`, or for a watermarking museum the watermarked entry
-   for the museum's current watermark version. On a hit, go to step 6. If only the watermarked copy is missing and the
+1. **Parse.** Check the path's shape, the tenant, the CSID's format and the derivative name. If any fails: the
+   unavailable image.
+2. **Servability.** Read the servability record for `<tenant>#<blob CSID>`; it must exist, its kind must be one Serena
+   serves, and its access must be public. Then read the takedown record for its Media CSID; an active takedown means
+   not servable. If not servable: the unavailable image.
+3. **Cache index.** Look up `<tenant>#<blob CSID>#<derivative>`, or for a watermarking museum the watermarked entry for
+   the museum's current watermark settings. On a hit, go to step 6. If only the watermarked copy is missing and the
    unwatermarked copy is stored, make the watermarked copy from it (see Watermarks), without steps 4 and 5.
-4. **Media check (miss only).** GET the Media record named in the servability record. If it's gone, deleted, or its
-   `blobcsid` isn't the Blob asked for (the image was replaced after the ETL ran): placeholder, and nothing is
-   fetched.
-5. **Fetch and store (miss only).** GET the derivative from CollectionSpace, write it to the task's local disk while
-   hashing it, validate it (see Image fetch), upload it to S3 under its hash if not already there, and write the cache
-   index. For a watermarking museum, make the
-   watermarked copy, store it the same way and index it too.
+4. **Light check (miss only).** GET the Media record named in the servability record. If it's gone or soft-deleted:
+   the unavailable image, and nothing is fetched. Serena doesn't read the record's `blobCsid`.
+5. **Fetch and store (miss only).** GET the file through the Media service, write it to the task's local disk while
+   hashing it, check it for its kind (see Image fetch), upload it to S3 under its hash if not already there, and write
+   the cache index. For a watermarking museum, make the watermarked copy, store it the same way and index it too.
 6. **Redirect.** Answer 302 with a CloudFront signed URL for the object.
 
-The guarantee for orphaned Blobs: Serena never serves one on a cache miss, and on a hit not after the next Sync
-(when the replaced Blob drops out of the public core).
+The museum's restricted-image Blob is served from the copy an admin uploaded (see Servability); Serena never calls
+CollectionSpace for it.
+
+### After an image is replaced
+
+Replacing a Media record's image creates a new Blob; the ETL picks it up the next night. Until then, clients still
+request the old Blob CSID (decided October 9, 2026):
+
+- **Cache hit:** the old image, until the next nightly update drops the old Blob.
+- **Cache miss:** the Media service returns the Media record's current file, so the client gets the new image a day
+  sooner. The old Blob's cache entry then points to the new file until the next nightly update drops it; the bytes are
+  stored once, by hash.
+- **The old image's bytes are never fetched on a miss.** A deleted or soft-deleted Media record gets the unavailable
+  image.
+
+An image replaced with one that should be restricted, before the restriction reaches the public core, would be served
+on a miss until the next nightly update: the same 24-hour window as any takedown through CollectionSpace. The admin
+app's takedown covers the urgent case.
 
 ### Responses
 
 | Case | Response |
 | --- | --- |
 | Servable | 302 to a CloudFront signed URL; `Cache-Control: private, max-age` no longer than the URL's remaining life |
-| Not servable, unknown path, bad CSID, size not allowed | 302 to the museum's placeholder; `Cache-Control: no-store`, so a later change takes effect at once |
-| CollectionSpace failed or timed out on a miss | 302 to the placeholder; `no-store`; counted and logged as an upstream error |
-| Serena itself failing (DynamoDB unreachable and so on) | 302 to the placeholder; logged as an internal error. Serena fails closed: when it can't check, it doesn't serve |
+| Not servable, unknown path, bad CSID, size not allowed, kind not served | 302 to the museum's unavailable image; `Cache-Control: no-store`, so a later change takes effect at once |
+| CollectionSpace failed or timed out on a miss | 302 to the unavailable image; `no-store`; counted and logged as an upstream error |
+| Serena itself failing (DynamoDB unreachable and so on) | 302 to the unavailable image; logged as an internal error. Serena fails closed: when it can't check, it doesn't serve |
 
-Serena never returns an error page or a stack trace to the browser. Every placeholder answer is logged with its
-reason.
+Serena never returns an error page or a stack trace to the browser.
+
+### Requests Serena doesn't serve
+
+Every request answered with the unavailable image is logged with its reason, and counted (decided October 9, 2026):
+per museum, reason and path, in short time buckets (for example 5 minutes), with a few recent samples per reason, all
+expiring after 30 days. The records hold no IP addresses and no email addresses, and the PDF link suffix is removed.
+The admin app shows them as a page of recent unserved requests, and a list of files Serena knows it can't serve, and
+why (for example restricted PDFs, files that failed their checks, fetch errors).
 
 ### Signed URLs
 
@@ -230,7 +298,7 @@ reason.
 - 15-minute windows: a URL's expiry is the end of the 15-minute window after the current one, so every request for
   the same object in the same window gets the same URL (the browser can reuse it) and each URL lives between 15 and
   30 minutes.
-- S3 objects carry `Cache-Control: private, max-age=900`, so a browser doesn't keep using an image much past its
+- S3 objects carry `Cache-Control: private, max-age=900`, so a browser doesn't keep using a file much past its
   URL's life.
 - CloudFront's cache key leaves out the signature's query parameters, so the edge cache still works across windows.
   (To verify when built.)
@@ -238,10 +306,12 @@ reason.
   browser may keep showing an image it already has for up to 15 minutes more: about 45 minutes in all, within the
   1 to 2 hour tolerance.
 
-### Placeholders
+### Unavailable images
 
-Each museum has its placeholder image (today `404.svg`), stored in a public prefix that CloudFront serves without a
-signature. Whether museums want a different placeholder for "taken down" than for "not found" is an open question.
+Each museum has its unavailable image (today `404.svg`, the same file for every museum), stored under a prefix that
+CloudFront serves without a signature. It is distinct from the restricted-image Blob, which is a real Blob in the
+public core that Serena serves like any other (see Servability). Whether museums want a different unavailable image
+for "taken down" than for "not found" is an open question.
 
 ## Servability
 
@@ -249,64 +319,160 @@ signature. Whether museums want a different placeholder for "taken down" than fo
 
 | Table | Key | Fields |
 | --- | --- | --- |
-| Servability | `<tenant>#<blob CSID>` | Media CSID, kind (image, card, audio, video, 3D) |
+| Servability | `<tenant>#<blob CSID>` | Media CSID, kind, access; indexed by Media CSID |
 | Takedowns | `<tenant>#<media CSID>` | state (taken down, or unlocked), who, when, why |
-| Sync status | `<tenant>` | latest applied ETL run ID, when, row count |
+| Runs | `<tenant>#<run ID>` | night, state, file name and hash, row counts, preflight result, timestamps, reasons |
+| Settings | `<tenant>` | watchdog deadline, ETL poll interval and step timeout, size limits; an admin's value overrides the starting value in configuration |
+| Alerts | `<tenant>#<time>` | kind, message, acknowledged by and when |
+| Unserved requests | `<tenant>#<bucket>` | counts by reason and path, samples; expire after 30 days |
+| Cache index | see Storage | |
+| Audit log | `<time>#<admin>` | every admin action |
 
-A Blob is servable when its servability record exists and its Media CSID has no active takedown. The table holds the
-Blobs in the last applied ETL run's public core. (What Serena does with audio, video and 3D Blobs is an open question.)
+A Blob is servable when its servability record exists, its kind is served, its access is public, and its Media CSID
+has no active takedown. The table holds the Blobs in the last applied night's file.
 
-### Servability Sync
+### The Blob-to-Media file
 
-A nightly job per museum, run after that museum's ETL finishes.
+Written each night per museum by the ETL, by the same step that builds the public core (Jira CSW-1027; decided
+October 9, 2026):
 
-1. Read the ETL's Blob-to-Media artifact for the night (CSW-1027): one row per Blob CSID in the public core, with its
-   Media CSID and kind. Artifacts are immutable and dated; Serena keeps a copy of each in S3.
-2. **Sanity checks.** Stop, alarm and leave yesterday's state in place if the artifact is missing, malformed, from a
-   night already applied, or differs from the last applied one by more than a set share of rows (in either
-   direction).
-3. Diff against the last applied artifact. First delete the rows for Blobs no longer listed, then write the new and
-   changed rows. Rows carry no run ID, so unchanged rows aren't touched.
-4. Update the sync-status record.
+- Tab-separated, UTF-8, header `blob_csid`, `media_csid`, `kind`, `access`; named
+  `blob-media.<tenant>.<YYYY-MM-DD>.tsv` (Serena returns the name when a run starts).
+- One row per Blob CSID in the public core's image, card, audio, video, 3D and PDF fields: no more and no fewer.
+- `kind`: image, card, audio, video, 3D or pdf. A Blob in several fields takes the first that applies of pdf, 3D, card,
+  image.
+- `access`: public or restricted. For kind pdf it follows the document's access code (public only for code 4); every
+  other row is public.
+- Only the museum's restricted-image Blob may have an empty `media_csid`.
+- Immutable once written; Serena keeps a copy of each applied file in S3. The ETL keeps each night's file for 14 days.
 
-Deleting before adding means a Sync that stops halfway never serves a Blob that the new night dropped; at worst some
-new images wait for a rerun. (Decided October 8, 2026.)
+### The nightly sequence
 
-If a night's Sync fails, Serena keeps serving yesterday's set and alarms. That delays new images and ETL-driven
-takedowns by a day; it never makes something servable that the ETL didn't list.
+Per museum, the ETL drives each step through Serena's ETL API (decided October 9, 2026):
 
-The Sync never fetches images. Buckets fill on demand.
+1. Start a run with Serena.
+2. Extract and merge, writing the public core's data and the Blob-to-Media file.
+3. Upload the file and ask Serena to preflight it. If the preflight fails, stop: the public core isn't loaded, and
+   both the public core and Serena keep yesterday's data.
+4. Load the public core (with the ETL's fallback to the previous night's data if the load fails).
+5. Report the load's outcome. If it fell back, stop: Serena applies nothing, and both keep yesterday's data.
+6. Ask Serena to apply the file.
+7. Report the night a success only once Serena reports the file applied. If the apply fails after Serena's retries,
+   the public core stays on tonight's data, the night is reported failed, and Serena alarms.
+
+**Partial nights.** If Serena can't be reached, or a step doesn't finish within Serena's timeout (a preflight that
+can't run or doesn't finish included), the ETL carries on without Serena: it loads the public core, reports the night
+"partial" and notifies. A preflight that ran and failed is different: it stops the night. Serena notices a partial
+night through its watchdog, and an admin brings it up to date:
+
+- If the file reached Serena and passed preflight: "record tonight's load and apply", after confirming the public
+  core loaded that night.
+- If not: upload that night's file (from the ETL server) in the admin app; it is preflighted, then applied.
+- Otherwise Serena catches up with the next night's run.
+
+The principle (decided October 9, 2026): if the ETL run succeeded (a working public core and a valid Blob-to-Media
+file), an admin can always bring Serena up to date. The steps go in a runbook, reviewed with the DevOps team.
+
+### The ETL API
+
+Under `/etl/v1/`, over HTTPS, not served through CloudFront, and accepted only from the ETL server. Each museum has its
+own bearer token, kept in Secrets Manager on Serena's side and in the ETL server's own secret store; during a rotation
+Serena accepts the old and the new token. Errors are `application/problem+json` with reasons, never internals.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/etl/v1/ping` | Checks connectivity and the token |
+| `POST` | `/etl/v1/museums/{tenant}/runs` | Starts a run: Serena assigns the run ID and night, and returns the file name, `poll_interval_seconds`, `step_timeout_seconds` and the links for the run's other calls. If a run for that museum and night is still open, returns it |
+| `GET` | `…/runs/{run_id}` | The run's status |
+| `PUT` | `…/runs/{run_id}/blob-media` | Uploads the file (gzip allowed), with its row count and SHA-256 in headers |
+| `POST` | `…/runs/{run_id}/preflight` | Checks the file without applying it (202; poll) |
+| `POST` | `…/runs/{run_id}/solr-load` | Records the public core's load outcome: `loaded` or `fell_back` |
+| `POST` | `…/runs/{run_id}/apply` | Applies the file; only after the preflight passed and the load reported `loaded` (202; poll) |
+| `GET` | `/etl/v1/museums/{tenant}` | The latest applied run |
+
+Run states: `started` → `received` → `preflighting` → `ready` or `preflight_failed`; on `loaded`, `solr_loaded` →
+`applying` → `applied` or `apply_failed`; on `fell_back`, `abandoned`. Rules:
+
+- A call out of order gets `409`. Repeating a call is safe: starting a run returns the open run; uploading the same
+  file changes nothing; a corrected file may replace the previous one until the load outcome is reported, and must
+  then be preflighted again.
+- A run's night is the Pacific date when it starts. A new run for the same night is allowed once the previous one is
+  closed (`applied` or `abandoned`). Starting a later night's run closes an earlier open run as `abandoned`, except one
+  the worker is preflighting or applying, which is never abandoned.
+- A run in `apply_failed` stays open until an admin retries it or the next night's run starts.
+- Every run response carries `poll_interval_seconds` and `step_timeout_seconds` (15 and 1800 to start), which admins
+  change per museum in the admin app. The ETL's own HTTP calls use a connect timeout of 10 seconds, a read timeout of
+  60 seconds and up to 3 retries with backoff.
+- The ETL can't override Serena's checks. Overriding the change threshold for one run (for example a museum's first
+  load) and retrying an apply are admin actions.
+
+The API's OpenAPI description, with examples, is generated from the code. A copy is kept in the repository under
+`docs/api/`, and CI fails when the copy no longer matches the code, so the ETL team can read it on GitHub. The admin
+app has a button that opens the same documentation.
+
+### Preflight and apply
+
+The worker (a separate process, as in the BMU) does both, from work queued in the Runs table, so a restart never loses
+a step.
+
+- **Preflight** checks the format, the CSIDs, the kinds and access values, empty `media_csid` values (allowed only for
+  the restricted-image Blob), and duplicates; warns if the museum's restricted-image Blob is missing; and compares the
+  file with the last applied one. If the added, removed and changed rows (a changed Media CSID, kind or access) exceed
+  a share of the rows (5% to start, a per-museum setting; decided October 9, 2026), the preflight fails.
+- **Apply** first deletes the rows for Blobs no longer listed, then writes the new and changed rows; unchanged rows
+  aren't touched. Deleting before adding means an apply that stops halfway never serves a Blob that the new night
+  dropped. It retries transient errors before reporting `apply_failed`.
+
+### Watchdog and alerts
+
+The watchdog runs in the worker every few minutes, in Pacific time (daylight saving included). It alerts when:
+
+- a museum's run hasn't reached `applied` or `abandoned` by the museum's deadline (08:00 to start; admins set it in the
+  admin app). This is how Serena notices a partial night;
+- a run ends in `preflight_failed`, `apply_failed` or `abandoned`;
+- Serena hasn't applied a night for a museum in 24 hours.
+
+An alert shows as a banner in the admin app until acknowledged, is logged, and is emailed through one Amazon SNS topic
+per environment to the team's mailing list. The subscription requires authentication to unsubscribe.
 
 ### Takedowns
 
 - **Through CollectionSpace:** unpublish the Media record, or mark its Object sensitive. The next ETL run drops the
-  Blob from the public core; the next Sync stops Serena serving it. Within 24 hours.
-- **In Serena (admin app, later):** an admin takes down a Media record by CSID. It takes effect on the next request.
-  Nothing is deleted; the cached images stay in S3. An admin can later unlock it, which removes Serena's override and
+  Blob from the public core; the next nightly update stops Serena serving it. Within 24 hours.
+- **In Serena's admin app:** an admin takes down a Media record by CSID. It takes effect on the next request.
+  Nothing is deleted; the cached files stay in S3. An admin can later unlock it, which removes Serena's override and
   hands servability back to the ETL's state.
 - **Optional, later:** CollectionSpace Listeners (custom Java, with retries, since CollectionSpace's framework has no
   outbound calls of its own) or an ETL-side poller of Postgres, either feeding the takedown table. Listeners are
   optional in CollectionSpace, so Serena can't depend on them.
+
+### Restricted-image Blob
+
+Each museum's restricted-image Blob CSID is in its configuration. An admin uploads its files in the admin app, one per
+derivative the museum serves (and the original, where the museum allows it); Serena stores them in S3 and indexes
+them, and watermarks them for a watermarking museum. Before the upload, requests for it get the unavailable image and
+raise an alert. (Decided October 9, 2026.)
 
 ## Image fetch
 
 - **Account.** One read-only CollectionSpace service account per museum, HTTP Basic, created in each museum's
   CollectionSpace by its administrators (or the team, if it has admin rights); no Lyrasis change is needed. Its
   password is in Secrets Manager, read at task start-up, never logged and never stored anywhere else.
-- **Calls.** `GET /cspace-services/media/<media CSID>` (the check), then
-  `GET /cspace-services/blobs/<blob CSID>/derivatives/<derivative>/content` or `…/blobs/<blob CSID>/content`.
+- **Calls.** All through the Media service, by the Media CSID from the servability record (decided October 9, 2026):
+  `GET /cspace-services/media/<media CSID>` (the light check: exists, not soft-deleted), then
+  `GET /cspace-services/media/<media CSID>/blob/derivatives/<derivative>/content` or `…/media/<media CSID>/blob/content`.
 - **Connections.** One pooled HTTP session per museum per task, with timeouts and retries for transient errors only.
 - **Concurrency limit.** A cap on simultaneous fetches per museum, per task, with no shared state. Tasks times the cap
   stays within what Lyrasis agrees to. Decided October 8, 2026; to revisit once Lyrasis confirms (a per-second rate
   shared across tasks would need more building).
-- **Duplicate first fetches.** Within a task, simultaneous requests for the same missing image wait on one fetch.
+- **Duplicate first fetches.** Within a task, simultaneous requests for the same missing file wait on one fetch.
   Across tasks, duplicates can happen; they cost one extra fetch, store nothing twice (same hash), and are logged.
-- **Validation.** The response must be 200 with an image content type, within a size limit, and decodable. Anything
-  else: placeholder, nothing stored. (The checks are to be revisited; see Open questions.)
-- **Local disk, then S3.** The hash, and so the S3 key, is known only after the whole image is read, and the image
-  must be read whole to check that it decodes. So each fetched image is written to the task's local disk (Fargate
-  ephemeral storage) while it's hashed, checked, then uploaded to `objects/<sha256>` (multipart for large originals).
-  Nothing is held whole in memory, and nothing in S3 ever needs deleting. (Decided October 8, 2026.)
+- **Checks.** The response must be 200, with a content type allowed for the Blob's kind, within the museum's size
+  limit, and (for images) decodable. Anything else: the unavailable image, nothing stored, and the reason recorded.
+- **Local disk, then S3.** The hash, and so the S3 key, is known only after the whole file is read, and an image must
+  be read whole to check that it decodes. So each fetched file is written to the task's local disk (Fargate ephemeral
+  storage) while it's hashed, checked, then uploaded to `objects/<sha256>` (multipart for large originals). Nothing is
+  held whole in memory, and nothing in S3 ever needs deleting. (Decided October 8, 2026.)
 
 ## Storage
 
@@ -315,51 +481,75 @@ The Sync never fetches images. Buckets fill on demand.
   anything. S3 Intelligent-Tiering for cost.
 - **Keys.** `objects/<sha256>`, like Nuxeo's content-addressed store, so identical bytes are stored once. The object
   records its content type.
-- **Cache index.** `<tenant>#<blob CSID>#<derivative>` → hash, content type, size, fetched-at. Watermarked copies:
-  `<tenant>#<blob CSID>#<derivative>#wm<version>` → hash of the watermarked bytes, plus the hash it was made from.
+- **Cache index.** `<tenant>#<blob CSID>#<derivative>` → hash, content type, size, fetched-at. Watermarked copies have
+  their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID are
+  indexed under the Media CSID and the Blob CSID listed for it in the last applied file, so a replaced image is fetched
+  again after the next nightly update.
 - **Never deleted.** A takedown leaves objects and index entries in place. Unlocking a takedown serves them again
   without another fetch.
 
 ## Watermarks
 
-- Per museum: on or off, the watermark image, transparency and size (as a share of the image's longer side), the
-  list of sizes to watermark, and a version number that changes whenever any of these change. (Decided October 8,
-  2026; to revisit after talking with each museum that plans to watermark.)
-- Any museum may turn watermarking on, now or later. Today only the Botanical Garden does, on everything it serves.
-- The watermarked copy is made once, with pyvips, from the stored unwatermarked copy of the same size, and indexed under
-  the current version. If that copy is already stored, CollectionSpace isn't asked again. Changing a museum's watermark
-  makes new copies on demand; old ones stay, unused.
-- For a size it watermarks, Serena never issues a signed URL for an unwatermarked copy. Sizes not on the list are
-  served unwatermarked.
+- Per museum: on or off, the watermark image, transparency, size (as a share of the image's longer side), position,
+  JPEG quality and the list of sizes to watermark. Any museum may turn watermarking on, now or later.
+- The Botanical Garden (decided October 9, 2026): watermark `botgarden_watermark_288x288_trans_white.png`,
+  transparency 0.50, size 0.25, top-left, JPEG quality 90, on Thumbnail, Medium and OriginalJpeg.
+- The watermarked copy is made once, with pyvips, from the stored unwatermarked copy of the same size. If that copy is
+  already stored, CollectionSpace isn't asked again. Changing a museum's watermark settings makes new copies on demand;
+  old ones stay, unused. How copies are keyed (a version number or a hash of the settings), and whether the
+  unwatermarked copy of a watermarked size is stored at all, are open (F1).
+- Only images are watermarked. For a size it watermarks, Serena never issues a signed URL for an unwatermarked copy:
+  until watermarking is built, those sizes get the unavailable image, and the Botanical Garden moves to Serena only
+  once it is.
 
-## Admin app (later)
+## Admin web app
 
-A small Serena web app for museum staff or the team. First feature: take down a Media record, and unlock one. Later,
-perhaps: look up why an image is or isn't served, and sync and fetch status. How admins sign in is an open question.
+Required from the start (decided October 9, 2026). Built as in the BMU: Vue, TypeScript and Vuetify, served by
+Serena's FastAPI app under `/admin`, with its API under `/admin/v1`. It is not served through CloudFront and is
+reachable only from campus networks.
+
+- **Sign-in.** With the admin's own CollectionSpace account, plus a CollectionSpace role that marks a Serena admin, per
+  museum. Serena never stores the password. The app shows only the museums where the signed-in user has the role;
+  team members hold the role in each museum.
+- **First-release features:**
+  - alerts and the banner (acknowledge);
+  - runs: history, status and reasons; retrying a failed apply; overriding the change threshold for one run; "record
+    tonight's load and apply" and uploading a night's file after a partial night;
+  - per-museum settings: the watchdog deadline, the ETL's poll interval and step timeout, size limits;
+  - restricted-image Blob upload;
+  - takedown and unlock by Media CSID;
+  - a lookup of why a file is or isn't served; the page of recent unserved requests; the list of files Serena knows it
+    can't serve;
+  - an "API documentation" button;
+  - an audit log of every admin action.
 
 ## Infrastructure and operations
 
-- **Compute.** Flask behind Gunicorn on ECS Fargate, behind an ALB with AWS WAF (rate limits and bot control, since
-  the catalog is crawled routinely). Fargate rather than Lambda: no cold starts for pyvips, and warm connection pools
-  for crawler bursts. The Sync runs as a scheduled Fargate task.
+- **Compute.** FastAPI on Uvicorn, one process per ECS Fargate task (so in-task state such as the shared first fetch
+  and the concurrency cap holds per task), behind an ALB with AWS WAF (rate limits and bot control, since the catalog
+  is crawled routinely). Fargate rather than Lambda: no cold starts for pyvips, and warm connection pools for crawler
+  bursts. The worker is a second ECS service from the same image.
 - **Routing.** The legacy imageserver's paths on each museum's webapps host are routed to Serena's ALB, one museum at
-  a time.
+  a time. The ALB accepts `/etl/` only from the ETL server and `/admin` only from campus networks.
 - **Infrastructure as code.** Terraform, in `deploy/`, with state in S3. No secrets in Terraform files or state.
-- **Least privilege.** The app's task role can read the servability, takedown and index tables, write the index, read
-  and put objects (reading is needed to make watermarked copies), use the KMS key and read its own secrets. The
-  Sync's role can write servability and sync status, read the ETL's artifacts and put its copies of them in S3.
-  Neither can delete S3 objects.
-- **Logs and metrics.** Structured JSON logs to CloudWatch and embedded metrics: requests, hits, misses, placeholders
-  by reason, Media-check mismatches, fetch time, upstream errors by cause, duplicate fetches, Sync row counts and
-  failures. No passwords, tokens, signed URLs or personal data in logs.
-- **Local development.** Docker Compose with a CollectionSpace simulator, as in the BMU.
+- **Least privilege.** The app's task role can read the servability, takedown and settings tables, read and write the
+  cache index, runs, alerts, unserved-request counts and audit log, read and put objects (reading is needed to make
+  watermarked copies), use the KMS key and read its own secrets. The worker's role can write servability, runs and
+  alerts, read and put the applied files in S3, and publish to the SNS topic. Neither can delete S3 objects.
+- **Logs and metrics.** Structured JSON logs to CloudWatch and embedded metrics: requests, hits, misses, unserved
+  requests by reason, fetch time, upstream errors by cause, duplicate fetches, run outcomes. No passwords, tokens,
+  signed URLs or personal data in logs: the PDF link suffix is removed before anything is logged. The load balancer's
+  access logs stay off, and WAF logging leaves the suffix out.
+- **Local development.** Docker Compose with a CollectionSpace simulator and the admin app's development server, as in
+  the BMU, and a fake ETL that runs whole nights through the API.
 
 ## Migration
 
 1. Build Serena and deploy it beside the legacy imageserver.
-2. Get the ETL change (CSW-1027) in for every museum; start the Sync.
+2. Get the ETL change (CSW-1027) in for every museum, calling Serena's ETL API.
 3. Route one low-traffic museum's `imageserver` paths to Serena; compare with the legacy imageserver.
-4. Move the other museums one at a time.
+4. Move the other museums one at a time. Cinefiles moves once its staff have confirmed Serena's handling of PDFs
+   (F8); the Botanical Garden once watermarking is built.
 5. Decommission the legacy imageserver and remove it from cspace-webapps-common.
 
 ## How we got here
@@ -376,39 +566,56 @@ The design went through several versions in Google Drive before this file:
    Lyrasis-hosted buckets.
 5. **Our own buckets, filled from the API (October 8, 2026).** After an update from Lyrasis, Serena won't sync with
    or serve from Lyrasis's buckets. Instead it fetches each image from CollectionSpace's API the first time it's
-   asked for, and keeps it in its own empty-at-start buckets. Listeners became optional, and orphaned Blobs are
-   handled by the Media check on a miss and the Sync on a hit. By then the design had also gone back to the legacy
-   Blob CSID URLs, because changing Glimmer wasn't acceptable, with the ETL's public core, the same source Glimmer
-   uses, as the list of what may be served.
+   asked for, and keeps it in its own empty-at-start buckets. Listeners became optional. By then the design had also
+   gone back to the legacy Blob CSID URLs, because changing Glimmer wasn't acceptable, with the ETL's public core, the
+   same source Glimmer uses, as the list of what may be served.
+6. **The implementation decisions (October 9, 2026).** FastAPI instead of Flask. Every call to CollectionSpace goes
+   through the Media service, and the cache-miss check became a light check that never compares Blob CSIDs. The ETL
+   and Serena coordinate through Serena's ETL API, replacing the scheduled Sync. Serena serves 3D files and public
+   PDFs as well as images, by kind. The admin web app is required from the start. The public core and its clients
+   (Glimmer among them) are kept apart.
 
 ## Open questions and findings
 
-- **Image validation.** Which checks to run on a fetched image before storing it (content type, size, decode,
-  dimensions), including whether very large originals should be refused by size.
+The F numbers follow the team's list of follow-ups.
+
+- **F1. Watermarked copies.** How watermarked copies are keyed in the cache index (a version number or a hash of the
+  settings), and whether the unwatermarked copy of a watermarked size should be stored at all. To settle before
+  watermarking is built.
+- **F2. Recovery runbook.** What an admin does for each failure (each alert, a partial night, a failed apply), who is
+  told, and where the runbook lives; built on the principle in The nightly sequence.
+- **F3. "Refresh and fetch".** Whether the admin app could pick up a Media record's current image at once, and whether
+  the rules deciding what is restricted could live in one place shared by Serena and the ETL. Possibly a dead end.
+- **F5. Manual retry.** Who may retry an apply or override the threshold, and how the result is reported.
+- **F6. API documentation.** Whether the admin API is documented the same way as the ETL API.
+- **F7. Review with DevOps.** Partial nights, the file rules and the run rules, to be documented and reviewed by the
+  DevOps team.
+- **F8. Cinefiles PDFs.** Confirm with Cinefiles staff: that code 4 alone means public; whether restricted PDFs being
+  unavailable to signed-in Glimmer users until signed links exist is acceptable; whether per-user records of PDF views
+  are wanted; whether documents with several PDFs should show them all; whether an image is acceptable where a portal
+  embeds a restricted PDF.
+- **Audio and video.** Whether Serena serves them, as kinds audio and video; to be settled from the access logs and
+  whether clients other than Glimmer request them. The nightly file lists them either way.
+- **URL forms in use.** Confirm from the access logs which URL shapes and derivative names are requested, and which
+  clients use the legacy imageserver. This sets each museum's exact list of sizes.
+- **Image validation.** Which further checks to run on a fetched file (dimensions, a refusal size for very large
+  originals).
 - **Sensitive derivatives.** Check that the ETL treats every derivative of a sensitive image as sensitive, and that
   catalog cards (`card_ss`) are handled as each museum expects.
 - **Rate limit.** Agree a fetch rate with Lyrasis.
-- **URL forms in use.** Confirm from Glimmer and the access logs which derivative names and URL shapes are requested
-  (including `blobs/<CSID>/content` and 3D), and whether any other app still uses the legacy imageserver. This sets
-  each museum's exact list of sizes (see URLs).
-- **The placeholder Blob and the Media check (deferred October 8, 2026).** CSW-1027 lets a museum's restricted-image
-  placeholder Blob appear with no Media CSID, so on its first request the Media check has nothing to check and Serena
-  would never fetch it. Options: the Sync marks the placeholder Blob and Serena skips the Media check for it; store
-  each museum's placeholder Blob in S3 when deploying; or ask the ETL to always give its Media CSID.
-- **Audio, video and 3D Blobs (deferred October 8, 2026).** The public core lists them, but audio and video are a
-  non-goal. Options: serve only image and catalog-card Blobs; serve every kind; or serve images, cards and 3D. Depends
-  on the URL check above.
-- **Signed-in users.** The legacy imageserver serves everything to signed-in Django users. Serena serves only the
-  public core. Do any internal apps still need the rest?
-- **Placeholders.** One placeholder, or different ones for "taken down" and "not found"?
-- **Admin app sign-in.** CalNet, CollectionSpace credentials, or something else.
+- **Images beyond the public core.** Do any internal apps need files that aren't in the public core?
+- **Unavailable images.** One per museum, or different ones for "taken down" and "not found"?
 - **CloudFront cache key.** Confirm that signed-URL query parameters are left out of the cache key.
 - **Single-use signed URLs.** Can a signed URL be made to work only once, so that no client can use it twice and,
   if several clients get the same URL, only the first one to use it gets a response? To discuss (raised October 8,
   2026).
-- **Sync thresholds.** The share of rows that may change in a night before the Sync stops.
+- **Notifications list.** The team mailing list that receives alarms.
+
+Settled since October 8 and recorded above: the restricted-image Blob (stored from an admin upload), 3D files (served),
+the change threshold (5%, counting changed rows), admin sign-in (CollectionSpace account and role).
 
 ## Testing
 
-Unit and integration tests run in CI against the CollectionSpace simulator and local stand-ins for AWS. Checks that
-need a real CollectionSpace tenant or AWS are in `docs/testing-checklist.md`.
+Unit and integration tests run in CI against the CollectionSpace simulator and local stand-ins for AWS; the admin app
+has its own unit tests and Selenium tests. Checks that need a real CollectionSpace tenant or AWS are in
+`docs/testing-checklist.md`.
