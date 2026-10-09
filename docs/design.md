@@ -168,14 +168,16 @@ Serena answers the paths its clients build today, under each museum's prefix:
 - `…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<derivative>/content`
 - `…/<tenant>/imageserver/blobs/<blob CSID>/content` (the original file)
 - Cinefiles only: `…/cinefiles/imageserver/blobs/<blob CSID>/content/linked_pdf:<suffix>` and
-  `…/content/inline_pdf:<suffix>`, which Glimmer builds for PDFs. The suffix is a bounded string with no slash; Serena
-  accepts and ignores it, and never logs it, because it carries the signed-in visitor's email address.
+  `…/content/inline_pdf:<suffix>`, which Glimmer builds for PDFs. The suffix is up to 512 characters with no slash
+  (decided October 9, 2026); Serena accepts and ignores it, and never logs it, because it carries the signed-in
+  visitor's email address.
 - Added for clients that use Media CSIDs (pull request 15 in the plan):
   `…/<tenant>/imageserver/media/<media CSID>/blob/derivatives/<derivative>/content` and
   `…/media/<media CSID>/blob/content`.
 
 Anything else under `imageserver/` gets the unavailable image. Serena accepts only these shapes, with a CSID in
-CollectionSpace's format and a derivative name from the museum's list.
+CollectionSpace's format and a derivative name from the museum's list, matched exactly. It answers `GET` and `HEAD`,
+and ignores any query string. A request under a museum Serena doesn't serve gets the default unavailable image.
 
 A CSID is 1 to 64 letters, digits and hyphens (decided October 9, 2026). That covers the usual UUIDs and the CSIDs
 that aren't UUIDs, such as PAHMA's restricted-image Blob. The same rule applies to the CSIDs in the Blob-to-Media file
@@ -293,7 +295,10 @@ Serena never returns an error page or a stack trace to the browser.
 
 ### Requests Serena doesn't serve
 
-Every request answered with the unavailable image is logged with its reason, and counted (decided October 9, 2026):
+Every request answered with the unavailable image is logged with its reason, and counted (decided October 9, 2026).
+The reasons are: unknown museum, unknown path, bad CSID, derivative not served, not servable (no servability record,
+a kind Serena doesn't serve, restricted access, a takedown, or the original file where the museum doesn't serve it),
+no derivatives for this kind (a derivative of a 3D or PDF Blob), and internal error; the fetch on a miss adds its own (see Image fetch). They are counted
 per museum, reason and path, in short time buckets (for example 5 minutes), with a few recent samples per reason, all
 expiring after 30 days. The records hold no IP addresses and no email addresses, and the PDF link suffix is removed.
 The admin app shows them as a page of recent unserved requests, and a list of files Serena knows it can't serve, and
@@ -317,7 +322,10 @@ why (for example restricted PDFs, files that failed their checks, fetch errors).
 ### Unavailable images
 
 Each museum has its unavailable image (today `404.svg`, the same file for every museum), stored under a prefix that
-CloudFront serves without a signature. It is distinct from the restricted-image Blob, which is a real Blob in the
+CloudFront serves without a signature: `<base URL>/<tenant>/unavailable.svg`, where the base URL is a setting
+(`SERENA_UNAVAILABLE_BASE_URL`). A museum Serena doesn't serve gets `<base URL>/default/unavailable.svg`. Without a
+base URL (local development and tests), Serena serves the file itself at `/unavailable/<tenant>.svg`, as an SVG that
+can run and load nothing. (Decided October 9, 2026.) It is distinct from the restricted-image Blob, which is a real Blob in the
 public core that Serena serves like any other (see Servability). Whether museums want a different unavailable image
 for "taken down" than for "not found" is an open question.
 
