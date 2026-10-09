@@ -1,0 +1,6 @@
+# The tools that manage the backend's dependencies: pip-compile (pip-tools) and pip-audit.
+# They are kept out of requirements.txt and requirements-dev.txt, so the app and its tests don't install them.
+pip-tools
+pip-audit
+# click 8.5 makes pip-tools 7.6.1 write a wrong "--no-index" into the requirements files' headers.
+click<8.5
