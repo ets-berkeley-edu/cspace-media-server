@@ -36,6 +36,8 @@ Key decisions:
 - **Signed links.** Serena answers a servable request with a 302 redirect to a CloudFront signed URL, issued in
   15-minute windows and valid for 15 to 30 minutes. Anything it won't serve gets a 302 to the museum's unavailable
   image, never an error.
+- **Restricted Cinefiles PDFs only with Glimmer's signature.** Glimmer signs the PDF links it gives readers signed
+  in to it; Serena serves a restricted PDF only with a valid signature (decided October 9, 2026).
 - **Watermarks are made once.** For a museum that watermarks, Serena makes the watermarked copy the first time it's
   needed, stores it like any other file, and never serves an unwatermarked copy of a size it watermarks.
 - **An admin web app from the start.** Museum and team admins see runs, alerts and why a file is or isn't served;
@@ -93,6 +95,7 @@ What Serena improves:
 | The Media service serves a Media record's current file: `media/<csid>/blob/content` and `media/<csid>/blob/derivatives/<name>/content`. It also returns soft-deleted Media records and their files. | Serena fetches through the Media service, after checking the record isn't deleted. |
 | Publication (`approvedforweb` / `postToPublic`) and sensitivity (for PAHMA, the related Object's status) live on the Media and Object records, not on the Blob. | Serena doesn't evaluate them. The ETL does, per museum, in `cspace-solr-ucb`. |
 | The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its restricted-image Blob; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The Blob-to-Media file mirrors these fields, with a kind and an access value per Blob. |
+| Cinefiles staff set a document's access code in CollectionSpace: "Access code override" on the document (Object) record, otherwise "Access code" on its source (Organization) record. The values are PFA Staff Only, In House Only, Campus (UCB), Education (\*.edu) and World. Cinefiles' ETL has no Media-level publish flag: every Media record of a document is in the public core. | For Cinefiles, the access code is how staff restrict a PDF through CollectionSpace; unpublishing a Media record changes nothing. |
 | The ETL runs nightly, starting at 03:01 for all museums in parallel. It empties each core and reloads it; if a load fails it reloads the previous night's data. Its output is immutable. | New files appear, and CollectionSpace-driven takedowns take effect, within about 24 hours. |
 | CollectionSpace is hosted at Lyrasis. Designs assume only HTTP Basic authentication (newer CollectionSpace versions also have OAuth2, not checked for the hosted version). | Serena uses one read-only service account per museum, password in Secrets Manager. |
 | CollectionSpace generates the image derivatives (Thumbnail, Small, Medium, FullHD, OriginalJpeg) itself. | Serena never resizes. It makes only watermarked copies. |
@@ -120,7 +123,8 @@ Non-goals:
 - Deciding what is public. That stays in the ETL.
 - Cleaning up orphaned Blobs in CollectionSpace. That belongs to whoever runs CollectionSpace.
 - Any change to Lyrasis's buckets or configuration.
-- Changes to Glimmer.
+- Changes to Glimmer, apart from one: Glimmer signs the PDF links it gives signed-in readers (see Restricted
+  PDFs).
 
 Constraints (also in `CLAUDE.md`):
 
@@ -171,14 +175,16 @@ Serena answers the paths its clients build today, under each museum's prefix:
 - Cinefiles only: `…/cinefiles/imageserver/blobs/<blob CSID>/content/linked_pdf:<suffix>` and
   `…/content/inline_pdf:<suffix>`, which Glimmer builds for PDFs. The suffix is up to 512 characters with no slash
   (decided October 9, 2026); Serena accepts and ignores it, and never logs it, because it carries the signed-in
-  visitor's email address.
+  visitor's email address. For a signed-in reader, Glimmer adds a signature as query parameters (see Restricted
+  PDFs).
 - Added for clients that use Media CSIDs (pull request 15 in the plan):
   `…/<tenant>/imageserver/media/<media CSID>/blob/derivatives/<derivative>/content` and
   `…/media/<media CSID>/blob/content`.
 
 Anything else under `imageserver/` gets the unavailable image. Serena accepts only these shapes, with a CSID in
 CollectionSpace's format and a derivative name from the museum's list, matched exactly. It answers `GET` and `HEAD`,
-and ignores any query string. A request under a museum Serena doesn't serve gets the default unavailable image.
+and ignores any query string apart from the signature parameters on a PDF request (see Restricted PDFs). A request
+under a museum Serena doesn't serve gets the default unavailable image.
 
 A CSID is 1 to 64 letters, digits and hyphens (decided October 9, 2026). That covers the usual UUIDs and the CSIDs
 that aren't UUIDs, such as PAHMA's restricted-image Blob. The same rule applies to the CSIDs in the Blob-to-Media file
@@ -207,7 +213,7 @@ Each Blob in the Blob-to-Media file has a kind (decided October 9, 2026):
 | --- | --- | --- | --- | --- |
 | image, card | Yes | Derivatives, and the original where the museum allows it | Image content type, decodable, size limit | If the museum watermarks that size |
 | 3D | Yes | The original file only | An allowlist of 3D content types, size limit | No |
-| pdf | Yes, if its access is public | The original file only | `application/pdf`, size limit | No |
+| pdf | Yes if its access is public; if restricted, only with a valid signed link | The original file only | `application/pdf`, size limit | No |
 | audio, video | Not yet (see Open questions) | n/a | n/a | No |
 
 A request for a derivative of a 3D or PDF Blob gets the unavailable image (reason "no derivatives for this kind").
@@ -215,9 +221,53 @@ Size limits are per museum, set in the admin app. The starting values are 500 MB
 files and 200 MB for PDFs, for every museum (decided October 9, 2026); the values for production are to be confirmed
 (see Open questions).
 
-A restricted PDF (access restricted) gets the unavailable image for now. Signed-in access for Glimmer users is a
-later step on Glimmer's timeline: short-lived links that Glimmer signs for its signed-in users, which Serena would
-verify. The access column already tells Serena which PDFs are restricted, so that step needs no further ETL change.
+### Restricted PDFs
+
+Cinefiles marks some documents restricted. Glimmer shows a restricted document's PDF only to readers signed in to
+Glimmer, who have accepted Cinefiles' copyright terms. Serena serves a restricted PDF only when Glimmer vouches for
+the reader with a signed link (decided October 9, 2026). The Blob-to-Media file's access column says which PDFs are
+restricted. A restricted document's page images stay public: Cinefiles staff are concerned only with the PDFs
+(October 9, 2026).
+
+**The link.** Glimmer adds four query parameters to the PDF links it renders for a signed-in reader:
+
+```
+…/cinefiles/imageserver/blobs/<blob CSID>/content/linked_pdf:?exp=<exp>&uid=<uid>&kid=<kid>&sig=<sig>
+```
+
+- `exp`: the link's expiry, in Unix seconds (UTC). Glimmer sets it 15 minutes ahead.
+- `uid`: the reader's Glimmer account ID. Never an email address.
+- `kid`: the ID of the key that signed it.
+- `sig`: HMAC-SHA256 of the string `v1`, `<tenant>`, `<blob CSID>`, `<exp>`, `<uid>`, joined by newlines (no
+  trailing newline), in base64url without padding.
+
+Test vector, with an example key that isn't a secret:
+
+```
+key:     example-key-not-a-secret
+string:  v1\ncinefiles\n0a1b2c3d-1111-2222-3333-444455556666\n1791590400\n12345
+sig:     pZqh6CO0MnUTOb6m_KMQtytCwTauTCXr5ZZb-5aGDWg
+```
+
+**What Serena checks,** for a PDF whose access is restricted, before the usual steps:
+
+- the four parameters are present and well formed, and `kid` names one of the museum's current keys;
+- `exp` hasn't passed (60 seconds of clock difference allowed) and is no more than 60 minutes ahead;
+- the signature matches, recomputed over the tenant and Blob CSID in the path and compared in constant time.
+
+If they pass, the request goes on like any other and gets a 302 to a CloudFront signed URL; the 302 is sent with
+`Cache-Control: no-store`. If not, the unavailable image, with the reason `restricted` (no signature),
+`signature_invalid` or `signature_expired`. A public PDF is served with or without a signature.
+
+**Keys.** One per museum and environment, at least 32 random bytes, generated by the DevOps team and kept in AWS
+Secrets Manager for Serena and in Glimmer's secret store. Each has a key ID. During a rotation Glimmer signs with the
+new key and Serena accepts the new and the previous one.
+
+**Logs.** The signature is never logged. The reader's `uid` is neither logged nor recorded unless Cinefiles wants
+records of who read which PDF (F8).
+
+**Timeline.** Glimmer's change is a story in the HMP project. Cinefiles moves to Serena only once Glimmer signs its
+links in production (see Migration).
 
 ### The steps
 
@@ -253,8 +303,9 @@ sequenceDiagram
 1. **Parse.** Check the path's shape, the tenant, the CSID's format and the derivative name. If any fails: the
    unavailable image.
 2. **Servability.** Read the servability record for `<tenant>#<blob CSID>`; it must exist, its kind must be one Serena
-   serves, and its access must be public. The request must fit the kind: a derivative only of an image or card, and
-   an image's or card's original file only where the museum serves originals. Then read the takedown record for its
+   serves, and its access must be public, or restricted with a valid signed link (see Restricted PDFs). The request
+   must fit the kind: a derivative only of an image or card, and an image's or card's original file only where the
+   museum serves originals. Then read the takedown record for its
    Media CSID, strongly consistent, so a takedown takes effect on the next request; an active takedown means not
    servable. If not servable: the unavailable image, with the reason (see Requests Serena doesn't serve).
 3. **Cache index.** Look up `<tenant>#<blob CSID>#<derivative>`, or for a watermarking museum the watermarked entry for
@@ -310,7 +361,9 @@ Each case has its own reason, so the admin app can say why a file isn't served:
 | `derivative_not_served` | A derivative not on the museum's list |
 | `not_listed` | The Blob isn't in the last applied Blob-to-Media file |
 | `kind_not_served` | Audio or video, for now |
-| `restricted` | Access restricted (Cinefiles' PDFs other than code 4) |
+| `restricted` | A restricted PDF (Cinefiles' PDFs other than code 4) requested without a signed link |
+| `signature_invalid` | A restricted PDF's signed link is malformed, has an unknown key ID or doesn't match |
+| `signature_expired` | A restricted PDF's signed link has expired, or expires too far ahead |
 | `no_derivatives_for_kind` | A derivative of a 3D or PDF Blob |
 | `original_not_served` | An image's or card's original file, where the museum doesn't serve originals |
 | `taken_down` | The Media record has an active takedown in Serena |
@@ -371,9 +424,9 @@ where the table is read as a list, a sort key:
 | Cache index | see Storage | | |
 | Audit log | `<tenant>` | `<time>#<admin>` | every admin action |
 
-A Blob is servable when its servability record exists, its kind is served, its access is public, and its Media CSID
-has no active takedown. The table holds the Blobs in the last applied night's file. The museum's restricted-image Blob
-must be listed there too, like any other (decided October 9, 2026).
+A Blob is servable when its servability record exists, its kind is served, its access is public (or restricted, with
+a valid signed link), and its Media CSID has no active takedown. The table holds the Blobs in the last applied night's
+file. The museum's restricted-image Blob must be listed there too, like any other (decided October 9, 2026).
 
 ### The Blob-to-Media file
 
@@ -385,8 +438,12 @@ October 9, 2026):
 - One row per Blob CSID in the public core's image, card, audio, video, 3D and PDF fields: no more and no fewer.
 - `kind`: image, card, audio, video, 3D or pdf. A Blob in several fields takes the first that applies of pdf, 3D, card,
   image.
-- `access`: public or restricted. For kind pdf it follows the document's access code (public only for code 4); every
-  other row is public.
+- `access`: public or restricted. For kind pdf it follows the document's access code, as the ETL already computes it
+  for the public core (the document's own access code override, otherwise its source's): public only for World
+  (code 4); any other code, and no code at all, is restricted. Every other row is public, a restricted document's page
+  images included (decided October 9, 2026). The ETL's mapping must use the values CollectionSpace stores:
+  "Education (\*.edu)" is stored with an asterisk, and a document whose code isn't recognized gets no code, so it is
+  restricted.
 - Only the museum's restricted-image Blob may have an empty `media_csid`.
 - Immutable once written; Serena keeps a copy of each applied file in S3. The ETL keeps each night's file for 14 days.
 
@@ -483,6 +540,10 @@ per environment to the team's mailing list. The subscription requires authentica
 
 - **Through CollectionSpace:** unpublish the Media record, or mark its Object sensitive. The next ETL run drops the
   Blob from the public core; the next nightly update stops Serena serving it. Within 24 hours.
+- **Cinefiles, through CollectionSpace:** its ETL has no Media-level publish flag, so unpublishing a Media record
+  changes nothing. Staff restrict a PDF by setting its document's access code override (or its source's access code)
+  to anything but World; after the next nightly update only signed-in Glimmer readers get it. To stop serving a PDF
+  or an image to everyone, an admin takes down its Media record in the admin app.
 - **In Serena's admin app:** an admin takes down a Media record by CSID. It takes effect on the next request.
   Nothing is deleted; the cached files stay in S3. An admin can later unlock it, which removes Serena's override and
   hands servability back to the ETL's state.
@@ -591,7 +652,7 @@ reachable only from campus networks.
   signed URLs or personal data in logs: the PDF link suffix is removed before anything is logged. The load balancer's
   access logs stay off, and WAF logging leaves the suffix out. Uvicorn's access log is off too, since it would log the
   raw path; Serena logs requests itself. As a backstop, every log field and traceback is scrubbed of credentials,
-  tokens, signed-URL signatures, the PDF link suffix and email addresses.
+  tokens, signed-URL signatures, the PDF link suffix and signature, and email addresses.
 - **Configuration.** Settings come from environment variables prefixed `SERENA_` (never a secret: those are in
   Secrets Manager). Each museum has a YAML file in `backend/serena/museums/`: its derivatives, whether it serves the
   original file, its restricted-image Blob CSID, and the starting values of its settings (watchdog deadline, the
@@ -606,8 +667,8 @@ reachable only from campus networks.
 1. Build Serena and deploy it beside the legacy imageserver.
 2. Get the ETL change (CSW-1027) in for every museum, calling Serena's ETL API.
 3. Route one low-traffic museum's `imageserver` paths to Serena; compare with the legacy imageserver.
-4. Move the other museums one at a time. Cinefiles moves once its staff have confirmed Serena's handling of PDFs
-   (F8); the Botanical Garden once watermarking is built.
+4. Move the other museums one at a time. Cinefiles moves once Glimmer signs its PDF links in production (see
+   Restricted PDFs) and its staff have confirmed the rest of F8; the Botanical Garden once watermarking is built.
 5. Decommission the legacy imageserver and remove it from cspace-webapps-common.
 
 ## How we got here
@@ -648,10 +709,13 @@ The F numbers follow the team's list of follow-ups.
 - **F6. API documentation.** Whether the admin API is documented the same way as the ETL API.
 - **F7. Review with DevOps.** Partial nights, the file rules and the run rules, to be documented and reviewed by the
   DevOps team.
-- **F8. Cinefiles PDFs.** Confirm with Cinefiles staff: that code 4 alone means public; whether restricted PDFs being
-  unavailable to signed-in Glimmer users until signed links exist is acceptable; whether per-user records of PDF views
-  are wanted; whether documents with several PDFs should show them all; whether an image is acceptable where a portal
-  embeds a restricted PDF.
+- **F8. Cinefiles PDFs.** Settled October 9, 2026: restricted PDFs are served only with a link Glimmer signs (see
+  Restricted PDFs), and restricted documents' page images stay public. Still to confirm with Cinefiles staff: that
+  code 4 alone means public; what PFA Staff Only and In House Only should mean (served to signed-in readers like the
+  other restricted codes, or never), and if they differ, whether the Blob-to-Media file should carry the access code
+  itself; whether records of who read which PDF are wanted (Serena would record `uid`); whether the email address can
+  come out of Glimmer's PDF links; whether documents with several PDFs should show them all; whether the unavailable
+  image is acceptable where a portal embeds a restricted PDF whose link has expired.
 - **Audio and video.** Whether Serena serves them, as kinds audio and video; to be settled from the access logs and
   whether clients other than Glimmer request them. The nightly file lists them either way.
 - **URL forms in use.** Confirm from the access logs which URL shapes and derivative names are requested, and which
@@ -672,7 +736,8 @@ The F numbers follow the team's list of follow-ups.
 - **Notifications list.** The team mailing list that receives alarms.
 
 Settled since October 8 and recorded above: the restricted-image Blob (stored from an admin upload), 3D files (served),
-the change threshold (5%, counting changed rows), admin sign-in (CollectionSpace account and role).
+the change threshold (5%, counting changed rows), admin sign-in (CollectionSpace account and role), restricted
+Cinefiles PDFs (signed links).
 
 ## Testing
 
