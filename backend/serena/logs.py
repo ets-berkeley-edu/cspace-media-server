@@ -34,6 +34,8 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)(https?://[^/\s:@]+:)[^@\s/]+@"), r"\1" + REMOVED + "@"),
     # CloudFront signed URLs: the signature, the policy and the key pair
     (re.compile(r"(?i)\b(Signature|Policy|Key-Pair-Id)=[^&\s'\"]+"), r"\1=" + REMOVED),
+    # A portal's signed link (design: Restricted files): its signature and the reader's ID
+    (re.compile(r"(?i)\b(sig|uid)=[^&\s'\"]+"), r"\1=" + REMOVED),
     # any email address left, plain or percent-encoded
     (re.compile(r"[A-Za-z0-9._%+-]+(?:@|%40)[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"), REMOVED),
 ]
