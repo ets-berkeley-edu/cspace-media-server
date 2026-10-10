@@ -113,3 +113,25 @@ Secrets Manager. Run these from a shell with the AWS profile set, without printi
   the content type for each; note any that differ from the kinds in the design.
 - [ ] Change the secret's password to a wrong one for a moment, then back. Within 5 minutes expect a 401 that isn't
   retried, and nothing about the password in the log.
+
+## 9. Cinefiles' restricted PDFs through Glimmer's signed links, in QA (20 minutes, once Glimmer signs its links in QA and Serena is in QA)
+
+The tests check the signature with synthetic keys and links. This checks that Glimmer and Serena agree on real ones.
+
+Set up: the QA signing key is in Serena's secret and Glimmer's credentials, with matching fingerprints (the
+operations task). Pick a restricted PDF (a Cinefiles document whose access code isn't World) and a public one. Use a
+test reader's Glimmer account.
+
+- [ ] Signed in to Glimmer, open the restricted document's PDF ("view full size" and the embedded viewer). Expect the
+  PDF, and the redirect sent with `Cache-Control: no-store`.
+- [ ] Copy the PDF link, remove its query string, and open it in a private window. Expect the unavailable image.
+- [ ] Change one digit of `uid` in the link. Expect the unavailable image; Serena records `signature_invalid`.
+- [ ] Wait past the link's lifetime (or use a link from a page left open that long). Expect the unavailable image and
+  `signature_expired`; reloading Glimmer's page gives a working link.
+- [ ] Signed out, open the public document's PDF. Expect the PDF.
+- [ ] Take the restricted PDF's Media record down in the admin app. Expect the unavailable image even with a fresh
+  signed link; then unlock it.
+- [ ] In Serena's log, find the served entry: it shows `signed` and the key ID, and no `uid`, `sig` or `exp`. In the
+  webapps host's Apache access log, expect no `uid` or `sig` values.
+- [ ] Rotate the QA key in the order the design gives. Links signed before and after the switch both work during the
+  hour that follows.

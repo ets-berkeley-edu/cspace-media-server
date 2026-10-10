@@ -12,7 +12,7 @@ import boto3
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import etl_api, imageserver, logs, museum, signing, tables
+from . import etl_api, imageserver, logs, museum, signed_links, signing, tables
 from .config import Settings, get_settings
 from .museum_settings import MuseumSettings
 from .runs import Runs
@@ -65,6 +65,11 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     tokens = Tokens(secret_cache, settings.etl_token_secret_ids, list(museums))
     app.state.s3 = s3
     app.state.signer = _signer(settings, secret_cache)
+    app.state.signing_keys = signed_links.SigningKeys(secret_cache, settings.signing_key_secret_ids)
+    for key, configured in museums.items():
+        if configured.signed_access_kinds and key not in settings.signing_key_secret_ids:
+            log.warning("no signing key secret for a museum with signed access: its restricted files aren't served",
+                        extra={"museum": key})
     app.mount(etl_api.PREFIX, etl_api.create_etl_app(etl_api.Services(
         settings, museums, app.state.museum_settings, Runs(store, clock) if clock else Runs(store), tokens, s3)))
 

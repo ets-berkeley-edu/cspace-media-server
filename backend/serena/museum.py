@@ -65,6 +65,9 @@ class Museum(BaseModel):
     # The sizes the museum watermarks (design: Watermarks). Until watermarking is built, they get the unavailable
     # image: Serena never serves an unwatermarked copy of a size the museum watermarks.
     watermark_sizes: tuple[str, ...] = ()
+    # The kinds whose restricted files are served with a portal's signed link (design: Restricted files). Its keys
+    # are a Secrets Manager secret, named in SERENA_SIGNING_KEY_SECRET_IDS.
+    signed_access_kinds: tuple[Kind, ...] = ()
     settings: StartingSettings
 
     @field_validator("derivatives")
@@ -93,6 +96,8 @@ class Museum(BaseModel):
         unknown = [size for size in self.watermark_sizes if size not in self.derivatives]
         if unknown:
             raise ValueError(f"watermark_sizes not among the museum's derivatives: {', '.join(unknown)}")
+        if len(set(self.signed_access_kinds)) != len(self.signed_access_kinds):
+            raise ValueError("a kind is listed twice in signed_access_kinds")
         return self
 
 

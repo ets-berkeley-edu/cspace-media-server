@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # {"key_pair_id": ..., "private_key": "<PEM>"}.
     cdn_base_url: str = ""
     cloudfront_key_secret_id: str = ""
+    # Signed links for restricted files (design: Signed links): each museum that allows signed access has one Secrets
+    # Manager secret {"current": {"kid": ..., "key": ...}, "previous": {...} or null}; these are the secrets' IDs,
+    # from SERENA_SIGNING_KEY_SECRET_IDS as JSON. The keys are never logged.
+    signing_key_secret_ids: dict[str, str] = {}
     # Local development only, without CloudFront: Serena signs with a key of its own and serves the files itself at
     # /local-cdn/<tenant>/objects/<sha256>. Allowed only with dynamodb_endpoint (DynamoDB Local), so never in AWS.
     local_cdn: bool = False

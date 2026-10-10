@@ -33,7 +33,7 @@ CloudFront link; fetching from CollectionSpace comes later. The design is `docs/
 | `backend/` | The Python 3.11 app (`serena/`), its tests and its pinned requirements |
 | `backend/serena/static/` | The unavailable image (`unavailable.svg`, the legacy imageserver's `404.svg`) |
 | `backend/fakecspace/` | A CollectionSpace simulator for tests and local development, with synthetic files |
-| `backend/serena/museums/` | Each museum's configuration: derivatives served, restricted-image Blob, starting settings |
+| `backend/serena/museums/` | Each museum's configuration: derivatives served, restricted-image Blob, kinds with signed access, starting settings |
 | `admin/` | The admin web app: Vue, TypeScript and Vuetify (to come) |
 | `deploy/` | The AWS deployment: Terraform and the production image (to come) |
 | `.github/workflows/` | CI (`ci.yml`), the weekly dependency audit (`audit.yml`) and the secret scan (`security.yml`) |

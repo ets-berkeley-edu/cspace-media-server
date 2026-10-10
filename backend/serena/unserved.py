@@ -24,7 +24,9 @@ class Reason(StrEnum):
     # Servability (design: The steps, step 2)
     NOT_LISTED = "not_listed"  # not in the last applied Blob-to-Media file
     KIND_NOT_SERVED = "kind_not_served"  # audio or video, for now
-    RESTRICTED = "restricted"  # access restricted (Cinefiles' PDFs other than code 4)
+    RESTRICTED = "restricted"  # access restricted, without a signed link or of a kind without signed access
+    SIGNATURE_INVALID = "signature_invalid"  # a signed link that is malformed, has an unknown key ID or doesn't match
+    SIGNATURE_EXPIRED = "signature_expired"  # a signed link that has expired, or expires too far ahead
     TAKEN_DOWN = "taken_down"
     NO_DERIVATIVES_FOR_KIND = "no_derivatives_for_kind"  # a derivative of a 3D or PDF Blob
     ORIGINAL_NOT_SERVED = "original_not_served"  # an image's original where the museum doesn't serve it
