@@ -82,7 +82,8 @@ def test_a_whole_night_then_a_file_is_fetched_and_served(stack: Any) -> None:
                              wait=lambda seconds: worker.tick())
     assert summary["state"] == "applied"
     assert summary["preflight"]["result"] == "passed"
-    assert summary["apply"]["written"] == 6
+    assert summary["apply"]["written"] == 7  # and PAHMA's restricted-image Blob
+    assert not any("restricted-image" in warning for warning in summary["preflight"]["warnings"])
     response = serena.get(summary["samples"]["image"])
     assert response.status_code == 302 and response.headers["location"].startswith("/local-cdn/pahma/objects/")
     assert serena.get(response.headers["location"]).status_code == 200
@@ -97,3 +98,20 @@ def test_a_partial_night_stops_after_the_preflight(stack: Any) -> None:
                              wait=lambda seconds: worker.tick())
     assert summary["state"] == "ready" and summary["apply"] is None
     assert "pdf (restricted)" in summary["samples"]
+
+
+def test_a_night_with_different_rows_trips_the_threshold(stack: Any) -> None:
+    """What happens when ./serena etl pahma --rows 3 follows a 20-row night: preflight refuses, as it should."""
+    serena, cspace, worker, token = stack
+    tick = lambda seconds: worker.tick()  # noqa: E731
+    assert fake_etl.night(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "applied"
+    smaller = fake_etl.night(serena, cspace, "pahma", token("pahma"), count=3, poll=0, wait=tick)
+    assert smaller["state"] == "preflight_failed" and fake_etl.threshold_failed(smaller)
+    assert fake_etl.night(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "applied"
+
+
+def test_the_restricted_image_blob_is_listed_without_a_media_csid() -> None:
+    listed = fake_etl.rows("pahma", 2)
+    assert listed[-1][0] == "59a733dd-d641-4e1a-8552" and listed[-1][1] == ""
+    assert all(row[1] for row in fake_etl.rows("bampfa", 2))  # no restricted-image Blob there
+
