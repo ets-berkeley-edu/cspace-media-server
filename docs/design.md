@@ -513,11 +513,11 @@ Under `/etl/v1/`, over HTTPS, not served through CloudFront, and accepted only f
 own bearer token, kept in Secrets Manager on Serena's side and in the ETL server's own secret store; during a rotation
 Serena accepts the old and the new token. Errors are `application/problem+json` with reasons, never internals.
 
-Tokens (decided October 9, 2026): one Secrets Manager secret per museum, `{"current": …, "previous": …}`, each token
-at least 32 characters. Each task reads it again every 5 minutes, so a rotation reaches every task within 5 minutes
-without a restart: put the new token in `current` and the old one in `previous`, give the ETL team the new token,
-then clear `previous`. Tokens are compared in constant time and never logged; at any log level the AWS libraries' own
-logging stays at warnings, since at debug it would log a secret's value.
+Tokens (decided October 9, 2026): one Secrets Manager secret per museum, `{"current": …, "previous": …}`, each token at
+least 32 characters (a shorter one is never accepted). Each task reads it again every 5 minutes, so a rotation reaches
+every task within 5 minutes without a restart: put the new token in `current` and the old one in `previous`, give the
+ETL team the new token, then clear `previous`. Tokens are compared in constant time and never logged; at any log level
+the AWS libraries' own logging stays at warnings, since at debug it would log a secret's value.
 
 | Method | Path | What it does |
 | --- | --- | --- |
@@ -542,7 +542,8 @@ Run states: `started` → `received` → `preflighting` → `ready` or `prefligh
 - If the open run is one the worker is preflighting or applying, a later night's run isn't started: `409`, and the
   ETL tries again until its step timeout, then carries on without Serena (decided October 9, 2026). So a museum has
   at most one open run, always its newest.
-- A run's ID is `<tenant>-<night>-<n>` (for example `pahma-2026-10-10-1`), `n` counting the runs started that night.
+- A run's ID is `<tenant>-<night>-<n>` (for example `pahma-2026-10-10-1`), `n` counting the runs started that night
+  (up to 999).
 - A run in `apply_failed` stays open until an admin retries it or the next night's run starts.
 - Every run response carries `poll_interval_seconds` and `step_timeout_seconds` (15 and 1800 to start), which admins
   change per museum in the admin app. The ETL's own HTTP calls use a connect timeout of 10 seconds, a read timeout of
@@ -568,7 +569,8 @@ Answers: `200` or `201` (a run started), and these problems:
 | `413` | A file larger than Serena accepts |
 | `415` | A body that isn't `text/tab-separated-values`, or an encoding other than gzip |
 | `422` | A file that doesn't match its `X-Row-Count` or `X-Content-SHA256` |
-| `503` | Serena can't check right now (its tokens or the museum's bucket unavailable); try again |
+| `503` | Serena can't check right now (its tokens, its records or the museum's bucket unavailable or not configured); try again |
+| `500` | Anything else unexpected; a reason, never internals; try again |
 
 The API's OpenAPI description, with examples, is generated from the code. A copy is kept in the repository as
 `docs/api/etl-v1.json`, and CI fails when the copy no longer matches the code, so the ETL team can read it on GitHub.

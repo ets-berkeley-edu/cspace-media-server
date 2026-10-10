@@ -13,6 +13,8 @@ import sys
 from dataclasses import dataclass
 from typing import Annotated, Any, cast
 
+from boto3.exceptions import Boto3Error
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -30,6 +32,7 @@ from .tokens import Tokens, TokenStoreUnavailable
 log = logging.getLogger("serena.etl")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 PREFIX = "/etl/v1"
+AWS_ERRORS: tuple[type[Exception], ...] = (BotoCoreError, ClientError, Boto3Error)
 
 
 @dataclass
@@ -117,6 +120,15 @@ def create_etl_app(services: Services) -> FastAPI:
     async def _http(request: Request, error: StarletteHTTPException) -> JSONResponse:
         return response(Problem(type="about:blank", title="Not found" if error.status_code == 404 else "Error",
                                 status=error.status_code))
+
+    async def _aws_unavailable(request: Request, error: Exception) -> JSONResponse:
+        # DynamoDB or S3 failed or couldn't be reached: the ETL retries, as for any 5xx (design: The ETL API).
+        log.warning("ETL API: AWS unavailable", extra={"error": type(error).__name__})
+        return response(Problem(type="about:blank", title="Storage unavailable", status=503,
+                                detail="Serena can't reach its records or storage right now; try again"))
+
+    for aws_error in AWS_ERRORS:
+        app.add_exception_handler(aws_error, _aws_unavailable)
 
     @app.exception_handler(Exception)
     async def _internal(request: Request, error: Exception) -> JSONResponse:

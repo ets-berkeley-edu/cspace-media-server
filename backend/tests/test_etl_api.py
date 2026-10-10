@@ -300,6 +300,32 @@ def test_bad_gzip(client: TestClient) -> None:
     is_problem(response, 400)
 
 
+# --- AWS failing
+
+def test_storage_failing_is_503(client: TestClient, s3: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from botocore.exceptions import EndpointConnectionError
+
+    run = start(client)
+
+    def unreachable(*args: object, **kwargs: object) -> None:
+        raise EndpointConnectionError(endpoint_url="https://s3.test")
+
+    monkeypatch.setattr(s3, "upload_file", unreachable)
+    response = put(client, run, FILE)
+    is_problem(response, 503)
+    assert "s3.test" not in response.text  # no internals
+
+
+def test_records_failing_is_503(client: TestClient, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+    from botocore.exceptions import ClientError
+
+    def throttled(**kwargs: object) -> None:
+        raise ClientError({"Error": {"Code": "ProvisionedThroughputExceededException", "Message": "x"}}, "Query")
+
+    monkeypatch.setattr(store.client, "query", throttled)
+    is_problem(client.post("/etl/v1/museums/pahma/runs", headers=auth()), 503)
+
+
 # --- documentation
 
 def test_the_api_documentation_in_the_repository_is_current() -> None:
