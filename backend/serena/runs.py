@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -76,6 +77,11 @@ class Run:
     updated_at: str
     upload: Upload | None = None
     reasons: list[str] = field(default_factory=list)
+    preflight: dict[str, Any] | None = None  # the preflight's result
+    solr_load: dict[str, Any] | None = None  # the load outcome the ETL reported
+    apply: dict[str, Any] | None = None  # the apply's counts
+    owner: str | None = None  # the worker doing this run's step
+    heartbeat_at: int | None = None  # when that worker last said it was still on it (Unix seconds)
 
     @property
     def run_id(self) -> str:
@@ -126,7 +132,36 @@ def _to_item(run: Run) -> dict[str, Any]:
     }
     if run.upload:
         plain["upload"] = vars(run.upload)
-    return {k: _serializer.serialize(v) for k, v in plain.items()}
+    for name in ("preflight", "solr_load", "apply"):
+        if getattr(run, name) is not None:
+            plain[name] = getattr(run, name)
+    return {k: _serializer.serialize(_decimals(v)) for k, v in plain.items()}
+
+
+def _decimals(value: Any) -> Any:
+    """DynamoDB stores numbers as Decimal: floats are converted, recursively."""
+
+
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _decimals(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_decimals(v) for v in value]
+    return value
+
+
+def _plain(value: Any) -> Any:
+    """Decimals back to int or float, recursively."""
+
+
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_plain(v) for v in value]
+    return value
 
 
 def _from_item(item: dict[str, Any]) -> Run:
@@ -136,7 +171,10 @@ def _from_item(item: dict[str, Any]) -> Run:
                created_at=plain["created_at"], updated_at=plain["updated_at"],
                upload=Upload(upload["sha256"], int(upload["rows"]), int(upload["bytes"]), upload["key"],
                              upload["uploaded_at"]) if upload else None,
-               reasons=list(plain.get("reasons", [])))
+               reasons=list(plain.get("reasons", [])),
+               preflight=_plain(plain.get("preflight")), solr_load=_plain(plain.get("solr_load")),
+               apply=_plain(plain.get("apply")), owner=plain.get("owner"),
+               heartbeat_at=int(plain["heartbeat_at"]) if "heartbeat_at" in plain else None)
 
 
 class Runs:
@@ -193,8 +231,10 @@ class Runs:
         raise OutOfOrder(f"{tenant}-{self.tonight()}", State.STARTED,
                          "another run was starting at the same time; try again")
 
-    def transition(self, run: Run, to: State, *, upload: Upload | None = None, reason: str | None = None) -> Run:
-        """Move the run to `to`, only if it is still in the state it was read in."""
+    def transition(self, run: Run, to: State, *, upload: Upload | None = None, reason: str | None = None,
+                   results: dict[str, dict[str, Any]] | None = None, release: bool = False) -> Run:
+        """Move the run to `to`, only if it is still in the state it was read in. `results` sets preflight, solr_load
+        or apply; `release` ends the worker's claim."""
         now = self.now()
         names = {"#state": "state"}
         values: dict[str, Any] = {":to": {"S": to.value}, ":from": {"S": run.state.value}, ":now": {"S": now}}
@@ -202,10 +242,17 @@ class Runs:
         if upload is not None:
             update += ", upload = :upload"
             values[":upload"] = _serializer.serialize(vars(upload))
+        for name, result in (results or {}).items():
+            names[f"#{name}"] = name
+            update += f", #{name} = :{name}"
+            values[f":{name}"] = _serializer.serialize(_decimals(result))
         if reason is not None:
             update += ", reasons = list_append(if_not_exists(reasons, :empty), :reason)"
             values[":reason"] = {"L": [{"S": reason}]}
             values[":empty"] = {"L": []}
+        if release:
+            update += " REMOVE #owner, heartbeat_at"
+            names["#owner"] = "owner"
         try:
             self.client.update_item(TableName=self.table, Key={"pk": {"S": run.tenant}, "sk": {"S": run.sort_key}},
                                     UpdateExpression=update, ConditionExpression="#state = :from",
@@ -219,4 +266,55 @@ class Runs:
             run.upload = upload
         if reason is not None:
             run.reasons.append(reason)
+        for name, result in (results or {}).items():
+            setattr(run, name, result)
+        if release:
+            run.owner, run.heartbeat_at = None, None
         return run
+
+    # The worker's claim on a run's step (decided October 9, 2026, D33): a conditional write sets the owner and a
+    # heartbeat; a step whose heartbeat is older than `stale_seconds` was interrupted and may be claimed again.
+
+    def claim(self, run: Run, owner: str, stale_seconds: float) -> bool:
+        now = int(self.clock().timestamp())
+        try:
+            self.client.update_item(
+                TableName=self.table, Key={"pk": {"S": run.tenant}, "sk": {"S": run.sort_key}},
+                UpdateExpression="SET #owner = :owner, heartbeat_at = :now",
+                ConditionExpression="#state = :state AND (attribute_not_exists(#owner) OR heartbeat_at < :stale)",
+                ExpressionAttributeNames={"#owner": "owner", "#state": "state"},
+                ExpressionAttributeValues={":owner": {"S": owner}, ":now": {"N": str(now)},
+                                           ":state": {"S": run.state.value},
+                                           ":stale": {"N": str(int(now - stale_seconds))}})
+        except self.client.exceptions.ConditionalCheckFailedException:
+            return False
+        run.owner, run.heartbeat_at = owner, now
+        return True
+
+    def heartbeat(self, run: Run, owner: str) -> bool:
+        now = int(self.clock().timestamp())
+        try:
+            self.client.update_item(
+                TableName=self.table, Key={"pk": {"S": run.tenant}, "sk": {"S": run.sort_key}},
+                UpdateExpression="SET heartbeat_at = :now", ConditionExpression="#owner = :owner",
+                ExpressionAttributeNames={"#owner": "owner"},
+                ExpressionAttributeValues={":owner": {"S": owner}, ":now": {"N": str(now)}})
+        except self.client.exceptions.ConditionalCheckFailedException:
+            return False
+        return True
+
+    def latest_applied(self, tenant: str) -> Run | None:
+        """The museum's most recent applied run."""
+        start: dict[str, Any] | None = None
+        while True:
+            options: dict[str, Any] = {"ExclusiveStartKey": start} if start else {}
+            page = self.client.query(TableName=self.table, KeyConditionExpression="pk = :pk", ScanIndexForward=False,
+                                     FilterExpression="#state = :applied", ConsistentRead=True,
+                                     ExpressionAttributeNames={"#state": "state"},
+                                     ExpressionAttributeValues={":pk": {"S": tenant}, ":applied": {"S": "applied"}},
+                                     **options)
+            if page["Items"]:
+                return _from_item(page["Items"][0])
+            start = page.get("LastEvaluatedKey")
+            if not start:
+                return None

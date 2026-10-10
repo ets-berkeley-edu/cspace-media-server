@@ -442,9 +442,9 @@ where the table is read as a list, a sort key:
 
 | Table | Partition key | Sort key | Fields |
 | --- | --- | --- | --- |
-| Servability | `<tenant>#<blob CSID>` | | Media CSID, kind, access; indexed by `<tenant>#<media CSID>` |
+| Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the apply) |
 | Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
-| Runs | `<tenant>` | `<night>#<nnn>` (sorts by night, then run) | run ID, night, state, the upload (SHA-256, rows, size, S3 key), preflight result, timestamps, reasons |
+| Runs | `<tenant>` | `<night>#<nnn>` (sorts by night, then run) | run ID, night, state, the upload (SHA-256, rows, size, S3 key), the preflight's result, the load report, the apply's counts, the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | time | kind, message, acknowledged by and when |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
@@ -525,17 +525,18 @@ the AWS libraries' own logging stays at warnings, since at debug it would log a 
 | `POST` | `/etl/v1/museums/{tenant}/runs` | Starts a run: Serena assigns the run ID and night, and returns the file name, `poll_interval_seconds`, `step_timeout_seconds` and the links for the run's other calls. If a run for that museum and night is still open, returns it |
 | `GET` | `…/runs/{run_id}` | The run's status |
 | `PUT` | `…/runs/{run_id}/blob-media` | Uploads the file (`text/tab-separated-values`, gzip allowed), with `X-Row-Count` (data rows) and `X-Content-SHA256` (of the uncompressed file) |
-| `POST` | `…/runs/{run_id}/preflight` | Checks the file without applying it (202; poll) |
-| `POST` | `…/runs/{run_id}/solr-load` | Records the public core's load outcome: `loaded` or `fell_back` |
-| `POST` | `…/runs/{run_id}/apply` | Applies the file; only after the preflight passed and the load reported `loaded` (202; poll) |
-| `GET` | `/etl/v1/museums/{tenant}` | The latest applied run |
+| `POST` | `…/runs/{run_id}/preflight` | Checks the file without applying it (202; poll until `ready` or `preflight_failed`). Allowed once a file is received; after a failed preflight, upload a corrected file first |
+| `POST` | `…/runs/{run_id}/solr-load` | Records the public core's load outcome, `{"outcome": "loaded" or "fell_back", "rows": <documents loaded>}`; allowed once the preflight passed |
+| `POST` | `…/runs/{run_id}/apply` | Applies the file; only after the preflight passed and the load reported `loaded` (202; poll until `applied` or `apply_failed`) |
+| `GET` | `/etl/v1/museums/{tenant}` | The latest applied run (`404` if there is none yet) |
 
 Run states: `started` → `received` → `preflighting` → `ready` or `preflight_failed`; on `loaded`, `solr_loaded` →
 `applying` → `applied` or `apply_failed`; on `fell_back`, `abandoned`. Rules:
 
-- A call out of order gets `409`. Repeating a call is safe: starting a run returns the open run; uploading the same
-  file changes nothing; a corrected file may replace the previous one until the load outcome is reported, and must
-  then be preflighted again.
+- A call out of order gets `409`. Repeating a call is safe: starting a run returns the open run; asking for a preflight
+  or an apply that is queued, running or done returns the run as it is (`202` while queued or running, `200` once done);
+  reporting the same load outcome again changes nothing; uploading the same file changes nothing; a corrected file may
+  replace the previous one until the load outcome is reported, and must then be preflighted again.
 - A run's night is the Pacific date when it starts. A new run for the same night is allowed once the previous one is
   closed (`applied` or `abandoned`). Starting a later night's run closes an earlier open run as `abandoned`, except one
   the worker is preflighting or applying, which is never abandoned.
@@ -578,16 +579,40 @@ The admin app has a button that opens the same documentation.
 
 ### Preflight and apply
 
-The worker (a separate process, as in the BMU) does both, from work queued in the Runs table, so a restart never loses
-a step.
+The worker (a separate process, as in the BMU: `python -m serena.worker`) does both, from work queued in the Runs
+table, so a restart never loses a step.
 
-- **Preflight** checks the format, the CSIDs, the kinds and access values, empty `media_csid` values (allowed only for
-  the restricted-image Blob), and duplicates; warns if the museum's restricted-image Blob is missing; and compares the
-  file with the last applied one. If the added, removed and changed rows (a changed Media CSID, kind or access) exceed
-  a share of the rows (5% to start, a per-museum setting; decided October 9, 2026), the preflight fails.
-- **Apply** first deletes the rows for Blobs no longer listed, then writes the new and changed rows; unchanged rows
-  aren't touched. Deleting before adding means an apply that stops halfway never serves a Blob that the new night
-  dropped. It retries transient errors before reporting `apply_failed`.
+- **Finding and holding work** (decided October 9, 2026): every 5 seconds the worker reads each museum's newest run
+  (a museum has at most one open run, always its newest). A run in `preflighting` or `applying` is claimed with a
+  conditional write that sets an owner and a heartbeat; the heartbeat is renewed every 30 seconds while the step
+  runs. A step whose heartbeat is more than 5 minutes old was interrupted, and another pass claims it and starts it
+  again; both steps are safe to repeat. One worker task to start.
+- **Preflight** reads the uploaded file and checks, failing on any of (decided October 9, 2026):
+  - a header other than `blob_csid`, `media_csid`, `kind`, `access`, tab-separated; a missing header (empty file);
+  - a line without exactly four fields; a line that isn't UTF-8; a line ending in CR (lines end in LF; the last may
+    have no LF);
+  - a Blob or Media CSID outside Serena's rule (see URLs); a kind or access value not in the file's lists;
+  - an empty `media_csid`, except for the museum's restricted-image Blob;
+  - a Blob listed twice;
+  - more change than the threshold allows (below).
+
+  It warns, without failing, when the museum's restricted-image Blob isn't listed and when one Media CSID is listed
+  for several Blobs. The run shows the result: the rows, added, removed and changed counts, the change as a share,
+  the number of problems and the first 20, each with its line number, field and what is wrong, never the value.
+- **The threshold** (decided October 9, 2026): the file is compared with the last applied run's file, as kept in S3.
+  The added, removed and changed rows (a changed Media CSID, kind or access), as a share of the last applied file's
+  rows, may be at most the museum's threshold (5% to start, a per-museum setting). A museum's first load (no applied
+  file yet, or an empty one) has nothing to compare with, so the threshold doesn't apply to it; the run's warnings
+  say so, and every other check still does. An admin's override for one run comes with the admin app.
+- **Apply** reads the museum's rows from the servability table itself, through its `by_tenant` index, so it is right
+  even after an apply that stopped partway (decided October 9, 2026). It first deletes the rows for Blobs no longer
+  listed, then writes the new and changed rows; unchanged rows aren't touched. Deleting before adding means an apply
+  that stops halfway never serves a Blob that the new night dropped. Writes are batched (25 at a time), and what
+  DynamoDB leaves unprocessed is retried with backoff; a whole apply that still fails is tried twice more before the
+  run ends `apply_failed` with the reason. The run shows the counts: deleted, written, unchanged.
+- **The load report:** `solr-load` records the outcome and the number of documents loaded in the run, for the admin
+  app and troubleshooting, and nothing else: Serena doesn't read Solr, so it can't check the number (decided
+  October 9, 2026). `loaded` moves the run to `solr_loaded`; `fell_back` abandons it.
 
 ### Watchdog and alerts
 

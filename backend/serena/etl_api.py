@@ -11,7 +11,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 from boto3.exceptions import Boto3Error
 from botocore.exceptions import BotoCoreError, ClientError
@@ -72,8 +72,19 @@ class RunOut(BaseModel):
     step_timeout_seconds: int = Field(description="How long a step may take before the ETL carries on without Serena",
                                       examples=[1800])
     upload: UploadInfo | None = None
+    preflight: dict[str, Any] | None = Field(
+        None, description="The preflight's result: result (passed or failed), rows, added, removed, changed, "
+                          "previous_rows, threshold_percent, change_percent, error_count, errors (the first 20, each "
+                          "with line, field and problem), warnings")
+    solr_load: dict[str, Any] | None = Field(None, description="The load outcome the ETL reported")
+    apply: dict[str, Any] | None = Field(None, description="The apply's counts: deleted, written, unchanged")
     reasons: list[str] = Field(default_factory=list, description="Why the run is in its state, when that needs saying")
     links: Links
+
+
+class SolrLoad(BaseModel):
+    outcome: Literal["loaded", "fell_back"] = Field(description="loaded, or fell_back to the previous night's data")
+    rows: int = Field(ge=0, description="Documents loaded into the public core")
 
 
 class Ping(BaseModel):
@@ -90,6 +101,7 @@ def _out(services: Services, run: Run) -> RunOut:
         step_timeout_seconds=current.etl_step_timeout_seconds,
         upload=UploadInfo(sha256=upload.sha256, rows=upload.rows, bytes=upload.bytes, uploaded_at=upload.uploaded_at)
         if upload else None,
+        preflight=run.preflight, solr_load=run.solr_load, apply=run.apply,
         reasons=run.reasons,
         links=Links(self=base, blob_media=f"{base}/blob-media", preflight=f"{base}/preflight",
                     solr_load=f"{base}/solr-load", apply=f"{base}/apply"))
@@ -262,6 +274,70 @@ def create_etl_app(services: Services) -> FastAPI:
         finally:
             os.unlink(received.path)
         log.info("file received", extra={"museum": tenant, "run_id": run.run_id, "rows": received.rows})
+        return _json(_out(services, run))
+
+    def step(tenant: str, run_id: str, allowed: State, to: State, done: frozenset[State], what: str,
+             results: dict[str, dict[str, Any]] | None = None, reason: str | None = None) -> JSONResponse:
+        """Moves a run from `allowed` to `to`; a run already in `to` or past it (`done`) is returned as it is, so
+        repeating the call is safe. Anything else is out of order."""
+        run = run_of(tenant, run_id)
+        if run.state in done:
+            return _json(_out(services, run), 202 if run.state in BUSY else 200)
+        if run.state != allowed:
+            raise ProblemError(409, "the-etl-api", "Out of order",
+                               f"run {run.run_id} is {run.state.value}; {what} needs it {allowed.value}")
+        try:
+            run = services.runs.transition(run, to, results=results, reason=reason)
+        except OutOfOrder as error:
+            raise out_of_order(error) from None
+        log.info("step requested", extra={"museum": tenant, "run_id": run.run_id, "state": run.state.value})
+        return _json(_out(services, run), 202 if to in BUSY else 200)
+
+    @app.post("/museums/{tenant}/runs/{run_id}/preflight", response_model=RunOut, status_code=202,
+              responses={200: {"description": "The preflight is already done; the run is returned as it is",
+                               "model": RunOut}, **openapi_responses(401, 403, 404, 409, 503)},
+              summary="Check the uploaded file without applying it")
+    def request_preflight(tenant: Tenant, run_id: str) -> JSONResponse:
+        """Queues the preflight (202); poll the run until it is ready or preflight_failed. Allowed once a file is
+        uploaded (received). A failed preflight needs a corrected file, which puts the run back in received."""
+        return step(tenant, run_id, State.RECEIVED, State.PREFLIGHTING,
+                    frozenset({State.PREFLIGHTING, State.READY, State.SOLR_LOADED, State.APPLYING, State.APPLIED}),
+                    "the preflight")
+
+    @app.post("/museums/{tenant}/runs/{run_id}/solr-load", response_model=RunOut,
+              responses=openapi_responses(400, 401, 403, 404, 409, 503),
+              summary="Report the public core's load")
+    def report_solr_load(tenant: Tenant, run_id: str, body: SolrLoad) -> JSONResponse:
+        """Allowed once the preflight passed (ready). loaded: the run waits for the apply (solr_loaded). fell_back:
+        the run is abandoned and Serena applies nothing, so both keep yesterday's data."""
+        if body.outcome == "loaded":
+            return step(tenant, run_id, State.READY, State.SOLR_LOADED,
+                        frozenset({State.SOLR_LOADED, State.APPLYING, State.APPLIED}), "the load report",
+                        results={"solr_load": body.model_dump()})
+        run = run_of(tenant, run_id)
+        if run.state == State.ABANDONED and (run.solr_load or {}).get("outcome") == "fell_back":
+            return _json(_out(services, run))
+        return step(tenant, run_id, State.READY, State.ABANDONED, frozenset(), "the load report",
+                    results={"solr_load": body.model_dump()}, reason="the public core's load fell back")
+
+    @app.post("/museums/{tenant}/runs/{run_id}/apply", response_model=RunOut, status_code=202,
+              responses={200: {"description": "The file is already applied; the run is returned as it is",
+                               "model": RunOut}, **openapi_responses(401, 403, 404, 409, 503)},
+              summary="Apply the file")
+    def request_apply(tenant: Tenant, run_id: str) -> JSONResponse:
+        """Queues the apply (202); poll the run until it is applied or apply_failed. Allowed only after the
+        preflight passed and the load reported loaded (solr_loaded). Report the night a success only once the run
+        is applied."""
+        return step(tenant, run_id, State.SOLR_LOADED, State.APPLYING,
+                    frozenset({State.APPLYING, State.APPLIED}), "the apply")
+
+    @app.get("/museums/{tenant}", response_model=RunOut, responses=openapi_responses(401, 403, 404, 503),
+             summary="The museum's latest applied run")
+    def latest_applied(tenant: Tenant) -> JSONResponse:
+        """For troubleshooting. 404 if the museum has no applied run yet."""
+        run = services.runs.latest_applied(tenant)
+        if run is None:
+            raise ProblemError(404, "the-etl-api", "No applied run", f"{tenant} has no applied run yet")
         return _json(_out(services, run))
 
     return app
