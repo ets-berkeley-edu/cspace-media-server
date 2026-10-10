@@ -61,7 +61,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         s3 = boto3.client("s3", region_name=settings.aws_region, endpoint_url=settings.s3_endpoint)
     if secretsmanager is None:
         secretsmanager = secretsmanager_client(settings)
-    tokens = Tokens(SecretCache(secretsmanager, settings.secret_cache_seconds), settings.etl_token_secret_ids)
+    tokens = Tokens(SecretCache(secretsmanager, settings.secret_cache_seconds), settings.etl_token_secret_ids,
+                    list(museums))
     app.mount(etl_api.PREFIX, etl_api.create_etl_app(etl_api.Services(
         settings, museums, app.state.museum_settings, Runs(store, clock) if clock else Runs(store), tokens, s3)))
 

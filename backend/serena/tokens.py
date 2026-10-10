@@ -18,9 +18,12 @@ class TokenStoreUnavailable(Exception):
 
 
 class Tokens:
-    def __init__(self, secrets: SecretCache, secret_ids: dict[str, str]):
+    def __init__(self, secrets: SecretCache, secret_ids: dict[str, str], museums: list[str]):
+        """`museums` are the museums the deployment serves; `secret_ids` maps each to the ID of its token secret.
+        Names in logs come from `museums`, never from anything read with a secret."""
         self.secrets = secrets
         self.secret_ids = secret_ids
+        self.museums = sorted(museums)
 
     def _tokens(self, tenant: str) -> list[str]:
         secret_id = self.secret_ids.get(tenant)
@@ -40,7 +43,7 @@ class Tokens:
         found = None
         unavailable = False
         candidate = token.encode()
-        for tenant in sorted(self.secret_ids):
+        for tenant in self.museums:
             try:
                 known_tokens = self._tokens(tenant)
             except TokenStoreUnavailable:
