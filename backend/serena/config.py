@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     # How often each task writes its counts of unserved requests to their table
     unserved_flush_seconds: float = 60.0
 
+    # Each museum's S3 bucket (design: Storage), from SERENA_BUCKETS as JSON: {"pahma": "..."}.
+    buckets: dict[str, str] = {}
+    s3_endpoint: str | None = None  # local development only
+    # The ETL API (design: The ETL API). Each museum's bearer tokens are one Secrets Manager secret holding
+    # {"current": ..., "previous": ...}; these are the secrets' IDs, from SERENA_ETL_TOKEN_SECRET_IDS as JSON.
+    etl_token_secret_ids: dict[str, str] = {}
+    secretsmanager_endpoint: str | None = None  # local development only
+    secret_cache_seconds: float = 300.0  # how long each task keeps a secret before reading it again
+    upload_max_mb: int = 500  # the largest Blob-to-Media file accepted, uncompressed
+    upload_dir: str | None = None  # where uploads are written while they're checked; None: the system's temp directory
+
     @field_validator("tenants")
     @classmethod
     def _cspace_urls(cls, tenants: dict[str, str]) -> dict[str, str]:

@@ -4,23 +4,29 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from datetime import datetime
+from typing import Any
 
+import boto3
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import imageserver, logs, museum, tables
+from . import etl_api, imageserver, logs, museum, tables
 from .config import Settings, get_settings
 from .museum_settings import MuseumSettings
+from .runs import Runs
+from .secret_cache import SecretCache, secretsmanager_client
 from .store import Store, dynamodb_client
+from .tokens import Tokens
 from .unserved import DynamoRecorder, Recorder
 
 log = logging.getLogger("serena.app")
 
 
-def create_app(settings: Settings | None = None, store: Store | None = None,
-               unserved: Recorder | None = None) -> FastAPI:
-    """The app. Tests pass their own store (moto) and recorder; otherwise both use DynamoDB."""
+def create_app(settings: Settings | None = None, store: Store | None = None, unserved: Recorder | None = None,
+               s3: Any = None, secretsmanager: Any = None, clock: Callable[[], datetime] | None = None) -> FastAPI:
+    """The app. Tests pass their own store, recorder and clients (moto); otherwise they use AWS."""
     settings = settings or get_settings()
     logs.configure(settings.log_level)
     museums = museum.load_all(settings.tenants)
@@ -50,6 +56,15 @@ def create_app(settings: Settings | None = None, store: Store | None = None,
     app.state.store = store
     app.state.museum_settings = MuseumSettings(store, settings.settings_cache_seconds)
     app.state.unserved = recorder
+
+    if s3 is None:
+        s3 = boto3.client("s3", region_name=settings.aws_region, endpoint_url=settings.s3_endpoint)
+    if secretsmanager is None:
+        secretsmanager = secretsmanager_client(settings)
+    tokens = Tokens(SecretCache(secretsmanager, settings.secret_cache_seconds), settings.etl_token_secret_ids,
+                    list(museums))
+    app.mount(etl_api.PREFIX, etl_api.create_etl_app(etl_api.Services(
+        settings, museums, app.state.museum_settings, Runs(store, clock) if clock else Runs(store), tokens, s3)))
 
     @app.get("/health", include_in_schema=False)
     def health() -> PlainTextResponse:

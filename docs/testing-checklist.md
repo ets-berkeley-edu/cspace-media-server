@@ -42,3 +42,17 @@ remove the image from its Media record in CollectionSpace.
 - [ ] Request the Blob at its legacy URL. Expect the museum's unavailable image, not an error.
 - [ ] In Serena's log, expect the light check to pass and the Media service's fetch to fail, with that reason
   recorded. Note the status CollectionSpace returned.
+
+## 4. The ETL API with each museum's real token (15 minutes, once Serena is deployed to QA)
+
+Serena's tests use tokens made up at run time and moto in place of AWS. These checks need the QA deployment, each
+museum's token secret in Secrets Manager, and a call from the ETL server (the only place the load balancer accepts
+`/etl/` from).
+
+- [ ] From the ETL server, `GET /etl/v1/ping` with each museum's token. Expect `200` and `{"museum": "<that museum>"}`.
+- [ ] With one museum's token on another museum's path (`POST /etl/v1/museums/<other>/runs`), expect `403`.
+- [ ] Start a run, then upload a real night's Blob-to-Media file (gzip). Expect `received`, with the row count the ETL
+  reports, and the file in the museum's bucket under `blob-media/<run ID>/`, encrypted with the museum's KMS key.
+- [ ] Rotate one museum's token (new one in `current`, old one in `previous`). Within 5 minutes both work; after
+  `previous` is cleared, only the new one.
+- [ ] In CloudWatch, search Serena's logs for the tokens: expect no match.

@@ -34,6 +34,9 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)(https?://[^/\s:@]+:)[^@\s/]+@"), r"\1" + REMOVED + "@"),
     # CloudFront signed URLs: the signature, the policy and the key pair
     (re.compile(r"(?i)\b(Signature|Policy|Key-Pair-Id)=[^&\s'\"]+"), r"\1=" + REMOVED),
+    # A secret's value as AWS returns it (SecretString), and the ETL tokens' fields
+    (re.compile(r"(?i)(['\"\\]*(?:SecretString|SecretBinary|current|previous)['\"\\]*\s*[:=]\s*['\"\\]*)"
+                r"[^'\"\\\s,}]+"), r"\1" + REMOVED),
     # A portal's signed link (design: Restricted files): its signature and the reader's ID
     (re.compile(r"(?i)\b(sig|uid)=[^&\s'\"]+"), r"\1=" + REMOVED),
     # any email address left, plain or percent-encoded
@@ -44,6 +47,9 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # color_message, the message again with terminal colours.
 _STANDARD = set(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {"message", "asctime", "taskName",
                                                                           "color_message"}
+
+
+QUIET = ("httpx", "httpcore", "botocore", "boto3", "s3transfer", "urllib3")
 
 
 def scrub(text: str) -> str:
@@ -95,8 +101,9 @@ def configure(level: str = "INFO") -> None:
         logger.handlers = []
         logger.propagate = True
     logging.getLogger("uvicorn.access").disabled = True
-    # httpx and httpcore log every request's URL at INFO and DEBUG: Serena logs its own calls, without them.
-    for name in ("httpx", "httpcore"):
+    # httpx and httpcore log every request's URL at INFO and DEBUG, and botocore (boto3) logs whole request and
+    # response bodies at DEBUG, secrets' values included. Serena logs its own calls, without them, whatever its level.
+    for name in QUIET:
         logging.getLogger(name).setLevel(logging.WARNING)
     if logging.lastResort is not None:
         logging.lastResort.setFormatter(JsonFormatter())
