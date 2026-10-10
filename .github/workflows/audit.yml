@@ -1,6 +1,5 @@
 # Every Monday morning (Pacific), and on demand: checks the pinned packages for newly published vulnerabilities, so a
 # problem shows up even in a week nobody pushes. CI (ci.yml) runs the same check on every push.
-# An npm job joins this one when there is a frontend.
 name: Dependency audit
 on:
   schedule:
@@ -23,3 +22,13 @@ jobs:
           # The tools are audited apart from the app, as in the BMU: pip-audit refuses a package pinned twice.
           pip-audit --require-hashes --disable-pip -r requirements.txt -r requirements-dev.txt
           pip-audit --require-hashes --disable-pip -r requirements-tools.txt
+
+  npm:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: admin } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: "22" }
+      - run: npm audit

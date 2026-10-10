@@ -8,6 +8,8 @@ derivatives: [Thumbnail, Small, Medium, FullHD, OriginalJpeg]
 original: true
 # No restricted-image Blob: the ETL leaves non-public images out of the public core
 restricted_image_blob_csid: null
+# The CollectionSpace role that marks a Serena admin (design: Admin web app)
+admin_role: Serena_Admin
 settings:
   watchdog_deadline: "08:00"          # Pacific time: the night's run must be applied or abandoned by then
   etl_poll_interval_seconds: 15       # returned to the ETL in every run response

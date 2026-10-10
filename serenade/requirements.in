@@ -1,0 +1,3 @@
+# serenade's packages (pinned with hashes in requirements.txt)
+pytest>=8
+selenium>=4.40

@@ -31,6 +31,13 @@ from fastapi.responses import JSONResponse, Response
 from . import samples
 
 USERS = {"serena": "serena"}
+# Admins' own accounts, for the admin app's sign-in (design: Admin web app; decided October 10, 2026). Synthetic: each
+# password is its username. The museum is the first label of the host name the simulator is called by
+# (pahma.fakecspace, or pahma.cspace.test in the tests), as each museum has its own CollectionSpace.
+ADMINS = {"admin": "admin", "pahma-admin": "pahma-admin", "viewer": "viewer"}
+ADMIN_MUSEUMS = {"admin": {"bampfa", "botgarden", "cinefiles", "pahma", "ucjeps"}, "pahma-admin": {"pahma"},
+                 "viewer": set()}
+TENANT_IDS = {"bampfa": "11", "botgarden": "12", "cinefiles": "13", "pahma": "14", "ucjeps": "15"}  # synthetic
 DERIVATIVES = ("Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg")
 
 
@@ -92,15 +99,25 @@ store = Store()
 app = FastAPI(title="Fake CollectionSpace (Media service only)", docs_url=None, redoc_url=None, openapi_url=None)
 
 
-def _authorized(request: Request) -> bool:
+def _login(request: Request) -> tuple[str, str] | None:
     scheme, _, encoded = request.headers.get("authorization", "").partition(" ")
     if scheme.lower() != "basic":
-        return False
+        return None
     try:
         user, _, password = base64.b64decode(encoded).decode().partition(":")
     except ValueError:
-        return False
-    return secrets.compare_digest(USERS.get(user, "\0"), password)
+        return None
+    return user, password
+
+
+def _authorized(request: Request) -> bool:
+    login = _login(request)
+    return login is not None and secrets.compare_digest(USERS.get(login[0], "\0"), login[1])
+
+
+def museum_of(request: Request) -> str:
+    label = (request.url.hostname or "").split(".")[0]
+    return label if label in TENANT_IDS else "pahma"
 
 
 def _gate(request: Request) -> Response | None:
@@ -149,6 +166,25 @@ def get_original(request: Request, csid: str) -> Response:
 @app.get("/cspace-services/media/{csid}/blob/derivatives/{name}/content")
 def get_derivative(request: Request, csid: str, name: str) -> Response:
     return _file(request, csid, name)
+
+
+@app.get("/cspace-services/accounts/0/accountroles")
+def account_roles(request: Request) -> Response:
+    """The signed-in account's roles in this museum's tenant, as CollectionSpace answers it."""
+    login = _login(request)
+    known = {**USERS, **ADMINS}
+    if login is None or not secrets.compare_digest(known.get(login[0], "\0"), login[1]):
+        return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="CollectionSpace"'})
+    museum = museum_of(request)
+    tenant = TENANT_IDS[museum]
+    roles = [f"ROLE_{tenant}_TENANT_READER"]
+    if museum in ADMIN_MUSEUMS.get(login[0], set()):
+        roles.append(f"ROLE_{tenant}_SERENA_ADMIN")
+    role_xml = "".join(f"<role><roleName>{name}</roleName></role>" for name in roles)
+    body = (f'<?xml version="1.0" encoding="UTF-8"?><ns2:account_role xmlns:ns2="http://collectionspace.org/'
+            f'services/authorization"><account><userId>{login[0]}</userId><tenantId>{tenant}</tenantId></account>'
+            f"{role_xml}</ns2:account_role>")
+    return Response(body, media_type="application/xml")
 
 
 # --- development hooks

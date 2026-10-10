@@ -1,0 +1,5 @@
+# The backend's ruff settings, and assert in tests (how pytest checks).
+extend = "../backend/pyproject.toml"
+
+[lint.per-file-ignores]
+"tests/*" = ["S101"]

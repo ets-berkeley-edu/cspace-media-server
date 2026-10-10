@@ -14,3 +14,8 @@ venv/
 *.tfstate
 *.tfstate.*
 *.tfplan
+# The admin app: installed packages and the built app (built into the production image)
+admin/node_modules/
+admin/dist/
+# serenade, the Selenium tests: its virtual environment
+serenade/.venv/

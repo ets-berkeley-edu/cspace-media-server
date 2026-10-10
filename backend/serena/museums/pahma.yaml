@@ -8,6 +8,8 @@ derivatives: [Thumbnail, Small, Medium, FullHD, OriginalJpeg]
 original: true
 # The Blob the ETL lists in place of a non-public image (its "Image restricted" picture). Its CSID isn't a UUID.
 restricted_image_blob_csid: 59a733dd-d641-4e1a-8552
+# The CollectionSpace role that marks a Serena admin (design: Admin web app)
+admin_role: Serena_Admin
 settings:
   watchdog_deadline: "08:00"          # Pacific time: the night's run must be applied or abandoned by then
   etl_poll_interval_seconds: 15       # returned to the ETL in every run response

@@ -83,9 +83,11 @@ To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with
 (`pip install --require-hashes -r requirements-tools.txt`). Each museum's configuration is
 `backend/serena/museums/<tenant>.yaml`.
 
-The admin web app (Vue, TypeScript, Vuetify) will go in `admin/` (the BMU's `frontend/` is the model), with npm
-dependencies pinned by its lockfile and installed with `npm ci`; CI will add its lint, type check, unit tests and
-`npm audit`.
+The admin web app (Vue, TypeScript, Vuetify) is in `admin/` (the BMU's `frontend/` is the model), with npm
+dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `npm run lint`, `npm run typecheck`,
+`npm test`, `npm run build`; CI's `admin` job runs all four, and `npm audit` runs on every pull request
+(security.yml) and weekly. Its API is `backend/serena/admin_api.py`. The Selenium tests are in `serenade/`
+(`./serena ui`, against the local stack only).
 
 CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`
 job), and a `dependencies` job: the requirements files are in step and `pip-audit` finds no known vulnerabilities.

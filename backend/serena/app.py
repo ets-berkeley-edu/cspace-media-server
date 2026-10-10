@@ -9,10 +9,13 @@ from datetime import datetime
 from typing import Any
 
 import boto3
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import etl_api, imageserver, logs, museum, signed_links, signing, tables
+from . import admin_api, etl_api, imageserver, logs, museum, signed_links, signing, tables
+from .admin_sessions import Sessions
+from .audit import Audit
 from .config import Settings, get_settings
 from .cspace.clients import CSpaceClients, HttpFactory
 from .fetch import Fetcher
@@ -87,6 +90,10 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         """For the load balancer: answers "ok" and nothing else about Serena."""
         return PlainTextResponse("ok", headers={"Cache-Control": "no-store"})
 
+    admin_api.add_to(app, admin_api.AdminServices(
+        settings, museums,
+        Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), Audit(store),
+        cspace_http or _admin_http))
     app.include_router(imageserver.router)
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})
@@ -115,3 +122,8 @@ def _signer(settings: Settings, secret_cache: SecretCache) -> signing.Signer | N
         return signing.LocalSigner()
     log.warning("no CloudFront signer configured: servable files get the unavailable image")
     return None
+
+
+def _admin_http(tenant: str) -> httpx.Client:
+    """For an admin's sign-in: one short request to the museum's CollectionSpace, no redirects followed."""
+    return httpx.Client(timeout=httpx.Timeout(10.0), follow_redirects=False)
