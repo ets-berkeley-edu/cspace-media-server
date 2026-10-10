@@ -22,6 +22,33 @@ updates:
       python:
         patterns: ["*"]
 
+  - package-ecosystem: npm
+    directory: /admin
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    ignore:
+      # As in the BMU: ESLint 10 waits until eslint-plugin-import supports it; TypeScript 7 until typescript-eslint
+      # and vue-tsc do; Vuetify 4 is a deliberate upgrade; @types/node follows the Node we run (22).
+      - dependency-name: "eslint"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@eslint/js"
+        update-types: [version-update:semver-major]
+      - dependency-name: "typescript"
+        update-types: [version-update:semver-major]
+      - dependency-name: "vuetify"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+    groups:
+      admin:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /serenade
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    groups:
+      serenade:
+        patterns: ["*"]
+
   - package-ecosystem: docker
     directories: [/backend]
     schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
@@ -33,9 +60,13 @@ updates:
         patterns: ["*"]
 
   # moto's image (docker-compose.yml) follows the moto the tests pin (requirements-dev.txt): move both together.
+  # node's image (the admin app's dev server) stays on 22, the Node CI uses.
   - package-ecosystem: docker-compose
     directory: /
     schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    ignore:
+      - dependency-name: "node"
+        update-types: [version-update:semver-major]
     groups:
       compose:
         patterns: ["*"]

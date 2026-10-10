@@ -175,3 +175,30 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 - [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
   `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.
 
+## 12. The admin app, locally (15 minutes, before merging pull request 11)
+
+The unit tests stub the API, and CI doesn't run a browser. This checks the app in Chrome.
+
+- [ ] `./serena up`, then open http://localhost:5373/admin/. Expect the sign-in page with the five museums.
+- [ ] Sign in to PAHMA as `admin` (password `admin`). Expect PAHMA's overview, and the museum menu in the header.
+- [ ] Open "API documentation". Expect Swagger UI listing the ETL API's endpoints, with no "Try it out" button, and
+  nothing in the browser's console about the Content-Security-Policy.
+- [ ] Open "Audit log". Expect the sign-in, with `admin` and the time.
+- [ ] From the museum menu, sign in to another museum as well. Expect both in the menu, and switching between them.
+- [ ] Sign out of PAHMA. Expect the other museum still signed in.
+- [ ] Sign in to BAMPFA as `pahma-admin`, and to PAHMA as `viewer`. Expect a message naming the `Serena_Admin` role,
+  each time.
+- [ ] `./serena ui`. Expect 2 passed (needs Chrome and python3.11).
+
+## 13. Admin sign-in against a real museum, in QA (15 minutes per museum, once Serena is in QA)
+
+Set up: the museum's CollectionSpace administrators have created the `Serena_Admin` role in QA and given it to you.
+
+- [ ] Sign in to the museum with your own QA account. Expect the overview.
+- [ ] In Serena's log, find the sign-in: the museum, and no username or password. In the audit log, your username.
+- [ ] Sign in with a wrong password. Expect "don't work", and nothing in the audit log.
+- [ ] Have the role removed from your account, then sign everyone out from another admin's session. Expect your
+  next request to need a new sign-in, which is refused with the role named.
+- [ ] Check the cookies in the browser's developer tools: `serena_admin_<museum>`, HttpOnly, Secure, SameSite Strict,
+  path `/admin`.
+

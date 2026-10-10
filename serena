@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # ./serena — Serena's local stack (design: Local development).
 #
-#   ./serena up                    build and start it: http://localhost:8300 (the simulator: http://localhost:8380)
+#   ./serena up                    build and start it: http://localhost:8300, the admin app http://localhost:5373/admin/
 #   ./serena down                  stop it; moto forgets everything
 #   ./serena status                what's running
-#   ./serena logs [service]        follow the logs (services: web, worker, fakecspace, moto, seed)
+#   ./serena logs [service]        follow the logs (services: web, worker, admin, fakecspace, moto, seed)
 #   ./serena etl <museum> [opts]   run a night through the ETL API with the fake ETL (--partial, --rows N, --json)
 #   ./serena smoke                 a whole night for PAHMA, then fetch and serve one of its images (what CI runs)
+#   ./serena ui [pytest options]   the admin app's Selenium tests (serenade/), in headless Chrome; --headed shows it
 #   ./serena urls                  the addresses
 #
 # The stack is its own Docker Compose project (serena), on ports that don't clash with the BMU's. It needs Docker
@@ -59,11 +60,23 @@ case "$cmd" in
     esac
     curl -fsS -o /dev/null "$location"
     echo "Smoke test passed: a night applied, and $path fetched, stored and served." ;;
+  ui)
+    # Python 3.11 (.python-version), the version serenade/requirements.txt is pinned for.
+    py="$(command -v python3.11 || true)"
+    [ -n "$py" ] || { echo "./serena ui needs python3.11 (the repository's Python)." >&2; exit 1; }
+    if [ ! -x serenade/.venv/bin/python ]; then
+      "$py" -m venv serenade/.venv
+      serenade/.venv/bin/pip install -q --require-hashes -r serenade/requirements.txt
+    fi
+    curl -fs -o /dev/null "http://localhost:${SERENA_ADMIN_PORT:-5373}/admin/" ||
+      { echo "The admin app isn't up: ./serena up (it can take a minute after that, for npm ci)." >&2; exit 1; }
+    SERENADE_BASE_URL="http://localhost:${SERENA_ADMIN_PORT:-5373}/admin/" serenade/.venv/bin/python -m pytest serenade "$@" ;;
   urls)
     echo "Serena:      http://localhost:$PORT   (health: /health; files: /<museum>/imageserver/blobs/...)"
+    echo "Admin app:   http://localhost:${SERENA_ADMIN_PORT:-5373}/admin/   (admin/admin, pahma-admin/pahma-admin, viewer/viewer)"
     echo "Simulator:   http://localhost:${SERENA_SIM_PORT:-8380}   (calls it received: /_fake/calls)"
     echo "moto:        http://localhost:${SERENA_MOTO_PORT:-9300}/moto-api/" ;;
   help|-h|--help)
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) echo "Unknown command '$cmd'. ./serena help lists them." >&2; exit 2 ;;
 esac

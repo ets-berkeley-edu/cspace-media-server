@@ -68,6 +68,9 @@ class Museum(BaseModel):
     # The kinds whose restricted files are served with a portal's signed link (design: Restricted files). Its keys
     # are a Secrets Manager secret, named in SERENA_SIGNING_KEY_SECRET_IDS.
     signed_access_kinds: tuple[Kind, ...] = ()
+    # The CollectionSpace role (its display name) that marks a Serena admin in this museum (design: Admin web app).
+    # It carries no permissions in CollectionSpace; the museum's administrators give it to the team.
+    admin_role: str = Field(default="Serena_Admin", pattern=r"^[A-Za-z0-9_ ]{1,64}$")
     settings: StartingSettings
 
     @field_validator("derivatives")

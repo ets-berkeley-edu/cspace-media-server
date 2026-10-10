@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     tenants: dict[str, str] = {}
     # Which environment this is (for example "QA"), shown in the admin app; empty: none.
     env_label: str = ""
+    # The admin app (design: Admin web app): its sessions' idle and absolute timeouts, its cookies' name prefix
+    # (<prefix>_<museum>) and whether they're Secure (false only for a local stack on http), and the built app's
+    # directory (None: no built app here; locally Vite's dev server serves it).
+    admin_session_idle_minutes: float = 30.0
+    admin_session_hours: float = 8.0
+    admin_cookie_name: str = "serena_admin"
+    admin_cookie_secure: bool = True
+    admin_dist_dir: str | None = None
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Where the unavailable images are: <base>/<tenant>/unavailable.svg, served by CloudFront without a signature.
     # Empty (local development, tests): Serena serves them itself at /unavailable/<tenant>.svg.

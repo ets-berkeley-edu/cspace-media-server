@@ -488,7 +488,8 @@ where the table is read as a list, a sort key:
 | Alerts | `<tenant>` | `<night>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
 | Cache index | see Storage | | |
-| Audit log | `<tenant>` | `<time>#<admin>` | every admin action |
+| Audit log | `<tenant>` | `<time>#<admin>#<random>` (the random part keeps two actions in the same microsecond apart) | the admin action, its target, details (before and after, for a setting); kept indefinitely |
+| Admin sessions | SHA-256 of the session's token | | museum, admin, started, last seen; expire by TTL after 8 hours |
 
 A Blob is servable when its servability record exists, its kind is served, its access is public (or restricted, with a
 valid signed link where the museum allows it), and its Media CSID has no active takedown. The table holds the Blobs in
@@ -801,7 +802,22 @@ reachable only from campus networks.
 
 - **Sign-in.** With the admin's own CollectionSpace account, plus a CollectionSpace role that marks a Serena admin, per
   museum. Serena never stores the password. The app shows only the museums where the signed-in user has the role;
-  team members hold the role in each museum.
+  team members hold the role in each museum. Decided October 10, 2026:
+  - The role is `Serena_Admin` (each museum's YAML names it), created by the museum's CollectionSpace administrators.
+    It carries no permissions in CollectionSpace. Serena reads the account's roles with `GET
+    accounts/0/accountroles`, with the admin's own credentials, once, at sign-in (CollectionSpace stores the role as
+    `ROLE_<tenantId>_SERENA_ADMIN`).
+  - The admin picks a museum and signs in to it; the password goes only to that museum's CollectionSpace. To work on
+    another museum, they sign in to it too: the app keeps a session per museum and switches between them.
+  - Sessions: a random token in an HttpOnly, Secure, SameSite=Strict cookie per museum (`serena_admin_<museum>`, path
+    `/admin`); the session record is keyed by the token's SHA-256. Signed out after 30 minutes without activity and
+    after 8 hours at most. Without a stored password the role is checked only at sign-in, so a role removed in
+    CollectionSpace takes effect at the next sign-in, within 8 hours; "sign everyone out" ends every session for a
+    museum at once.
+  - Every request that changes something carries `X-Serena-Admin: 1`, which a cross-site form can't send; without it
+    the API answers 403. The app and its API share an origin, with no CORS.
+  - A failed sign-in is logged without the username (it may be anyone's, or a mistyped password) and isn't audited.
+- **Pages.** Served by the app with a Content-Security-Policy that allows scripts only from Serena (no CDN).
 - **First-release features:**
   - alerts and the banner (acknowledge);
   - runs: history, status and reasons; retrying a failed apply; overriding the change threshold for one run; "record
@@ -811,8 +827,14 @@ reachable only from campus networks.
   - takedown and unlock by Media CSID;
   - a lookup of why a file is or isn't served; the page of recent unserved requests; the list of files Serena knows it
     can't serve;
-  - an "API documentation" button;
-  - an audit log of every admin action.
+  - an "API documentation" button: Swagger UI, bundled with the app (no CDN), read-only, showing the ETL API's
+    description generated from the code (decided October 10, 2026);
+  - an audit log of every admin action: sign-in, sign-out, signing everyone out, takedown, unlock, a settings change
+    (before and after), a retried apply, a threshold override, an uploaded file and the restricted-image upload, each
+    with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
+- **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
+  objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October
+  10, 2026). Not in CI yet.
 
 ## Infrastructure and operations
 
@@ -826,7 +848,7 @@ reachable only from campus networks.
 - **Infrastructure as code.** Terraform, in `deploy/`, with state in S3. No secrets in Terraform files or state.
 - **Least privilege.** The app's task role can read the servability table; read and write the takedown and settings
   tables (the admin app's takedowns and settings are served by the app), the cache index, runs, alerts,
-  unserved-request counts and audit log; read and put objects (reading is needed to make watermarked copies) and the
+  unserved-request counts, audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
   uploaded Blob-to-Media files; use the KMS key; and read its own secrets. The worker's role can read and write
   servability (deleting rows included, for an apply), runs and alerts, read the settings, read and put the applied
   files in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
@@ -861,11 +883,14 @@ reachable only from campus networks.
   Media records to the simulator. `./serena smoke` runs a night and fetches, stores and serves one of its images; CI
   runs it on every code change. The stack talks only to the simulator: there is no local mode against a real
   CollectionSpace, which would need a museum's service-account password on a laptop; real-tenant checks happen in
-  the AWS QA environment (decided October 10, 2026). The admin app's development server joins the stack with the app
-  (pull request 11). The simulator (`backend/fakecspace`) answers the three
+  the AWS QA environment (decided October 10, 2026). The admin app runs on Vite's development server
+  (http://localhost:5373/admin/), forwarding `/admin/v1` to the app. The simulator (`backend/fakecspace`) answers the three
   Media-service calls above with synthetic files (PNG images, a PDF and an X3D model, made in code) and HTTP Basic auth
   with a synthetic account. Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a
-  record, remove its file, inject failures, and list the calls it received.
+  record, remove its file, inject failures, and list the calls it received. It also answers `accounts/0/accountroles`
+  for three synthetic admin accounts (`admin`, with the role in every museum; `pahma-admin`, in PAHMA only;
+  `viewer`, in none; each password is its username), telling museums apart by host name (`pahma.fakecspace`, as each
+  museum has its own CollectionSpace).
 
 ## Migration
 

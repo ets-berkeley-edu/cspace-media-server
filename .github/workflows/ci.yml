@@ -74,6 +74,23 @@ jobs:
         run: mypy
       - name: Tests
         run: pytest -q
+  admin:
+    # The admin web app (admin/): lint, type check, unit tests and a production build.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: admin } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: "22", cache: npm, cache-dependency-path: admin/package-lock.json }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   stack:
     # The local stack (docker-compose.yml, ./serena): builds the image, starts the stack, runs a whole night for PAHMA
     # through the fake ETL, then fetches, stores and serves one of its images. Not a required check.

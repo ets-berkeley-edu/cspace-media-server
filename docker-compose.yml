@@ -2,11 +2,12 @@
 # standing in for DynamoDB, S3 and Secrets Manager. Start it with ./serena up; ./serena help lists the rest.
 # Ports differ from the BMU's, so both stacks can run at once. Nothing here is a secret: the seed step makes random ETL
 # tokens and signing keys in moto at start-up, and the simulator's account is synthetic. moto keeps everything in
-# memory, so `./serena down` forgets it all. The admin app's dev server joins this file in pull request 11.
+# memory, so `./serena down` forgets it all. The admin app runs on Vite's dev server: http://localhost:5373/admin/
 x-serena-env: &serena-env
   SERENA_ENV_LABEL: Local · simulator
   SERENA_LOG_LEVEL: INFO
-  SERENA_TENANTS: '{"bampfa": "http://fakecspace:8180", "botgarden": "http://fakecspace:8180", "cinefiles": "http://fakecspace:8180", "pahma": "http://fakecspace:8180", "ucjeps": "http://fakecspace:8180"}'
+  # Each museum has its own CollectionSpace: here, the simulator under a host name per museum (its network aliases).
+  SERENA_TENANTS: '{"bampfa": "http://bampfa.fakecspace:8180", "botgarden": "http://botgarden.fakecspace:8180", "cinefiles": "http://cinefiles.fakecspace:8180", "pahma": "http://pahma.fakecspace:8180", "ucjeps": "http://ucjeps.fakecspace:8180"}'
   SERENA_TABLE_PREFIX: serena-local
   SERENA_CREATE_TABLES: "true"
   SERENA_DYNAMODB_ENDPOINT: http://moto:5000
@@ -19,6 +20,7 @@ x-serena-env: &serena-env
   SERENA_SIGNING_KEY_SECRET_IDS: '{"cinefiles": "serena/local/cinefiles/pdf-signing-key"}'
   SERENA_LOCAL_CDN: "true"          # Serena signs and serves files itself at /local-cdn/, in place of CloudFront
   SERENA_WORKER_POLL_SECONDS: "2"
+  SERENA_ADMIN_COOKIE_SECURE: "false"   # the local stack is plain http
   AWS_ACCESS_KEY_ID: local          # moto accepts any credentials
   AWS_SECRET_ACCESS_KEY: local
   AWS_DEFAULT_REGION: us-west-2
@@ -34,6 +36,9 @@ services:
     build: ./backend
     command: ["uvicorn", "fakecspace.app:app", "--host", "0.0.0.0", "--port", "8180"]
     ports: ["${SERENA_SIM_PORT:-8380}:8180"]
+    networks:
+      default:
+        aliases: [bampfa.fakecspace, botgarden.fakecspace, cinefiles.fakecspace, pahma.fakecspace, ucjeps.fakecspace]
 
   # Buckets and secrets in moto, before the app starts (devtools/seed.py).
   seed:
@@ -62,3 +67,15 @@ services:
     depends_on:
       web: { condition: service_healthy }   # the app creates the tables
     restart: unless-stopped
+
+  # The admin app on Vite's dev server, forwarding /admin/v1 to the app. Sign in with the simulator's synthetic
+  # accounts: admin (every museum), pahma-admin (PAHMA only), viewer (no Serena role); each password is its username.
+  admin:
+    image: node:22-alpine
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0"]
+    environment:
+      VITE_API_TARGET: http://web:8000
+    volumes: ["./admin:/app", "/app/node_modules"]
+    ports: ["${SERENA_ADMIN_PORT:-5373}:5373"]
+    depends_on: [web]
