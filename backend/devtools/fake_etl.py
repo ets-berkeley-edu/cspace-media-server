@@ -25,6 +25,7 @@ import boto3
 import httpx
 
 from serena.config import get_settings
+from serena.museum import load
 
 NAMESPACE = uuid.UUID("3f6b0c55-2c4e-4f6e-9d4b-6a1c0b6e5a10")  # for the synthetic CSIDs; not a secret
 DONE = {"ready", "preflight_failed", "applied", "apply_failed", "abandoned"}
@@ -44,8 +45,14 @@ def csid(tenant: str, what: str, n: int) -> str:
 
 
 def rows(tenant: str, count: int) -> list[tuple[str, str, str, str]]:
+    """The night's rows. A museum with a restricted-image Blob gets it too, with no Media CSID, as the real ETL lists
+    it (design: Restricted-image Blob)."""
     mix = MIX.get(tenant, [("image", "public")])
-    return [(csid(tenant, "blob", n), csid(tenant, "media", n), *mix[n % len(mix)]) for n in range(count)]
+    listed = [(csid(tenant, "blob", n), csid(tenant, "media", n), *mix[n % len(mix)]) for n in range(count)]
+    restricted_image = load(tenant).restricted_image_blob_csid
+    if restricted_image:
+        listed.append((restricted_image, "", "image", "public"))
+    return listed
 
 
 def tsv(listed: list[tuple[str, str, str, str]]) -> bytes:
@@ -54,6 +61,8 @@ def tsv(listed: list[tuple[str, str, str, str]]) -> bytes:
 
 def add_to_simulator(cspace: httpx.Client, listed: list[tuple[str, str, str, str]]) -> None:
     for _, media, kind, _ in listed:
+        if not media:  # the restricted-image Blob: served from an admin's upload, never fetched
+            continue
         cspace.post("/_fake/media", json={"csid": media, "kind": kind}).raise_for_status()
 
 
@@ -97,13 +106,20 @@ def night(serena: httpx.Client, cspace: httpx.Client, tenant: str, token: str, c
         run = _wait(serena, run, headers, DONE - {"ready"}, every, wait, timeout)
 
     samples: dict[str, str] = {}
-    for blob, _, kind, access in listed:
+    for blob, media, kind, access in listed:
+        if not media:
+            continue
         key = kind if access == "public" else f"{kind} ({access})"
         if key not in samples:
             tail = "derivatives/Medium/content" if kind in ("image", "card") else "content"
             samples[key] = f"/{tenant}/imageserver/blobs/{blob}/{tail}"
     return {"run_id": run["run_id"], "state": run["state"], "preflight": run.get("preflight"),
             "apply": run.get("apply"), "partial": partial, "samples": samples}
+
+
+def threshold_failed(summary: dict[str, Any]) -> bool:
+    errors = (summary.get("preflight") or {}).get("errors", [])
+    return any("threshold" in problem.get("problem", "") for problem in errors)
 
 
 def token_for(tenant: str) -> str:
@@ -137,6 +153,11 @@ def main() -> None:
         print(json.dumps(summary))
         return
     print(f"{summary['run_id']}: {summary['state']}")
+    for problem in (summary.get("preflight") or {}).get("errors", []):
+        print(f"  preflight: {problem['problem']}")
+    if summary["state"] == "preflight_failed" and threshold_failed(summary):
+        print("  The night changes more rows than the threshold allows: the last applied night had a different --rows."
+              "\n  Use the same --rows as that night, or start afresh with ./serena down and ./serena up.")
     if summary["partial"]:
         print("Partial night: the Solr load and the apply weren't reported. The watchdog raises a missed deadline "
               "at the museum's deadline.")
