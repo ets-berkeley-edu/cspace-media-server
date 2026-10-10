@@ -65,10 +65,19 @@ python -m serena.worker                    # the worker (preflight and apply); s
 uvicorn fakecspace.app:app --port 8180    # the CollectionSpace simulator (synthetic files and account)
 ```
 
-To run the app locally before Docker Compose exists (pull request 10), point it at DynamoDB Local, never at AWS:
-`SERENA_TENANTS='{"pahma": "http://localhost:8180"}' SERENA_DYNAMODB_ENDPOINT=http://localhost:8000
-SERENA_CREATE_TABLES=true uvicorn serena.main:app --no-access-log`. Serena refuses to create tables without a
-DynamoDB endpoint.
+The local stack, from the repository's root (Docker only; never AWS or a real CollectionSpace):
+
+```
+./serena up            # app, worker, simulator and moto: http://localhost:8300
+./serena etl pahma     # a night through the ETL API with the fake ETL (--partial, --rows N)
+./serena smoke         # a night, then one image fetched, stored and served (CI's `stack` job)
+./serena logs worker   # follow a service's logs
+./serena down          # stop; moto forgets everything
+```
+
+Local-only code (the seed step and the fake ETL) is in `backend/devtools/`, and the simulator in
+`backend/fakecspace/`; neither goes in the production image. Serena refuses to create tables, or to serve files
+itself in place of CloudFront, without a local DynamoDB endpoint.
 
 To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with the tools installed
 (`pip install --require-hashes -r requirements-tools.txt`). Each museum's configuration is
@@ -87,8 +96,9 @@ the `changes` job decides, and a skipped job counts as passing. `dependencies` a
 `.github/workflows/security.yml` (`gitleaks` over the whole history) run on every pull request and push, whatever
 changed: never add a path filter or a docs-only condition to them. A gitleaks match that isn't a secret goes in
 `.gitleaksignore`, by fingerprint, with a comment saying why. Actions are pinned by commit SHA with the version in a
-comment; Dependabot (`.github/dependabot.yml`, weekly, grouped) moves both. Its Docker entry is commented
-out until there is a Dockerfile.
+comment; Dependabot (`.github/dependabot.yml`, weekly, grouped) moves both, and the Docker images too
+(`backend/Dockerfile`, and moto's in `docker-compose.yml`, which moves with the moto the tests pin). The `stack` job
+runs `./serena up` and `./serena smoke`; it isn't a required check.
 
 While working, run only the test files a change affects. Run the full suite once before each commit.
 

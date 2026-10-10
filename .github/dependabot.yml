@@ -1,6 +1,7 @@
 # Weekly update pull requests (Mondays), grouped so there are few of them. Each one runs CI like any other PR.
 #
-# The docker entry is commented out until the pull request that adds the first Dockerfile (with its directories).
+# Docker: the local stack's image (backend/Dockerfile) and the images docker-compose.yml names; /deploy joins the
+# docker entry with the production image (pull request 17).
 #
 # Python: the requirements files are pip-compile output (backend/pin-requirements.sh, as in the BMU); Dependabot
 # reruns pip-compile with the options in each file's header. Base images: only patch updates are offered, so Python
@@ -21,12 +22,20 @@ updates:
       python:
         patterns: ["*"]
 
-  # - package-ecosystem: docker
-  #   directories: [/backend, /deploy]
-  #   schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
-  #   ignore:
-  #     - dependency-name: "*python"
-  #       update-types: [version-update:semver-major, version-update:semver-minor]
-  #   groups:
-  #     images:
-  #       patterns: ["*"]
+  - package-ecosystem: docker
+    directories: [/backend]
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    ignore:
+      - dependency-name: "*python"
+        update-types: [version-update:semver-major, version-update:semver-minor]
+    groups:
+      images:
+        patterns: ["*"]
+
+  # moto's image (docker-compose.yml) follows the moto the tests pin (requirements-dev.txt): move both together.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    groups:
+      compose:
+        patterns: ["*"]

@@ -1,0 +1,64 @@
+# Serena's local stack (design: Local development): the app, its worker, the CollectionSpace simulator, and moto
+# standing in for DynamoDB, S3 and Secrets Manager. Start it with ./serena up; ./serena help lists the rest.
+# Ports differ from the BMU's, so both stacks can run at once. Nothing here is a secret: the seed step makes random ETL
+# tokens and signing keys in moto at start-up, and the simulator's account is synthetic. moto keeps everything in
+# memory, so `./serena down` forgets it all. The admin app's dev server joins this file in pull request 11.
+x-serena-env: &serena-env
+  SERENA_ENV_LABEL: Local · simulator
+  SERENA_LOG_LEVEL: INFO
+  SERENA_TENANTS: '{"bampfa": "http://fakecspace:8180", "botgarden": "http://fakecspace:8180", "cinefiles": "http://fakecspace:8180", "pahma": "http://fakecspace:8180", "ucjeps": "http://fakecspace:8180"}'
+  SERENA_TABLE_PREFIX: serena-local
+  SERENA_CREATE_TABLES: "true"
+  SERENA_DYNAMODB_ENDPOINT: http://moto:5000
+  SERENA_S3_ENDPOINT: http://moto:5000
+  SERENA_SECRETSMANAGER_ENDPOINT: http://moto:5000
+  SERENA_SNS_ENDPOINT: http://moto:5000
+  SERENA_BUCKETS: '{"bampfa": "serena-local-bampfa", "botgarden": "serena-local-botgarden", "cinefiles": "serena-local-cinefiles", "pahma": "serena-local-pahma", "ucjeps": "serena-local-ucjeps"}'
+  SERENA_ETL_TOKEN_SECRET_IDS: '{"bampfa": "serena/local/bampfa/etl-tokens", "botgarden": "serena/local/botgarden/etl-tokens", "cinefiles": "serena/local/cinefiles/etl-tokens", "pahma": "serena/local/pahma/etl-tokens", "ucjeps": "serena/local/ucjeps/etl-tokens"}'
+  SERENA_CSPACE_SECRET_IDS: '{"bampfa": "serena/local/bampfa/cspace", "botgarden": "serena/local/botgarden/cspace", "cinefiles": "serena/local/cinefiles/cspace", "pahma": "serena/local/pahma/cspace", "ucjeps": "serena/local/ucjeps/cspace"}'
+  SERENA_SIGNING_KEY_SECRET_IDS: '{"cinefiles": "serena/local/cinefiles/pdf-signing-key"}'
+  SERENA_LOCAL_CDN: "true"          # Serena signs and serves files itself at /local-cdn/, in place of CloudFront
+  SERENA_WORKER_POLL_SECONDS: "2"
+  AWS_ACCESS_KEY_ID: local          # moto accepts any credentials
+  AWS_SECRET_ACCESS_KEY: local
+  AWS_DEFAULT_REGION: us-west-2
+
+services:
+  # The AWS stand-in: moto, the same library and version the tests use (backend/requirements-dev.txt).
+  # Its state is at http://localhost:9300/moto-api/
+  moto:
+    image: motoserver/moto:5.2.3
+    ports: ["${SERENA_MOTO_PORT:-9300}:5000"]
+
+  fakecspace:
+    build: ./backend
+    command: ["uvicorn", "fakecspace.app:app", "--host", "0.0.0.0", "--port", "8180"]
+    ports: ["${SERENA_SIM_PORT:-8380}:8180"]
+
+  # Buckets and secrets in moto, before the app starts (devtools/seed.py).
+  seed:
+    build: ./backend
+    command: ["python", "-m", "devtools.seed"]
+    environment: *serena-env
+    depends_on: [moto]
+    restart: "no"
+
+  web:
+    build: ./backend
+    environment: *serena-env
+    depends_on:
+      seed: { condition: service_completed_successfully }
+      fakecspace: { condition: service_started }
+    ports: ["${SERENA_PORT:-8300}:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      retries: 30
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "serena.worker"]
+    environment: *serena-env
+    depends_on:
+      web: { condition: service_healthy }   # the app creates the tables
+    restart: unless-stopped

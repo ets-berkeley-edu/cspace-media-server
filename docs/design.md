@@ -455,7 +455,7 @@ why (for example restricted files, files that failed their checks, fetch errors)
 - After a takedown, no new URL is issued. A URL already handed out works until it expires (at most 30 minutes), and a
   browser may keep showing an image it already has for up to 15 minutes more: about 45 minutes in all, within the
   1 to 2 hour tolerance.
-- Without CloudFront (local development only, `SERENA_LOCAL_CDN`, which needs DynamoDB Local), Serena signs with a key
+- Without CloudFront (local development only, `SERENA_LOCAL_CDN`, which needs a local DynamoDB endpoint), Serena signs with a key
   of its own, made when it starts, and serves the files itself at `/local-cdn/<tenant>/objects/<sha256>`, checking the
   signature and expiry. In AWS that path answers 404. With neither, a servable file gets the unavailable image
   (`internal_error`) and Serena logs that no signer is configured.
@@ -852,8 +852,17 @@ reachable only from campus networks.
   ETL's poll interval and step timeout, the change threshold and size limits), which an admin's values override.
 - **Health check.** `GET /health` answers `ok` with `Cache-Control: no-store`, for the load balancer, and says
   nothing else about Serena.
-- **Local development.** Docker Compose with a CollectionSpace simulator and the admin app's development server, as in
-  the BMU, and a fake ETL that runs whole nights through the API. The simulator (`backend/fakecspace`) answers the three
+- **Local development.** Docker Compose (`docker-compose.yml`, driven by `./serena`), as in the BMU: the app, the
+  worker, the CollectionSpace simulator, and moto standing in for DynamoDB, S3 and Secrets Manager, the same library
+  and version the tests use (decided October 10, 2026). A seed step makes each museum's bucket and the secrets in moto
+  at start-up: random ETL tokens and signing keys, and the simulator's synthetic account; nothing secret is in the
+  repository, and moto forgets it all when the stack stops. A fake ETL (`./serena etl <museum>`) runs a whole night
+  through the ETL API, or a partial one (`--partial`: no Solr load, no apply), after adding the night's synthetic
+  Media records to the simulator. `./serena smoke` runs a night and fetches, stores and serves one of its images; CI
+  runs it on every code change. The stack talks only to the simulator: there is no local mode against a real
+  CollectionSpace, which would need a museum's service-account password on a laptop; real-tenant checks happen in
+  the AWS QA environment (decided October 10, 2026). The admin app's development server joins the stack with the app
+  (pull request 11). The simulator (`backend/fakecspace`) answers the three
   Media-service calls above with synthetic files (PNG images, a PDF and an X3D model, made in code) and HTTP Basic auth
   with a synthetic account. Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a
   record, remove its file, inject failures, and list the calls it received.

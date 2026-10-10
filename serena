@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# ./serena — Serena's local stack (design: Local development).
+#
+#   ./serena up                    build and start it: http://localhost:8300 (the simulator: http://localhost:8380)
+#   ./serena down                  stop it; moto forgets everything
+#   ./serena status                what's running
+#   ./serena logs [service]        follow the logs (services: web, worker, fakecspace, moto, seed)
+#   ./serena etl <museum> [opts]   run a night through the ETL API with the fake ETL (--partial, --rows N, --json)
+#   ./serena smoke                 a whole night for PAHMA, then fetch and serve one of its images (what CI runs)
+#   ./serena urls                  the addresses
+#
+# The stack is its own Docker Compose project (serena), on ports that don't clash with the BMU's. It needs Docker
+# and nothing else: no .env, no keys. It never talks to AWS or a real CollectionSpace.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+PORT="${SERENA_PORT:-8300}"
+compose() { docker compose -p serena "$@"; }
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  up)
+    compose up -d --build
+    printf 'Waiting for http://localhost:%s/health ' "$PORT"
+    for _ in $(seq 1 90); do
+      if curl -fs -o /dev/null "http://localhost:$PORT/health"; then echo; break; fi
+      printf '.'; sleep 2
+    done
+    curl -fs -o /dev/null "http://localhost:$PORT/health" || { echo; echo "Not up: ./serena logs web" >&2; exit 1; }
+    # The worker starts once the app is healthy (it creates the tables); give it a moment.
+    for _ in $(seq 1 30); do [ -n "$(compose ps -q --status running worker)" ] && break; sleep 1; done
+    echo "Serena (Local · simulator) is up: http://localhost:$PORT/health"
+    echo "Run a night: ./serena etl pahma" ;;
+  down)
+    compose down ;;
+  status)
+    compose ps ;;
+  logs)
+    compose logs -f --tail 100 "$@" ;;
+  etl)
+    museum="${1:?Usage: ./serena etl <museum> [--partial] [--rows N] [--json]}"; shift
+    compose exec -T worker python -m devtools.fake_etl --museum "$museum" --public "http://localhost:$PORT" "$@" ;;
+  smoke)
+    summary="$(compose exec -T worker python -m devtools.fake_etl --museum pahma --rows 3 --json)"
+    state="$(printf '%s' "$summary" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')"
+    [ "$state" = applied ] || { echo "The night ended $state, not applied: $summary" >&2; exit 1; }
+    path="$(printf '%s' "$summary" | python3 -c 'import json,sys; print(json.load(sys.stdin)["samples"]["image"])')"
+    location="$(curl -fsS -o /dev/null -w '%{redirect_url}' "http://localhost:$PORT$path")"
+    case "$location" in
+      *"/local-cdn/pahma/objects/"*) ;;
+      *) echo "Expected a redirect to the stored image, got: $location" >&2; exit 1 ;;
+    esac
+    curl -fsS -o /dev/null "$location"
+    echo "Smoke test passed: a night applied, and $path fetched, stored and served." ;;
+  urls)
+    echo "Serena:      http://localhost:$PORT   (health: /health; files: /<museum>/imageserver/blobs/...)"
+    echo "Simulator:   http://localhost:${SERENA_SIM_PORT:-8380}   (calls it received: /_fake/calls)"
+    echo "moto:        http://localhost:${SERENA_MOTO_PORT:-9300}/moto-api/" ;;
+  help|-h|--help)
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "Unknown command '$cmd'. ./serena help lists them." >&2; exit 2 ;;
+esac

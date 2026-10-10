@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     aws_region: str = "us-west-2"
     # DynamoDB: every table is <table_prefix>-<name> (serena/tables.py); Terraform sets the prefix per environment.
     table_prefix: str = "serena-local"
-    dynamodb_endpoint: str | None = None  # local development only (DynamoDB Local)
+    dynamodb_endpoint: str | None = None  # local development only (moto in the local stack)
     # Local development only: create missing tables at start-up. Allowed only with dynamodb_endpoint, so it can never
     # create tables in AWS (Terraform does that there).
     create_tables: bool = False
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # from SERENA_SIGNING_KEY_SECRET_IDS as JSON. The keys are never logged.
     signing_key_secret_ids: dict[str, str] = {}
     # Local development only, without CloudFront: Serena signs with a key of its own and serves the files itself at
-    # /local-cdn/<tenant>/objects/<sha256>. Allowed only with dynamodb_endpoint (DynamoDB Local), so never in AWS.
+    # /local-cdn/<tenant>/objects/<sha256>. Allowed only with dynamodb_endpoint (a local stand-in), so never in AWS.
     local_cdn: bool = False
 
     # CollectionSpace (design: Image fetch): each museum's read-only service account is a Secrets Manager secret
@@ -108,9 +108,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _tables_only_locally(self) -> Settings:
         if self.create_tables and not self.dynamodb_endpoint:
-            raise ValueError("create_tables is for local development: set dynamodb_endpoint (DynamoDB Local) too")
+            raise ValueError("create_tables is for local development: set dynamodb_endpoint (a local stand-in) too")
         if self.local_cdn and not self.dynamodb_endpoint:
-            raise ValueError("local_cdn is for local development: set dynamodb_endpoint (DynamoDB Local) too")
+            raise ValueError("local_cdn is for local development: set dynamodb_endpoint (a local stand-in) too")
         if self.cdn_base_url and not self.cdn_base_url.startswith("https://"):
             raise ValueError("cdn_base_url must be an https URL")
         return self

@@ -35,9 +35,17 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 | `backend/serena/static/` | The unavailable image (`unavailable.svg`, the legacy imageserver's `404.svg`) |
 | `backend/fakecspace/` | A CollectionSpace simulator for tests and local development, with synthetic files |
 | `backend/serena/museums/` | Each museum's configuration: derivatives served, restricted-image Blob, kinds with signed access, starting settings |
+| `backend/devtools/` | Local-only tools: seeding the AWS stand-in, and a fake ETL |
+| `docker-compose.yml`, `serena` | The local stack and its script (`./serena help`) |
 | `admin/` | The admin web app: Vue, TypeScript and Vuetify (to come) |
 | `deploy/` | The AWS deployment: Terraform and the production image (to come) |
 | `.github/workflows/` | CI (`ci.yml`), the weekly dependency audit (`audit.yml`) and the secret scan (`security.yml`) |
+
+## Run it locally
+
+With Docker installed: `./serena up`, then `./serena etl pahma` to run a night through the ETL API. The command prints
+a few files to open in your browser, at http://localhost:8300. The stack uses a CollectionSpace simulator and
+moto in place of AWS, so it needs no accounts or keys. `./serena help` lists the rest.
 
 ## License
 

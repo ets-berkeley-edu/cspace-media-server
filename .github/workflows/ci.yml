@@ -74,6 +74,27 @@ jobs:
         run: mypy
       - name: Tests
         run: pytest -q
+  stack:
+    # The local stack (docker-compose.yml, ./serena): builds the image, starts the stack, runs a whole night for PAHMA
+    # through the fake ETL, then fetches, stores and serves one of its images. Not a required check.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Start the stack
+        run: ./serena up
+      - name: Smoke test
+        run: ./serena smoke
+      - name: Logs, if it failed
+        if: failure()
+        run: docker compose -p serena logs --no-color --tail 200
+      - name: Stop
+        if: always()
+        run: ./serena down
+
   dependencies:
     # Security: always runs (pip-audit, and the hash-pinned requirements files in step). No `needs`, no `if`.
     runs-on: ubuntu-latest
