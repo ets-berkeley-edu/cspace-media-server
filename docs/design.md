@@ -446,7 +446,7 @@ where the table is read as a list, a sort key:
 | Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
 | Runs | `<tenant>` | `<night>#<nnn>` (sorts by night, then run) | run ID, night, state, the upload (SHA-256, rows, size, S3 key), the preflight's result, the load report, the apply's counts, the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute |
-| Alerts | `<tenant>` | time | kind, message, acknowledged by and when |
+| Alerts | `<tenant>` | `<night>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
 | Cache index | see Storage | | |
 | Audit log | `<tenant>` | `<time>#<admin>` | every admin action |
@@ -616,15 +616,27 @@ table, so a restart never loses a step.
 
 ### Watchdog and alerts
 
-The watchdog runs in the worker every few minutes, in Pacific time (daylight saving included). It alerts when:
+The watchdog runs in the worker every 5 minutes, in Pacific time (daylight saving included). It alerts when:
 
-- a museum's run hasn't reached `applied` or `abandoned` by the museum's deadline (08:00 to start; admins set it in the
-  admin app). This is how Serena notices a partial night;
-- a run ends in `preflight_failed`, `apply_failed` or `abandoned`;
-- Serena hasn't applied a night for a museum in 24 hours.
+- a museum's run for tonight hasn't reached `applied` or `abandoned` by the museum's deadline (08:00 to start; admins
+  set it in the admin app), including when no run started at all. This is how Serena notices a partial night;
+- a museum's newest run is `preflight_failed`, `apply_failed` or `abandoned` (an abandoned run's reasons say whether
+  the load fell back or a later night started);
+- Serena hasn't applied a night for a museum in 24 hours. Only a museum that has applied a night can be late: before
+  its first night there's nothing to compare with.
 
 An alert shows as a banner in the admin app until acknowledged, is logged, and is emailed through one Amazon SNS topic
-per environment to the team's mailing list. The subscription requires authentication to unsubscribe.
+per environment (`SERENA_ALERT_TOPIC_ARN`) to the team's mailing list. The subscription requires authentication to
+unsubscribe. Without a topic (local development) alerts are recorded and logged, not emailed.
+
+Each alert is keyed by what it is about, `<night>#<kind>#<subject>` (the subject is the run ID or the night), so the
+watchdog raises it on every pass while it holds but it is recorded, logged and emailed once (decided October 9,
+2026). The 24-hour alert's night is the day it is raised, so it comes again once a day until a night is applied. An
+alert whose email failed is sent again on the next pass. Alerts carry museum names, nights, run IDs and reasons,
+never personal data.
+
+The alert for a restricted-image Blob whose files haven't been uploaded comes with that upload (pull request 14 in the
+plan); until then, its requests are counted as `restricted_image_not_uploaded`.
 
 ### Takedowns
 
