@@ -4,9 +4,9 @@ Serena is the new media server for UC Berkeley's CollectionSpace museums: BAMPFA
 PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
-It's being built, one pull request at a time. So far it parses the legacy imageserver paths and decides from its
-records in DynamoDB whether each file may be served; serving the files themselves comes next. The design is
-`docs/design.md`.
+It's being built, one pull request at a time. So far it parses the legacy imageserver paths, decides from its
+records in DynamoDB whether each file may be served, and takes each night's Blob-to-Media file through its ETL API.
+Serving the files themselves comes later. The design is `docs/design.md`.
 
 ## What it will do
 
@@ -28,7 +28,7 @@ records in DynamoDB whether each file may be served; serving the files themselve
 | --- | --- |
 | `docs/design.md` | The design document |
 | `docs/testing-checklist.md` | Checks to do by hand |
-| `docs/api/` | The ETL API's description, generated from the code (to come) |
+| `docs/api/etl-v1.json` | The ETL API's OpenAPI description, generated from the code |
 | `backend/` | The Python 3.11 app (`serena/`), its tests and its pinned requirements |
 | `backend/serena/static/` | The unavailable image (`unavailable.svg`, the legacy imageserver's `404.svg`) |
 | `backend/serena/museums/` | Each museum's configuration: derivatives served, restricted-image Blob, starting settings |

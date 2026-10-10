@@ -444,7 +444,7 @@ where the table is read as a list, a sort key:
 | --- | --- | --- | --- |
 | Servability | `<tenant>#<blob CSID>` | | Media CSID, kind, access; indexed by `<tenant>#<media CSID>` |
 | Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
-| Runs | `<tenant>` | run ID | night, state, file name and hash, row counts, preflight result, timestamps, reasons |
+| Runs | `<tenant>` | `<night>#<nnn>` (sorts by night, then run) | run ID, night, state, the upload (SHA-256, rows, size, S3 key), preflight result, timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | time | kind, message, acknowledged by and when |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
@@ -513,12 +513,18 @@ Under `/etl/v1/`, over HTTPS, not served through CloudFront, and accepted only f
 own bearer token, kept in Secrets Manager on Serena's side and in the ETL server's own secret store; during a rotation
 Serena accepts the old and the new token. Errors are `application/problem+json` with reasons, never internals.
 
+Tokens (decided October 9, 2026): one Secrets Manager secret per museum, `{"current": …, "previous": …}`, each token
+at least 32 characters. Each task reads it again every 5 minutes, so a rotation reaches every task within 5 minutes
+without a restart: put the new token in `current` and the old one in `previous`, give the ETL team the new token,
+then clear `previous`. Tokens are compared in constant time and never logged; at any log level the AWS libraries' own
+logging stays at warnings, since at debug it would log a secret's value.
+
 | Method | Path | What it does |
 | --- | --- | --- |
-| `GET` | `/etl/v1/ping` | Checks connectivity and the token |
+| `GET` | `/etl/v1/ping` | Checks connectivity and the token; answers with the museum the token belongs to, and nothing else |
 | `POST` | `/etl/v1/museums/{tenant}/runs` | Starts a run: Serena assigns the run ID and night, and returns the file name, `poll_interval_seconds`, `step_timeout_seconds` and the links for the run's other calls. If a run for that museum and night is still open, returns it |
 | `GET` | `…/runs/{run_id}` | The run's status |
-| `PUT` | `…/runs/{run_id}/blob-media` | Uploads the file (gzip allowed), with its row count and SHA-256 in headers |
+| `PUT` | `…/runs/{run_id}/blob-media` | Uploads the file (`text/tab-separated-values`, gzip allowed), with `X-Row-Count` (data rows) and `X-Content-SHA256` (of the uncompressed file) |
 | `POST` | `…/runs/{run_id}/preflight` | Checks the file without applying it (202; poll) |
 | `POST` | `…/runs/{run_id}/solr-load` | Records the public core's load outcome: `loaded` or `fell_back` |
 | `POST` | `…/runs/{run_id}/apply` | Applies the file; only after the preflight passed and the load reported `loaded` (202; poll) |
@@ -533,16 +539,40 @@ Run states: `started` → `received` → `preflighting` → `ready` or `prefligh
 - A run's night is the Pacific date when it starts. A new run for the same night is allowed once the previous one is
   closed (`applied` or `abandoned`). Starting a later night's run closes an earlier open run as `abandoned`, except one
   the worker is preflighting or applying, which is never abandoned.
+- If the open run is one the worker is preflighting or applying, a later night's run isn't started: `409`, and the
+  ETL tries again until its step timeout, then carries on without Serena (decided October 9, 2026). So a museum has
+  at most one open run, always its newest.
+- A run's ID is `<tenant>-<night>-<n>` (for example `pahma-2026-10-10-1`), `n` counting the runs started that night.
 - A run in `apply_failed` stays open until an admin retries it or the next night's run starts.
 - Every run response carries `poll_interval_seconds` and `step_timeout_seconds` (15 and 1800 to start), which admins
   change per museum in the admin app. The ETL's own HTTP calls use a connect timeout of 10 seconds, a read timeout of
   60 seconds and up to 3 retries with backoff.
 - The ETL can't override Serena's checks. Overriding the change threshold for one run (for example a museum's first
   load) and retrying an apply are admin actions.
+- Every state change is a conditional write on the run's current state, so two calls at once can't both succeed.
 
-The API's OpenAPI description, with examples, is generated from the code. A copy is kept in the repository under
-`docs/api/`, and CI fails when the copy no longer matches the code, so the ETL team can read it on GitHub. The admin
-app has a button that opens the same documentation.
+Uploads (decided October 9, 2026): the body is streamed to the task's disk while it's decompressed, hashed and
+counted, then stored gzip-compressed in the museum's bucket at `blob-media/<run ID>/<file name>.gz`. At most 500 MB
+uncompressed (a setting, `SERENA_UPLOAD_MAX_MB`). A gzip body is decompressed in bounded pieces, so a small body that
+expands hugely is refused like a large one. The format is checked by the preflight, not here.
+
+Answers: `200` or `201` (a run started), and these problems:
+
+| Status | When |
+| --- | --- |
+| `400` | A header missing or malformed, or a body that isn't valid gzip |
+| `401` | No token, or one Serena doesn't know |
+| `403` | The token is for another museum (decided October 9, 2026) |
+| `404` | A museum Serena doesn't serve, or no such run |
+| `409` | A call out of order for the run's state, or a later night while the worker is busy |
+| `413` | A file larger than Serena accepts |
+| `415` | A body that isn't `text/tab-separated-values`, or an encoding other than gzip |
+| `422` | A file that doesn't match its `X-Row-Count` or `X-Content-SHA256` |
+| `503` | Serena can't check right now (its tokens or the museum's bucket unavailable); try again |
+
+The API's OpenAPI description, with examples, is generated from the code. A copy is kept in the repository as
+`docs/api/etl-v1.json`, and CI fails when the copy no longer matches the code, so the ETL team can read it on GitHub.
+The admin app has a button that opens the same documentation.
 
 ### Preflight and apply
 

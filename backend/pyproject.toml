@@ -12,12 +12,13 @@ dependencies = [
   "pydantic-settings>=2.3",
   "pyyaml>=6",
   "defusedxml>=0.7",
+  "tzdata>=2024.1",  # America/Los_Angeles for a run's night, also where the OS has no time zone database
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
-  "moto[dynamodb,s3]>=5",
+  "moto[dynamodb,s3,secretsmanager]>=5",
   "ruff>=0.6",
   "mypy>=1.11",
   "types-PyYAML>=6",

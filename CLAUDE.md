@@ -60,6 +60,7 @@ pip install --require-hashes -r requirements-dev.txt
 pip install --no-deps --no-build-isolation -e .
 ruff check . && mypy && pytest -q          # what CI runs
 pytest -q tests/test_logs.py               # one test file
+python -m serena.etl_api --openapi > ../docs/api/etl-v1.json   # after changing the ETL API
 ```
 
 To run the app locally before Docker Compose exists (pull request 10), point it at DynamoDB Local, never at AWS:
@@ -92,8 +93,8 @@ While working, run only the test files a change affects. Run the full suite once
 ## Documents kept in step with the code
 
 - **Design document** — `docs/design.md`. Change it in the same pull request as the code it describes.
-- **API documentation** — `docs/api/` (from pull request 4): the OpenAPI description generated from the code, which CI
-  checks is current.
+- **API documentation** — `docs/api/etl-v1.json`: the ETL API's OpenAPI description generated from the code; a test
+  (so CI) fails when it isn't current.
 - **Testing checklist** — `docs/testing-checklist.md`: the checks to do by hand. A pull request that needs checks
   by hand adds a section to it.
 - **README.md** — what Serena does and the repository's layout.

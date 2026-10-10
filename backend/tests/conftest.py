@@ -35,6 +35,20 @@ def store(dynamodb: Any) -> Store:
     return Store(dynamodb, "t")
 
 
+@pytest.fixture
+def s3(dynamodb: Any) -> Any:
+    """Inside the same moto context as the tables: one bucket per museum, b-<tenant>."""
+    client = boto3.client("s3", region_name="us-west-2")
+    for tenant in TENANTS:
+        client.create_bucket(Bucket=f"b-{tenant}", CreateBucketConfiguration={"LocationConstraint": "us-west-2"})
+    return client
+
+
+@pytest.fixture
+def secretsmanager(dynamodb: Any) -> Any:
+    return boto3.client("secretsmanager", region_name="us-west-2")
+
+
 def add_blob(store: Store, tenant: str, blob: str, media: str | None, kind: str = "image",
              access: str = "public") -> None:
     """A row of the servability table, as an applied Blob-to-Media file leaves it."""
