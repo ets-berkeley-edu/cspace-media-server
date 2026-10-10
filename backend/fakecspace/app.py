@@ -60,7 +60,7 @@ class Store:
             self.calls: list[str] = []
 
     def add(self, csid: str, kind: str = "image", state: str = "project", shade: int = 128) -> Media:
-        if kind == "image":
+        if kind in ("image", "card"):
             image = samples.png(shade=shade)
             files = {"content": (image, "image/png"), **{name: (image, "image/png") for name in DERIVATIVES}}
         elif kind == "pdf":

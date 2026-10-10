@@ -415,10 +415,18 @@ Each case has its own reason, so the admin app can say why a file isn't served:
 | `taken_down` | The Media record has an active takedown in Serena |
 | `restricted_image_not_uploaded` | The museum's restricted-image Blob, before an admin uploads its files |
 | `watermark_not_built` | Temporary: a size the museum watermarks, until watermarking is built (pull request 16) |
-| `fetch_not_built` | Temporary: servable, but not in Serena's cache yet, until fetching on a miss is built (pull request 9) |
+| `media_gone` | A miss: the Media record isn't in CollectionSpace (404 on the light check) |
+| `media_deleted` | A miss: the Media record is soft-deleted |
+| `no_file` | A miss: the Media record exists, but CollectionSpace has no such file or size (404) |
+| `cspace_unavailable` | A miss: CollectionSpace didn't answer, or answered 429 or 5xx after the retries, or the file broke off part-way |
+| `cspace_refused` | A miss: CollectionSpace answered 401, 403 or another unexpected status, or Serena has no account for the museum: a configuration problem |
+| `wrong_content_type` | A miss: a content type the kind doesn't allow, or a "PDF" without `%PDF-` in its first 1024 bytes |
+| `too_large` | A miss: over the museum's size limit for the kind |
+| `not_decodable` | A miss: an image or card that doesn't decode |
+| `fetch_busy` | A miss: not enough local disk to fetch it now |
 | `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
 
-The fetch on a miss adds its own reasons (see Image fetch). Each task counts them in memory and writes the totals to
+The reasons for a miss were decided October 10, 2026 (see Image fetch). Each task counts them in memory and writes the totals to
 the Unserved requests table every minute: one item per museum, 5-minute bucket and reason, with its count and the
 five most recent paths, expiring after 30 days (decided October 9, 2026). A request under a museum Serena doesn't
 serve is counted under `default`. A task that stops abruptly loses at most a
@@ -727,11 +735,33 @@ upload, requests for it get the unavailable image (reason `restricted_image_not_
 - **Duplicate first fetches.** Within a task, simultaneous requests for the same missing file wait on one fetch.
   Across tasks, duplicates can happen; they cost one extra fetch, store nothing twice (same hash), and are logged.
 - **Checks.** The response must be 200, with a content type allowed for the Blob's kind, within the museum's size
-  limit, and (for images) decodable. Anything else: the unavailable image, nothing stored, and the reason recorded.
+  limit, and (for images) decodable. Anything else: the unavailable image, nothing stored, and the reason recorded
+  (see Requests Serena doesn't serve). Decided October 10, 2026:
+  - Content types (parameters such as `charset` ignored): images and cards `image/jpeg`, `image/png`, `image/tiff`,
+    `image/gif`, `image/webp`; 3D `model/x3d+xml`, `model/x3d-vrml`, `model/gltf-binary`, `model/gltf+json`,
+    `model/obj`, `model/stl`, `model/vnd.collada+xml`, `model/ply`; PDFs `application/pdf`. Not
+    `application/octet-stream`, which would let any bytes through. JPEG 2000 isn't allowed, since the bundled libvips
+    can't decode it. A new type is a small code change; the testing checklist records the types the museums' files
+    really have.
+  - A PDF must have `%PDF-` within its first 1024 bytes, where PDF readers look for it.
+  - An image is decodable when libvips (pyvips, with the libvips the `pyvips-binary` wheel bundles) decodes every
+    pixel, reading the file sequentially from local disk, so a large TIFF needs little memory.
+  - The size limit is checked against `Content-Length` before reading, and again while the file is read.
+- **Remembering a failure.** A failure that would repeat (every reason above but `cspace_unavailable` and
+  `fetch_busy`) is remembered by the task for 10 minutes (`SERENA_FETCH_FAILURE_MEMORY_SECONDS`), so a crawler asking
+  again and again doesn't call CollectionSpace each time. Step 2 runs first, so a takedown still applies (decided
+  October 10, 2026).
+- **HEAD.** A HEAD request is answered like a GET, so a miss fetches and stores the file (decided October 10, 2026).
 - **Local disk, then S3.** The hash, and so the S3 key, is known only after the whole file is read, and an image must
   be read whole to check that it decodes. So each fetched file is written to the task's local disk (Fargate ephemeral
-  storage) while it's hashed, checked, then uploaded to `objects/<sha256>` (multipart for large originals). Nothing is
-  held whole in memory, and nothing in S3 ever needs deleting. (Decided October 8, 2026.)
+  storage) while it's hashed, checked, then uploaded to `objects/<sha256>` (multipart for large originals) unless the
+  same bytes are already stored. Nothing is held whole in memory, and nothing in S3 ever needs deleting. (Decided
+  October 8, 2026.) The local file is deleted as soon as it's stored or refused. Before a fetch, Serena checks the free
+  space: below the kind's size limit plus 1 GB (`SERENA_FETCH_FREE_MARGIN_MB`), the request gets `fetch_busy` and
+  nothing is fetched. Each task has 50 GB of ephemeral storage (decided October 10, 2026).
+- **Waiting on a large fetch.** A miss answers the 302 only once the file is stored. The load balancer's idle timeout
+  is 300 seconds, for large originals; a fetch the browser gave up on still finishes, so the next request is a hit
+  (decided October 10, 2026).
 
 ## Storage
 
@@ -789,7 +819,8 @@ reachable only from campus networks.
 - **Compute.** FastAPI on Uvicorn, one process per ECS Fargate task (so in-task state such as the shared first fetch
   and the concurrency cap holds per task), behind an ALB with AWS WAF (rate limits and bot control, since the catalog
   is crawled routinely). Fargate rather than Lambda: no cold starts for pyvips, and warm connection pools for crawler
-  bursts. The worker is a second ECS service from the same image.
+  bursts. The worker is a second ECS service from the same image. Each app task has 50 GB of ephemeral storage for
+  fetches, and the ALB's idle timeout is 300 seconds (see Image fetch).
 - **Routing.** The legacy imageserver's paths on each museum's webapps host are routed to Serena's ALB, one museum at
   a time. The ALB accepts `/etl/` only from the ETL server and `/admin` only from campus networks.
 - **Infrastructure as code.** Terraform, in `deploy/`, with state in S3. No secrets in Terraform files or state.

@@ -13,6 +13,7 @@ dependencies = [
   "pydantic-settings>=2.3",
   "pyyaml>=6",
   "defusedxml>=0.7",
+  "pyvips[binary]>=3.0",  # checks fetched images decode; later makes watermarked copies (libvips bundled by the wheel)
   "tzdata>=2024.1",  # America/Los_Angeles for a run's night, also where the OS has no time zone database
 ]
 
@@ -57,5 +58,5 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 # No type information for these: their values are Any, so code using them keeps its own annotations.
-module = ["boto3", "boto3.*", "botocore", "botocore.*", "moto", "defusedxml", "defusedxml.*"]
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "moto", "defusedxml", "defusedxml.*", "pyvips", "pyvips.*"]
 ignore_missing_imports = true

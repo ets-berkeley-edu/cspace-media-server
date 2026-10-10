@@ -101,10 +101,10 @@ def test_a_tampered_or_expired_local_url_is_refused(local: TestClient, store: St
                      f"&Signature={query['Signature'][0]}").status_code == 403
 
 
-def test_a_miss_until_fetching_is_built(local: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+def test_a_miss_goes_to_the_fetch(local: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     add_blob(store, "pahma", BLOB, MEDIA)
     assert local.get(path()).headers["location"] == "/unavailable/pahma.svg"
-    assert recorder.recent[-1].reason == Reason.FETCH_NOT_BUILT
+    assert recorder.recent[-1].reason == Reason.CSPACE_REFUSED  # no CollectionSpace account here; see test_fetch.py
 
 
 def test_watermarked_sizes_until_watermarking_is_built(local: TestClient, store: Store,
