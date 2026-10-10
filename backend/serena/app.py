@@ -14,6 +14,8 @@ from fastapi.responses import PlainTextResponse
 
 from . import etl_api, imageserver, logs, museum, signed_links, signing, tables
 from .config import Settings, get_settings
+from .cspace.clients import CSpaceClients, HttpFactory
+from .fetch import Fetcher
 from .museum_settings import MuseumSettings
 from .runs import Runs
 from .secret_cache import SecretCache, secretsmanager_client
@@ -25,8 +27,10 @@ log = logging.getLogger("serena.app")
 
 
 def create_app(settings: Settings | None = None, store: Store | None = None, unserved: Recorder | None = None,
-               s3: Any = None, secretsmanager: Any = None, clock: Callable[[], datetime] | None = None) -> FastAPI:
-    """The app. Tests pass their own store, recorder and clients (moto); otherwise they use AWS."""
+               s3: Any = None, secretsmanager: Any = None, clock: Callable[[], datetime] | None = None,
+               cspace_http: HttpFactory | None = None) -> FastAPI:
+    """The app. Tests pass their own store, recorder and clients (moto, the CollectionSpace simulator); otherwise
+    they use AWS and each museum's CollectionSpace."""
     settings = settings or get_settings()
     logs.configure(settings.log_level)
     museums = museum.load_all(settings.tenants)
@@ -47,6 +51,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         finally:
             flusher.cancel()
             await asyncio.to_thread(_flush_now, recorder)
+            app.state.fetcher.clients.close()
 
     # No interactive API documentation here: the ETL API's description is generated into docs/api/ (design: The ETL
     # API), and the admin app has its own button for it.
@@ -66,6 +71,10 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     app.state.s3 = s3
     app.state.signer = _signer(settings, secret_cache)
     app.state.signing_keys = signed_links.SigningKeys(secret_cache, settings.signing_key_secret_ids)
+    app.state.fetcher = Fetcher(
+        CSpaceClients(settings, secret_cache, cspace_http), s3, settings.buckets, app.state.museum_settings, store,
+        fetch_dir=settings.fetch_dir, free_margin_mb=settings.fetch_free_margin_mb,
+        failure_seconds=settings.fetch_failure_memory_seconds)
     for key, configured in museums.items():
         if configured.signed_access_kinds and key not in settings.signing_key_secret_ids:
             log.warning("no signing key secret for a museum with signed access: its restricted files aren't served",

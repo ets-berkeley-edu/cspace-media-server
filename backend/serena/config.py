@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     # {"username": ..., "password": ...}; these are the secrets' IDs, from SERENA_CSPACE_SECRET_IDS as JSON. The
     # password is never stored anywhere else or logged.
     cspace_secret_ids: dict[str, str] = {}
+    # A miss (design: Image fetch): where fetched files are written while they're hashed and checked (None: the
+    # system's temp directory; Fargate ephemeral storage in AWS), the free space kept beyond the kind's size limit
+    # before a fetch starts, and how long a failure that would repeat is remembered.
+    fetch_dir: str | None = None
+    fetch_free_margin_mb: int = 1024
+    fetch_failure_memory_seconds: float = 600.0
     # Simultaneous calls per museum, per task: tasks times this stays within what Lyrasis agrees to.
     cspace_concurrency: int = 4
     cspace_connect_timeout_seconds: float = 5.0

@@ -28,6 +28,13 @@ def key(tenant: str, blob_csid: str, derivative: str | None) -> str:
     return f"{tenant}#{blob_csid}#{derivative or ORIGINAL}"
 
 
+def record(store: Store, tenant: str, blob_csid: str, derivative: str | None, entry: Entry) -> None:
+    store.client.put_item(TableName=store.table(tables.CACHE_INDEX), Item={
+        "pk": {"S": key(tenant, blob_csid, derivative)}, "sha256": {"S": entry.sha256},
+        "content_type": {"S": entry.content_type}, "size": {"N": str(entry.size)},
+        "fetched_at": {"S": entry.fetched_at}})
+
+
 def lookup(store: Store, tenant: str, blob_csid: str, derivative: str | None) -> Entry | None:
     item = store.client.get_item(TableName=store.table(tables.CACHE_INDEX),
                                  Key={"pk": {"S": key(tenant, blob_csid, derivative)}}).get("Item")

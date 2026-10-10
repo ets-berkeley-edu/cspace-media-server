@@ -6,7 +6,7 @@ repository was set up. Tick an item when it's done, and note anything odd under 
 Change this file through pull requests, like `docs/design.md`. When a pull request needs checks by hand, add a
 section here in the same pull request.
 
-## 1. A replaced image is served on a cache miss (10 minutes, once the cache-miss path is built)
+## 1. A replaced image is served on a cache miss (10 minutes, once Serena is in QA)
 
 Replacing a Media record's image creates a new Blob. Until the next nightly update, clients still request the old
 Blob CSID. On a cache miss Serena checks only that the Media record exists and isn't deleted, then fetches through the
@@ -23,7 +23,7 @@ the next nightly update.
 - [ ] After the next nightly update, expect the old Blob's URL to get the museum's unavailable image, and the new
   Blob's URL to get the new image.
 
-## 2. A soft-deleted Media record isn't served on a cache miss (10 minutes, once the cache-miss path is built)
+## 2. A soft-deleted Media record isn't served on a cache miss (10 minutes, once Serena is in QA)
 
 The Media service returns soft-deleted Media records and their files, so Serena's light check must catch them.
 
@@ -31,17 +31,18 @@ Set up, on a test tenant: pick a Blob CSID that the last applied file lists as p
 soft-delete its Media record in CollectionSpace.
 
 - [ ] Request the Blob at its legacy URL. Expect the museum's unavailable image.
-- [ ] In Serena's log, expect the light check finding the record deleted, the reason recorded, and no fetch.
+- [ ] In Serena's log, expect the light check finding the record deleted, the reason `media_deleted`, and no fetch.
 - [ ] Expect nothing new in Serena's bucket for that Blob.
 
-## 3. A Media record with no image gets the unavailable image (10 minutes, once the cache-miss path is built)
+## 3. A Media record with no image gets the unavailable image (10 minutes, once Serena is in QA)
 
 Set up, on a test tenant: pick a Blob CSID that the last applied file lists as public and that isn't cached, and
 remove the image from its Media record in CollectionSpace.
 
 - [ ] Request the Blob at its legacy URL. Expect the museum's unavailable image, not an error.
-- [ ] In Serena's log, expect the light check to pass and the Media service's fetch to fail, with that reason
-  recorded. Note the status CollectionSpace returned.
+- [ ] In Serena's log, expect the light check to pass and the Media service's fetch to fail, with the reason
+  `no_file`. Note the status CollectionSpace returned; if it isn't 404, the reason will be `cspace_refused`, and the
+  fetch's handling of that status needs a second look.
 
 ## 4. The ETL API with each museum's real token (15 minutes, once Serena is deployed to QA)
 
@@ -135,3 +136,23 @@ test reader's Glimmer account.
   webapps host's Apache access log, expect no `uid` or `sig` values.
 - [ ] Rotate the QA key in the order the design gives. Links signed before and after the switch both work during the
   hour that follows.
+
+## 10. Real files on a cache miss, in QA (30 minutes, once Serena is in QA)
+
+The tests use the simulator's small synthetic files. This checks what the museums' real files look like.
+
+- [ ] For each museum, request a derivative and (where served) the original of a few images that aren't cached.
+  Expect each served, and a `fetched` log entry with its size and time.
+- [ ] Request a 3D file at each museum that has them. Note the content type CollectionSpace sends (Serena's log shows
+  it on a `wrong_content_type` refusal). If real 3D files arrive as a type Serena doesn't allow, such as
+  `application/octet-stream`, stop and decide whether to allow it.
+- [ ] Request a few Cinefiles public PDFs, old and new. Expect each served; any `wrong_content_type` means a PDF
+  without `%PDF-` in its first 1024 bytes: note it.
+- [ ] Note whether any museum has JPEG 2000 (`image/jp2`) originals. Serena refuses them as `wrong_content_type`.
+- [ ] Request the largest original image you can find (a TIFF of several hundred MB). Note how long the first
+  request takes. It must finish within the load balancer's 300 seconds and within the proxy timeout of Apache on the
+  webapps host (Apache's own default is 60 seconds; DevOps raises it to match). The second request is a hit.
+- [ ] Request a file that isn't cached from two browsers at the same moment. Expect one `fetched` log entry, and both
+  served.
+- [ ] Request a Blob whose Media record is soft-deleted, twice within 10 minutes. Expect one light check in
+  CollectionSpace's access log, not two.

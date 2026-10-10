@@ -33,8 +33,16 @@ class Reason(StrEnum):
     RESTRICTED_IMAGE_NOT_UPLOADED = "restricted_image_not_uploaded"
     # Temporary: a size the museum watermarks, until watermarking is built (pull request 16 in the plan).
     WATERMARK_NOT_BUILT = "watermark_not_built"
-    # Temporary: servable, but not in Serena's cache yet, until fetching on a miss is built (pull request 9).
-    FETCH_NOT_BUILT = "fetch_not_built"
+    # A miss (design: Image fetch): the light check, then the fetch and its checks
+    MEDIA_GONE = "media_gone"  # the Media record isn't in CollectionSpace (404)
+    MEDIA_DELETED = "media_deleted"  # the Media record is soft-deleted
+    NO_FILE = "no_file"  # the Media record exists, but CollectionSpace has no such file or size (404)
+    CSPACE_UNAVAILABLE = "cspace_unavailable"  # no answer, or 429 or 5xx after the retries
+    CSPACE_REFUSED = "cspace_refused"  # 401, 403 or another unexpected answer: Serena's account or configuration
+    WRONG_CONTENT_TYPE = "wrong_content_type"  # not a type the kind allows, or a "PDF" without %PDF-
+    TOO_LARGE = "too_large"  # over the museum's size limit for the kind
+    NOT_DECODABLE = "not_decodable"  # an image or card that doesn't decode
+    FETCH_BUSY = "fetch_busy"  # not enough local disk to fetch it now
     INTERNAL_ERROR = "internal_error"
 
 

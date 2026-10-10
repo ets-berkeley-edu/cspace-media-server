@@ -87,9 +87,14 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
             # Never an unwatermarked copy of a size the museum watermarks (design: Watermarks).
             return _unavailable(request, tenant, Reason.WATERMARK_NOT_BUILT)
         entry = cache_index.lookup(request.app.state.store, tenant, parsed.blob_csid, parsed.derivative)
+        if entry is None and decision.record is not None:
+            # A miss: the light check, then fetch, check and store (design: The steps, steps 4 and 5).
+            fetched = request.app.state.fetcher.get(museum, decision.record, parsed.derivative)
+            if isinstance(fetched, Reason):
+                return _unavailable(request, tenant, fetched)
+            entry = fetched
         if entry is None:
-            # Fetching on a miss arrives with pull request 9.
-            return _unavailable(request, tenant, Reason.FETCH_NOT_BUILT)
+            return _unavailable(request, tenant, Reason.INTERNAL_ERROR)
         return _redirect(request, tenant, entry, decision.signed_kid)
     except signed_links.SigningKeysUnavailable:
         # Already logged, with the museum; fail closed (design: Signed links).

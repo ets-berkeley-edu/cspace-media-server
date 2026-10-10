@@ -33,6 +33,9 @@ def derivative(tenant: str, size: str = "Medium", blob: str = BLOB) -> str:
     return f"/{tenant}/imageserver/blobs/{blob}/derivatives/{size}/content"
 
 
+SERVABLE = Reason.CSPACE_REFUSED  # reached the fetch: no CollectionSpace account in these tests
+
+
 def original(tenant: str, blob: str = BLOB) -> str:
     return f"/{tenant}/imageserver/blobs/{blob}/content"
 
@@ -40,13 +43,14 @@ def original(tenant: str, blob: str = BLOB) -> str:
 @pytest.mark.parametrize(
     ("tenant", "kind", "access", "path", "reason"),
     [
-        # listed, public, a kind Serena serves, asked for in a way that fits it: servable
-        ("pahma", "image", "public", derivative("pahma"), Reason.FETCH_NOT_BUILT),
-        ("pahma", "card", "public", derivative("pahma", "Thumbnail"), Reason.FETCH_NOT_BUILT),
-        ("pahma", "image", "public", original("pahma"), Reason.FETCH_NOT_BUILT),
-        ("bampfa", "3D", "public", original("bampfa"), Reason.FETCH_NOT_BUILT),
-        ("cinefiles", "pdf", "public", original("cinefiles"), Reason.FETCH_NOT_BUILT),
-        ("cinefiles", "pdf", "public", original("cinefiles") + "/linked_pdf:x", Reason.FETCH_NOT_BUILT),
+        # listed, public, a kind Serena serves, asked for in a way that fits it: servable, so it reaches the fetch,
+        # which these tests refuse because they configure no CollectionSpace account (see test_fetch.py)
+        ("pahma", "image", "public", derivative("pahma"), SERVABLE),
+        ("pahma", "card", "public", derivative("pahma", "Thumbnail"), SERVABLE),
+        ("pahma", "image", "public", original("pahma"), SERVABLE),
+        ("bampfa", "3D", "public", original("bampfa"), SERVABLE),
+        ("cinefiles", "pdf", "public", original("cinefiles"), SERVABLE),
+        ("cinefiles", "pdf", "public", original("cinefiles") + "/linked_pdf:x", SERVABLE),
         # not
         ("pahma", "audio", "public", original("pahma"), Reason.KIND_NOT_SERVED),
         ("pahma", "video", "public", original("pahma"), Reason.KIND_NOT_SERVED),
@@ -71,11 +75,11 @@ def test_not_listed(client: TestClient, store: Store, recorder: MemoryRecorder) 
 def test_takedowns(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     add_blob(store, "pahma", BLOB, MEDIA)
     take_down(store, "ucjeps", MEDIA)  # another museum's takedown changes nothing here
-    assert _reason(client, recorder, derivative("pahma")) == Reason.FETCH_NOT_BUILT
+    assert _reason(client, recorder, derivative("pahma")) == SERVABLE
     take_down(store, "pahma", MEDIA)
     assert _reason(client, recorder, derivative("pahma")) == Reason.TAKEN_DOWN  # on the very next request
     take_down(store, "pahma", MEDIA, state="unlocked")
-    assert _reason(client, recorder, derivative("pahma")) == Reason.FETCH_NOT_BUILT
+    assert _reason(client, recorder, derivative("pahma")) == SERVABLE
 
 
 def test_restricted_image_blob(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
