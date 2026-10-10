@@ -97,3 +97,19 @@ The tests check the signature against a key made at run time and serve files thr
   and the signed URL already handed out to stop working when it expires.
 - [ ] Rotate the CloudFront signing key (new key in the key group and the secret). Within 5 minutes, new URLs use the
   new key pair ID and work.
+
+## 8. Each museum's CollectionSpace service account (10 minutes per museum, once the accounts exist)
+
+The tests run against the CollectionSpace simulator, which can't show whether a real tenant's account works, whether
+its soft-delete states are the ones Serena looks for, or what a real Media service returns for each kind.
+
+Set up: the museum's read-only service account exists, and its secret (`{"username": ..., "password": ...}`) is in
+Secrets Manager. Run these from a shell with the AWS profile set, without printing the secret.
+
+- [ ] Light check on a public Media record. Expect it reported as existing.
+- [ ] Light check on a soft-deleted Media record, and on a made-up Media CSID. Expect deleted, then gone. Note the
+  `workflowState` value the soft-deleted record shows.
+- [ ] Fetch a derivative and the original of an image, and a file of each other kind the museum has. Expect 200 and
+  the content type for each; note any that differ from the kinds in the design.
+- [ ] Change the secret's password to a wrong one for a moment, then back. Within 5 minutes expect a 401 that isn't
+  retried, and nothing about the password in the log.

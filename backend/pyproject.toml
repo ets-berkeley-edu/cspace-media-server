@@ -30,7 +30,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["serena*"]
+include = ["serena*", "fakecspace*"]
 
 [tool.setuptools.package-data]
 serena = ["museums/*.yaml", "static/*.svg"]
@@ -51,11 +51,11 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "RUF"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["serena", "tests"]
+files = ["serena", "fakecspace", "tests"]
 strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 # No type information for these: their values are Any, so code using them keeps its own annotations.
-module = ["boto3", "boto3.*", "botocore", "botocore.*", "moto"]
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "moto", "defusedxml", "defusedxml.*"]
 ignore_missing_imports = true

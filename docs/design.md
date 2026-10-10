@@ -687,12 +687,22 @@ upload, requests for it get the unavailable image (reason `restricted_image_not_
 
 - **Account.** One read-only CollectionSpace service account per museum, HTTP Basic, created in each museum's
   CollectionSpace by its administrators (or the team, if it has admin rights); no Lyrasis change is needed. Its
-  password is in Secrets Manager, read at task start-up, never logged and never stored anywhere else.
+  username and password are a Secrets Manager secret, `{"username": ..., "password": ...}`, one per museum, named in
+  `SERENA_CSPACE_SECRET_IDS`. Serena reads it through the same 5-minute secret cache as the ETL tokens, so a rotated
+  password is picked up without a restart; it's held only in memory, never logged and never stored anywhere else.
 - **Calls.** All through the Media service, by the Media CSID from the servability record (decided October 9, 2026):
   `GET /cspace-services/media/<media CSID>` (the light check: exists, not soft-deleted), then
   `GET /cspace-services/media/<media CSID>/blob/derivatives/<derivative>/content` or `…/media/<media CSID>/blob/content`.
-- **Connections.** One pooled HTTP session per museum per task, with timeouts and retries for transient errors only.
-- **Concurrency limit.** A cap on simultaneous fetches per museum, per task, with no shared state. Tasks times the cap
+  A 404 on the light check means the record is gone. A record is soft-deleted when any of its `workflowState` values
+  contains `deleted` (`deleted`, `locked_deleted`, `replicated_deleted`), since the Media service still returns it.
+- **Connections.** One pooled HTTP session per museum per task, which doesn't follow redirects. It uses httpx
+  0.28 (decided October 9, 2026): Starlette now suggests its successor, httpx2, whose maintainer isn't yet clear, so
+  the move waits until it is. Timeouts:
+  5 seconds to connect and 60 seconds between bytes (not for a whole file). Retries, 2 by default with backoff of 0.5
+  and 1 second, are for transient failures only: no answer, 429, 502, 503 and 504. Any other status, a 401 included,
+  isn't retried. After the last retry the call fails as CollectionSpace unavailable.
+- **Concurrency limit.** A cap on simultaneous calls per museum, per task (`SERENA_CSPACE_CONCURRENCY`, 4 by default),
+  with no shared state. Tasks times the cap
   stays within what Lyrasis agrees to. Decided October 8, 2026; to revisit once Lyrasis confirms (a per-second rate
   shared across tasks would need more building).
 - **Duplicate first fetches.** Within a task, simultaneous requests for the same missing file wait on one fetch.
@@ -793,7 +803,10 @@ reachable only from campus networks.
 - **Health check.** `GET /health` answers `ok` with `Cache-Control: no-store`, for the load balancer, and says
   nothing else about Serena.
 - **Local development.** Docker Compose with a CollectionSpace simulator and the admin app's development server, as in
-  the BMU, and a fake ETL that runs whole nights through the API.
+  the BMU, and a fake ETL that runs whole nights through the API. The simulator (`backend/fakecspace`) answers the three
+  Media-service calls above with synthetic files (PNG images, a PDF and an X3D model, made in code) and HTTP Basic auth
+  with a synthetic account. Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a
+  record, remove its file, inject failures, and list the calls it received.
 
 ## Migration
 
