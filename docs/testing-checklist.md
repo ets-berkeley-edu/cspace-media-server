@@ -156,3 +156,20 @@ The tests use the simulator's small synthetic files. This checks what the museum
   served.
 - [ ] Request a Blob whose Media record is soft-deleted, twice within 10 minutes. Expect one light check in
   CollectionSpace's access log, not two.
+
+## 11. The local stack on a Mac (15 minutes, before merging pull request 10)
+
+CI's `stack` job runs the stack on Linux. This checks it where the team develops.
+
+- [ ] With Docker Desktop running, from the repository's root: `./serena up`. Expect "Serena (Local · simulator) is up"
+  within a couple of minutes, and nothing else on ports 8300, 8380 or 9300. If the BMU's stack is running, both run.
+- [ ] `./serena etl pahma`. Expect `applied`, and three sample addresses. Open the image one in a browser: expect a
+  grey square. Open it again: expect the same, now from Serena's store (`./serena logs web` shows no second fetch).
+- [ ] `./serena etl cinefiles`. Open the `pdf` sample: expect a one-page PDF. Open the `pdf (restricted)` sample:
+  expect the unavailable image (no signed link).
+- [ ] `./serena etl bampfa --partial`. Expect `ready`, and the run left there.
+- [ ] `./serena smoke`. Expect "Smoke test passed".
+- [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
+- [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
+  `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.
+
