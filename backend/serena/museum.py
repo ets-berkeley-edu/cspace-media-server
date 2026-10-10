@@ -62,6 +62,9 @@ class Museum(BaseModel):
     # The Blob the ETL lists in place of a non-public image (design: Restricted-image Blob). Only museums whose ETL
     # uses one have it.
     restricted_image_blob_csid: str | None = None
+    # The sizes the museum watermarks (design: Watermarks). Until watermarking is built, they get the unavailable
+    # image: Serena never serves an unwatermarked copy of a size the museum watermarks.
+    watermark_sizes: tuple[str, ...] = ()
     settings: StartingSettings
 
     @field_validator("derivatives")
@@ -87,6 +90,9 @@ class Museum(BaseModel):
     def _key_is_file_name(self) -> Museum:
         if not re.fullmatch(r"[a-z]+", self.key):
             raise ValueError("a museum's key is lower-case letters")
+        unknown = [size for size in self.watermark_sizes if size not in self.derivatives]
+        if unknown:
+            raise ValueError(f"watermark_sizes not among the museum's derivatives: {', '.join(unknown)}")
         return self
 
 

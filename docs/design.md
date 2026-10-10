@@ -395,6 +395,8 @@ Each case has its own reason, so the admin app can say why a file isn't served:
 | `original_not_served` | An image's or card's original file, where the museum doesn't serve originals |
 | `taken_down` | The Media record has an active takedown in Serena |
 | `restricted_image_not_uploaded` | The museum's restricted-image Blob, before an admin uploads its files |
+| `watermark_not_built` | Temporary: a size the museum watermarks, until watermarking is built (pull request 16) |
+| `fetch_not_built` | Temporary: servable, but not in Serena's cache yet, until fetching on a miss is built (pull request 9) |
 | `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
 
 The fetch on a miss adds its own reasons (see Image fetch). Each task counts them in memory and writes the totals to
@@ -408,8 +410,14 @@ why (for example restricted files, files that failed their checks, fetch errors)
 
 ### Signed URLs
 
-- CloudFront signed URLs with a trusted key group. The private key is in Secrets Manager; only the app's task role
-  can read it.
+- CloudFront signed URLs with a trusted key group, canned policy (an expiry only). The private key is in Secrets
+  Manager, `{"key_pair_id": …, "private_key": "<PEM>"}` (RSA, as CloudFront requires); only the app's task role can
+  read it, and each task reads it again every 5 minutes, so a rotation needs no restart.
+- One distribution per environment (`SERENA_CDN_BASE_URL`); a stored file's URL is `<base>/<tenant>/objects/<sha256>`
+  (decided October 9, 2026). CloudFront sends `/<tenant>/…` to that museum's bucket, without the museum's prefix, so
+  the object's key stays `objects/<sha256>` (built in pull request 18).
+- The 302 to a signed URL carries `Cache-Control: private, max-age=<the URL's remaining life>`. The URL is never logged:
+  the log line says only that the museum's file was served from the cache.
 - 15-minute windows: a URL's expiry is the end of the 15-minute window after the current one, so every request for
   the same object in the same window gets the same URL (the browser can reuse it) and each URL lives between 15 and
   30 minutes.
@@ -420,6 +428,10 @@ why (for example restricted files, files that failed their checks, fetch errors)
 - After a takedown, no new URL is issued. A URL already handed out works until it expires (at most 30 minutes), and a
   browser may keep showing an image it already has for up to 15 minutes more: about 45 minutes in all, within the
   1 to 2 hour tolerance.
+- Without CloudFront (local development only, `SERENA_LOCAL_CDN`, which needs DynamoDB Local), Serena signs with a key
+  of its own, made when it starts, and serves the files itself at `/local-cdn/<tenant>/objects/<sha256>`, checking the
+  signature and expiry. In AWS that path answers 404. With neither, a servable file gets the unavailable image
+  (`internal_error`) and Serena logs that no signer is configured.
 
 ### Unavailable images
 
@@ -699,7 +711,8 @@ upload, requests for it get the unavailable image (reason `restricted_image_not_
   anything. S3 Intelligent-Tiering for cost.
 - **Keys.** `objects/<sha256>`, like Nuxeo's content-addressed store, so identical bytes are stored once. The object
   records its content type.
-- **Cache index.** `<tenant>#<blob CSID>#<derivative>` → hash, content type, size, fetched-at. Watermarked copies have
+- **Cache index.** `<tenant>#<blob CSID>#<derivative>` (`original` for the original file) → hash, content type,
+  size, fetched-at. Watermarked copies have
   their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID are
   indexed under the Media CSID and the Blob CSID listed for it in the last applied file, so a replaced image is fetched
   again after the next nightly update.
@@ -717,7 +730,8 @@ upload, requests for it get the unavailable image (reason `restricted_image_not_
   old ones stay, unused. How copies are keyed (a version number or a hash of the settings), and whether the
   unwatermarked copy of a watermarked size is stored at all, are open (F1).
 - Only images are watermarked. For a size it watermarks, Serena never issues a signed URL for an unwatermarked copy:
-  until watermarking is built, those sizes get the unavailable image, and the Botanical Garden moves to Serena only
+  until watermarking is built, those sizes (each museum's `watermark_sizes`; the Botanical Garden's are all three of its
+  sizes) get the unavailable image (`watermark_not_built`), and the Botanical Garden moves to Serena only
   once it is.
 
 ## Admin web app
@@ -771,10 +785,10 @@ reachable only from campus networks.
   - **Apache on the museums' webapps hosts,** which routes the legacy paths to Serena: outside Serena. Its access logs
     record the full request, with the email address after `linked_pdf:` and a signed link's `uid` and `sig`. The DevOps
     team is to keep them out of those logs (a sub-task of Glimmer's story).
-- **Configuration.** Settings come from environment variables prefixed `SERENA_` (never a secret: those are in
-  Secrets Manager). Each museum has a YAML file in `backend/serena/museums/`: its derivatives, whether it serves the
-  original file, its restricted-image Blob CSID, the kinds it allows signed access to and its signing key IDs
-  (the keys themselves are in Secrets Manager), and the starting values of its settings (watchdog deadline, the
+- **Configuration.** Settings come from environment variables prefixed `SERENA_` (never a secret: those are in Secrets
+  Manager). Each museum has a YAML file in `backend/serena/museums/`: its derivatives, whether it serves the original
+  file, its restricted-image Blob CSID, the sizes it watermarks, the kinds it allows signed access to and its signing
+  key IDs (the keys themselves are in Secrets Manager), and the starting values of its settings (watchdog deadline, the
   ETL's poll interval and step timeout, the change threshold and size limits), which an admin's values override.
 - **Health check.** `GET /health` answers `ok` with `Cache-Control: no-store`, for the load balancer, and says
   nothing else about Serena.

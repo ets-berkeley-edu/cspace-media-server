@@ -9,6 +9,7 @@ dependencies = [
   "uvicorn[standard]>=0.30",
   "httpx>=0.27",
   "boto3>=1.34",
+  "cryptography>=42",  # signs CloudFront URLs (RSA)
   "pydantic-settings>=2.3",
   "pyyaml>=6",
   "defusedxml>=0.7",

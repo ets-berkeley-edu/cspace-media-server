@@ -12,7 +12,7 @@ import boto3
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import etl_api, imageserver, logs, museum, tables
+from . import etl_api, imageserver, logs, museum, signing, tables
 from .config import Settings, get_settings
 from .museum_settings import MuseumSettings
 from .runs import Runs
@@ -61,8 +61,10 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         s3 = boto3.client("s3", region_name=settings.aws_region, endpoint_url=settings.s3_endpoint)
     if secretsmanager is None:
         secretsmanager = secretsmanager_client(settings)
-    tokens = Tokens(SecretCache(secretsmanager, settings.secret_cache_seconds), settings.etl_token_secret_ids,
-                    list(museums))
+    secret_cache = SecretCache(secretsmanager, settings.secret_cache_seconds)
+    tokens = Tokens(secret_cache, settings.etl_token_secret_ids, list(museums))
+    app.state.s3 = s3
+    app.state.signer = _signer(settings, secret_cache)
     app.mount(etl_api.PREFIX, etl_api.create_etl_app(etl_api.Services(
         settings, museums, app.state.museum_settings, Runs(store, clock) if clock else Runs(store), tokens, s3)))
 
@@ -90,3 +92,12 @@ async def _flush_unserved(recorder: Recorder, every_seconds: float) -> None:
     while True:
         await asyncio.sleep(every_seconds)
         await asyncio.to_thread(_flush_now, recorder)
+
+
+def _signer(settings: Settings, secret_cache: SecretCache) -> signing.Signer | None:
+    if settings.cdn_base_url and settings.cloudfront_key_secret_id:
+        return signing.CloudFrontURLSigner(settings.cdn_base_url, secret_cache, settings.cloudfront_key_secret_id)
+    if settings.local_cdn:
+        return signing.LocalSigner()
+    log.warning("no CloudFront signer configured: servable files get the unavailable image")
+    return None

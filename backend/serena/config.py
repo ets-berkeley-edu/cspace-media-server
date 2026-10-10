@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     alert_topic_arn: str = ""
     sns_endpoint: str | None = None  # local development only
 
+    # Delivery (design: Signed URLs): the CloudFront distribution's base URL; a file is
+    # <base>/<tenant>/objects/<sha256>. The signing key is a Secrets Manager secret
+    # {"key_pair_id": ..., "private_key": "<PEM>"}.
+    cdn_base_url: str = ""
+    cloudfront_key_secret_id: str = ""
+    # Local development only, without CloudFront: Serena signs with a key of its own and serves the files itself at
+    # /local-cdn/<tenant>/objects/<sha256>. Allowed only with dynamodb_endpoint (DynamoDB Local), so never in AWS.
+    local_cdn: bool = False
+
     @field_validator("tenants")
     @classmethod
     def _cspace_urls(cls, tenants: dict[str, str]) -> dict[str, str]:
@@ -63,6 +72,11 @@ class Settings(BaseSettings):
             if not url.startswith(("https://", "http://")):
                 raise ValueError(f"the CollectionSpace server for {tenant} must be an http(s) URL")
         return {tenant: url.rstrip("/") for tenant, url in tenants.items()}
+
+    @field_validator("cdn_base_url")
+    @classmethod
+    def _cdn(cls, url: str) -> str:
+        return url.rstrip("/")
 
     @field_validator("unavailable_base_url")
     @classmethod
@@ -75,6 +89,10 @@ class Settings(BaseSettings):
     def _tables_only_locally(self) -> Settings:
         if self.create_tables and not self.dynamodb_endpoint:
             raise ValueError("create_tables is for local development: set dynamodb_endpoint (DynamoDB Local) too")
+        if self.local_cdn and not self.dynamodb_endpoint:
+            raise ValueError("local_cdn is for local development: set dynamodb_endpoint (DynamoDB Local) too")
+        if self.cdn_base_url and not self.cdn_base_url.startswith("https://"):
+            raise ValueError("cdn_base_url must be an https URL")
         return self
 
 
