@@ -1,0 +1,5 @@
+// Vuetify's styles, with the RTL look: Verdana first, as in BOA and the BMU.
+@use 'vuetify' with (
+  $color-pack: true,
+  $body-font-family: (Verdana, "Open Sans", Roboto, Helvetica, Arial, sans-serif)
+);
