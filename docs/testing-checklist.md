@@ -82,3 +82,18 @@ The tests use moto's SNS. These checks need the real topic and the team's mailin
 - [ ] Check the email has no personal data and no link with a token or signature in it.
 - [ ] Try to unsubscribe from the email's link without signing in to AWS: expect it to be refused (the subscription
   requires authentication to unsubscribe).
+
+## 7. Signed URLs through CloudFront, in QA (15 minutes, once CloudFront is set up in pull request 18)
+
+The tests check the signature against a key made at run time and serve files through the local stand-in.
+
+- [ ] Request a cached image at its legacy URL. Expect a 302 to `<CloudFront>/<tenant>/objects/<sha256>?Expires=…`,
+  with `Cache-Control: private, max-age` of 15 to 30 minutes, and the image from CloudFront.
+- [ ] Request the same URL without its query string, and with a changed `Signature`. Expect 403 from CloudFront.
+- [ ] Request it again after `Expires`. Expect 403.
+- [ ] Two requests in the same 15-minute window get the same URL; the second is served from CloudFront's edge cache
+  (`X-Cache: Hit from cloudfront`), which checks that the signature's parameters are left out of the cache key.
+- [ ] Take the image's Media record down in the admin app. Expect the legacy URL to get the unavailable image at once,
+  and the signed URL already handed out to stop working when it expires.
+- [ ] Rotate the CloudFront signing key (new key in the key group and the secret). Within 5 minutes, new URLs use the
+  new key pair ID and work.

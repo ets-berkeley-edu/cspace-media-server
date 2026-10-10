@@ -8,6 +8,8 @@ derivatives: [Thumbnail, Medium, OriginalJpeg]
 original: false
 # No restricted-image Blob: the ETL leaves non-public images out of the public core
 restricted_image_blob_csid: null
+# Watermarked (design: Watermarks): every size. Until watermarking is built they get the unavailable image.
+watermark_sizes: [Thumbnail, Medium, OriginalJpeg]
 settings:
   watchdog_deadline: "08:00"          # Pacific time: the night's run must be applied or abandoned by then
   etl_poll_interval_seconds: 15       # returned to the ETL in every run response

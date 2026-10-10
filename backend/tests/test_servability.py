@@ -41,12 +41,12 @@ def original(tenant: str, blob: str = BLOB) -> str:
     ("tenant", "kind", "access", "path", "reason"),
     [
         # listed, public, a kind Serena serves, asked for in a way that fits it: servable
-        ("pahma", "image", "public", derivative("pahma"), Reason.SERVING_NOT_BUILT),
-        ("pahma", "card", "public", derivative("pahma", "Thumbnail"), Reason.SERVING_NOT_BUILT),
-        ("pahma", "image", "public", original("pahma"), Reason.SERVING_NOT_BUILT),
-        ("bampfa", "3D", "public", original("bampfa"), Reason.SERVING_NOT_BUILT),
-        ("cinefiles", "pdf", "public", original("cinefiles"), Reason.SERVING_NOT_BUILT),
-        ("cinefiles", "pdf", "public", original("cinefiles") + "/linked_pdf:x", Reason.SERVING_NOT_BUILT),
+        ("pahma", "image", "public", derivative("pahma"), Reason.FETCH_NOT_BUILT),
+        ("pahma", "card", "public", derivative("pahma", "Thumbnail"), Reason.FETCH_NOT_BUILT),
+        ("pahma", "image", "public", original("pahma"), Reason.FETCH_NOT_BUILT),
+        ("bampfa", "3D", "public", original("bampfa"), Reason.FETCH_NOT_BUILT),
+        ("cinefiles", "pdf", "public", original("cinefiles"), Reason.FETCH_NOT_BUILT),
+        ("cinefiles", "pdf", "public", original("cinefiles") + "/linked_pdf:x", Reason.FETCH_NOT_BUILT),
         # not
         ("pahma", "audio", "public", original("pahma"), Reason.KIND_NOT_SERVED),
         ("pahma", "video", "public", original("pahma"), Reason.KIND_NOT_SERVED),
@@ -71,11 +71,11 @@ def test_not_listed(client: TestClient, store: Store, recorder: MemoryRecorder) 
 def test_takedowns(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     add_blob(store, "pahma", BLOB, MEDIA)
     take_down(store, "ucjeps", MEDIA)  # another museum's takedown changes nothing here
-    assert _reason(client, recorder, derivative("pahma")) == Reason.SERVING_NOT_BUILT
+    assert _reason(client, recorder, derivative("pahma")) == Reason.FETCH_NOT_BUILT
     take_down(store, "pahma", MEDIA)
     assert _reason(client, recorder, derivative("pahma")) == Reason.TAKEN_DOWN  # on the very next request
     take_down(store, "pahma", MEDIA, state="unlocked")
-    assert _reason(client, recorder, derivative("pahma")) == Reason.SERVING_NOT_BUILT
+    assert _reason(client, recorder, derivative("pahma")) == Reason.FETCH_NOT_BUILT
 
 
 def test_restricted_image_blob(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
