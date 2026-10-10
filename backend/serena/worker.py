@@ -29,6 +29,7 @@ from .museum import Museum
 from .museum_settings import MuseumSettings
 from .runs import OutOfOrder, Run, Runs, State
 from .store import Store
+from .watchdog import Watchdog
 
 log = logging.getLogger("serena.worker")
 APPLY_ATTEMPTS = 3  # transient errors: the whole apply is tried again (it's safe to repeat) before apply_failed
@@ -42,6 +43,7 @@ class WorkerServices:
     runs: Runs
     store: Store
     s3: Any
+    watchdog: Watchdog | None = None
 
 
 class _Heartbeat(threading.Thread):
@@ -61,9 +63,12 @@ class _Heartbeat(threading.Thread):
 
 
 class Worker:
-    def __init__(self, services: WorkerServices, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, services: WorkerServices, sleep: Callable[[float], None] = time.sleep,
+                 monotonic: Callable[[], float] = time.monotonic):
         self.s = services
         self.sleep = sleep
+        self.monotonic = monotonic
+        self.watched_at: float | None = None
         self.owner = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         self.stopping = threading.Event()
 
@@ -83,9 +88,24 @@ class Worker:
                 log.exception("worker step failed", extra={"museum": tenant})
         return done
 
+    def watch(self) -> bool:
+        """Run the watchdog if its interval has passed; returns whether it ran."""
+        if self.s.watchdog is None:
+            return False
+        now = self.monotonic()
+        if self.watched_at is not None and now - self.watched_at < self.s.settings.watchdog_seconds:
+            return False
+        self.watched_at = now
+        try:
+            self.s.watchdog.check()
+        except Exception:
+            log.exception("watchdog pass failed")
+        return True
+
     def run_forever(self) -> None:
         log.info("worker started", extra={"owner": self.owner})
         while not self.stopping.is_set():
+            self.watch()
             if not self.tick():
                 self.stopping.wait(self.s.settings.worker_poll_seconds)
         log.info("worker stopped", extra={"owner": self.owner})
@@ -157,6 +177,7 @@ def build_services(settings: Settings | None = None) -> WorkerServices:
     import boto3
 
     from . import logs, museum
+    from .alerts import Alerts
     from .config import get_settings
     from .store import dynamodb_client
 
@@ -164,8 +185,14 @@ def build_services(settings: Settings | None = None) -> WorkerServices:
     logs.configure(settings.log_level)
     store = Store(dynamodb_client(settings), settings.table_prefix)
     s3 = boto3.client("s3", region_name=settings.aws_region, endpoint_url=settings.s3_endpoint)
-    return WorkerServices(settings, museum.load_all(settings.tenants),
-                          MuseumSettings(store, settings.settings_cache_seconds), Runs(store), store, s3)
+    sns = boto3.client("sns", region_name=settings.aws_region, endpoint_url=settings.sns_endpoint)
+    museums = museum.load_all(settings.tenants)
+    museum_settings = MuseumSettings(store, settings.settings_cache_seconds)
+    runs = Runs(store)
+    if not settings.alert_topic_arn:
+        log.warning("no alert topic: alerts are recorded and logged, not emailed")
+    watchdog = Watchdog(museums, museum_settings, runs, Alerts(store, sns, settings.alert_topic_arn))
+    return WorkerServices(settings, museums, museum_settings, runs, store, s3, watchdog)
 
 
 def main() -> None:

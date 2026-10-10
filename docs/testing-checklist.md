@@ -69,3 +69,16 @@ The tests run whole nights against moto with synthetic files. These checks use a
   5 minutes and end `applied`, with the table matching the file.
 - [ ] Upload a file with 10% of the rows removed: expect `preflight_failed`, the change as a share, and the table
   unchanged.
+
+## 6. Alerts by email, in QA (15 minutes, once Serena and its SNS topic are in QA)
+
+The tests use moto's SNS. These checks need the real topic and the team's mailing list subscribed to it.
+
+- [ ] Set a museum's deadline a few minutes ahead in the admin app (or its Settings item) and run no night for it.
+  Expect one email to the mailing list within 5 minutes after the deadline, naming the museum, the night and what
+  to do, and one alert record. Expect no second email on the next passes.
+- [ ] Make a night's preflight fail (upload a file with a bad kind). Expect a "preflight failed" email with the run ID
+  and the reason.
+- [ ] Check the email has no personal data and no link with a token or signature in it.
+- [ ] Try to unsubscribe from the email's link without signing in to AWS: expect it to be refused (the subscription
+  requires authentication to unsubscribe).

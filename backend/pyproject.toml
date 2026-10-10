@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
-  "moto[dynamodb,s3,secretsmanager]>=5",
+  "moto[dynamodb,s3,secretsmanager,sns,sqs]>=5",
   "ruff>=0.6",
   "mypy>=1.11",
   "types-PyYAML>=6",

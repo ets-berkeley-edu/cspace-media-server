@@ -4,9 +4,10 @@ Serena is the new media server for UC Berkeley's CollectionSpace museums: BAMPFA
 PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
-It's being built, one pull request at a time. So far it parses the legacy imageserver paths, decides from its
-records in DynamoDB whether each file may be served, and takes each night's Blob-to-Media file through its ETL API:
-its worker preflights and applies it. Serving the files themselves comes later. The design is `docs/design.md`.
+It's being built, one pull request at a time. So far it parses the legacy imageserver paths, decides from its records in
+DynamoDB whether each file may be served, and takes each night's Blob-to-Media file through its ETL API: its worker
+preflights and applies it, and its watchdog raises alerts. Serving the files themselves comes later. The design is
+`docs/design.md`.
 
 ## What it will do
 

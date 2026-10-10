@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = 5.0
     worker_heartbeat_seconds: float = 30.0
     worker_heartbeat_stale_seconds: float = 300.0
+    # The watchdog (design: Watchdog and alerts), in the worker: how often it checks, and the SNS topic its alerts
+    # are emailed through (one per environment; the team's mailing list subscribes to it). Empty: alerts are
+    # recorded and logged, not emailed (local development).
+    watchdog_seconds: float = 300.0
+    alert_topic_arn: str = ""
+    sns_endpoint: str | None = None  # local development only
 
     @field_validator("tenants")
     @classmethod
