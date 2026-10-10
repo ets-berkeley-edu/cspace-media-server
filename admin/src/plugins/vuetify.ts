@@ -1,3 +1,4 @@
+import './main.scss'
 import {aliases, mdi} from 'vuetify/iconsets/mdi-svg'
 import {createVuetify} from 'vuetify'
 import {VAlert} from 'vuetify/components/VAlert'
@@ -18,8 +19,9 @@ import {VTable} from 'vuetify/components/VTable'
 import {VTextField} from 'vuetify/components/VTextField'
 
 /**
- * Vuetify as BOA, Damien, Diablo and the BMU set it up: components registered by hand (add each one here when a
- * screen first uses it, so the bundle holds only what the app uses) and icons from @mdi/js.
+ * Vuetify as BOA, Damien, Diablo and the BMU set it up: its styles (main.scss: without them the components render
+ * unstyled), components registered by hand (add each one here when a screen first uses it, so the bundle holds only
+ * what the app uses), icons from @mdi/js, the BMU's control defaults, and BOA's light-theme colours.
  */
 export default createVuetify({
   components: {
@@ -29,7 +31,26 @@ export default createVuetify({
   },
   icons: {defaultSet: 'mdi', aliases, sets: {mdi}},
   defaults: {
-    VTextField: {variant: 'outlined', density: 'comfortable'},
-    VSelect: {variant: 'outlined', density: 'comfortable'}
+    VBtn: {style: 'text-transform: none;'},
+    VTextField: {variant: 'outlined', density: 'compact'},
+    VSelect: {variant: 'outlined', density: 'compact'}
+  },
+  theme: {
+    themes: {
+      light: {
+        colors: {
+          anchor: '#37769a',
+          body: '#212529',
+          error: '#cf1715',
+          info: '#367da1',
+          primary: '#37769a',
+          secondary: '#96C3de',
+          success: '#437f4b',
+          tertiary: '#125074',
+          topbar: '#125074',
+          warning: '#C74600'
+        }
+      }
+    }
   }
 })

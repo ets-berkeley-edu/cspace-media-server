@@ -90,6 +90,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: The build has Vuetify's styles
+        # Without src/plugins/main.scss the components render unstyled, which no unit test notices.
+        run: grep -q '\.v-field{' dist/assets/*.css || { echo "::error::No Vuetify styles in the build"; exit 1; }
 
   stack:
     # The local stack (docker-compose.yml, ./serena): builds the image, starts the stack, runs a whole night for PAHMA

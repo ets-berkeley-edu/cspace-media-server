@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <v-app-bar color="primary" density="comfortable">
+    <v-app-bar color="topbar" density="comfortable">
       <v-app-bar-title>
         Serena admin
         <v-chip
