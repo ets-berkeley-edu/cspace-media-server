@@ -32,6 +32,7 @@ CloudFront link; fetching from CollectionSpace comes later. The design is `docs/
 | `docs/api/etl-v1.json` | The ETL API's OpenAPI description, generated from the code |
 | `backend/` | The Python 3.11 app (`serena/`), its tests and its pinned requirements |
 | `backend/serena/static/` | The unavailable image (`unavailable.svg`, the legacy imageserver's `404.svg`) |
+| `backend/fakecspace/` | A CollectionSpace simulator for tests and local development, with synthetic files |
 | `backend/serena/museums/` | Each museum's configuration: derivatives served, restricted-image Blob, starting settings |
 | `admin/` | The admin web app: Vue, TypeScript and Vuetify (to come) |
 | `deploy/` | The AWS deployment: Terraform and the production image (to come) |

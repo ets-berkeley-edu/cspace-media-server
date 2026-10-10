@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     # /local-cdn/<tenant>/objects/<sha256>. Allowed only with dynamodb_endpoint (DynamoDB Local), so never in AWS.
     local_cdn: bool = False
 
+    # CollectionSpace (design: Image fetch): each museum's read-only service account is a Secrets Manager secret
+    # {"username": ..., "password": ...}; these are the secrets' IDs, from SERENA_CSPACE_SECRET_IDS as JSON. The
+    # password is never stored anywhere else or logged.
+    cspace_secret_ids: dict[str, str] = {}
+    # Simultaneous calls per museum, per task: tasks times this stays within what Lyrasis agrees to.
+    cspace_concurrency: int = 4
+    cspace_connect_timeout_seconds: float = 5.0
+    cspace_read_timeout_seconds: float = 60.0  # between bytes, not for a whole file
+    cspace_retries: int = 2  # for transient failures only: no answer, 429, 502, 503, 504
+
     @field_validator("tenants")
     @classmethod
     def _cspace_urls(cls, tenants: dict[str, str]) -> dict[str, str]:
