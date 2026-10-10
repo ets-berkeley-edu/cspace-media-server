@@ -18,7 +18,8 @@ class Table:
 
 
 # Every partition key is the string attribute "pk"; a sort key, where there is one, is "sk".
-SERVABILITY = Table("servability", indexes={"by_media": "media_key"})  # pk <tenant>#<blob CSID>
+# pk <tenant>#<blob CSID>; indexed by <tenant>#<media CSID> (requests by Media CSID) and by museum (the apply)
+SERVABILITY = Table("servability", indexes={"by_media": "media_key", "by_tenant": "tenant"})
 TAKEDOWNS = Table("takedowns")  # pk <tenant>#<media CSID>
 RUNS = Table("runs", sort_key="sk")  # pk <tenant>, sk <run ID>
 SETTINGS = Table("settings")  # pk <tenant>

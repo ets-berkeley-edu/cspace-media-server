@@ -82,6 +82,19 @@
       },
       "RunOut": {
         "properties": {
+          "apply": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The apply's counts: deleted, written, unchanged",
+            "title": "Apply"
+          },
           "file_name": {
             "description": "The name to give the Blob-to-Media file",
             "examples": [
@@ -116,6 +129,19 @@
             "title": "Poll Interval Seconds",
             "type": "integer"
           },
+          "preflight": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The preflight's result: result (passed or failed), rows, added, removed, changed, previous_rows, threshold_percent, change_percent, error_count, errors (the first 20, each with line, field and problem), warnings",
+            "title": "Preflight"
+          },
           "reasons": {
             "description": "Why the run is in its state, when that needs saying",
             "items": {
@@ -130,6 +156,19 @@
             ],
             "title": "Run Id",
             "type": "string"
+          },
+          "solr_load": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The load outcome the ETL reported",
+            "title": "Solr Load"
           },
           "state": {
             "$ref": "#/components/schemas/State"
@@ -164,6 +203,31 @@
           "links"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "SolrLoad": {
+        "properties": {
+          "outcome": {
+            "description": "loaded, or fell_back to the previous night's data",
+            "enum": [
+              "loaded",
+              "fell_back"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Documents loaded into the public core",
+            "minimum": 0.0,
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "outcome",
+          "rows"
+        ],
+        "title": "SolrLoad",
         "type": "object"
       },
       "State": {
@@ -229,6 +293,76 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/museums/{tenant}": {
+      "get": {
+        "description": "For troubleshooting. 404 if the museum has no applied run yet.",
+        "operationId": "latest_applied_museums__tenant__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant",
+            "required": true,
+            "schema": {
+              "title": "Tenant",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No token, or a token Serena doesn't know"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The token is for another museum"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such museum or run"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serena can't check right now (tokens or storage unavailable); try again"
+          }
+        },
+        "summary": "The museum's latest applied run"
+      }
+    },
     "/museums/{tenant}/runs": {
       "post": {
         "description": "Serena assigns the run ID and the night (the Pacific date now). If the museum's run for tonight is still\nopen, returns it (200). An earlier night's open run is closed as abandoned, unless Serena is preflighting or\napplying it: then 409, and the ETL tries again (decided October 9, 2026, D30).",
@@ -395,6 +529,105 @@
           }
         },
         "summary": "The run's status"
+      }
+    },
+    "/museums/{tenant}/runs/{run_id}/apply": {
+      "post": {
+        "description": "Queues the apply (202); poll the run until it is applied or apply_failed. Allowed only after the\npreflight passed and the load reported loaded (solr_loaded). Report the night a success only once the run\nis applied.",
+        "operationId": "request_apply_museums__tenant__runs__run_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tenant",
+            "required": true,
+            "schema": {
+              "title": "Tenant",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "The file is already applied; the run is returned as it is"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No token, or a token Serena doesn't know"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The token is for another museum"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such museum or run"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The call is out of order for the run's state"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serena can't check right now (tokens or storage unavailable); try again"
+          }
+        },
+        "summary": "Apply the file"
       }
     },
     "/museums/{tenant}/runs/{run_id}/blob-media": {
@@ -588,6 +821,214 @@
           }
         },
         "summary": "Upload the night's Blob-to-Media file"
+      }
+    },
+    "/museums/{tenant}/runs/{run_id}/preflight": {
+      "post": {
+        "description": "Queues the preflight (202); poll the run until it is ready or preflight_failed. Allowed once a file is\nuploaded (received). A failed preflight needs a corrected file, which puts the run back in received.",
+        "operationId": "request_preflight_museums__tenant__runs__run_id__preflight_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tenant",
+            "required": true,
+            "schema": {
+              "title": "Tenant",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "The preflight is already done; the run is returned as it is"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No token, or a token Serena doesn't know"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The token is for another museum"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such museum or run"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The call is out of order for the run's state"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serena can't check right now (tokens or storage unavailable); try again"
+          }
+        },
+        "summary": "Check the uploaded file without applying it"
+      }
+    },
+    "/museums/{tenant}/runs/{run_id}/solr-load": {
+      "post": {
+        "description": "Allowed once the preflight passed (ready). loaded: the run waits for the apply (solr_loaded). fell_back:\nthe run is abandoned and Serena applies nothing, so both keep yesterday's data.",
+        "operationId": "report_solr_load_museums__tenant__runs__run_id__solr_load_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tenant",
+            "required": true,
+            "schema": {
+              "title": "Tenant",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolrLoad"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A header or parameter is missing or malformed"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No token, or a token Serena doesn't know"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The token is for another museum"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such museum or run"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The call is out of order for the run's state"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serena can't check right now (tokens or storage unavailable); try again"
+          }
+        },
+        "summary": "Report the public core's load"
       }
     },
     "/ping": {

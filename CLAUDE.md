@@ -61,6 +61,7 @@ pip install --no-deps --no-build-isolation -e .
 ruff check . && mypy && pytest -q          # what CI runs
 pytest -q tests/test_logs.py               # one test file
 python -m serena.etl_api --openapi > ../docs/api/etl-v1.json   # after changing the ETL API
+python -m serena.worker                    # the worker (preflight and apply); same settings as the app
 ```
 
 To run the app locally before Docker Compose exists (pull request 10), point it at DynamoDB Local, never at AWS:

@@ -56,3 +56,16 @@ museum's token secret in Secrets Manager, and a call from the ETL server (the on
 - [ ] Rotate one museum's token (new one in `current`, old one in `previous`). Within 5 minutes both work; after
   `previous` is cleared, only the new one.
 - [ ] In CloudWatch, search Serena's logs for the tokens: expect no match.
+
+## 5. A whole night through the worker, in QA (30 minutes, once Serena and the ETL change are in QA)
+
+The tests run whole nights against moto with synthetic files. These checks use a real night's file, DynamoDB and S3.
+
+- [ ] Run one museum's nightly job against QA. Expect the run to go `started`, `received`, `preflighting`, `ready`,
+  `solr_loaded`, `applying`, `applied`, and the servability table to hold exactly the file's rows for that museum.
+- [ ] Note how long the preflight and the apply took for the largest museum (PAHMA), and the worker's memory.
+- [ ] The next night, expect the preflight's added, removed and changed counts to match a diff of the two files.
+- [ ] Stop the worker's task while it applies a night; a new task starts. Expect the apply to start again after about
+  5 minutes and end `applied`, with the table matching the file.
+- [ ] Upload a file with 10% of the rows removed: expect `preflight_failed`, the change as a share, and the table
+  unchanged.
