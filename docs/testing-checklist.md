@@ -163,12 +163,14 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 
 - [ ] With Docker Desktop running, from the repository's root: `./serena up`. Expect "Serena (Local · simulator) is up"
   within a couple of minutes, and nothing else on ports 8300, 8380 or 9300. If the BMU's stack is running, both run.
-- [ ] `./serena etl pahma`. Expect `applied`, and three sample addresses. Open the image one in a browser: expect a
+- [ ] `./serena etl pahma`. Expect `applied`, no preflight warnings, and sample addresses for an image and a card. Open the image one in a browser: expect a
   grey square. Open it again: expect the same, now from Serena's store (`./serena logs web` shows no second fetch).
 - [ ] `./serena etl cinefiles`. Open the `pdf` sample: expect a one-page PDF. Open the `pdf (restricted)` sample:
   expect the unavailable image (no signed link).
 - [ ] `./serena etl bampfa --partial`. Expect `ready`, and the run left there.
-- [ ] `./serena smoke`. Expect "Smoke test passed".
+- [ ] `./serena smoke`, after the nights above. Expect "Smoke test passed".
+- [ ] `./serena etl pahma --rows 3`. Expect `preflight_failed`, with the threshold explained: 17 of PAHMA's 20 rows
+  would be removed, more than its 5% threshold. This is preflight protecting the servability table, not a fault.
 - [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
 - [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
   `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.

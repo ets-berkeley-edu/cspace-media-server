@@ -41,9 +41,16 @@ case "$cmd" in
     museum="${1:?Usage: ./serena etl <museum> [--partial] [--rows N] [--json]}"; shift
     compose exec -T worker python -m devtools.fake_etl --museum "$museum" --public "http://localhost:$PORT" "$@" ;;
   smoke)
-    summary="$(compose exec -T worker python -m devtools.fake_etl --museum pahma --rows 3 --json)"
+    # The default --rows, like ./serena etl pahma, so a night run before this one doesn't trip preflight's threshold.
+    summary="$(compose exec -T worker python -m devtools.fake_etl --museum pahma --json)"
     state="$(printf '%s' "$summary" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')"
-    [ "$state" = applied ] || { echo "The night ended $state, not applied: $summary" >&2; exit 1; }
+    if [ "$state" != applied ]; then
+      echo "The night ended $state, not applied: $summary" >&2
+      case "$summary" in
+        *threshold*) echo "PAHMA's last applied night had a different --rows. Start afresh: ./serena down && ./serena up" >&2 ;;
+      esac
+      exit 1
+    fi
     path="$(printf '%s' "$summary" | python3 -c 'import json,sys; print(json.load(sys.stdin)["samples"]["image"])')"
     location="$(curl -fsS -o /dev/null -w '%{redirect_url}' "http://localhost:$PORT$path")"
     case "$location" in
