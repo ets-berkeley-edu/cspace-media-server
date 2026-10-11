@@ -484,8 +484,8 @@ where the table is read as a list, a sort key:
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the apply) |
 | Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
 | Runs | `<tenant>` | `<night>#<nnn>` (sorts by night, then run) | run ID, night, state, the upload (SHA-256, rows, size, S3 key), the preflight's result, the load report, the apply's counts, the worker's claim (owner, heartbeat), timestamps, reasons |
-| Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute |
-| Alerts | `<tenant>` | `<night>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when |
+| Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, change threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute. Also, under `<tenant>#threshold-override`, an armed threshold override (who, after which run, why, when it was armed and expires) |
+| Alerts | `<tenant>` | `<night>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its banner and alerts page |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
 | Cache index | see Storage | | |
 | Audit log | `<tenant>` | `<time>#<admin>#<random>` (the random part keeps two actions in the same microsecond apart) | the admin action, its target, details (before and after, for a setting); kept indefinitely |
@@ -565,7 +565,7 @@ the AWS libraries' own logging stays at warnings, since at debug it would log a 
 | `POST` | `/etl/v1/museums/{tenant}/runs` | Starts a run: Serena assigns the run ID and night, and returns the file name, `poll_interval_seconds`, `step_timeout_seconds` and the links for the run's other calls. If a run for that museum and night is still open, returns it |
 | `GET` | `…/runs/{run_id}` | The run's status |
 | `PUT` | `…/runs/{run_id}/blob-media` | Uploads the file (`text/tab-separated-values`, gzip allowed), with `X-Row-Count` (data rows) and `X-Content-SHA256` (of the uncompressed file) |
-| `POST` | `…/runs/{run_id}/preflight` | Checks the file without applying it (202; poll until `ready` or `preflight_failed`). Allowed once a file is received; after a failed preflight, upload a corrected file first |
+| `POST` | `…/runs/{run_id}/preflight` | Checks the file without applying it (202; poll until `ready` or `preflight_failed`). Allowed once a file is received, and again after a failed preflight: with a corrected file, or with the same file once an admin has overridden the change threshold |
 | `POST` | `…/runs/{run_id}/solr-load` | Records the public core's load outcome, `{"outcome": "loaded" or "fell_back", "rows": <documents loaded>}`; allowed once the preflight passed |
 | `POST` | `…/runs/{run_id}/apply` | Applies the file; only after the preflight passed and the load reported `loaded` (202; poll until `applied` or `apply_failed`) |
 | `GET` | `/etl/v1/museums/{tenant}` | The latest applied run (`404` if there is none yet) |
@@ -643,7 +643,7 @@ table, so a restart never loses a step.
   The added, removed and changed rows (a changed Media CSID, kind or access), as a share of the last applied file's
   rows, may be at most the museum's threshold (5% to start, a per-museum setting). A museum's first load (no applied
   file yet, or an empty one) has nothing to compare with, so the threshold doesn't apply to it; the run's warnings
-  say so, and every other check still does. An admin's override for one run comes with the admin app.
+  say so, and every other check still does. An admin can override the threshold for one run (below).
 - **Apply** reads the museum's rows from the servability table itself, through its `by_tenant` index, so it is right
   even after an apply that stopped partway (decided October 9, 2026). It first deletes the rows for Blobs no longer
   listed, then writes the new and changed rows; unchanged rows aren't touched. Deleting before adding means an apply
@@ -653,6 +653,27 @@ table, so a restart never loses a step.
 - **The load report:** `solr-load` records the outcome and the number of documents loaded in the run, for the admin
   app and troubleshooting, and nothing else: Serena doesn't read Solr, so it can't check the number (decided
   October 9, 2026). `loaded` moves the run to `solr_loaded`; `fell_back` abandons it.
+
+### Admin actions on runs
+
+Decided October 11, 2026 (settling F5). Any admin of the museum may take these actions; each needs a reason (except
+recording a load, where it is optional), is recorded in the run's reasons and the audit log, and is offered only on the
+museum's newest run, in the state it applies to:
+
+- **Retry an apply.** On an `apply_failed` run: the run goes back to `applying` and the worker applies it again.
+- **Override the change threshold.** On a `preflight_failed` run whose only problem is the threshold. The override is
+  armed for the museum's next preflight, not applied to the failed run: the ETL team reruns the night (preflighting
+  the same run again, with the same file), or the next night's run uses it. It is used up by that one preflight,
+  whatever the result; it expires after 48 hours unused, and an admin can cancel it. At most one is armed per museum
+  (kept in the Settings table), and while it is armed it isn't offered again. Arming it raises an alert, so the team
+  is emailed; the run that uses it says so in its reasons and its preflight warnings.
+- **Record the load and apply.** After a partial night where the file reached Serena and passed preflight (`ready`):
+  the admin confirms, with a checkbox, that the public core loaded that night, optionally with the number of documents
+  loaded; the run goes to `solr_loaded`, then `applying`.
+- **Upload a night's file.** After a partial night where the file never reached Serena: the admin uploads it (plain
+  or gzip, under the same size limit as the ETL's uploads), says which night it is, and confirms that the public core
+  loaded that night with this file. Serena starts a run, preflights the file and, if it passes, applies it; if it
+  fails, nothing changes and the run shows why. Refused while the museum has a run in progress.
 
 ### Watchdog and alerts
 
@@ -665,8 +686,10 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 - Serena hasn't applied a night for a museum in 24 hours. Only a museum that has applied a night can be late: before
   its first night there's nothing to compare with.
 
-An alert shows as a banner in the admin app until acknowledged, is logged, and is emailed through one Amazon SNS topic
-per environment (`SERENA_ALERT_TOPIC_ARN`) to the team's mailing list. The subscription requires authentication to
+An alert shows in the admin app's banner (the newest 5 not yet acknowledged) until an admin acknowledges it, one at
+a time; the app's alerts page lists the last 30 nights' alerts, acknowledged or not. An alert is logged, and is emailed through one Amazon SNS topic
+per environment (`SERENA_ALERT_TOPIC_ARN`) to the team's mailing list. Besides the watchdog's alerts, an admin's
+threshold override raises one, so the team hears of it. The subscription requires authentication to
 unsubscribe. Without a topic (local development) alerts are recorded and logged, not emailed.
 
 Each alert is keyed by what it is about, `<night>#<kind>#<subject>` (the subject is the run ID or the night), so the
@@ -819,9 +842,8 @@ reachable only from campus networks.
   - A failed sign-in is logged without the username (it may be anyone's, or a mistyped password) and isn't audited.
 - **Pages.** Served by the app with a Content-Security-Policy that allows scripts only from Serena (no CDN).
 - **First-release features:**
-  - alerts and the banner (acknowledge);
-  - runs: history, status and reasons; retrying a failed apply; overriding the change threshold for one run; "record
-    tonight's load and apply" and uploading a night's file after a partial night;
+  - alerts: the banner, the alerts page and acknowledging (see Watchdog and alerts);
+  - runs: history, status, reasons and the preflight's problems; the actions in Admin actions on runs;
   - per-museum settings: the watchdog deadline, the ETL's poll interval and step timeout, size limits;
   - restricted-image Blob upload;
   - takedown and unlock by Media CSID;
@@ -830,7 +852,8 @@ reachable only from campus networks.
   - an "API documentation" button: Swagger UI, bundled with the app (no CDN), read-only, showing the ETL API's
     description generated from the code (decided October 10, 2026);
   - an audit log of every admin action: sign-in, sign-out, signing everyone out, takedown, unlock, a settings change
-    (before and after), a retried apply, a threshold override, an uploaded file and the restricted-image upload, each
+    (before and after), a retried apply, a threshold override and its cancelling, a recorded load, an acknowledged
+    alert, an uploaded file and the restricted-image upload, each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
 - **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
   objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October
@@ -935,7 +958,6 @@ The F numbers follow the team's list of follow-ups.
   told, and where the runbook lives; built on the principle in The nightly sequence.
 - **F3. "Refresh and fetch".** Whether the admin app could pick up a Media record's current image at once, and whether
   the rules deciding what is restricted could live in one place shared by Serena and the ETL. Possibly a dead end.
-- **F5. Manual retry.** Who may retry an apply or override the threshold, and how the result is reported.
 - **F6. API documentation.** Whether the admin API is documented the same way as the ETL API.
 - **F7. Review with DevOps.** Partial nights, the file rules and the run rules, to be documented and reviewed by the
   DevOps team.
@@ -969,7 +991,7 @@ The F numbers follow the team's list of follow-ups.
 
 Settled since October 8 and recorded above: the restricted-image Blob (stored from an admin upload), 3D files (served),
 the change threshold (5%, counting changed rows), admin sign-in (CollectionSpace account and role), restricted
-Cinefiles PDFs (signed links).
+Cinefiles PDFs (signed links), admin actions on runs (F5).
 
 ## Testing
 

@@ -202,3 +202,23 @@ Set up: the museum's CollectionSpace administrators have created the `Serena_Adm
 - [ ] Check the cookies in the browser's developer tools: `serena_admin_<museum>`, HttpOnly, Secure, SameSite Strict,
   path `/admin`.
 
+
+## 14. Runs and alerts in the admin app, locally (20 minutes, before merging pull request 12)
+
+The API's tests cover each action, and the pages were checked in a headless browser in Claude's workspace. This
+checks them in Chrome on a Mac. Start afresh: `./serena down && ./serena up`, then sign in to PAHMA as `admin`.
+
+- [ ] `./serena etl pahma`, then open "Runs". Expect the run, `Applied`, with its row count.
+- [ ] `./serena etl pahma --rows 3`. Expect `preflight_failed`. In the app, open the run: expect its problem (the
+  change against the 5% threshold) and an "Override the threshold" button.
+- [ ] Override it. Expect the Confirm button disabled until a reason is typed. After confirming: the orange banner
+  with the override's alert, the button gone from the run, and the override on the Overview with a Cancel button.
+- [ ] Acknowledge the alert in the banner. Expect the banner gone, and the alert on the "Alerts" page with your name.
+- [ ] `./serena etl pahma --rows 3` again (the ETL team's rerun). Expect `applied`, and the run's reasons naming the
+  override. The Overview no longer shows an override.
+- [ ] `./serena etl pahma --rows 3 --partial`. Expect `ready`. In the app, open the run and "Record the load and apply":
+  expect Confirm disabled until the checkbox is ticked, then the run `Applied`.
+- [ ] `./serena etl pahma --rows 3 --file-only > /tmp/pahma-night.tsv`. In the app, open "Upload", choose that file,
+  type yesterday's date and tick the checkbox. Expect the new run to reach `Applied` within a few seconds.
+- [ ] Open "Audit log". Expect the override, the acknowledgement, the recorded load and the upload, each with `admin`.
+- [ ] `./serena logs worker`. Expect the override's alert logged once, and no email (no topic locally).

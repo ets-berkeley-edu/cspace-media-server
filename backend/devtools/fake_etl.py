@@ -143,9 +143,18 @@ def main() -> None:
     parser.add_argument("--poll", type=float, default=2.0, help="seconds between polls (faster than the API says)")
     parser.add_argument("--public", default="http://localhost:8300", help="Serena's address in your browser")
     parser.add_argument("--json", action="store_true", help="print the summary as JSON")
+    parser.add_argument("--file-only", action="store_true",
+                        help="add the records to the simulator and print the night's file, for the admin app's upload "
+                             "page; Serena isn't called")
     args = parser.parse_args()
     if get_settings().secretsmanager_endpoint is None:
         sys.exit("devtools.fake_etl runs only against the local stack.")
+    if args.file_only:
+        listed = rows(args.museum, args.rows)
+        with httpx.Client(base_url=args.cspace, timeout=60) as cspace:
+            add_to_simulator(cspace, listed)
+        sys.stdout.buffer.write(tsv(listed))
+        return
     with httpx.Client(base_url=args.serena, timeout=60) as serena, \
             httpx.Client(base_url=args.cspace, timeout=60) as cspace:
         summary = night(serena, cspace, args.museum, token_for(args.museum), args.rows, args.partial, args.poll)

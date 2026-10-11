@@ -86,7 +86,8 @@ To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with
 The admin web app (Vue, TypeScript, Vuetify) is in `admin/` (the BMU's `frontend/` is the model), with npm
 dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `npm run lint`, `npm run typecheck`,
 `npm test`, `npm run build`; CI's `admin` job runs all four, and `npm audit` runs on every pull request
-(security.yml) and weekly. Its API is `backend/serena/admin_api.py`. The Selenium tests are in `serenade/`
+(security.yml) and weekly. Its API is `backend/serena/admin_api.py` (sign-in, audit) and `backend/serena/admin_runs.py` (runs,
+overrides, uploads, alerts). The Selenium tests are in `serenade/`
 (`./serena ui`, against the local stack only).
 
 CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`

@@ -47,7 +47,8 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 With Docker installed: `./serena up`, then `./serena etl pahma` to run a night through the ETL API. The command prints
 a few files to open in your browser, at http://localhost:8300. The admin app is at http://localhost:5373/admin/:
 sign in as `admin`, password `admin` (the simulator's synthetic account). The stack uses a CollectionSpace simulator and
-moto in place of AWS, so it needs no accounts or keys. `./serena help` lists the rest.
+moto in place of AWS, so it needs no accounts or keys. `docs/testing-checklist.md` walks through the admin app's
+runs and alerts locally. `./serena help` lists the rest.
 
 ## License
 

@@ -103,7 +103,10 @@ def test_too_many_changes_fail_the_preflight(client: TestClient, worker: Worker,
     assert run["preflight"]["change_percent"] == 10.0
     assert served(store) == first  # nothing applied
     is_problem(client.post(run["links"]["solr_load"], json={"outcome": "loaded", "rows": 1}, headers=auth()), 409)
-    is_problem(client.post(run["links"]["preflight"], headers=auth()), 409)  # a corrected file is needed
+    # Asking again re-checks the stored file (for a rerun after an admin's override, D64); without one it fails again.
+    assert client.post(run["links"]["preflight"], headers=auth()).status_code == 202
+    assert worker.tick() == 1
+    assert poll(client, run)["state"] == "preflight_failed" and served(store) == first
 
 
 def test_a_fallen_back_load_applies_nothing(client: TestClient, worker: Worker, store: Store) -> None:

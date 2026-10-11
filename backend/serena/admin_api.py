@@ -174,11 +174,14 @@ def create_router() -> APIRouter:
     return router
 
 
-def add_to(app: FastAPI, admin: AdminServices) -> None:
-    """The API, and the built app if there is one (settings.admin_dist_dir: the production image has it; locally,
-    Vite's dev server serves the app and forwards /admin/v1 here)."""
+def add_to(app: FastAPI, admin: AdminServices, routers: tuple[APIRouter, ...] = ()) -> None:
+    """The API (with the other admin routers: before the built app's catch-all route), and the built app if there is
+    one (settings.admin_dist_dir: the production image has it; locally, Vite's dev server serves the app and forwards
+    /admin/v1 here)."""
     app.state.admin = admin
     app.include_router(create_router())
+    for router in routers:
+        app.include_router(router)
 
     @app.middleware("http")
     async def admin_headers(request: Request, call_next: Callable[[Request], Any]) -> Response:

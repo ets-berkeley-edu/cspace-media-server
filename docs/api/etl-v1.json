@@ -825,7 +825,7 @@
     },
     "/museums/{tenant}/runs/{run_id}/preflight": {
       "post": {
-        "description": "Queues the preflight (202); poll the run until it is ready or preflight_failed. Allowed once a file is\nuploaded (received). A failed preflight needs a corrected file, which puts the run back in received.",
+        "description": "Queues the preflight (202); poll the run until it is ready or preflight_failed. Allowed once a file is\nuploaded (received), and again after a failed preflight: with a corrected file, or with the same file when the\nnight is rerun after an admin overrode the change threshold for it.",
         "operationId": "request_preflight_museums__tenant__runs__run_id__preflight_post",
         "parameters": [
           {

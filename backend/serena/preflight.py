@@ -55,8 +55,11 @@ class _Problems:
             self.listed.append(Problem(line, field_name, problem))
 
 
-def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, threshold_percent: float) -> Result:
-    """`new` is the uploaded file (gzip); `previous` the rows of the last applied file, None for a first load."""
+def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, threshold_percent: float,
+          override: bool = False) -> Result:
+    """`new` is the uploaded file (gzip); `previous` the rows of the last applied file, None for a first load.
+    `override`: an admin overrode the threshold for this run (decided October 10, 2026, D64); the change is still
+    counted and shown, but doesn't fail the preflight."""
     problems = _Problems()
     rows: dict[str, Row] = {}
     seen_header = False
@@ -114,7 +117,11 @@ def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, thres
         changes = result.added + result.removed + result.changed
         # A share of what Serena serves now: the last applied file's rows (decided October 9, 2026, D37).
         result.change_percent = round(100 * changes / len(previous), 2)
-        if result.change_percent > threshold_percent:
+        if override:
+            result.warnings.append(f"the change threshold was overridden by an admin for this run ("
+                                   f"{result.change_percent}% of the rows change; the threshold is "
+                                   f"{threshold_percent}%)")
+        elif result.change_percent > threshold_percent:
             problems.count += 1
             result.error_count = problems.count
             result.errors.append(Problem(0, "file", f"{result.change_percent}% of the rows would change; the "

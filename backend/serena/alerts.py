@@ -25,6 +25,7 @@ class Kind(StrEnum):
     APPLY_FAILED = "apply_failed"
     ABANDONED = "abandoned"
     NOT_UPDATED = "not_updated"  # no night applied in 24 hours
+    THRESHOLD_OVERRIDDEN = "threshold_overridden"  # an admin armed the override for the next run (D62, D64)
 
 
 TITLES = {
@@ -33,6 +34,7 @@ TITLES = {
     Kind.APPLY_FAILED: "A night's apply failed",
     Kind.ABANDONED: "A night's run was abandoned",
     Kind.NOT_UPDATED: "Serena hasn't applied a night in 24 hours",
+    Kind.THRESHOLD_OVERRIDDEN: "An admin overrode the change threshold for the next run",
 }
 
 
@@ -85,6 +87,40 @@ class Alerts:
             if self._email(alert):
                 sent += 1
         return sent
+
+    def recent(self, tenant: str, since_night: str) -> list[dict[str, Any]]:
+        """The museum's alerts from `since_night` on, newest first, for the admin app (design: decided October 10,
+        2026, D67)."""
+        items: list[dict[str, Any]] = []
+        start: dict[str, Any] | None = None
+        while True:
+            options: dict[str, Any] = {"ExclusiveStartKey": start} if start else {}
+            page = self.client.query(TableName=self.table, KeyConditionExpression="pk = :t AND sk >= :since",
+                                     ExpressionAttributeValues={":t": {"S": tenant}, ":since": {"S": since_night}},
+                                     ScanIndexForward=False, **options)
+            for item in page["Items"]:
+                items.append({"key": item["sk"]["S"], "night": item["night"]["S"], "kind": item["kind"]["S"],
+                              "title": TITLES.get(Kind(item["kind"]["S"]), item["kind"]["S"]),
+                              "subject": item["subject"]["S"], "message": item["message"]["S"],
+                              "created_at": item["created_at"]["S"],
+                              "acknowledged_by": item.get("acknowledged_by", {}).get("S"),
+                              "acknowledged_at": item.get("acknowledged_at", {}).get("S")})
+            start = page.get("LastEvaluatedKey")
+            if not start:
+                return items
+
+    def acknowledge(self, tenant: str, key: str, admin: str) -> bool:
+        """Marks the alert acknowledged by the admin. False if there's no such alert or it was already acknowledged."""
+        try:
+            self.client.update_item(
+                TableName=self.table, Key={"pk": {"S": tenant}, "sk": {"S": key}},
+                UpdateExpression="SET acknowledged_by = :admin, acknowledged_at = :now",
+                ConditionExpression="attribute_exists(pk) AND attribute_not_exists(acknowledged_at)",
+                ExpressionAttributeValues={":admin": {"S": admin}, ":now": {
+                    "S": self.clock().astimezone(UTC).isoformat(timespec="seconds")}})
+        except self.client.exceptions.ConditionalCheckFailedException:
+            return False
+        return True
 
     def _email(self, alert: Alert) -> bool:
         if not self.topic_arn:

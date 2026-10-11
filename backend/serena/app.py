@@ -13,13 +13,15 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import admin_api, etl_api, imageserver, logs, museum, signed_links, signing, tables
+from . import admin_api, admin_runs, etl_api, imageserver, logs, museum, signed_links, signing, tables
 from .admin_sessions import Sessions
+from .alerts import Alerts
 from .audit import Audit
 from .config import Settings, get_settings
 from .cspace.clients import CSpaceClients, HttpFactory
 from .fetch import Fetcher
 from .museum_settings import MuseumSettings
+from .overrides import Overrides
 from .runs import Runs
 from .secret_cache import SecretCache, secretsmanager_client
 from .store import Store, dynamodb_client
@@ -90,10 +92,13 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         """For the load balancer: answers "ok" and nothing else about Serena."""
         return PlainTextResponse("ok", headers={"Cache-Control": "no-store"})
 
+    # The app records alerts (an admin's override, D62) but doesn't email them: the worker does.
+    app.state.admin_runs = admin_runs.RunServices(Runs(store, clock) if clock else Runs(store), Overrides(store),
+                                                  Alerts(store, None, ""), s3)
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
         Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), Audit(store),
-        cspace_http or _admin_http))
+        cspace_http or _admin_http), routers=(admin_runs.create_router(),))
     app.include_router(imageserver.router)
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})
