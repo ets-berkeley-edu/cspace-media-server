@@ -66,6 +66,7 @@ export interface RunSummary {
   updated_at: string
   rows: number | null
   reasons: string[]
+  uploaded_night: string | null // an admin's upload: the night the file is for
 }
 
 export interface Run extends RunSummary {
@@ -106,7 +107,7 @@ export interface AlertItem {
 
 const PREFIX = '/admin/v1'
 
-async function call<T>(method: string, path: string, body?: unknown, raw?: {file: Blob, headers: Record<string, string>}): Promise<T> {
+async function call<T>(method: string, path: string, body?: unknown, raw?: {file?: Blob, headers: Record<string, string>}): Promise<T> {
   const headers: Record<string, string> = {Accept: 'application/json', ...(raw ? raw.headers : {})}
   if (method !== 'GET') {
     headers['X-Serena-Admin'] = '1'
@@ -118,7 +119,7 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: {file
     method,
     headers,
     credentials: 'same-origin',
-    body: raw ? raw.file : body === undefined ? undefined : JSON.stringify(body)
+    body: raw?.file ? raw.file : body === undefined ? undefined : JSON.stringify(body)
   })
   const text = await response.text()
   const data = text ? JSON.parse(text) : null
@@ -127,6 +128,11 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: {file
     throw new ApiError(response.status, detail)
   }
   return data as T
+}
+
+/** A failed load's message, for the page to show. */
+export function problem(e: unknown): string {
+  return e instanceof ApiError ? e.message : 'Serena couldn\'t be reached. Reload the page to try again.'
 }
 
 export const api = {
@@ -148,12 +154,20 @@ export const api = {
   overrideThreshold: (museum: string, runId: string, reason: string) =>
     call<{override: Override}>('POST', `/museums/${museum}/runs/${runId}/override-threshold`, {reason}),
   cancelOverride: (museum: string) => call<{override: null}>('DELETE', `/museums/${museum}/threshold-override`),
-  upload: (museum: string, file: File, night: string) =>
+  // The file name and reason are URL-encoded: a header carries only ASCII.
+  upload: (museum: string, file: File, night: string, reason: string) =>
     call<Run>('PUT', `/museums/${museum}/uploads`, undefined, {
       file,
-      headers: {'X-Loaded-Confirmed': 'yes', 'X-File-Name': file.name, 'X-Night': night}
+      headers: {
+        'X-Loaded-Confirmed': 'yes',
+        'X-File-Name': encodeURIComponent(file.name),
+        'X-Night': night,
+        'X-Reason': encodeURIComponent(reason)
+      }
     }),
-  alerts: (museum: string) => call<{alerts: AlertItem[]}>('GET', `/museums/${museum}/alerts`),
+  // background: the banner's own checks, which don't count as activity (the session still signs out when idle)
+  alerts: (museum: string, background = false) => call<{alerts: AlertItem[]}>('GET', `/museums/${museum}/alerts`,
+    undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),
   acknowledge: (museum: string, key: string) =>
     call<{acknowledged: string}>('POST', `/museums/${museum}/alerts/acknowledge`, {key})
 }

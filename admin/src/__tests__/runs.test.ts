@@ -6,6 +6,7 @@ import {routes} from '@/router'
 import AlertBanner from '@/components/AlertBanner.vue'
 import RunDetail from '@/views/RunDetail.vue'
 import Upload from '@/views/Upload.vue'
+import Runs from '@/views/Runs.vue'
 import {pacificDate} from '@/words'
 
 const RUN = {
@@ -60,6 +61,8 @@ describe('the alert banner', () => {
     expect(wrapper.findAll('.acknowledge')).toHaveLength(1)
     expect(wrapper.text()).toContain('Not applied by 08:00')
     expect(wrapper.text().split('2026-10-10')).toHaveLength(2) // the night once: the subject is the same night
+    // The banner's checks don't count as activity, so an open tab still signs out when idle.
+    expect(calls.find(c => c.path.endsWith('/alerts'))?.headers['X-Serena-Background']).toBe('1')
     await wrapper.find('.acknowledge').trigger('click')
     await flushPromises()
     expect(calls.find(c => c.method === 'POST')?.body).toEqual({key: alert.key})
@@ -81,11 +84,12 @@ describe('uploading a night\'s file', () => {
     }))
     const {wrapper, router} = await at('/pahma/upload', Upload)
     const file = new File(['blob_csid\tmedia_csid\tkind\taccess\n'], 'blob-media.pahma.2026-10-09.tsv')
-    const vm = wrapper.vm as unknown as {$: {setupState: {file: File | null, night: string, confirmed: boolean}}}
+    const vm = wrapper.vm as unknown as {$: {setupState: {file: File | null, night: string, confirmed: boolean, reason: string}}}
     expect(vm.$.setupState.night).toBe(pacificDate(1)) // last night, to start
     vm.$.setupState.file = file
     vm.$.setupState.night = '2026-10-09'
     vm.$.setupState.confirmed = true
+    vm.$.setupState.reason = 'ETL log checked: café'
     await flushPromises()
     await wrapper.find('form').trigger('submit')
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/pahma/runs/pahma-2026-10-11-1'))
@@ -93,6 +97,7 @@ describe('uploading a night\'s file', () => {
     expect(put?.headers['X-Loaded-Confirmed']).toBe('yes')
     expect(put?.headers['X-Night']).toBe('2026-10-09')
     expect(put?.headers['X-File-Name']).toBe('blob-media.pahma.2026-10-09.tsv')
+    expect(put?.headers['X-Reason']).toBe('ETL%20log%20checked%3A%20caf%C3%A9')
     expect(put?.headers['X-Serena-Admin']).toBe('1')
     expect(put?.body).toBe(file)
     wrapper.unmount()
@@ -104,5 +109,14 @@ describe('pacificDate', () => {
     const evening = new Date('2026-10-11T03:30:00Z') // 20:30 on October 10 in Berkeley
     expect(pacificDate(0, evening)).toBe('2026-10-10')
     expect(pacificDate(1, evening)).toBe('2026-10-09')
+  })
+})
+
+describe('a page that can\'t load', () => {
+  it('says so', async () => {
+    fakeApi({'GET /museums/pahma/runs': {status: 401, body: {detail: 'Sign in to this museum.'}}})
+    const {wrapper} = await at('/pahma/runs', Runs)
+    expect(wrapper.find('#load-error').text()).toContain('Sign in to this museum.')
+    wrapper.unmount()
   })
 })

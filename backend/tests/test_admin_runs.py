@@ -166,7 +166,8 @@ def test_record_the_load_and_apply(admin: TestClient, etl: TestClient, worker: W
     run = until_ready(etl, worker, BLOBS)  # the ETL never reported the load: a partial night
     assert run_of(admin, run["run_id"])["actions"] == ["record_load"]
     url = f"/admin/v1/museums/pahma/runs/{run['run_id']}/record-load"
-    assert admin.post(url, headers=CHANGES, json={"confirmed": False}).status_code == 422
+    assert admin.post(url, headers=CHANGES, json={"confirmed": False, "reason": "ETL log checked"}).status_code == 422
+    assert admin.post(url, headers=CHANGES, json={"confirmed": True, "reason": ""}).status_code == 422
     response = admin.post(url, headers=CHANGES, json={"confirmed": True, "rows": 1234, "reason": "ETL log checked"})
     assert response.status_code == 200 and response.json()["state"] == "applying"
     assert worker.tick() == 1
@@ -243,8 +244,10 @@ def test_an_override_expires_and_can_be_cancelled(app: Any, admin: TestClient, e
     overrides: Overrides = app.state.admin_runs.overrides
     overrides.clock.now += LIFETIME_SECONDS  # type: ignore[attr-defined]
     assert admin.get("/admin/v1/museums/pahma/status").json()["override"] is None
-    overrides.clock.now -= LIFETIME_SECONDS  # type: ignore[attr-defined]
+    overrides.clock.now -= LIFETIME_SECONDS - 60  # type: ignore[attr-defined]
     admin.post(url, headers=CHANGES, json={"reason": "expected"})
+    kinds = [a["kind"] for a in admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"]]
+    assert kinds.count("threshold_overridden") == 2  # armed again after the same run: recorded and emailed again
     assert admin.delete("/admin/v1/museums/pahma/threshold-override", headers=CHANGES).status_code == 200
     assert admin.get("/admin/v1/museums/pahma/status").json()["override"] is None
     assert audit(admin)[0]["action"] == "threshold_override_cancel"
@@ -253,10 +256,11 @@ def test_an_override_expires_and_can_be_cancelled(app: Any, admin: TestClient, e
 
 # --- uploading a night's file (D66)
 
-def admin_upload(admin: TestClient, body: bytes, confirmed: bool = True) -> Any:
+def admin_upload(admin: TestClient, body: bytes, confirmed: bool = True,
+                 reason: str = "ETL%20log%20checked%3A%20caf%C3%A9") -> Any:
     return admin.put("/admin/v1/museums/pahma/uploads", content=body, headers={
         **CHANGES, "X-Loaded-Confirmed": "yes" if confirmed else "", "X-File-Name": "blob-media.pahma.2026-10-09.tsv",
-        "X-Night": "2026-10-09"})
+        "X-Night": "2026-10-09", "X-Reason": reason})
 
 
 @pytest.mark.parametrize("compress", [False, True])
@@ -267,8 +271,9 @@ def test_upload_a_nights_file(admin: TestClient, etl: TestClient, worker: Worker
     assert response.status_code == 200, response.text
     run = response.json()
     assert run["state"] == "preflighting" and run["upload"]["rows"] == len(BLOBS)
-    assert any("uploaded by an admin: blob-media.pahma.2026-10-09.tsv, the night of 2026-10-09" in r
-               for r in run["reasons"])
+    assert run["uploaded_night"] == "2026-10-09"  # the run's own night is tonight
+    assert any("uploaded by an admin: blob-media.pahma.2026-10-09.tsv, the night of 2026-10-09: ETL log checked: "
+               "café" in r for r in run["reasons"])
     assert worker.tick() == 1  # the preflight; it passes, and the apply is queued at once
     assert run_of(admin, run["run_id"])["state"] == "applying"
     assert worker.tick() == 1
@@ -289,8 +294,22 @@ def test_an_uploaded_file_that_fails_preflight_changes_nothing(admin: TestClient
 
 def test_upload_refused(admin: TestClient, etl: TestClient) -> None:
     assert admin_upload(admin, file_of(BLOBS), confirmed=False).status_code == 422
-    start(etl)  # a run in progress
+    assert admin_upload(admin, file_of(BLOBS), reason="").status_code == 422
+    start(etl)  # tonight's run is open
     assert admin_upload(admin, file_of(BLOBS)).status_code == 409
+
+
+def test_upload_after_an_earlier_night_was_left_open(admin: TestClient, etl: TestClient, worker: Worker,
+                                                     clock: Any) -> None:
+    """Yesterday's preflight failed (not on the threshold) and tonight no run started: the upload still works."""
+    applied_night(etl, worker, BLOBS)
+    clock.now += timedelta(days=1)
+    failed = until_ready(etl, worker, {**BLOBS, "not a CSID!": "1a2b3c4d-0000-4000-8000-000000000001"})
+    assert failed["state"] == "preflight_failed" and run_of(admin, failed["run_id"])["actions"] == []
+    clock.now += timedelta(days=1)
+    response = admin_upload(admin, file_of(BLOBS))
+    assert response.status_code == 200, response.text
+    assert run_of(admin, failed["run_id"])["state"] == "abandoned"
 
 
 # --- alerts (D67)

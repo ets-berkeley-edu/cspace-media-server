@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from typing import Annotated, Any
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -24,7 +25,7 @@ from .admin_api import SignedIn, changes, services
 from .alerts import Alert, Alerts, Kind
 from .audit import Action
 from .overrides import Overrides
-from .runs import CLOSED, OutOfOrder, Run, Runs, State, Upload
+from .runs import BUSY, CLOSED, Busy, OutOfOrder, Run, Runs, State, Upload
 
 log = logging.getLogger("serena.admin")
 
@@ -55,7 +56,7 @@ class Reason(BaseModel):
 class RecordLoad(BaseModel):
     confirmed: bool  # the admin confirms the public core loaded that night (D65)
     rows: int | None = Field(default=None, ge=0)
-    reason: str = Field(default="", max_length=500)
+    reason: str = Field(min_length=1, max_length=500)  # every action needs a reason (D62)
 
 
 class Acknowledge(BaseModel):
@@ -65,7 +66,9 @@ class Acknowledge(BaseModel):
 def summary(run: Run) -> dict[str, Any]:
     return {"run_id": run.run_id, "night": run.night, "state": run.state.value, "created_at": run.created_at,
             "updated_at": run.updated_at, "rows": run.upload.rows if run.upload else None,
-            "reasons": run.reasons}
+            "reasons": run.reasons,
+            # An admin's upload: the night the file is for, which may be earlier than the run's own night (D66).
+            "uploaded_night": (run.solr_load or {}).get("uploaded_night")}
 
 
 def detail(run: Run, newest: bool, armed: bool = False) -> dict[str, Any]:
@@ -160,7 +163,7 @@ def create_router() -> APIRouter:
         load = {"outcome": "loaded", "rows": body.rows, "recorded_by_admin": True}
         try:
             run = r.runs.transition(run, State.SOLR_LOADED, results={"solr_load": load},
-                                    reason="load recorded by an admin" + (f": {reason}" if reason else ""))
+                                    reason=f"load recorded by an admin: {reason}")
             run = r.runs.transition(run, State.APPLYING)
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
@@ -180,7 +183,8 @@ def create_router() -> APIRouter:
         r.alerts.raise_(Alert(session.tenant, r.runs.tonight(), Kind.THRESHOLD_OVERRIDDEN, run.run_id,
                               f"An admin overrode the change threshold for {museum.name}'s next run, after "
                               f"{run.run_id} failed on it ({change}% of the rows would change). The ETL team can "
-                              f"rerun the night, or the next night uses it. Reason: {reason}"))
+                              f"rerun the night, or the next night uses it. Reason: {reason}",
+                              instance=str(int(override.armed_at))))  # each override is emailed (D62)
         services(request).audit.record(session.tenant, session.user, Action.THRESHOLD_OVERRIDE, run.run_id,
                                        {"reason": reason, "expires_at": int(override.expires_at)})
         return {"override": asdict(override)}
@@ -198,14 +202,19 @@ def create_router() -> APIRouter:
     @router.put("/uploads", dependencies=[Depends(changes)])
     async def upload(request: Request, session: SignedIn, r: Runs_,
                      x_loaded_confirmed: Annotated[str, Header()] = "",
-                     x_file_name: Annotated[str, Header(max_length=200)] = "",
-                     x_night: Annotated[str, Header(max_length=10)] = "") -> dict[str, Any]:
+                     x_file_name: Annotated[str, Header(max_length=600)] = "",
+                     x_night: Annotated[str, Header(max_length=10)] = "",
+                     x_reason: Annotated[str, Header(max_length=1600)] = "") -> dict[str, Any]:
         """D66: after a partial night where the file never reached Serena, an admin uploads that night's file (plain
         or gzip) and confirms the public core loaded it. Serena starts a run, preflights the file, and on a pass
-        applies it. Refused while the museum has a run in progress."""
+        applies it. Refused while tonight's run is open or the worker is on a run; an earlier night's open run is
+        abandoned, as when the ETL starts a later night."""
         admin = services(request)
         if x_loaded_confirmed != "yes":
             raise HTTPException(422, "Confirm that the public core loaded that night with this file.")
+        reason = _clean(unquote(x_reason))  # sent URL-encoded: a header carries only ASCII
+        if not reason or len(reason) > 500:
+            raise HTTPException(422, "Give a reason, up to 500 characters (D62).")
         night = x_night.strip()
         if night:
             try:
@@ -216,7 +225,8 @@ def create_router() -> APIRouter:
         if bucket is None:
             raise HTTPException(503, "Serena has no bucket for this museum.")
         newest = await asyncio.to_thread(r.runs.newest, session.tenant)
-        if newest is not None and newest.state not in CLOSED:
+        if newest is not None and newest.state not in CLOSED and (newest.night == r.runs.tonight()
+                                                                    or newest.state in BUSY):
             raise HTTPException(409, f"Run {newest.run_id} is {newest.state.value}: wait for it to finish, or "
                                      "use its own actions.")
         stream, gzipped = await _sniff(request.stream())
@@ -229,14 +239,18 @@ def create_router() -> APIRouter:
         except uploads.BadGzip:
             raise HTTPException(400, "The file looks like gzip but isn't valid gzip.") from None
         try:
-            run, created = await asyncio.to_thread(r.runs.start, session.tenant)
+            try:
+                run, created = await asyncio.to_thread(r.runs.start, session.tenant)
+            except Busy as busy:
+                raise HTTPException(409, busy.detail) from None
             if not created:
                 raise HTTPException(409, f"Run {run.run_id} has just started: try again once it finishes.")
             key = f"blob-media/{run.run_id}/{run.file_name}.gz"
             await asyncio.to_thread(uploads.store, r.s3, bucket, key, received)
-            name = FILE_NAME.sub("", os.path.basename(x_file_name))[:120] or "the file"
-            note = f"file uploaded by an admin: {name}" + (f", the night of {night}" if night else "")
-            load = {"outcome": "loaded", "rows": None, "recorded_by_admin": True}
+            name = FILE_NAME.sub("", os.path.basename(unquote(x_file_name)))[:120] or "the file"
+            note = (f"file uploaded by an admin: {name}" + (f", the night of {night}" if night else "")
+                    + f": {reason}")
+            load = {"outcome": "loaded", "rows": None, "recorded_by_admin": True, "uploaded_night": night or None}
             try:
                 run = r.runs.transition(run, State.RECEIVED, reason=note, results={"solr_load": load},
                                         upload=Upload(received.sha256, received.rows, received.size, key,
@@ -247,7 +261,8 @@ def create_router() -> APIRouter:
         finally:
             os.unlink(received.path)
         admin.audit.record(session.tenant, session.user, Action.FILE_UPLOAD, run.run_id,
-                           {"file_name": name, "night": night, "rows": received.rows, "sha256": received.sha256})
+                           {"file_name": name, "night": night, "rows": received.rows, "sha256": received.sha256,
+                            "reason": reason})
         log.info("file uploaded by an admin", extra={"museum": session.tenant, "run_id": run.run_id,
                                                      "rows": received.rows})
         return detail(run, True)

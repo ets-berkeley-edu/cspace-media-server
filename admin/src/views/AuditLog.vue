@@ -1,6 +1,7 @@
 <template>
   <v-container fluid>
     <h1 class="text-h5 mb-4">Audit log</h1>
+    <LoadError :message="error" />
     <v-table id="audit-table" density="compact">
       <thead>
         <tr>
@@ -29,15 +30,22 @@
 import {ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import type {AuditEntry} from '@/api'
-import {api} from '@/api'
+import {api, problem} from '@/api'
+import LoadError from '@/components/LoadError.vue'
 
 const route = useRoute()
 const entries = ref<AuditEntry[]>([])
 const loaded = ref(false)
+const error = ref('')
 
 watch(() => route.params.museum, async museum => {
   loaded.value = false
-  entries.value = (await api.audit(String(museum))).entries
-  loaded.value = true
+  error.value = ''
+  try {
+    entries.value = (await api.audit(String(museum))).entries
+    loaded.value = true
+  } catch (e) {
+    error.value = problem(e)
+  }
 }, {immediate: true})
 </script>

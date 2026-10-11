@@ -42,7 +42,7 @@ const unacknowledged = computed(() => alerts.value.filter(a => !a.acknowledged_a
 
 async function load() {
   try {
-    alerts.value = museum.value ? (await api.alerts(museum.value)).alerts : []
+    alerts.value = museum.value ? (await api.alerts(museum.value, true)).alerts : []
   } catch {
     alerts.value = [] // the page itself reports a problem reaching Serena; the banner stays out of the way
   }
@@ -53,6 +53,8 @@ async function acknowledge(key: string) {
   try {
     await api.acknowledge(museum.value, key)
     alertsChanged.value++
+  } catch {
+    void load() // already acknowledged in another tab, or Serena unreachable: show what's there now
   } finally {
     busy.value = ''
   }

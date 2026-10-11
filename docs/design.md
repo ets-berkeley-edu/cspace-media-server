@@ -589,8 +589,8 @@ Run states: `started` → `received` → `preflighting` → `ready` or `prefligh
 - Every run response carries `poll_interval_seconds` and `step_timeout_seconds` (15 and 1800 to start), which admins
   change per museum in the admin app. The ETL's own HTTP calls use a connect timeout of 10 seconds, a read timeout of
   60 seconds and up to 3 retries with backoff.
-- The ETL can't override Serena's checks. Overriding the change threshold for one run (for example a museum's first
-  load) and retrying an apply are admin actions.
+- The ETL can't override Serena's checks. Overriding the change threshold for one run (for example after a museum
+  republishes many images) and retrying an apply are admin actions (see Admin actions on runs).
 - Every state change is a conditional write on the run's current state, so two calls at once can't both succeed.
 
 Uploads (decided October 9, 2026): the body is streamed to the task's disk while it's decompressed, hashed and
@@ -656,24 +656,26 @@ table, so a restart never loses a step.
 
 ### Admin actions on runs
 
-Decided October 11, 2026 (settling F5). Any admin of the museum may take these actions; each needs a reason (except
-recording a load, where it is optional), is recorded in the run's reasons and the audit log, and is offered only on the
-museum's newest run, in the state it applies to:
+Decided October 11, 2026 (settling F5). Any admin of the museum may take these actions; each needs a typed reason (up to
+500 characters, no personal data), is recorded in the run's reasons and the audit log, and is offered only on the
+museum's newest run, in the state it applies to (an upload starts a run of its own):
 
 - **Retry an apply.** On an `apply_failed` run: the run goes back to `applying` and the worker applies it again.
 - **Override the change threshold.** On a `preflight_failed` run whose only problem is the threshold. The override is
   armed for the museum's next preflight, not applied to the failed run: the ETL team reruns the night (preflighting
   the same run again, with the same file), or the next night's run uses it. It is used up by that one preflight,
   whatever the result; it expires after 48 hours unused, and an admin can cancel it. At most one is armed per museum
-  (kept in the Settings table), and while it is armed it isn't offered again. Arming it raises an alert, so the team
-  is emailed; the run that uses it says so in its reasons and its preflight warnings.
+  (kept in the Settings table), and while it is armed it isn't offered again. Each arming raises its own alert, so the team
+  is emailed every time; the run that uses it says so in its reasons and its preflight warnings.
 - **Record the load and apply.** After a partial night where the file reached Serena and passed preflight (`ready`):
   the admin confirms, with a checkbox, that the public core loaded that night, optionally with the number of documents
   loaded; the run goes to `solr_loaded`, then `applying`.
 - **Upload a night's file.** After a partial night where the file never reached Serena: the admin uploads it (plain
   or gzip, under the same size limit as the ETL's uploads), says which night it is, and confirms that the public core
   loaded that night with this file. Serena starts a run, preflights the file and, if it passes, applies it; if it
-  fails, nothing changes and the run shows why. Refused while the museum has a run in progress.
+  fails, nothing changes and the run shows why. The run's night is tonight, as for every run; the night the admin
+  gives is recorded with it and shown beside it. Refused while tonight's run is open or the worker is preflighting
+  or applying a run; an earlier night's open run is abandoned, as when the ETL starts a later night.
 
 ### Watchdog and alerts
 
@@ -834,9 +836,10 @@ reachable only from campus networks.
     another museum, they sign in to it too: the app keeps a session per museum and switches between them.
   - Sessions: a random token in an HttpOnly, Secure, SameSite=Strict cookie per museum (`serena_admin_<museum>`, path
     `/admin`); the session record is keyed by the token's SHA-256. Signed out after 30 minutes without activity and
-    after 8 hours at most. Without a stored password the role is checked only at sign-in, so a role removed in
-    CollectionSpace takes effect at the next sign-in, within 8 hours; "sign everyone out" ends every session for a
-    museum at once.
+    after 8 hours at most. The app's own background requests (the alert banner's checks, marked
+    `X-Serena-Background: 1`) don't count as activity, so a tab left open still signs out. Without a stored password
+    the role is checked only at sign-in, so a role removed in CollectionSpace takes effect at the next sign-in, within
+    8 hours; "sign everyone out" ends every session for a museum at once.
   - Every request that changes something carries `X-Serena-Admin: 1`, which a cross-site form can't send; without it
     the API answers 403. The app and its API share an origin, with no CORS.
   - A failed sign-in is logged without the username (it may be anyone's, or a mistyped password) and isn't audited.

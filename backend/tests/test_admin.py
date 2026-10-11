@@ -194,6 +194,18 @@ def test_idle_and_absolute_timeouts(app: Any, client: TestClient) -> None:
     assert last == 401
 
 
+def test_background_requests_dont_keep_a_session(app: Any, client: TestClient) -> None:
+    """The alert banner checks every minute; an open tab must still sign out after 30 idle minutes."""
+    clock = app.state.admin.sessions.clock
+    sign_in(client)
+    background = {"X-Serena-Background": "1"}
+    for _ in range(29):
+        clock.now += 60
+        assert client.get("/admin/v1/museums/pahma/audit", headers=background).status_code == 200
+    clock.now += 2 * 60
+    assert client.get("/admin/v1/museums/pahma/audit", headers=background).status_code == 401
+
+
 def test_sign_everyone_out(store: Store, s3: Any, secretsmanager: Any, app: Any) -> None:
     first, second, other = TestClient(app), TestClient(app), TestClient(app)
     sign_in(first)

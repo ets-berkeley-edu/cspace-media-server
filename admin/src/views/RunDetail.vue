@@ -3,7 +3,8 @@
     <h1 class="text-h5 mb-1">{{ run?.run_id }}</h1>
     <p v-if="run" class="mb-4">
       <span id="run-state" class="font-weight-bold">{{ stateOf(run.state) }}</span>
-      · night of {{ run.night }} · last change {{ when(run.updated_at) }}
+      · night of {{ run.night }}<span v-if="run.uploaded_night"> · an admin's upload of the night of
+        {{ run.uploaded_night }}'s file</span> · last change {{ when(run.updated_at) }}
       <span v-if="!run.newest"> · a later run has started</span>
     </p>
     <v-alert
@@ -117,7 +118,7 @@
           <v-textarea
             id="reason"
             v-model="reason"
-            :label="action === 'record_load' ? 'Note (optional)' : 'Reason'"
+            label="Reason"
             hint="Recorded in the run and the audit log. No personal data, please."
             persistent-hint
             rows="2"
@@ -146,7 +147,7 @@
 import {computed, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import type {Run, RunAction} from '@/api'
-import {ApiError, api} from '@/api'
+import {ApiError, api, problem as failure} from '@/api'
 import {alertsChanged} from '@/session'
 import {stateOf, when} from '@/words'
 
@@ -175,11 +176,16 @@ const rows = ref('')
 const busy = ref(false)
 
 const museum = computed(() => String(route.params.museum))
-const ready = computed(() => reason.value.length <= 500 &&
-  (action.value === 'record_load' ? confirmed.value : reason.value.trim().length > 0))
+// Every action needs a reason (D62); recording a load also needs the confirmation (D65).
+const ready = computed(() => reason.value.length <= 500 && reason.value.trim().length > 0 &&
+  (action.value !== 'record_load' || confirmed.value))
 
 async function load() {
-  run.value = await api.run(museum.value, String(route.params.runId))
+  try {
+    run.value = await api.run(museum.value, String(route.params.runId))
+  } catch (e) {
+    error.value = failure(e)
+  }
 }
 
 function open(which: RunAction) {

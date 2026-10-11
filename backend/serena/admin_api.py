@@ -30,6 +30,7 @@ from .museum import Museum
 log = logging.getLogger("serena.admin")
 
 PREFIX = "/admin/v1"
+BACKGROUND = "X-Serena-Background"  # a background request (the alert banner's): not activity
 CSRF_HEADER = "X-Serena-Admin"
 # The built app's own pages: scripts and styles only from Serena; Vuetify and Swagger UI set inline styles.
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
@@ -76,7 +77,8 @@ def signed_in(request: Request, s: Services,
               tenant: Annotated[str, PathParam(pattern=r"^[a-z]+$", max_length=32)]) -> Session:
     _museum(s, tenant)
     token = request.cookies.get(cookie_name(s.settings, tenant))
-    session = s.sessions.get(tenant, token) if token else None
+    background = request.headers.get(BACKGROUND) == "1"  # not the admin's own activity: doesn't keep the session
+    session = s.sessions.get(tenant, token, touch=not background) if token else None
     if session is None:
         raise HTTPException(401, "Sign in to this museum.")
     return session

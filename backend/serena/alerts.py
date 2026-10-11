@@ -45,10 +45,12 @@ class Alert:
     kind: Kind
     subject: str  # the run ID, or the night
     message: str
+    instance: str = ""  # for an alert raised for each event, not once per subject: an admin's override each time
 
     @property
     def sort_key(self) -> str:
-        return f"{self.night}#{self.kind.value}#{self.subject}"
+        key = f"{self.night}#{self.kind.value}#{self.subject}"
+        return f"{key}#{self.instance}" if self.instance else key
 
 
 class Alerts:
@@ -67,7 +69,7 @@ class Alerts:
             self.client.put_item(TableName=self.table, ConditionExpression="attribute_not_exists(pk)", Item={
                 "pk": {"S": alert.tenant}, "sk": {"S": alert.sort_key}, "night": {"S": alert.night},
                 "kind": {"S": alert.kind.value}, "subject": {"S": alert.subject}, "message": {"S": alert.message},
-                "created_at": {"S": now}})
+                "created_at": {"S": now}, **({"instance": {"S": alert.instance}} if alert.instance else {})})
         except self.client.exceptions.ConditionalCheckFailedException:
             return False
         log.warning("alert", extra={"museum": alert.tenant, "kind": alert.kind.value, "subject": alert.subject,
@@ -83,7 +85,7 @@ class Alerts:
                                   ExpressionAttributeValues={":t": {"S": tenant}})["Items"]
         for item in items:
             alert = Alert(tenant, item["night"]["S"], Kind(item["kind"]["S"]), item["subject"]["S"],
-                          item["message"]["S"])
+                          item["message"]["S"], item.get("instance", {}).get("S", ""))
             if self._email(alert):
                 sent += 1
         return sent

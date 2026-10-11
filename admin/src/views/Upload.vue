@@ -29,6 +29,16 @@
         :max="today"
         label="Which night's file it is"
       />
+      <v-textarea
+        id="reason"
+        v-model="reason"
+        label="Reason"
+        hint="Recorded in the run and the audit log. No personal data, please."
+        persistent-hint
+        rows="2"
+        counter="500"
+        class="mb-2"
+      />
       <v-checkbox
         id="confirm-loaded"
         v-model="confirmed"
@@ -59,12 +69,13 @@ const file = ref<File | File[] | null>(null)
 const today = pacificDate()
 const night = ref(pacificDate(1)) // a partial night is usually last night
 const confirmed = ref(false)
+const reason = ref('')
 const busy = ref(false)
 const error = ref('')
 
 const chosen = computed(() => (Array.isArray(file.value) ? file.value[0] : file.value) || null)
 const ready = computed(() => !!chosen.value && confirmed.value && /^\d{4}-\d{2}-\d{2}$/.test(night.value) &&
-  night.value <= today)
+  night.value <= today && reason.value.trim().length > 0 && reason.value.length <= 500) // D62
 
 async function upload() {
   if (!chosen.value) {
@@ -73,7 +84,7 @@ async function upload() {
   busy.value = true
   error.value = ''
   try {
-    const run = await api.upload(String(route.params.museum), chosen.value, night.value)
+    const run = await api.upload(String(route.params.museum), chosen.value, night.value, reason.value.trim())
     await router.push({name: 'run', params: {museum: String(route.params.museum), runId: run.run_id}})
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'The upload didn\'t work.'

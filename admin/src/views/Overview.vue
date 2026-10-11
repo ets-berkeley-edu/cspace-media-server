@@ -2,15 +2,7 @@
   <v-container fluid>
     <h1 id="overview-title" class="text-h5 mb-4">{{ signed?.name }}</h1>
     <p class="mb-4">Signed in as {{ signed?.user }}.</p>
-    <v-alert
-      v-if="error"
-      id="load-error"
-      type="error"
-      density="compact"
-      class="mb-4"
-    >
-      {{ error }}
-    </v-alert>
+    <LoadError :message="error" />
     <p v-if="status?.newest" id="newest-run" class="mb-2">
       Newest run:
       <router-link :to="{name: 'run', params: {museum: String(route.params.museum), runId: status.newest.run_id}}">
@@ -71,7 +63,8 @@
 import {computed, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import type {Status} from '@/api'
-import {ApiError, api} from '@/api'
+import {api, problem} from '@/api'
+import LoadError from '@/components/LoadError.vue'
 import {refresh, signedInTo} from '@/session'
 import {stateOf, when} from '@/words'
 
@@ -87,7 +80,7 @@ async function load() {
   try {
     status.value = await api.status(String(route.params.museum))
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'Serena couldn\'t be reached. Reload the page to try again.'
+    error.value = problem(e)
   }
 }
 

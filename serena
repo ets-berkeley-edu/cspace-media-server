@@ -5,6 +5,7 @@
 #   ./serena down                  stop it; moto forgets everything
 #   ./serena status                what's running
 #   ./serena logs [service]        follow the logs (services: web, worker, admin, fakecspace, moto, seed)
+#   ./serena logs --no-follow [service]   print them and stop, for grep
 #   ./serena etl <museum> [opts]   run a night through the ETL API with the fake ETL (--partial, --rows N, --json)
 #                                  (--file-only prints the night's file instead, for the admin app's upload page)
 #   ./serena smoke                 a whole night for PAHMA, then fetch and serve one of its images (what CI runs)
@@ -38,7 +39,7 @@ case "$cmd" in
   status)
     compose ps ;;
   logs)
-    compose logs -f --tail 100 "$@" ;;
+    if [ "${1:-}" = --no-follow ]; then shift; compose logs --no-log-prefix "$@"; else compose logs -f --tail 100 "$@"; fi ;;
   etl)
     museum="${1:?Usage: ./serena etl <museum> [--partial] [--rows N] [--json] [--file-only]}"; shift
     compose exec -T worker python -m devtools.fake_etl --museum "$museum" --public "http://localhost:$PORT" "$@" ;;
