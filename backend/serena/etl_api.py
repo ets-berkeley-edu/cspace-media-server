@@ -115,7 +115,7 @@ def create_etl_app(services: Services) -> FastAPI:
     app = FastAPI(title="Serena ETL API", version="1",
                   summary="How the nightly Solr ETL hands each night's Blob-to-Media file to Serena",
                   description="See docs/design.md, The ETL API and The nightly sequence. Every call needs the museum's "
-                              "bearer token (Authorization: Bearer <token>). Errors are application/problem+json.",
+                              "bearer token (`Authorization: Bearer <token>`). Errors are application/problem+json.",
                   docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.exception_handler(ProblemError)

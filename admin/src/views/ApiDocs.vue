@@ -29,3 +29,10 @@ onMounted(() => {
   })
 })
 </script>
+
+<style>
+/* Read-only (decided October 10, 2026): no requests are sent from here, so no Authorize button either. */
+.swagger-ui .auth-wrapper {
+  display: none;
+}
+</style>

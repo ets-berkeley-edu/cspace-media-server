@@ -1,5 +1,5 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <h1 id="overview-title" class="text-h5 mb-4">{{ signed?.name }}</h1>
     <p class="mb-4">Signed in as {{ signed?.user }}.</p>
     <p class="mb-6">

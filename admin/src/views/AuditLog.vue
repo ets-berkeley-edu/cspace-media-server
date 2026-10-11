@@ -1,5 +1,5 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <h1 class="text-h5 mb-4">Audit log</h1>
     <v-table id="audit-table" density="compact">
       <thead>

@@ -286,7 +286,7 @@
     }
   },
   "info": {
-    "description": "See docs/design.md, The ETL API and The nightly sequence. Every call needs the museum's bearer token (Authorization: Bearer <token>). Errors are application/problem+json.",
+    "description": "See docs/design.md, The ETL API and The nightly sequence. Every call needs the museum's bearer token (`Authorization: Bearer <token>`). Errors are application/problem+json.",
     "summary": "How the nightly Solr ETL hands each night's Blob-to-Media file to Serena",
     "title": "Serena ETL API",
     "version": "1"
