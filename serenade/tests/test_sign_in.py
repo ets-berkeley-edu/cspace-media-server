@@ -17,7 +17,7 @@ def test_sign_in_see_the_museum_and_sign_out(driver: WebDriver, base_url: str) -
     overview.wait_for_url("/admin/pahma")
     assert overview.text_of(overview.TITLE) == "PAHMA"
     overview.click(overview.AUDIT)
-    assert "sign in" in overview.text_of(overview.AUDIT_TABLE)
+    overview.wait_for(overview.SIGN_IN_ROW)
     overview.sign_out()
     sign_in.wait_for(sign_in.BUTTON)
 

@@ -6,7 +6,9 @@ from .page import Page, by_id
 
 
 class SignInPage(Page):
-    MUSEUM = by_id("museum")
+    # Vuetify puts the id on a hidden input inside the select; the visible field around it takes the click.
+    MUSEUM = (By.XPATH, "//input[@id='museum']/ancestor::div[contains(concat(' ', normalize-space(@class), ' '), "
+                        "' v-field ')][1]")
     USERNAME = by_id("username")
     PASSWORD = by_id("password")
     BUTTON = by_id("sign-in-button")
