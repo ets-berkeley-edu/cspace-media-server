@@ -22,7 +22,13 @@
         label="The Blob-to-Media file (.tsv or .tsv.gz)"
         accept=".tsv,.gz,.txt"
       />
-      <v-text-field id="night" v-model="night" label="Which night's file it is (YYYY-MM-DD)" />
+      <v-text-field
+        id="night"
+        v-model="night"
+        type="date"
+        :max="today"
+        label="Which night's file it is"
+      />
       <v-checkbox
         id="confirm-loaded"
         v-model="confirmed"
@@ -45,17 +51,20 @@
 import {computed, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {ApiError, api} from '@/api'
+import {pacificDate} from '@/words'
 
 const route = useRoute()
 const router = useRouter()
 const file = ref<File | File[] | null>(null)
-const night = ref('')
+const today = pacificDate()
+const night = ref(pacificDate(1)) // a partial night is usually last night
 const confirmed = ref(false)
 const busy = ref(false)
 const error = ref('')
 
 const chosen = computed(() => (Array.isArray(file.value) ? file.value[0] : file.value) || null)
-const ready = computed(() => !!chosen.value && confirmed.value && /^\d{4}-\d{2}-\d{2}$/.test(night.value))
+const ready = computed(() => !!chosen.value && confirmed.value && /^\d{4}-\d{2}-\d{2}$/.test(night.value) &&
+  night.value <= today)
 
 async function upload() {
   if (!chosen.value) {

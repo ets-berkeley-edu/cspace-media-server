@@ -158,7 +158,7 @@ class Worker:
             self.s.runs.transition(run, State.APPLYING)
         log.info("preflight done", extra={"museum": run.tenant, "run_id": run.run_id, "result": to.value,
                                           "rows": result.rows, "added": result.added, "removed": result.removed,
-                                          "changed": result.changed})
+                                          "changed": result.changed, "threshold_overridden": override is not None})
 
     def _apply(self, run: Run) -> None:
         if run.upload is None:  # can't happen: a run is applying only after a passed preflight

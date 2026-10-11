@@ -185,7 +185,8 @@ def changed(blobs: dict[str, str], share: float) -> dict[str, str]:
 
 
 def test_override_the_threshold_for_the_next_run(admin: TestClient, etl: TestClient, worker: Worker,
-                                                 store: Store, s3: Any, clock: Any) -> None:
+                                                 store: Store, s3: Any, clock: Any,
+                                                 caplog: pytest.LogCaptureFixture) -> None:
     applied_night(etl, worker, BLOBS)
     clock.now += timedelta(days=1)
     big = changed(BLOBS, 0.5)
@@ -204,7 +205,10 @@ def test_override_the_threshold_for_the_next_run(admin: TestClient, etl: TestCli
     assert admin.post(url, headers=CHANGES, json={"reason": "twice"}).status_code == 409
 
     # The ETL team reruns the night: the same run takes the file again, and its preflight uses the override.
+    caplog.set_level("INFO", logger="serena.worker")
     rerun = until_ready(etl, worker, big)
+    done = [r for r in caplog.records if r.getMessage() == "preflight done"]
+    assert done[-1].threshold_overridden is True  # type: ignore[attr-defined]
     assert rerun["run_id"] == failed["run_id"] and rerun["state"] == "ready"
     assert any("overridden by an admin" in w for w in rerun["preflight"]["warnings"])
     assert admin.get("/admin/v1/museums/pahma/status").json()["override"] is None  # used up

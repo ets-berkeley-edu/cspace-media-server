@@ -164,6 +164,8 @@ def main() -> None:
     print(f"{summary['run_id']}: {summary['state']}")
     for problem in (summary.get("preflight") or {}).get("errors", []):
         print(f"  preflight: {problem['problem']}")
+    for warning in (summary.get("preflight") or {}).get("warnings", []):
+        print(f"  preflight warning: {warning}")
     if summary["state"] == "preflight_failed" and threshold_failed(summary):
         print("  The night changes more rows than the threshold allows: the last applied night had a different --rows."
               "\n  Use the same --rows as that night, or start afresh with ./serena down and ./serena up.")

@@ -686,8 +686,8 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 - Serena hasn't applied a night for a museum in 24 hours. Only a museum that has applied a night can be late: before
   its first night there's nothing to compare with.
 
-An alert shows in the admin app's banner (the newest 5 not yet acknowledged) until an admin acknowledges it, one at
-a time; the app's alerts page lists the last 30 nights' alerts, acknowledged or not. An alert is logged, and is emailed through one Amazon SNS topic
+An alert shows in the admin app's banner (the newest 5 not yet acknowledged, checked on every page change and every
+minute) until an admin acknowledges it, one at a time; the app's alerts page lists the last 30 nights' alerts, acknowledged or not. An alert is logged, and is emailed through one Amazon SNS topic
 per environment (`SERENA_ALERT_TOPIC_ARN`) to the team's mailing list. Besides the watchdog's alerts, an admin's
 threshold override raises one, so the team hears of it. The subscription requires authentication to
 unsubscribe. Without a topic (local development) alerts are recorded and logged, not emailed.

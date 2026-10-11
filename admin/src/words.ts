@@ -19,3 +19,9 @@ export function stateOf(state: string): string {
 export function when(iso: string | null | undefined): string {
   return iso ? iso.replace('T', ' ').replace(/(\.\d+)?(Z|\+00:00)$/, '').slice(0, 19) + ' UTC' : ''
 }
+
+/** A date in Pacific time, as YYYY-MM-DD: the museums' nights are Pacific dates (design: The ETL API). */
+export function pacificDate(daysAgo = 0, now: Date = new Date()): string {
+  const day = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
+  return new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Los_Angeles'}).format(day)
+}

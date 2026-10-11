@@ -7,7 +7,7 @@
       density="compact"
       class="mb-2"
     >
-      <strong>{{ alert.title }}</strong> · {{ alert.night }} · {{ alert.subject }}
+      <strong>{{ alert.title }}</strong> · {{ alert.night }}<template v-if="alert.subject !== alert.night"> · {{ alert.subject }}</template>
       <div class="text-body-2">{{ alert.message }}</div>
       <template #append>
         <v-btn
@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref, watch} from 'vue'
+import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import type {AlertItem} from '@/api'
 import {api} from '@/api'
@@ -58,5 +58,24 @@ async function acknowledge(key: string) {
   }
 }
 
-watch([museum, alertsChanged], load, {immediate: true})
+// Alerts the watchdog raises in the background show up without a refresh: on every page change, and every minute
+// while the tab is visible.
+const EVERY_MS = 60_000
+let timer: ReturnType<typeof setInterval> | undefined
+
+function whenVisible() {
+  if (document.visibilityState === 'visible') {
+    void load()
+  }
+}
+
+watch([museum, alertsChanged, () => route.fullPath], load, {immediate: true})
+onMounted(() => {
+  timer = setInterval(whenVisible, EVERY_MS)
+  document.addEventListener('visibilitychange', whenVisible)
+})
+onBeforeUnmount(() => {
+  clearInterval(timer)
+  document.removeEventListener('visibilitychange', whenVisible)
+})
 </script>

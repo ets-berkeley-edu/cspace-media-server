@@ -163,7 +163,7 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 
 - [ ] With Docker Desktop running, from the repository's root: `./serena up`. Expect "Serena (Local · simulator) is up"
   within a couple of minutes, and nothing else on ports 8300, 8380 or 9300. If the BMU's stack is running, both run.
-- [ ] `./serena etl pahma`. Expect `applied`, no preflight warnings, and sample addresses for an image and a card. Open the image one in a browser: expect a
+- [ ] `./serena etl pahma`. Expect `applied`, one preflight warning (PAHMA's first load, so the change threshold doesn't apply), and sample addresses for an image and a card. Open the image one in a browser: expect a
   grey square. Open it again: expect the same, now from Serena's store (`./serena logs web` shows no second fetch).
 - [ ] `./serena etl cinefiles`. Open the `pdf` sample: expect a one-page PDF. Open the `pdf (restricted)` sample:
   expect the unavailable image (no signed link).
@@ -206,19 +206,40 @@ Set up: the museum's CollectionSpace administrators have created the `Serena_Adm
 ## 14. Runs and alerts in the admin app, locally (20 minutes, before merging pull request 12)
 
 The API's tests cover each action, and the pages were checked in a headless browser in Claude's workspace. This
-checks them in Chrome on a Mac. Start afresh: `./serena down && ./serena up`, then sign in to PAHMA as `admin`.
+checks them in Chrome on a Mac. Start afresh: `./serena down && ./serena up`, then open http://localhost:5373/admin/
+and sign in to PAHMA as `admin` (password `admin`).
 
-- [ ] `./serena etl pahma`, then open "Runs". Expect the run, `Applied`, with its row count.
-- [ ] `./serena etl pahma --rows 3`. Expect `preflight_failed`. In the app, open the run: expect its problem (the
-  change against the 5% threshold) and an "Override the threshold" button.
-- [ ] Override it. Expect the Confirm button disabled until a reason is typed. After confirming: the orange banner
-  with the override's alert, the button gone from the run, and the override on the Overview with a Cancel button.
-- [ ] Acknowledge the alert in the banner. Expect the banner gone, and the alert on the "Alerts" page with your name.
-- [ ] `./serena etl pahma --rows 3` again (the ETL team's rerun). Expect `applied`, and the run's reasons naming the
-  override. The Overview no longer shows an override.
-- [ ] `./serena etl pahma --rows 3 --partial`. Expect `ready`. In the app, open the run and "Record the load and apply":
-  expect Confirm disabled until the checkbox is ticked, then the run `Applied`.
-- [ ] `./serena etl pahma --rows 3 --file-only > /tmp/pahma-night.tsv`. In the app, open "Upload", choose that file,
-  type yesterday's date and tick the checkbox. Expect the new run to reach `Applied` within a few seconds.
-- [ ] Open "Audit log". Expect the override, the acknowledgement, the recorded load and the upload, each with `admin`.
-- [ ] `./serena logs worker`. Expect the override's alert logged once, and no email (no topic locally).
+About alerts: the watchdog runs in the worker every 5 minutes. Past 08:00 Pacific, its first pass raises "Tonight's run
+isn't finished by the deadline" for every museum, because no run has started: acknowledge PAHMA's. A failed preflight
+raises its own alert on the watchdog's next pass. The banner checks for new alerts on every page change and every
+minute, so an alert appears within a minute of being raised. The banner disappears only once every alert in it is
+acknowledged.
+
+- [ ] In a terminal: `./serena etl pahma`. Expect `applied`. In the app, open "Runs": expect that run, `Applied`, with
+  its row count.
+- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `preflight_failed`. In the app, open "Runs", then the run:
+  expect "Preflight failed", the problem (the share of rows that would change, against the 5% threshold), and an
+  orange button, "Override the change threshold for the next run".
+- [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the change threshold", is greyed
+  out until you type a reason. Type one and click it. Expect:
+  - the banner, with "An admin overrode the change threshold" (and, within a few minutes, "Preflight failed");
+  - the orange button gone from the run's page;
+  - on "Overview", a blue note that the threshold is overridden for the next run, with who, after which run, when it
+    expires and the reason, and a "Cancel it" button. Don't click it: the next items need the override.
+- [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"
+  page with your name and the time.
+- [ ] In a terminal: `./serena etl pahma --rows 3` again (the ETL team's rerun of the night). Expect the same run,
+  `applied`, and the line "preflight warning: the change threshold was overridden by an admin for this run". In the
+  app: the run's reasons name the override, and "Overview" no longer shows it.
+- [ ] In a terminal: `./serena etl pahma --rows 3 --partial`. Expect `ready`. In the app, open that run and click
+  "Record tonight's load and apply". In the dialog, the blue button is greyed out until you tick the checkbox. Tick it
+  and click it. Expect the run `Applied` after a refresh.
+- [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-night.tsv`. In the app, open "Upload a
+  night's file". Choose the file (in the Mac file picker, press Cmd+Shift+G, type `/tmp/pahma-night.tsv` and press
+  Return). The night starts as yesterday, with a calendar picker; leave it. Tick the checkbox and click "Upload and
+  apply". Expect the new run's page, and `Applied` after a refresh.
+- [ ] Open "Audit log". Expect the override, each acknowledgement, the recorded load and the upload, each with `admin`.
+- [ ] In a terminal: `./serena logs web | grep threshold_overridden` (Ctrl-C to stop). Expect the override's alert,
+  logged once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
+  `./serena logs worker | grep threshold_overridden`: expect the rerun's "preflight done" line with
+  `"threshold_overridden": true`.

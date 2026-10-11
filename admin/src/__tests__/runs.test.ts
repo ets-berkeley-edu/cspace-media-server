@@ -6,6 +6,7 @@ import {routes} from '@/router'
 import AlertBanner from '@/components/AlertBanner.vue'
 import RunDetail from '@/views/RunDetail.vue'
 import Upload from '@/views/Upload.vue'
+import {pacificDate} from '@/words'
 
 const RUN = {
   run_id: 'pahma-2026-10-10-1', night: '2026-10-10', state: 'apply_failed', created_at: '2026-10-10T10:00:00+00:00',
@@ -58,6 +59,7 @@ describe('the alert banner', () => {
     const {wrapper} = await at('/pahma', AlertBanner)
     expect(wrapper.findAll('.acknowledge')).toHaveLength(1)
     expect(wrapper.text()).toContain('Not applied by 08:00')
+    expect(wrapper.text().split('2026-10-10')).toHaveLength(2) // the night once: the subject is the same night
     await wrapper.find('.acknowledge').trigger('click')
     await flushPromises()
     expect(calls.find(c => c.method === 'POST')?.body).toEqual({key: alert.key})
@@ -80,6 +82,7 @@ describe('uploading a night\'s file', () => {
     const {wrapper, router} = await at('/pahma/upload', Upload)
     const file = new File(['blob_csid\tmedia_csid\tkind\taccess\n'], 'blob-media.pahma.2026-10-09.tsv')
     const vm = wrapper.vm as unknown as {$: {setupState: {file: File | null, night: string, confirmed: boolean}}}
+    expect(vm.$.setupState.night).toBe(pacificDate(1)) // last night, to start
     vm.$.setupState.file = file
     vm.$.setupState.night = '2026-10-09'
     vm.$.setupState.confirmed = true
@@ -93,5 +96,13 @@ describe('uploading a night\'s file', () => {
     expect(put?.headers['X-Serena-Admin']).toBe('1')
     expect(put?.body).toBe(file)
     wrapper.unmount()
+  })
+})
+
+describe('pacificDate', () => {
+  it('is the Pacific date, not the UTC one', () => {
+    const evening = new Date('2026-10-11T03:30:00Z') // 20:30 on October 10 in Berkeley
+    expect(pacificDate(0, evening)).toBe('2026-10-10')
+    expect(pacificDate(1, evening)).toBe('2026-10-09')
   })
 })
