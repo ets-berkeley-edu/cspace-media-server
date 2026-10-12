@@ -7,6 +7,7 @@ import {api} from '@/api'
 
 export const session = reactive({
   environment: '',
+  build: '',
   signedIn: [] as SignedIn[],
   loaded: false
 })
@@ -14,6 +15,7 @@ export const session = reactive({
 export async function refresh(): Promise<void> {
   const me = await api.me()
   session.environment = me.environment
+  session.build = me.build || ''
   session.signedIn = me.sessions
   session.loaded = true
 }

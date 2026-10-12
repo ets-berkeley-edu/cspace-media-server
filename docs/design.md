@@ -950,9 +950,11 @@ reachable only from campus networks.
   and version the tests use (decided October 10, 2026). A seed step makes each museum's bucket and the secrets in moto
   at start-up: random ETL tokens and signing keys, and the simulator's synthetic account; nothing secret is in the
   repository, and moto forgets it all when the stack stops. A fake ETL (`./serena etl <museum>`) runs a whole daily
-  refresh through the ETL API, or a failed one (`--failed`: no Solr refresh, no servability update), after adding the
-  refresh's synthetic Media records to the simulator. `./serena smoke` runs a daily refresh and fetches, stores and serves one of its images; CI
-  runs it on every code change. The stack talks only to the simulator: there is no local mode against a real
+  refresh through the ETL API, after adding the refresh's synthetic Media records to the simulator (the stand-in for
+  the Solr refresh), and prints its counts; `--failed` makes the servable list but never calls Serena (D85).
+  `./serena smoke` runs a daily refresh and fetches, stores and serves one of its images; CI runs it on every code
+  change. `./serena up` prints the clone's branch and commit, and the admin app shows them beside the environment
+  (`SERENA_BUILD`), so a tester sees at once which code the stack runs. The stack talks only to the simulator: there is no local mode against a real
   CollectionSpace, which would need a museum's service-account password on a laptop; real-tenant checks happen in
   the AWS QA environment (decided October 10, 2026). The admin app runs on Vite's development server
   (http://localhost:5373/admin/), forwarding `/admin/v1` to the app. The simulator (`backend/fakecspace`) answers the three

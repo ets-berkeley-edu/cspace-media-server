@@ -24,6 +24,7 @@ export interface SignedIn {
 
 export interface Me {
   environment: string
+  build: string // which code this is, for example "feature/x @ 1a2b3c4"; empty: not shown
   sessions: SignedIn[]
 }
 

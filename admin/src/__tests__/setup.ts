@@ -11,6 +11,7 @@ config.global.plugins = [vuetify]
 
 beforeEach(() => {
   session.environment = ''
+  session.build = ''
   session.signedIn = []
   session.loaded = false
 })

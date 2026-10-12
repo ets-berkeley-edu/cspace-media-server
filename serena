@@ -23,6 +23,11 @@ compose() { docker compose -p serena "$@"; }
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   up)
+    # Which code this stack runs, shown in the admin app's header and below: the clone's branch and commit.
+    SERENA_BUILD="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown) @ $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    [ -z "$(git status --porcelain 2>/dev/null)" ] || SERENA_BUILD="$SERENA_BUILD + local changes"
+    export SERENA_BUILD
+    echo "Building from $SERENA_BUILD"
     compose up -d --build
     printf 'Waiting for http://localhost:%s/health ' "$PORT"
     for _ in $(seq 1 90); do
@@ -32,7 +37,7 @@ case "$cmd" in
     curl -fs -o /dev/null "http://localhost:$PORT/health" || { echo; echo "Not up: ./serena logs web" >&2; exit 1; }
     # The worker starts once the app is healthy (it creates the tables); give it a moment.
     for _ in $(seq 1 30); do [ -n "$(compose ps -q --status running worker)" ] && break; sleep 1; done
-    echo "Serena (Local · simulator) is up: http://localhost:$PORT/health"
+    echo "Serena (Local · simulator, $SERENA_BUILD) is up: http://localhost:$PORT/health"
     echo "A daily refresh: ./serena etl pahma" ;;
   down)
     compose down ;;

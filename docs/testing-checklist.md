@@ -6,6 +6,18 @@ repository was set up. Tick an item when it's done, and note anything odd under 
 Change this file through pull requests, like `docs/design.md`. When a pull request needs checks by hand, add a
 section here in the same pull request.
 
+**Testing a pull request locally.** The checks and the code change together, so take both from the pull request's
+branch, in the same clone:
+
+```
+git switch <the pull request's branch> && git pull && ./serena down && ./serena up
+```
+
+Then read this file in that clone (or on GitHub on that branch, never on `main`). `./serena up` prints the branch and
+commit it built, and the admin app's header shows them beside "Local · simulator", for example
+"Local · simulator · feature/x @ 1a2b3c4". If they don't name the pull request's branch and latest commit, you're
+testing other code: run the line above again. "+ local changes" means the clone has changes not yet committed.
+
 ## 1. A replaced image is served on a cache miss (10 minutes, once Serena is in QA)
 
 Replacing a Media record's image creates a new Blob. Until the next daily update, clients still request the old

@@ -5,11 +5,12 @@
         Serena admin
         <v-chip
           v-if="session.environment"
+          id="environment"
           class="ml-2"
           size="small"
           variant="outlined"
         >
-          {{ session.environment }}
+          {{ session.environment }}<template v-if="session.build"> · {{ session.build }}</template>
         </v-chip>
       </v-app-bar-title>
       <template v-if="current">
