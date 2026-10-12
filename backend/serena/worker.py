@@ -27,6 +27,7 @@ from .blob_media import read_rows
 from .config import Settings
 from .museum import Museum
 from .museum_settings import MuseumSettings
+from .overrides import Overrides
 from .runs import OutOfOrder, Run, Runs, State
 from .store import Store
 from .watchdog import Watchdog
@@ -44,6 +45,7 @@ class WorkerServices:
     store: Store
     s3: Any
     watchdog: Watchdog | None = None
+    overrides: Overrides | None = None  # an admin's threshold override for the next run (D64)
 
 
 class _Heartbeat(threading.Thread):
@@ -141,14 +143,22 @@ class Worker:
             with self._file(run.tenant, previous_run.upload.key) as handle:
                 previous = read_rows(handle)
         threshold = self.s.museum_settings.get(museum).change_threshold_percent
+        # An armed override is used up by this preflight, whatever its result (D64).
+        override = self.s.overrides.use(run.tenant) if self.s.overrides is not None and previous else None
         with self._file(run.tenant, run.upload.key) as handle:
-            result = preflight.check(museum, handle, previous, threshold)
+            result = preflight.check(museum, handle, previous, threshold, override=override is not None)
         to = State.READY if result.passed else State.PREFLIGHT_FAILED
         reason = None if result.passed else f"preflight failed: {result.error_count} problem(s)"
+        if override is not None:
+            reason = f"threshold overridden by an admin after {override.after_run}" + (f"; {reason}" if reason else "")
         self.s.runs.transition(run, to, results={"preflight": result.summary()}, reason=reason, release=True)
+        if to == State.READY and run.solr_load and run.solr_load.get("recorded_by_admin"):
+            # A file an admin uploaded after a partial night, with the load already confirmed (D66): apply it now.
+            self.s.runs.transition(run, State.SOLR_LOADED)
+            self.s.runs.transition(run, State.APPLYING)
         log.info("preflight done", extra={"museum": run.tenant, "run_id": run.run_id, "result": to.value,
                                           "rows": result.rows, "added": result.added, "removed": result.removed,
-                                          "changed": result.changed})
+                                          "changed": result.changed, "threshold_overridden": override is not None})
 
     def _apply(self, run: Run) -> None:
         if run.upload is None:  # can't happen: a run is applying only after a passed preflight
@@ -192,7 +202,7 @@ def build_services(settings: Settings | None = None) -> WorkerServices:
     if not settings.alert_topic_arn:
         log.warning("no alert topic: alerts are recorded and logged, not emailed")
     watchdog = Watchdog(museums, museum_settings, runs, Alerts(store, sns, settings.alert_topic_arn))
-    return WorkerServices(settings, museums, museum_settings, runs, store, s3, watchdog)
+    return WorkerServices(settings, museums, museum_settings, runs, store, s3, watchdog, Overrides(store))
 
 
 def main() -> None:

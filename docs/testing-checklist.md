@@ -81,6 +81,9 @@ The tests use moto's SNS. These checks need the real topic and the team's mailin
 - [ ] Make a night's preflight fail (upload a file with a bad kind). Expect a "preflight failed" email with the run ID
   and the reason.
 - [ ] Check the email has no personal data and no link with a token or signature in it.
+- [ ] Override a museum's change threshold in the admin app. Expect an "An admin overrode the change threshold"
+  email within 5 minutes (the web app records the alert; the worker sends it on its next pass), with the run ID and
+  the reason. Cancel the override and arm it again: expect a second email.
 - [ ] Try to unsubscribe from the email's link without signing in to AWS: expect it to be refused (the subscription
   requires authentication to unsubscribe).
 
@@ -163,14 +166,16 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 
 - [ ] With Docker Desktop running, from the repository's root: `./serena up`. Expect "Serena (Local · simulator) is up"
   within a couple of minutes, and nothing else on ports 8300, 8380 or 9300. If the BMU's stack is running, both run.
-- [ ] `./serena etl pahma`. Expect `applied`, no preflight warnings, and sample addresses for an image and a card. Open the image one in a browser: expect a
-  grey square. Open it again: expect the same, now from Serena's store (`./serena logs web` shows no second fetch).
+- [ ] `./serena etl pahma`. Expect `applied`, one preflight warning (PAHMA's first load, so the change threshold
+  doesn't apply), and sample addresses for an image and a card. Open the image one in a browser: expect a grey
+  square. Open it again: expect the same, now from Serena's store (`./serena logs --no-follow web | grep '"fetched"'`
+  shows one fetch).
 - [ ] `./serena etl cinefiles`. Open the `pdf` sample: expect a one-page PDF. Open the `pdf (restricted)` sample:
   expect the unavailable image (no signed link).
 - [ ] `./serena etl bampfa --partial`. Expect `ready`, and the run left there.
 - [ ] `./serena smoke`, after the nights above. Expect "Smoke test passed".
-- [ ] `./serena etl pahma --rows 3`. Expect `preflight_failed`, with the threshold explained: 17 of PAHMA's 20 rows
-  would be removed, more than its 5% threshold. This is preflight protecting the servability table, not a fault.
+- [ ] `./serena etl pahma --rows 3`. Expect `preflight_failed`, with the threshold explained: 17 of PAHMA's 21 rows (its 20
+  plus the restricted-image Blob) would be removed, 80.95%, more than its 5% threshold. This is preflight protecting the servability table, not a fault.
 - [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
 - [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
   `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.
@@ -202,3 +207,44 @@ Set up: the museum's CollectionSpace administrators have created the `Serena_Adm
 - [ ] Check the cookies in the browser's developer tools: `serena_admin_<museum>`, HttpOnly, Secure, SameSite Strict,
   path `/admin`.
 
+## 14. Runs and alerts in the admin app, locally (20 minutes, before merging pull request 12)
+
+The API's tests cover each action, and the pages were checked in a headless browser in Claude's workspace. This
+checks them in Chrome on a Mac. Start afresh: `./serena down && ./serena up`, then open http://localhost:5373/admin/
+and sign in to PAHMA as `admin` (password `admin`).
+
+About alerts: the watchdog runs in the worker every 5 minutes. Past 08:00 Pacific, its first pass raises "Tonight's run
+isn't finished by the deadline" for every museum, because no run has started: acknowledge PAHMA's. A failed preflight
+raises its own alert on the watchdog's next pass. The banner checks for new alerts on every page change and every
+minute, so an alert appears within a minute of being raised. The banner disappears only once every alert in it is
+acknowledged.
+
+- [ ] In a terminal: `./serena etl pahma`. Expect `applied`. In the app, open "Runs": expect that run, `Applied`, with
+  its row count.
+- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `preflight_failed`. In the app, open "Runs", then the run:
+  expect "Preflight failed", the problem (the share of rows that would change, against the 5% threshold), and an
+  orange button, "Override the change threshold for the next run".
+- [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the change threshold", is greyed
+  out until you type a reason. Type one and click it. Expect:
+  - the banner, with "An admin overrode the change threshold" (and, within a few minutes, "Preflight failed");
+  - the orange button gone from the run's page;
+  - on "Overview", a blue note that the threshold is overridden for the next run, with who, after which run, when it
+    expires and the reason, and a "Cancel it" button. Don't click it: the next items need the override.
+- [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"
+  page with your name and the time.
+- [ ] In a terminal: `./serena etl pahma --rows 3` again (the ETL team's rerun of the night). Expect the same run,
+  `applied`, and the line "preflight warning: the change threshold was overridden by an admin for this run". In the
+  app: the run's reasons name the override, and "Overview" no longer shows it.
+- [ ] In a terminal: `./serena etl pahma --rows 3 --partial`. Expect `ready`. In the app, open that run and click
+  "Record tonight's load and apply". In the dialog, the blue button is greyed out until you tick the checkbox and
+  type a reason. Do both and click it. Expect the run `Applied` after a refresh.
+- [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-night.tsv`. In the app, open "Upload a
+  night's file". Choose the file (in the Mac file picker, press Cmd+Shift+G, type `/tmp/pahma-night.tsv` and press
+  Return). The night starts as yesterday, with a calendar picker; leave it. Type a reason, tick the checkbox and
+  click "Upload and apply" (greyed out until all are done). Expect the new run's page, "an admin's upload of the night of <yesterday>'s file" beside tonight's night,
+  and `Applied` after a refresh.
+- [ ] Open "Audit log". Expect the override, each acknowledgement, the recorded load and the upload, each with `admin`.
+- [ ] In a terminal: `./serena logs --no-follow web | grep threshold_overridden`. Expect the override's alert, logged
+  once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
+  `./serena logs --no-follow worker | grep '"threshold_overridden": true'`: expect one line, the rerun's
+  "preflight done".

@@ -2,9 +2,37 @@
   <v-container fluid>
     <h1 id="overview-title" class="text-h5 mb-4">{{ signed?.name }}</h1>
     <p class="mb-4">Signed in as {{ signed?.user }}.</p>
+    <LoadError :message="error" />
+    <p v-if="status?.newest" id="newest-run" class="mb-2">
+      Newest run:
+      <router-link :to="{name: 'run', params: {museum: String(route.params.museum), runId: status.newest.run_id}}">
+        {{ status.newest.run_id }}
+      </router-link>, {{ stateOf(status.newest.state) }}.
+    </p>
+    <p v-else-if="status" class="mb-2">No runs yet.</p>
+    <v-alert
+      v-if="status?.override"
+      id="override-armed"
+      type="info"
+      density="compact"
+      class="mb-4"
+    >
+      The change threshold is overridden for the next run (armed by {{ status.override.armed_by }} after
+      {{ status.override.after_run }}; expires {{ when(new Date(status.override.expires_at * 1000).toISOString()) }}).
+      Reason: {{ status.override.reason }}
+      <template #append>
+        <v-btn
+          id="cancel-override"
+          size="small"
+          variant="outlined"
+          @click="cancelOverride"
+        >
+          Cancel it
+        </v-btn>
+      </template>
+    </v-alert>
     <p class="mb-6">
-      Runs and alerts, settings, takedowns and the unserved-requests pages arrive in the next pull requests.
-      For now: the audit log and the ETL API's documentation.
+      Settings, takedowns and the unserved-requests pages arrive in the next pull requests.
     </p>
     <v-btn
       id="sign-out-all"
@@ -32,15 +60,36 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from 'vue'
+import {computed, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
-import {api} from '@/api'
+import type {Status} from '@/api'
+import {api, problem} from '@/api'
+import LoadError from '@/components/LoadError.vue'
 import {refresh, signedInTo} from '@/session'
+import {stateOf, when} from '@/words'
 
 const route = useRoute()
 const router = useRouter()
 const confirming = ref(false)
 const signed = computed(() => signedInTo(String(route.params.museum)))
+const status = ref<Status | null>(null)
+const error = ref('')
+
+async function load() {
+  error.value = ''
+  try {
+    status.value = await api.status(String(route.params.museum))
+  } catch (e) {
+    error.value = problem(e)
+  }
+}
+
+async function cancelOverride() {
+  await api.cancelOverride(String(route.params.museum))
+  await load()
+}
+
+watch(() => route.params.museum, load, {immediate: true})
 
 async function signOutAll() {
   confirming.value = false

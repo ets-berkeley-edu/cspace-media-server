@@ -1,6 +1,7 @@
 <template>
   <v-container fluid>
     <h1 class="text-h5 mb-4">Audit log</h1>
+    <LoadError :message="error" />
     <v-table id="audit-table" density="compact">
       <thead>
         <tr>
@@ -13,11 +14,15 @@
       </thead>
       <tbody>
         <tr v-for="entry in entries" :key="entry.at + entry.admin + entry.action">
-          <td>{{ entry.at.replace('T', ' ').slice(0, 19) }}</td>
+          <td class="text-no-wrap">{{ entry.at.replace('T', ' ').slice(0, 19) }}</td>
           <td>{{ entry.admin }}</td>
           <td>{{ entry.action.replace(/_/g, ' ') }}</td>
-          <td>{{ entry.target }}</td>
-          <td>{{ Object.keys(entry.details).length ? JSON.stringify(entry.details) : '' }}</td>
+          <td class="audit-target">{{ targetOf(entry.action, entry.target) }}</td>
+          <td class="audit-details">
+            <div v-for="line in detailLines(entry.details)" :key="line.label">
+              {{ line.label }}: <span :title="line.full">{{ line.value }}</span>
+            </div>
+          </td>
         </tr>
       </tbody>
     </v-table>
@@ -29,15 +34,30 @@
 import {ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import type {AuditEntry} from '@/api'
-import {api} from '@/api'
+import {api, problem} from '@/api'
+import LoadError from '@/components/LoadError.vue'
+import {detailLines, targetOf} from '@/words'
 
 const route = useRoute()
 const entries = ref<AuditEntry[]>([])
 const loaded = ref(false)
+const error = ref('')
 
 watch(() => route.params.museum, async museum => {
   loaded.value = false
-  entries.value = (await api.audit(String(museum))).entries
-  loaded.value = true
+  error.value = ''
+  try {
+    entries.value = (await api.audit(String(museum))).entries
+    loaded.value = true
+  } catch (e) {
+    error.value = problem(e)
+  }
 }, {immediate: true})
 </script>
+
+<style scoped>
+.audit-target,
+.audit-details {
+  overflow-wrap: anywhere;
+}
+</style>

@@ -33,11 +33,15 @@
     <v-navigation-drawer v-if="current" permanent>
       <v-list nav>
         <v-list-item :to="{name: 'overview', params: {museum: current.museum}}" title="Overview" exact />
+        <v-list-item id="nav-runs" :to="{name: 'runs', params: {museum: current.museum}}" title="Runs" />
+        <v-list-item id="nav-alerts" :to="{name: 'alerts', params: {museum: current.museum}}" title="Alerts" />
+        <v-list-item id="nav-upload" :to="{name: 'upload', params: {museum: current.museum}}" title="Upload a night's file" />
         <v-list-item id="nav-audit" :to="{name: 'audit', params: {museum: current.museum}}" title="Audit log" />
         <v-list-item id="nav-api" :to="{name: 'api', params: {museum: current.museum}}" title="API documentation" />
       </v-list>
     </v-navigation-drawer>
     <v-main>
+      <AlertBanner v-if="current" />
       <router-view />
     </v-main>
   </v-app>
@@ -47,6 +51,7 @@
 import {computed} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {api} from '@/api'
+import AlertBanner from '@/components/AlertBanner.vue'
 import {refresh, session, signedInTo} from '@/session'
 
 const route = useRoute()

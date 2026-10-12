@@ -28,6 +28,9 @@ class Action(StrEnum):
     THRESHOLD_OVERRIDE = "threshold_override"
     FILE_UPLOAD = "file_upload"
     RESTRICTED_IMAGE_UPLOAD = "restricted_image_upload"
+    RECORD_LOAD = "record_load"  # "record tonight's load and apply" after a partial night (D65)
+    THRESHOLD_OVERRIDE_CANCEL = "threshold_override_cancel"
+    ALERT_ACKNOWLEDGE = "alert_acknowledge"
 
 
 @dataclass(frozen=True)

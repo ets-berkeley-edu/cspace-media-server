@@ -53,8 +53,10 @@ class Sessions:
             "expires_at": {"N": str(int(now + self.max_age))}})
         return token
 
-    def get(self, tenant: str, token: str) -> Session | None:
-        """The live session for this museum and token, or None (and an ended one is deleted)."""
+    def get(self, tenant: str, token: str, touch: bool = True) -> Session | None:
+        """The live session for this museum and token, or None (and an ended one is deleted). With touch=False (the
+        app's background checks, such as the alert banner's), the request doesn't count as activity, so an open tab
+        still signs out after the idle time."""
         key = {"pk": {"S": token_hash(token)}}
         item = self.store.client.get_item(TableName=self.table, Key=key, ConsistentRead=True).get("Item")
         if item is None or item["tenant"]["S"] != tenant:
@@ -64,7 +66,7 @@ class Sessions:
         if now - started > self.max_age or now - last > self.idle:
             self.store.client.delete_item(TableName=self.table, Key=key)
             return None
-        if now - last >= TOUCH_EVERY_SECONDS:
+        if touch and now - last >= TOUCH_EVERY_SECONDS:
             self.store.client.update_item(TableName=self.table, Key=key, UpdateExpression="SET last_seen = :now",
                                           ExpressionAttributeValues={":now": {"N": str(now)}})
             last = now

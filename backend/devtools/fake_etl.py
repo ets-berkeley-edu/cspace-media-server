@@ -143,9 +143,18 @@ def main() -> None:
     parser.add_argument("--poll", type=float, default=2.0, help="seconds between polls (faster than the API says)")
     parser.add_argument("--public", default="http://localhost:8300", help="Serena's address in your browser")
     parser.add_argument("--json", action="store_true", help="print the summary as JSON")
+    parser.add_argument("--file-only", action="store_true",
+                        help="add the records to the simulator and print the night's file, for the admin app's upload "
+                             "page; Serena isn't called")
     args = parser.parse_args()
     if get_settings().secretsmanager_endpoint is None:
         sys.exit("devtools.fake_etl runs only against the local stack.")
+    if args.file_only:
+        listed = rows(args.museum, args.rows)
+        with httpx.Client(base_url=args.cspace, timeout=60) as cspace:
+            add_to_simulator(cspace, listed)
+        sys.stdout.buffer.write(tsv(listed))
+        return
     with httpx.Client(base_url=args.serena, timeout=60) as serena, \
             httpx.Client(base_url=args.cspace, timeout=60) as cspace:
         summary = night(serena, cspace, args.museum, token_for(args.museum), args.rows, args.partial, args.poll)
@@ -155,6 +164,8 @@ def main() -> None:
     print(f"{summary['run_id']}: {summary['state']}")
     for problem in (summary.get("preflight") or {}).get("errors", []):
         print(f"  preflight: {problem['problem']}")
+    for warning in (summary.get("preflight") or {}).get("warnings", []):
+        print(f"  preflight warning: {warning}")
     if summary["state"] == "preflight_failed" and threshold_failed(summary):
         print("  The night changes more rows than the threshold allows: the last applied night had a different --rows."
               "\n  Use the same --rows as that night, or start afresh with ./serena down and ./serena up.")

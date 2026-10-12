@@ -203,6 +203,12 @@ class Runs:
                                   Limit=1)["Items"]
         return _from_item(items[0]) if items else None
 
+    def recent(self, tenant: str, limit: int) -> list[Run]:
+        """The museum's newest runs, newest first (the admin app's runs page)."""
+        items = self.client.query(TableName=self.table, KeyConditionExpression="pk = :pk", ScanIndexForward=False,
+                                  ExpressionAttributeValues={":pk": {"S": tenant}}, Limit=limit)["Items"]
+        return [_from_item(item) for item in items]
+
     def start(self, tenant: str) -> tuple[Run, bool]:
         """The museum's open run for tonight, or a new one. Returns (run, created). Closes an earlier night's open run
         as abandoned, unless the worker is on it (Busy)."""

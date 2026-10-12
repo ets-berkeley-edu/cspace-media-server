@@ -276,16 +276,18 @@ def create_etl_app(services: Services) -> FastAPI:
         log.info("file received", extra={"museum": tenant, "run_id": run.run_id, "rows": received.rows})
         return _json(_out(services, run))
 
-    def step(tenant: str, run_id: str, allowed: State, to: State, done: frozenset[State], what: str,
-             results: dict[str, dict[str, Any]] | None = None, reason: str | None = None) -> JSONResponse:
+    def step(tenant: str, run_id: str, allowed: State | frozenset[State], to: State, done: frozenset[State],
+             what: str, results: dict[str, dict[str, Any]] | None = None, reason: str | None = None) -> JSONResponse:
         """Moves a run from `allowed` to `to`; a run already in `to` or past it (`done`) is returned as it is, so
         repeating the call is safe. Anything else is out of order."""
         run = run_of(tenant, run_id)
         if run.state in done:
             return _json(_out(services, run), 202 if run.state in BUSY else 200)
-        if run.state != allowed:
+        states = allowed if isinstance(allowed, frozenset) else frozenset({allowed})
+        if run.state not in states:
+            needed = " or ".join(sorted(s.value for s in states))
             raise ProblemError(409, "the-etl-api", "Out of order",
-                               f"run {run.run_id} is {run.state.value}; {what} needs it {allowed.value}")
+                               f"run {run.run_id} is {run.state.value}; {what} needs it {needed}")
         try:
             run = services.runs.transition(run, to, results=results, reason=reason)
         except OutOfOrder as error:
@@ -299,8 +301,9 @@ def create_etl_app(services: Services) -> FastAPI:
               summary="Check the uploaded file without applying it")
     def request_preflight(tenant: Tenant, run_id: str) -> JSONResponse:
         """Queues the preflight (202); poll the run until it is ready or preflight_failed. Allowed once a file is
-        uploaded (received). A failed preflight needs a corrected file, which puts the run back in received."""
-        return step(tenant, run_id, State.RECEIVED, State.PREFLIGHTING,
+        uploaded (received), and again after a failed preflight: with a corrected file, or with the same file when the
+        night is rerun after an admin overrode the change threshold for it."""
+        return step(tenant, run_id, frozenset({State.RECEIVED, State.PREFLIGHT_FAILED}), State.PREFLIGHTING,
                     frozenset({State.PREFLIGHTING, State.READY, State.SOLR_LOADED, State.APPLYING, State.APPLIED}),
                     "the preflight")
 

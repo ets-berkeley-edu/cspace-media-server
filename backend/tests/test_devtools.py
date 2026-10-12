@@ -115,3 +115,17 @@ def test_the_restricted_image_blob_is_listed_without_a_media_csid() -> None:
     assert listed[-1][0] == "59a733dd-d641-4e1a-8552" and listed[-1][1] == ""
     assert all(row[1] for row in fake_etl.rows("bampfa", 2))  # no restricted-image Blob there
 
+
+
+def test_file_only_prints_the_nights_file_for_the_upload_page(monkeypatch: pytest.MonkeyPatch,
+                                                              capsysbinary: pytest.CaptureFixture[bytes]) -> None:
+    class Local:
+        secretsmanager_endpoint = "http://moto:5000"
+
+    monkeypatch.setattr(fake_etl, "get_settings", lambda: Local())
+    monkeypatch.setattr("devtools.fake_etl.httpx.Client", lambda **kwargs: TestClient(fake_app))
+    monkeypatch.setattr("sys.argv", ["fake_etl", "--museum", "bampfa", "--rows", "3", "--file-only"])
+    fake_etl.main()
+    assert capsysbinary.readouterr().out == fake_etl.tsv(fake_etl.rows("bampfa", 3))
+    media = fake_etl.rows("bampfa", 3)[0][1]
+    assert media in fake.media  # added to the simulator, so its files can be fetched

@@ -1,14 +1,22 @@
 import {createRouter, createWebHistory} from 'vue-router'
 import type {RouteLocationNormalized} from 'vue-router'
 import {refresh, session, signedInTo} from '@/session'
+import Alerts from '@/views/Alerts.vue'
 import AuditLog from '@/views/AuditLog.vue'
 import Overview from '@/views/Overview.vue'
+import RunDetail from '@/views/RunDetail.vue'
+import Runs from '@/views/Runs.vue'
 import SignIn from '@/views/SignIn.vue'
+import Upload from '@/views/Upload.vue'
 
 export const routes = [
   {path: '/', name: 'home', component: SignIn, meta: {public: true}},
   {path: '/sign-in', name: 'sign-in', component: SignIn, meta: {public: true}},
   {path: '/:museum', name: 'overview', component: Overview},
+  {path: '/:museum/runs', name: 'runs', component: Runs},
+  {path: '/:museum/runs/:runId', name: 'run', component: RunDetail},
+  {path: '/:museum/upload', name: 'upload', component: Upload},
+  {path: '/:museum/alerts', name: 'alerts', component: Alerts},
   {path: '/:museum/audit', name: 'audit', component: AuditLog},
   // Swagger UI is large: loaded only when the page is opened.
   {path: '/:museum/api', name: 'api', component: () => import('@/views/ApiDocs.vue')}
