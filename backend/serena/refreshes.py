@@ -9,7 +9,7 @@ raises OutOfOrder (409).
                                      -> updating -> updated | update_failed
 
 A passed servable list check goes straight on to the servability update (decided October 12, 2026, D80). An open
-refresh is closed as abandoned when a later refresh date's refresh starts, or when an admin uploads a servable list
+refresh is closed as abandoned when a later refresh date's refresh starts, or when an admin starts an admin refresh
 (D82). A museum has at most one open refresh (any state but updated or abandoned), and it is always its newest."""
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class Refresh:
     check: dict[str, Any] | None = None  # the servable list check's result
     update: dict[str, Any] | None = None  # the servability update's counts
     override: dict[str, Any] | None = None  # an admin's override of the delta threshold for this list (D83)
-    admin_upload: dict[str, Any] | None = None  # an admin upload: the refresh date the list is for (D75)
+    admin_refresh: dict[str, Any] | None = None  # an admin refresh: the refresh date its list is for (D75)
     owner: str | None = None  # the worker doing this refresh's step
     heartbeat_at: int | None = None  # when that worker last said it was still on it (Unix seconds)
 
@@ -124,7 +124,7 @@ def parse_refresh_id(tenant: str, refresh_id: str) -> tuple[str, int] | None:
     return refresh_date, number
 
 
-RESULTS = ("check", "update", "override", "admin_upload")
+RESULTS = ("check", "update", "override", "admin_refresh")
 _serializer = TypeSerializer()
 _deserializer = TypeDeserializer()
 
@@ -178,7 +178,7 @@ def _from_item(item: dict[str, Any]) -> Refresh:
                                  upload["uploaded_at"]) if upload else None,
                    reasons=list(plain.get("reasons", [])),
                    check=_plain(plain.get("check")), update=_plain(plain.get("update")),
-                   override=_plain(plain.get("override")), admin_upload=_plain(plain.get("admin_upload")),
+                   override=_plain(plain.get("override")), admin_refresh=_plain(plain.get("admin_refresh")),
                    owner=plain.get("owner"),
                    heartbeat_at=int(plain["heartbeat_at"]) if "heartbeat_at" in plain else None)
 
@@ -218,7 +218,7 @@ class Refreshes:
     def start(self, tenant: str, closing_reason: str | None = None) -> tuple[Refresh, bool]:
         """The museum's open refresh for today's refresh date, or a new one. Returns (refresh, created). Closes an
         earlier refresh date's open refresh as abandoned, unless the worker is on it (Busy). With `closing_reason` (an
-        admin upload, D82), any open refresh is closed that way, today's included, and a new one always starts."""
+        admin refresh, D82), any open refresh is closed that way, today's included, and a new one always starts."""
         for _ in range(3):  # another call may start a refresh at the same moment: re-read and try again
             refresh_date = self.today()
             newest = self.newest(tenant)
@@ -249,7 +249,7 @@ class Refreshes:
     def transition(self, refresh: Refresh, to: State, *, upload: Upload | None = None, reason: str | None = None,
                    results: dict[str, dict[str, Any]] | None = None, release: bool = False) -> Refresh:
         """Move the refresh to `to`, only if it is still in the state it was read in. `results` sets check, update,
-        override or admin_upload; a new upload removes an earlier override, which was for the earlier list.
+        override or admin_refresh; a new upload removes an earlier override, which was for the earlier list.
         `release` ends the worker's claim."""
         now = self.now()
         names = {"#state": "state"}

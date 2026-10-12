@@ -6,7 +6,7 @@ import {routes} from '@/router'
 import AlertBanner from '@/components/AlertBanner.vue'
 import RefreshDetail from '@/views/RefreshDetail.vue'
 import Refreshes from '@/views/Refreshes.vue'
-import Upload from '@/views/Upload.vue'
+import StartRefresh from '@/views/StartRefresh.vue'
 import {pacificDate} from '@/words'
 
 const REFRESH = {
@@ -94,19 +94,19 @@ describe('the alert banner', () => {
   })
 })
 
-describe('uploading a servable list', () => {
-  it('sends the file with the confirmation and opens its refresh', async () => {
+describe('starting an admin refresh', () => {
+  it('sends the servable list with the confirmation and opens the new refresh', async () => {
     const calls = fakeApi({
-      'PUT /museums/pahma/uploads': {body: {...REFRESH, refresh_id: 'pahma-2026-10-11-1', state: 'checking', actions: []}},
+      'POST /museums/pahma/refreshes': {body: {...REFRESH, refresh_id: 'pahma-2026-10-11-1', state: 'checking', actions: []}},
       'GET /museums/pahma/refreshes/pahma-2026-10-11-1': {body: {...REFRESH, refresh_id: 'pahma-2026-10-11-1', state: 'checking', actions: []}}
     })
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
       calls.push({method: init.method || 'GET', path: url.replace('/admin/v1', ''), headers: (init.headers || {}) as Record<string, string>, body: init.body})
       const path = url.replace('/admin/v1', '')
-      const body = path.endsWith('/uploads') || path.includes('2026-10-11-1') ? {...REFRESH, refresh_id: 'pahma-2026-10-11-1', state: 'checking', actions: []} : {}
+      const body = path.endsWith('/refreshes') || path.includes('2026-10-11-1') ? {...REFRESH, refresh_id: 'pahma-2026-10-11-1', state: 'checking', actions: []} : {}
       return new Response(JSON.stringify(body), {status: 200})
     }))
-    const {wrapper, router} = await at('/pahma/upload', Upload)
+    const {wrapper, router} = await at('/pahma/start-refresh', StartRefresh)
     const file = new File(['blob_csid\tmedia_csid\tkind\taccess\n'], 'servable-list.pahma.2026-10-09.tsv')
     const vm = wrapper.vm as unknown as {$: {setupState: {file: File | null, refreshDate: string, confirmed: boolean, reason: string}}}
     expect(vm.$.setupState.refreshDate).toBe(pacificDate()) // today, to start (D75)
@@ -117,13 +117,13 @@ describe('uploading a servable list', () => {
     await flushPromises()
     await wrapper.find('form').trigger('submit')
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/pahma/refreshes/pahma-2026-10-11-1'))
-    const put = calls.find(c => c.method === 'PUT')
-    expect(put?.headers['X-Live-Core-Confirmed']).toBe('yes')
-    expect(put?.headers['X-Refresh-Date']).toBe('2026-10-09')
-    expect(put?.headers['X-File-Name']).toBe('servable-list.pahma.2026-10-09.tsv')
-    expect(put?.headers['X-Reason']).toBe('ETL%20log%20checked%3A%20caf%C3%A9')
-    expect(put?.headers['X-Serena-Admin']).toBe('1')
-    expect(put?.body).toBe(file)
+    const post = calls.find(c => c.method === 'POST')
+    expect(post?.headers['X-Live-Core-Confirmed']).toBe('yes')
+    expect(post?.headers['X-Refresh-Date']).toBe('2026-10-09')
+    expect(post?.headers['X-File-Name']).toBe('servable-list.pahma.2026-10-09.tsv')
+    expect(post?.headers['X-Reason']).toBe('ETL%20log%20checked%3A%20caf%C3%A9')
+    expect(post?.headers['X-Serena-Admin']).toBe('1')
+    expect(post?.body).toBe(file)
     wrapper.unmount()
   })
 })

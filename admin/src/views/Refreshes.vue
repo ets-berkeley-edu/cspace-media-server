@@ -16,7 +16,7 @@
       <tbody>
         <tr v-for="refresh in refreshes" :key="refresh.refresh_id">
           <td><router-link :to="{name: 'refresh', params: {museum, refreshId: refresh.refresh_id}}">{{ refresh.refresh_id }}</router-link></td>
-          <td>{{ refresh.refresh_date }}<span v-if="refresh.uploaded_refresh_date"> (upload of {{ refresh.uploaded_refresh_date }})</span></td>
+          <td>{{ refresh.refresh_date }}<span v-if="refresh.admin_refresh_date"> (admin refresh, list for {{ refresh.admin_refresh_date }})</span></td>
           <td>{{ stateOf(refresh.state) }}</td>
           <td>{{ refresh.rows ?? '' }}</td>
           <td>{{ when(refresh.updated_at) }}</td>

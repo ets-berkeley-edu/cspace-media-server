@@ -35,7 +35,7 @@
         <v-list-item :to="{name: 'overview', params: {museum: current.museum}}" title="Overview" exact />
         <v-list-item id="nav-refreshes" :to="{name: 'refreshes', params: {museum: current.museum}}" title="Refreshes" />
         <v-list-item id="nav-alerts" :to="{name: 'alerts', params: {museum: current.museum}}" title="Alerts" />
-        <v-list-item id="nav-upload" :to="{name: 'upload', params: {museum: current.museum}}" title="Upload a servable list" />
+        <v-list-item id="nav-start-refresh" :to="{name: 'start-refresh', params: {museum: current.museum}}" title="Start a refresh" />
         <v-list-item id="nav-audit" :to="{name: 'audit', params: {museum: current.museum}}" title="Audit log" />
         <v-list-item id="nav-api" :to="{name: 'api', params: {museum: current.museum}}" title="API documentation" />
       </v-list>

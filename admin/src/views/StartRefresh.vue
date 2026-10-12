@@ -1,22 +1,22 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-4">Upload a servable list</h1>
+    <h1 class="text-h5 mb-4">Start a refresh</h1>
     <p class="mb-4">
-      For a failed refresh: when the servable list didn't reach Serena, or needs replacing. Run the servable list script
-      on the ETL server, then upload the list it makes. Serena closes the museum's open refresh, if there is one, starts
-      a new one, checks the list as it checks every servable list and, if it passes, runs the servability update. If it
-      fails, nothing changes and the refresh shows why.
+      An admin refresh, for a failed refresh: when the servable list didn't reach Serena, or needs replacing. Run the
+      servable list script on the ETL server, then choose the list it makes. Serena closes the museum's open refresh, if
+      there is one, starts a new refresh with the list, checks it as it checks every servable list and, if it passes,
+      runs the servability update. If it fails, nothing changes and the refresh shows why.
     </p>
     <v-alert
       v-if="error"
-      id="upload-error"
+      id="start-refresh-error"
       type="error"
       density="compact"
       class="mb-4"
     >
       {{ error }}
     </v-alert>
-    <v-form id="upload-form" style="max-width: 640px" @submit.prevent="upload">
+    <v-form id="start-refresh-form" style="max-width: 640px" @submit.prevent="start">
       <v-file-input
         id="file"
         v-model="file"
@@ -41,18 +41,18 @@
         class="mb-2"
       />
       <v-checkbox
-        id="confirm-loaded"
+        id="confirm-live-core"
         v-model="confirmed"
         label="This servable list was made from the live public core: I ran the servable list script on the ETL server."
       />
       <v-btn
-        id="upload-button"
+        id="start-refresh-button"
         type="submit"
         color="primary"
         :disabled="!ready"
         :loading="busy"
       >
-        Upload and update Serena
+        Start the refresh
       </v-btn>
     </v-form>
   </v-container>
@@ -78,17 +78,17 @@ const chosen = computed(() => (Array.isArray(file.value) ? file.value[0] : file.
 const ready = computed(() => !!chosen.value && confirmed.value && /^\d{4}-\d{2}-\d{2}$/.test(refreshDate.value) &&
   refreshDate.value <= today && reason.value.trim().length > 0 && reason.value.length <= 500) // D62
 
-async function upload() {
+async function start() {
   if (!chosen.value) {
     return
   }
   busy.value = true
   error.value = ''
   try {
-    const refresh = await api.upload(String(route.params.museum), chosen.value, refreshDate.value, reason.value.trim())
+    const refresh = await api.startRefresh(String(route.params.museum), chosen.value, refreshDate.value, reason.value.trim())
     await router.push({name: 'refresh', params: {museum: String(route.params.museum), refreshId: refresh.refresh_id}})
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'The upload didn\'t work.'
+    error.value = e instanceof ApiError ? e.message : 'The refresh didn\'t start.'
   } finally {
     busy.value = false
   }

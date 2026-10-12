@@ -220,75 +220,75 @@ def test_a_new_list_drops_an_override(store: Store, clock: Any) -> None:
     assert refresh.override is None and stored is not None and stored.override is None
 
 
-# --- an admin upload (D66, D75, D82)
+# --- an admin refresh (D66, D75, D82)
 
-def admin_upload(admin: TestClient, body: bytes, confirmed: bool = True,
+def admin_refresh(admin: TestClient, body: bytes, confirmed: bool = True,
                  reason: str = "ETL%20log%20checked%3A%20caf%C3%A9") -> Any:
-    return admin.put("/admin/v1/museums/pahma/uploads", content=body, headers={
+    return admin.post("/admin/v1/museums/pahma/refreshes", content=body, headers={
         **CHANGES, "X-Live-Core-Confirmed": "yes" if confirmed else "",
         "X-File-Name": "servable-list.pahma.2026-10-09.tsv", "X-Refresh-Date": "2026-10-09", "X-Reason": reason})
 
 
 @pytest.mark.parametrize("compress", [False, True])
-def test_upload_a_days_file(admin: TestClient, etl: TestClient, worker: Worker, store: Store,
+def test_an_admin_refresh(admin: TestClient, etl: TestClient, worker: Worker, store: Store,
                               compress: bool) -> None:
     body = file_of(BLOBS)
-    response = admin_upload(admin, gzip.compress(body) if compress else body)
-    assert response.status_code == 200, response.text
+    response = admin_refresh(admin, gzip.compress(body) if compress else body)
+    assert response.status_code == 201, response.text
     refresh = response.json()
     assert refresh["state"] == "checking" and refresh["upload"]["rows"] == len(BLOBS)
-    assert refresh["uploaded_refresh_date"] == "2026-10-09"  # the refresh's own refresh date is today
-    assert any("servable list uploaded by an admin: servable-list.pahma.2026-10-09.tsv, for the refresh date "
+    assert refresh["admin_refresh_date"] == "2026-10-09"  # the refresh's own refresh date is today
+    assert any("admin refresh with the servable list servable-list.pahma.2026-10-09.tsv, for the refresh date "
                "2026-10-09: ETL log checked: café" in r for r in refresh["reasons"])
     assert worker.tick() == 1  # the servable list check; it passes, and the servability update follows at once
     assert refresh_of(admin, refresh["refresh_id"])["state"] == "updated"
     rows = store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"]
     assert len(rows) == len(BLOBS)
     entry = audit(admin)[0]
-    assert entry["action"] == "file_upload" and entry["details"]["rows"] == len(BLOBS)
+    assert entry["action"] == "admin_refresh" and entry["details"]["rows"] == len(BLOBS)
 
 
-def test_an_uploaded_file_that_fails_check_changes_nothing(admin: TestClient, worker: Worker,
+def test_an_admin_refresh_whose_check_fails_changes_nothing(admin: TestClient, worker: Worker,
                                                                store: Store) -> None:
-    refresh = admin_upload(admin, b"not\ta\tservable\tlist\n").json()
+    refresh = admin_refresh(admin, b"not\ta\tservable\tlist\n").json()
     worker.tick()
     assert refresh_of(admin, refresh["refresh_id"])["state"] == "check_failed"
     assert store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"] == []
 
 
-def test_upload_refused(admin: TestClient, etl: TestClient) -> None:
-    assert admin_upload(admin, file_of(BLOBS), confirmed=False).status_code == 422
-    assert admin_upload(admin, file_of(BLOBS), reason="").status_code == 422
+def test_an_admin_refresh_refused(admin: TestClient, etl: TestClient) -> None:
+    assert admin_refresh(admin, file_of(BLOBS), confirmed=False).status_code == 422
+    assert admin_refresh(admin, file_of(BLOBS), reason="").status_code == 422
     refresh = start(etl)
     upload(etl, refresh, file_of(BLOBS))
     etl.post(refresh["links"]["check"], headers=auth())  # the worker is on it now
-    assert admin_upload(admin, file_of(BLOBS)).status_code == 409
+    assert admin_refresh(admin, file_of(BLOBS)).status_code == 409
 
 
-def test_upload_closes_todays_open_refresh(admin: TestClient, etl: TestClient, worker: Worker) -> None:
-    """D82: the ETL job reached Serena, then failed; the admin upload repairs it with a refresh of its own."""
+def test_an_admin_refresh_closes_todays_open_refresh(admin: TestClient, etl: TestClient, worker: Worker) -> None:
+    """D82: the ETL job reached Serena, then failed; an admin refresh repairs it."""
     stuck = start(etl)
     upload(etl, stuck, file_of(BLOBS))  # received, never checked
-    response = admin_upload(admin, file_of(BLOBS))
-    assert response.status_code == 200, response.text
+    response = admin_refresh(admin, file_of(BLOBS))
+    assert response.status_code == 201, response.text
     new = response.json()
     assert new["refresh_id"] == stuck["refresh_id"][:-1] + "2"  # the same refresh date, the second refresh
     old = refresh_of(admin, stuck["refresh_id"])
-    assert old["state"] == "abandoned" and "closed by an admin upload of a servable list" in old["reasons"]
+    assert old["state"] == "abandoned" and "closed by an admin refresh" in old["reasons"]
     assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "updated"
 
 
-def test_upload_after_an_earlier_day_was_left_open(admin: TestClient, etl: TestClient, worker: Worker,
+def test_an_admin_refresh_after_an_earlier_day_was_left_open(admin: TestClient, etl: TestClient, worker: Worker,
                                                      clock: Any) -> None:
-    """Yesterday's servable list check failed (not on the threshold) and today no refresh started: the upload still
-    works."""
+    """Yesterday's servable list check failed (not on the threshold) and today no refresh started: an admin refresh
+    still works."""
     updated_refresh(etl, worker, BLOBS)
     clock.now += timedelta(days=1)
     failed = checked(etl, worker, {**BLOBS, "not a CSID!": "1a2b3c4d-0000-4000-8000-000000000001"})
     assert failed["state"] == "check_failed" and refresh_of(admin, failed["refresh_id"])["actions"] == []
     clock.now += timedelta(days=1)
-    response = admin_upload(admin, file_of(BLOBS))
-    assert response.status_code == 200, response.text
+    response = admin_refresh(admin, file_of(BLOBS))
+    assert response.status_code == 201, response.text
     assert refresh_of(admin, failed["refresh_id"])["state"] == "abandoned"
 
 

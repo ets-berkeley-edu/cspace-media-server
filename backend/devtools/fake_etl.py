@@ -4,7 +4,7 @@ sequence, The ETL API; Jira CSW-1027). Local development only.
     python -m devtools.fake_etl --museum pahma           # a whole daily refresh: the Solr refresh's stand-in, the
                                                          # servable list, then start, upload, check and poll
     python -m devtools.fake_etl --museum pahma --failed  # a failed refresh: Serena is never called, as when it can't
-                                                         # be reached; the repair is an admin upload (D85)
+                                                         # be reached; the repair is an admin refresh (D85)
 
 It adds synthetic Media records to the CollectionSpace simulator first (the stand-in for the Solr refresh), and lists
 them in the servable list (the stand-in for the servable list script), so each listed file can then be fetched on a
@@ -166,8 +166,8 @@ def main() -> None:
         return
     if summary["failed"]:
         print(f"Failed refresh: {args.museum}'s records were added and its servable list made, but Serena wasn't "
-              "called.\n  Repair it with an admin upload: ./serena etl " + args.museum + f" --rows {args.rows} "
-              "--file-only > <file>, then \"Upload a servable list\" in the admin app.")
+              "called.\n  Repair it with an admin refresh: ./serena etl " + args.museum + f" --rows {args.rows} "
+              "--file-only > <file>, then \"Start a refresh\" in the admin app.")
         return
     print(f"{summary['refresh_id']}: {summary['state']}")
     for problem in (summary.get("check") or {}).get("errors", []):

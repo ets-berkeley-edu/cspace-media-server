@@ -233,16 +233,16 @@ acknowledged.
     its check's warnings saying the delta threshold was skipped.
 - [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"
   page with your name and the time.
-- [ ] In a terminal: `./serena etl pahma`. Expect `check_failed` again (20 rows after 3). Leave it: the admin upload
+- [ ] In a terminal: `./serena etl pahma`. Expect `check_failed` again (20 rows after 3). Leave it: the admin refresh
   below repairs it.
 - [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv` (the stand-in for running
-  the servable list script on the ETL server). In the app, open "Upload a servable list". Choose the file (in the Mac
+  the servable list script on the ETL server). In the app, open "Start a refresh". Choose the file (in the Mac
   file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and press Return). The refresh date starts as
   today, with a calendar picker; leave it. Type a reason, tick "This servable list was made from the live public core"
-  and click "Upload and update Serena" (greyed out until all are done). Expect the new refresh's page, "an admin's
-  upload of the servable list for <today>", and, after reloading the page, `Updated`. On "Refreshes", expect the
-  `check_failed` refresh now `Abandoned`, its reasons naming the admin upload.
-- [ ] Open "Audit log". Expect the override, each acknowledgement and the upload, each with `admin`.
+  and click "Start the refresh" (greyed out until all are done). Expect the new refresh's page, "an admin refresh, with
+  the servable list for <today>", and, after reloading the page, `Updated`. On "Refreshes", expect the `check_failed`
+  refresh now `Abandoned`, its reasons naming the admin refresh.
+- [ ] Open "Audit log". Expect the override, each acknowledgement and the admin refresh, each with `admin`.
 - [ ] In a terminal: `./serena logs --no-follow web | grep threshold_overridden`. Expect the override's alert, logged
   once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
   `./serena logs --no-follow worker | grep '"threshold_overridden": true'`: expect one line, the

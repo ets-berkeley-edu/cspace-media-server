@@ -3,8 +3,8 @@
     <h1 class="text-h5 mb-1">{{ refresh?.refresh_id }}</h1>
     <p v-if="refresh" class="mb-4">
       <span id="refresh-state" class="font-weight-bold">{{ stateOf(refresh.state) }}</span>
-      · refresh date {{ refresh.refresh_date }}<span v-if="refresh.uploaded_refresh_date"> · an admin's upload of the servable list
-        for {{ refresh.uploaded_refresh_date }}</span> · last change {{ when(refresh.updated_at) }}
+      · refresh date {{ refresh.refresh_date }}<span v-if="refresh.admin_refresh_date"> · an admin refresh, with the servable list
+        for {{ refresh.admin_refresh_date }}</span> · last change {{ when(refresh.updated_at) }}
       <span v-if="!refresh.newest"> · a later refresh has started</span>
     </p>
     <v-alert

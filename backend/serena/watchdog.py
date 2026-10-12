@@ -61,7 +61,7 @@ class Watchdog:
             found.append(Alert(tenant, today, Kind.MISSED_DEADLINE, today,
                                f"By {deadline_text} Pacific, today's refresh isn't updated or abandoned ({state}). "
                                "If the ETL job refreshed the public core without Serena (a failed refresh), bring "
-                               "Serena up to date in the admin app: an admin upload, a retry or an override."))
+                               "Serena up to date in the admin app: an admin refresh, a retry or an override."))
 
         updated = self.refreshes.latest_updated(tenant)
         if updated is not None:

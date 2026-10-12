@@ -26,7 +26,7 @@ class Action(StrEnum):
     SETTINGS_CHANGE = "settings_change"
     UPDATE_RETRY = "update_retry"
     THRESHOLD_OVERRIDE = "threshold_override"
-    FILE_UPLOAD = "file_upload"
+    ADMIN_REFRESH = "admin_refresh"
     RESTRICTED_IMAGE_UPLOAD = "restricted_image_upload"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
 

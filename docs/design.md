@@ -497,7 +497,7 @@ The words this document, the code, the ETL API and the admin app use for the dai
 | Failed refresh | A day when the public core was refreshed but Serena wasn't updated: its servable list didn't arrive, failed the check, or its servability update failed. An admin repairs it |
 | Retry the servability update | An admin action on a refresh whose servability update failed |
 | Override the delta threshold | An admin action on a refresh that failed only on the delta threshold: its servable list is checked again without it |
-| Admin upload | An admin's upload of a servable list in the admin app, made with the servable list script, to repair a failed refresh |
+| Admin refresh | A refresh an admin starts in the admin app with a servable list made by the servable list script, to repair a failed refresh (`POST /admin/v1/museums/{tenant}/refreshes`) |
 | Rerun the ETL job | The ETL team runs a museum's ETL job again, the same day |
 
 Retired words: run (now refresh), night (refresh date), nightly (daily), preflight (servable list check), apply
@@ -513,7 +513,7 @@ where the table is read as a list, a sort key:
 | --- | --- | --- | --- |
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
 | Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
-| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin upload's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
+| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its banner and alerts page |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
@@ -582,9 +582,9 @@ isn't `updated` in time (see Watchdog and alerts). An admin brings Serena up to 
 - The check failed only on the delta threshold: override the delta threshold, after making sure the change is
   expected (for example a museum republished many images).
 - The check failed otherwise (a malformed list): once the cause is fixed, the ETL team reruns the ETL job, or an admin
-  runs the servable list script again and makes an admin upload.
+  runs the servable list script again and starts an admin refresh.
 - The servability update failed: retry the servability update once whatever stopped it is fixed.
-- The servable list never reached Serena: run the servable list script on the ETL server, then make an admin upload.
+- The servable list never reached Serena: run the servable list script on the ETL server, then start an admin refresh.
 - Or wait: the next day's refresh catches up.
 
 So on a failed refresh the public core and Serena can differ for up to a day. Version 1 accepts that; changing both or
@@ -615,7 +615,7 @@ the AWS libraries' own logging stays at warnings, since at debug it would log a 
 | `GET` | `/etl/v1/museums/{tenant}` | The latest updated refresh (`404` if there is none yet) |
 
 Refresh states: `started` → `received` → `checking` → `check_failed`, or `updating` → `updated` or `update_failed`.
-An open refresh becomes `abandoned` when a later refresh date's refresh or an admin upload closes it. Rules:
+An open refresh becomes `abandoned` when a later refresh date's refresh or an admin refresh closes it. Rules:
 
 - A call out of order gets `409`. Repeating a call is safe: starting a refresh returns the open refresh; asking for a servable list check
   that is queued, running or done returns the refresh as it is (`202` while queued or running, `200` once done);
@@ -624,7 +624,7 @@ An open refresh becomes `abandoned` when a later refresh date's refresh or an ad
   must then be checked again; asking for a check of a `check_failed` refresh without a corrected list returns it as
   it is.
 - A refresh's refresh date is the Pacific date when it starts. A new refresh for the same refresh date is allowed once the
-  previous one is closed (`updated` or `abandoned`). Starting a later refresh date's refresh, or an admin upload,
+  previous one is closed (`updated` or `abandoned`). Starting a later refresh date's refresh, or an admin refresh,
   closes an earlier open refresh as `abandoned`, except one the worker is checking or updating, which is never abandoned.
 - If the open refresh is one the worker is checking or updating, a later refresh date's refresh isn't started: `409`, and the
   ETL tries again until its step timeout, then carries on without Serena (decided October 9, 2026). So a museum has
@@ -704,7 +704,7 @@ table, so a restart never loses a step.
 Decided October 11, 2026 (settling F5), and revised October 12, 2026 (D73 to D75, D82, D83). Any admin of the museum
 may take these actions; each needs a typed reason (up to 500 characters, no personal data), is recorded in the
 refresh's reasons and the audit log, and is offered only on the museum's newest refresh, in the state it applies to
-(an admin upload starts a refresh of its own):
+(an admin refresh starts a refresh of its own):
 
 - **Retry the servability update.** On an `update_failed` refresh: it goes back to `updating` and the worker does the
   servability update again.
@@ -713,12 +713,13 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   other check still applies); on a pass it does the servability update. The refresh's reasons and its check's warnings
   say so. Nothing is left armed, so there is nothing to expire or cancel, and an override only ever applies to a
   servable list an admin has looked at. Each override raises an alert, so the team is emailed every time.
-- **Admin upload.** When a servable list didn't reach Serena, or needs replacing: the admin runs the servable list
-  script on the ETL server, then uploads the list (plain or gzip, under the same size limit as the ETL's uploads),
-  gives the refresh date it is for (today, to start), and confirms with a checkbox that the list was made from the
-  live public core (D75). Serena closes the museum's open refresh, if there is one, as `abandoned`, its reasons naming
-  the admin upload (D82); starts a new refresh; checks the list and, if it passes, does the servability update; if it
-  fails, nothing changes and the refresh shows why. The refresh's refresh date is today, as for every refresh; the date
+- **Start an admin refresh** (`POST /admin/v1/museums/{tenant}/refreshes`, the app's "Start a refresh" page). When a
+  servable list didn't reach Serena, or needs replacing: the admin runs the servable list script on the ETL server,
+  then sends the list (plain or gzip, under the same size limit as the ETL's uploads), gives the refresh date it is
+  for (today, to start), and confirms with a checkbox that the list was made from the live public core (D75). Serena
+  closes the museum's open refresh, if there is one, as `abandoned`, its reasons naming the admin refresh (D82);
+  starts a new refresh with the list (`201`); checks it and, if it passes, does the servability update; if it fails,
+  nothing changes and the refresh shows why. Audited as `admin_refresh`. The refresh's refresh date is today, as for every refresh; the date
   the admin gives is recorded with it and shown beside it. Refused while the worker is checking or updating a refresh.
 
 ### Watchdog and alerts
@@ -728,7 +729,7 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 - a museum's refresh for today hasn't reached `updated` or `abandoned` by the museum's deadline (08:00 to start; admins
   set it in the admin app), including when no refresh started at all. This is how Serena notices a failed refresh;
 - a museum's newest refresh is `check_failed`, `update_failed` or `abandoned` (an abandoned refresh's reasons say whether
-  a later refresh date's refresh or an admin upload closed it);
+  a later refresh date's refresh or an admin refresh closed it);
 - Serena hasn't had a servability update for a museum in 24 hours. Only a museum that has had one can be late: before
   its first servability update there's nothing to compare with.
 
@@ -900,7 +901,7 @@ reachable only from campus networks.
     description generated from the code (decided October 10, 2026);
   - an audit log of every admin action: sign-in, sign-out, signing everyone out, takedown, unlock, a settings change
     (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, an
-    admin upload of a servable list and the restricted-image upload, each
+    admin refresh and the restricted-image upload, each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
 - **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
   objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October

@@ -95,7 +95,7 @@ def test_a_whole_day_then_a_file_is_fetched_and_served(stack: Any) -> None:
 
 def test_a_failed_refresh_never_calls_serena(stack: Any) -> None:
     """--failed (D85): the simulator's records and the servable list are made, but Serena isn't called, as when it
-    can't be reached; the repair is an admin upload."""
+    can't be reached; the repair is an admin refresh."""
     serena, cspace, worker, token = stack
     summary = fake_etl.daily_refresh(serena, cspace, "cinefiles", token("cinefiles"), count=6, failed=True, poll=0,
                                      wait=lambda seconds: worker.tick())

@@ -59,9 +59,9 @@ def summary(refresh: Refresh) -> dict[str, Any]:
     return {"refresh_id": refresh.refresh_id, "refresh_date": refresh.refresh_date, "state": refresh.state.value,
             "created_at": refresh.created_at, "updated_at": refresh.updated_at,
             "rows": refresh.upload.rows if refresh.upload else None, "reasons": refresh.reasons,
-            # An admin upload: the refresh date the servable list is for, which may be earlier than the refresh's
+            # An admin refresh: the refresh date its servable list is for, which may be earlier than the refresh's
             # own (D66, D75).
-            "uploaded_refresh_date": (refresh.admin_upload or {}).get("refresh_date")}
+            "admin_refresh_date": (refresh.admin_refresh or {}).get("refresh_date")}
 
 
 def detail(refresh: Refresh, newest: bool) -> dict[str, Any]:
@@ -169,16 +169,16 @@ def create_router() -> APIRouter:
                                        {"reason": reason, "delta_percent": delta})
         return detail(refresh, True)
 
-    @router.put("/uploads", dependencies=[Depends(changes)])
-    async def upload(request: Request, session: SignedIn, r: Refreshes_,
+    @router.post("/refreshes", status_code=201, dependencies=[Depends(changes)])
+    async def start_admin_refresh(request: Request, session: SignedIn, r: Refreshes_,
                      x_live_core_confirmed: Annotated[str, Header()] = "",
                      x_file_name: Annotated[str, Header(max_length=600)] = "",
                      x_refresh_date: Annotated[str, Header(max_length=10)] = "",
                      x_reason: Annotated[str, Header(max_length=1600)] = "") -> dict[str, Any]:
-        """D66, D75, D82: an admin uploads a servable list made with the servable list script (plain or gzip) and
-        confirms it was made from the live public core. Serena closes the museum's open refresh, if there is one, as
-        abandoned, starts a refresh, checks the servable list, and on a pass does the servability update. Refused
-        while the worker is checking or updating a refresh."""
+        """An admin refresh (D66, D75, D82): the body is a servable list made with the servable list script (plain or
+        gzip), and the admin confirms it was made from the live public core. Serena closes the museum's open refresh,
+        if there is one, as abandoned, starts a refresh with the list, checks it, and on a pass does the servability
+        update. Refused while the worker is checking or updating a refresh."""
         admin = services(request)
         if x_live_core_confirmed != "yes":
             raise HTTPException(422, "Confirm that the servable list was made from the live public core.")
@@ -209,7 +209,7 @@ def create_router() -> APIRouter:
         try:
             try:
                 refresh, _ = await asyncio.to_thread(r.refreshes.start, session.tenant,
-                                                     "closed by an admin upload of a servable list")
+                                                     "closed by an admin refresh")
             except Busy as busy:
                 raise HTTPException(409, busy.detail) from None
             except OutOfOrder as error:
@@ -217,11 +217,11 @@ def create_router() -> APIRouter:
             key = f"servable-list/{refresh.refresh_id}/{refresh.file_name}.gz"
             await asyncio.to_thread(uploads.store, r.s3, bucket, key, received)
             name = FILE_NAME.sub("", os.path.basename(unquote(x_file_name)))[:120] or "the servable list"
-            note = (f"servable list uploaded by an admin: {name}"
+            note = (f"admin refresh with the servable list {name}"
                     + (f", for the refresh date {refresh_date}" if refresh_date else "") + f": {reason}")
             try:
                 refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note,
-                                                 results={"admin_upload": {"refresh_date": refresh_date or None}},
+                                                 results={"admin_refresh": {"refresh_date": refresh_date or None}},
                                                  upload=Upload(received.sha256, received.rows, received.size, key,
                                                                r.refreshes.now()))
                 refresh = r.refreshes.transition(refresh, State.CHECKING)
@@ -229,10 +229,10 @@ def create_router() -> APIRouter:
                 raise HTTPException(409, error.detail) from None
         finally:
             os.unlink(received.path)
-        admin.audit.record(session.tenant, session.user, Action.FILE_UPLOAD, refresh.refresh_id,
+        admin.audit.record(session.tenant, session.user, Action.ADMIN_REFRESH, refresh.refresh_id,
                            {"file_name": name, "refresh_date": refresh_date, "rows": received.rows,
                             "sha256": received.sha256, "reason": reason})
-        log.info("servable list uploaded by an admin",
+        log.info("admin refresh started",
                  extra={"museum": session.tenant, "refresh_id": refresh.refresh_id, "rows": received.rows})
         return detail(refresh, True)
 
