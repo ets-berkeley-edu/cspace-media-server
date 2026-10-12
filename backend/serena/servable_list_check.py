@@ -1,4 +1,5 @@
-"""The preflight: checks a night's servable list without applying it (design: Preflight and apply).
+"""The servable list check: checks a refresh's servable list without changing anything (design: Servable list check
+and servability update).
 
 Fails on any malformed line, a value outside the rules, a Blob listed twice, or more change than the museum's
 threshold allows; warns on a missing restricted-image Blob and on a Media CSID listed for several Blobs. The result
@@ -13,7 +14,7 @@ from .csid import is_csid
 from .museum import Museum
 from .servable_list import ACCESS, HEADER, KINDS, Row, lines
 
-MAX_PROBLEMS = 20  # problems listed in the run; all are counted
+MAX_PROBLEMS = 20  # problems listed in the refresh; all are counted
 
 
 @dataclass
@@ -30,9 +31,9 @@ class Result:
     added: int = 0
     removed: int = 0
     changed: int = 0
-    previous_rows: int | None = None  # None: the museum's first load
+    previous_rows: int | None = None  # None: the museum's first servability update
     threshold_percent: float = 0.0
-    change_percent: float | None = None
+    delta_percent: float | None = None
     error_count: int = 0
     errors: list[Problem] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -57,9 +58,10 @@ class _Problems:
 
 def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, threshold_percent: float,
           override: bool = False) -> Result:
-    """`new` is the uploaded file (gzip); `previous` the rows of the last applied file, None for a first load.
-    `override`: an admin overrode the threshold for this run (decided October 10, 2026, D64); the change is still
-    counted and shown, but doesn't fail the preflight."""
+    """`new` is the uploaded servable list (gzip); `previous` the rows of the servable list of the last servability
+    update, None for a first servability update.
+    `override`: an admin overrode the threshold for this refresh (decided October 10, 2026, D64); the change is still
+    counted and shown, but doesn't fail the servable list check."""
     problems = _Problems()
     rows: dict[str, Row] = {}
     seen_header = False
@@ -107,24 +109,25 @@ def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, thres
     if shared:
         result.warnings.append(f"{shared} Media CSID{'s are' if shared > 1 else ' is'} listed for several Blobs")
 
-    if not previous:  # no applied file yet, or an empty one: nothing to compare with (decided October 9, 2026, D36)
-        result.warnings.append("first load: the change threshold doesn't apply")
+    # No updated servable list yet, or an empty one: nothing to compare with (decided October 9, 2026, D36).
+    if not previous:
+        result.warnings.append("first servability update: the delta threshold doesn't apply")
     else:
         result.previous_rows = len(previous)
         result.added = sum(1 for blob in rows if blob not in previous)
         result.removed = sum(1 for blob in previous if blob not in rows)
         result.changed = sum(1 for blob, row in rows.items() if blob in previous and previous[blob] != row)
         changes = result.added + result.removed + result.changed
-        # A share of what Serena serves now: the last applied file's rows (decided October 9, 2026, D37).
-        result.change_percent = round(100 * changes / len(previous), 2)
+        # A percentage of what Serena serves now: the last updated servable list's rows (decided October 9, 2026, D37).
+        result.delta_percent = round(100 * changes / len(previous), 2)
         if override:
-            result.warnings.append(f"the change threshold was overridden by an admin for this run ("
-                                   f"{result.change_percent}% of the rows change; the threshold is "
+            result.warnings.append(f"the delta threshold was overridden by an admin for this refresh ("
+                                   f"{result.delta_percent}% of the rows change; the threshold is "
                                    f"{threshold_percent}%)")
-        elif result.change_percent > threshold_percent:
+        elif result.delta_percent > threshold_percent:
             problems.count += 1
             result.error_count = problems.count
-            result.errors.append(Problem(0, "file", f"{result.change_percent}% of the rows would change; the "
+            result.errors.append(Problem(0, "file", f"{result.delta_percent}% of the rows would change; the "
                                                     f"threshold is {threshold_percent}%"))
     result.passed = result.error_count == 0
     return result

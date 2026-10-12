@@ -6,9 +6,9 @@
 #   ./serena status                what's running
 #   ./serena logs [service]        follow the logs (services: web, worker, admin, fakecspace, moto, seed)
 #   ./serena logs --no-follow [service]   print them and stop, for grep
-#   ./serena etl <museum> [opts]   run a night through the ETL API with the fake ETL (--partial, --rows N, --json)
-#                                  (--file-only prints the night's file instead, for the admin app's upload page)
-#   ./serena smoke                 a whole night for PAHMA, then fetch and serve one of its images (what CI runs)
+#   ./serena etl <museum> [opts]   a daily refresh through the ETL API with the fake ETL (--failed, --rows N, --json)
+#                                  (--file-only prints the servable list instead, for the admin app's upload page)
+#   ./serena smoke                 a whole daily refresh for PAHMA, then fetch and serve one of its images (what CI runs)
 #   ./serena ui [pytest options]   the admin app's Selenium tests (serenade/), in headless Chrome; --headed shows it
 #   ./serena urls                  the addresses
 #
@@ -33,7 +33,7 @@ case "$cmd" in
     # The worker starts once the app is healthy (it creates the tables); give it a moment.
     for _ in $(seq 1 30); do [ -n "$(compose ps -q --status running worker)" ] && break; sleep 1; done
     echo "Serena (Local · simulator) is up: http://localhost:$PORT/health"
-    echo "Run a night: ./serena etl pahma" ;;
+    echo "A daily refresh: ./serena etl pahma" ;;
   down)
     compose down ;;
   status)
@@ -41,16 +41,16 @@ case "$cmd" in
   logs)
     if [ "${1:-}" = --no-follow ]; then shift; compose logs --no-log-prefix "$@"; else compose logs -f --tail 100 "$@"; fi ;;
   etl)
-    museum="${1:?Usage: ./serena etl <museum> [--partial] [--rows N] [--json] [--file-only]}"; shift
+    museum="${1:?Usage: ./serena etl <museum> [--failed] [--rows N] [--json] [--file-only]}"; shift
     compose exec -T worker python -m devtools.fake_etl --museum "$museum" --public "http://localhost:$PORT" "$@" ;;
   smoke)
-    # The default --rows, like ./serena etl pahma, so a night run before this one doesn't trip preflight's threshold.
+    # The default --rows, like ./serena etl pahma, so a refresh before this one doesn't trip the servable list check's delta threshold.
     summary="$(compose exec -T worker python -m devtools.fake_etl --museum pahma --json)"
     state="$(printf '%s' "$summary" | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])')"
-    if [ "$state" != applied ]; then
-      echo "The night ended $state, not applied: $summary" >&2
+    if [ "$state" != updated ]; then
+      echo "The refresh ended $state, not updated: $summary" >&2
       case "$summary" in
-        *threshold*) echo "PAHMA's last applied night had a different --rows. Start afresh: ./serena down && ./serena up" >&2 ;;
+        *threshold*) echo "PAHMA's last updated refresh had a different --rows. Start afresh: ./serena down && ./serena up" >&2 ;;
       esac
       exit 1
     fi
@@ -61,7 +61,7 @@ case "$cmd" in
       *) echo "Expected a redirect to the stored image, got: $location" >&2; exit 1 ;;
     esac
     curl -fsS -o /dev/null "$location"
-    echo "Smoke test passed: a night applied, and $path fetched, stored and served." ;;
+    echo "Smoke test passed: a refresh updated, and $path fetched, stored and served." ;;
   ui)
     # Python 3.11 (.python-version), the version serenade/requirements.txt is pinned for.
     py="$(command -v python3.11 || true)"

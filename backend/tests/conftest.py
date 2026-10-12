@@ -52,7 +52,7 @@ def secretsmanager(dynamodb: Any) -> Any:
 
 def add_blob(store: Store, tenant: str, blob: str, media: str | None, kind: str = "image",
              access: str = "public") -> None:
-    """A row of the servability table, as an applied servable list leaves it."""
+    """A row of the servability table, as a servability update leaves it."""
     item: dict[str, Any] = {"pk": {"S": f"{tenant}#{blob}"}, "tenant": {"S": tenant}, "blob_csid": {"S": blob},
                             "kind": {"S": kind}, "access": {"S": access}}
     if media:

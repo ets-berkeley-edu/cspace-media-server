@@ -42,7 +42,7 @@ export interface Problem {
   problem: string
 }
 
-export interface Preflight {
+export interface Check {
   result: string
   rows: number
   added: number
@@ -50,52 +50,52 @@ export interface Preflight {
   changed: number
   previous_rows: number | null
   threshold_percent: number
-  change_percent: number
+  delta_percent: number
   error_count: number
   errors: Problem[]
   warnings: string[]
 }
 
-export type RunAction = 'retry_apply' | 'record_load' | 'override_threshold'
+export type RefreshAction = 'retry_update' | 'record_load' | 'override_threshold'
 
-export interface RunSummary {
-  run_id: string
-  night: string
+export interface RefreshSummary {
+  refresh_id: string
+  refresh_date: string
   state: string
   created_at: string
   updated_at: string
   rows: number | null
   reasons: string[]
-  uploaded_night: string | null // an admin's upload: the night the file is for
+  uploaded_refresh_date: string | null // an admin's upload: the refresh date the servable list is for
 }
 
-export interface Run extends RunSummary {
+export interface Refresh extends RefreshSummary {
   newest: boolean
   file_name: string
   upload: {rows: number, bytes: number, sha256: string, uploaded_at: string} | null
-  preflight: Preflight | null
+  check: Check | null
   solr_load: {outcome: string, rows: number | null, recorded_by_admin?: boolean} | null
-  apply: {deleted: number, written: number, unchanged: number} | null
-  actions: RunAction[]
+  update: {deleted: number, written: number, unchanged: number} | null
+  actions: RefreshAction[]
 }
 
 export interface Override {
   armed_by: string
   armed_at: number
   expires_at: number
-  after_run: string
+  after_refresh: string
   reason: string
 }
 
 export interface Status {
-  newest: Run | null
+  newest: Refresh | null
   override: Override | null
   unacknowledged: number
 }
 
 export interface AlertItem {
   key: string
-  night: string
+  refresh_date: string
   kind: string
   title: string
   subject: string
@@ -145,23 +145,23 @@ export const api = {
   audit: (museum: string) => call<{entries: AuditEntry[]}>('GET', `/museums/${museum}/audit`),
   etlApiUrl: (museum: string) => `${PREFIX}/museums/${museum}/etl-api.json`,
   status: (museum: string) => call<Status>('GET', `/museums/${museum}/status`),
-  runs: (museum: string) => call<{runs: RunSummary[]}>('GET', `/museums/${museum}/runs`),
-  run: (museum: string, runId: string) => call<Run>('GET', `/museums/${museum}/runs/${runId}`),
-  retryApply: (museum: string, runId: string, reason: string) =>
-    call<Run>('POST', `/museums/${museum}/runs/${runId}/retry-apply`, {reason}),
-  recordLoad: (museum: string, runId: string, rows: number | null, reason: string) =>
-    call<Run>('POST', `/museums/${museum}/runs/${runId}/record-load`, {confirmed: true, rows, reason}),
-  overrideThreshold: (museum: string, runId: string, reason: string) =>
-    call<{override: Override}>('POST', `/museums/${museum}/runs/${runId}/override-threshold`, {reason}),
+  refreshes: (museum: string) => call<{refreshes: RefreshSummary[]}>('GET', `/museums/${museum}/refreshes`),
+  refresh: (museum: string, refreshId: string) => call<Refresh>('GET', `/museums/${museum}/refreshes/${refreshId}`),
+  retryUpdate: (museum: string, refreshId: string, reason: string) =>
+    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/retry-update`, {reason}),
+  recordLoad: (museum: string, refreshId: string, rows: number | null, reason: string) =>
+    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/record-load`, {confirmed: true, rows, reason}),
+  overrideThreshold: (museum: string, refreshId: string, reason: string) =>
+    call<{override: Override}>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {reason}),
   cancelOverride: (museum: string) => call<{override: null}>('DELETE', `/museums/${museum}/threshold-override`),
   // The file name and reason are URL-encoded: a header carries only ASCII.
-  upload: (museum: string, file: File, night: string, reason: string) =>
-    call<Run>('PUT', `/museums/${museum}/uploads`, undefined, {
+  upload: (museum: string, file: File, refreshDate: string, reason: string) =>
+    call<Refresh>('PUT', `/museums/${museum}/uploads`, undefined, {
       file,
       headers: {
         'X-Loaded-Confirmed': 'yes',
         'X-File-Name': encodeURIComponent(file.name),
-        'X-Night': night,
+        'X-Refresh-Date': refreshDate,
         'X-Reason': encodeURIComponent(reason)
       }
     }),

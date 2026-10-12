@@ -5,8 +5,8 @@ PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
 It's being built, one pull request at a time. So far it parses the legacy imageserver paths, decides from its records in
-DynamoDB whether each file may be served, and takes each night's servable list through its ETL API: its worker
-preflights and applies it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file
+DynamoDB whether each file may be served, and takes each day's servable list through its ETL API: its worker
+checks it and updates servability from it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file
 from CollectionSpace, checks it and stores it; every file is served through a signed CloudFront link, and restricted
 PDFs only on a portal's signed link. The design is `docs/design.md`.
 
@@ -15,13 +15,13 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 - Serve the images, 3D files and documents that the museums' public portals
   ([Glimmer](https://github.com/cspace-deployment/glimmer)) and other clients link to, at the same addresses the
   legacy imageserver uses, so they keep working unchanged.
-- Serve only what the nightly Solr ETL ([cspace-solr-ucb](https://github.com/cspace-deployment/cspace-solr-ucb))
+- Serve only what the daily Solr ETL ([cspace-solr-ucb](https://github.com/cspace-deployment/cspace-solr-ucb))
   lists as public, unless it has been taken down in Serena. Anything else gets the museum's unavailable image.
-- Take in each night's ETL output through its ETL API, in step with the public Solr core's load.
+- Take in each daily servable list through its ETL API, in step with the public Solr core's refresh.
 - Fetch a file from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
 - Add a watermark for the museums that want one.
-- Give admins a web app to follow nightly runs and alerts, see why a file is or isn't served, take files down and
+- Give admins a web app to follow daily refreshes and alerts, see why a file is or isn't served, take files down and
   change settings.
 
 ## Layout
@@ -44,11 +44,11 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 
 ## Run it locally
 
-With Docker installed: `./serena up`, then `./serena etl pahma` to run a night through the ETL API. The command prints
+With Docker installed: `./serena up`, then `./serena etl pahma` to run a daily refresh through the ETL API. The command prints
 a few files to open in your browser, at http://localhost:8300. The admin app is at http://localhost:5373/admin/:
 sign in as `admin`, password `admin` (the simulator's synthetic account). The stack uses a CollectionSpace simulator and
 moto in place of AWS, so it needs no accounts or keys. `docs/testing-checklist.md` walks through the admin app's
-runs and alerts locally. `./serena help` lists the rest.
+refreshes and alerts locally. `./serena help` lists the rest.
 
 ## License
 

@@ -13,7 +13,7 @@ from serena import museum
 from serena.app import create_app
 from serena.config import Settings
 from serena.museum_settings import MuseumSettings
-from serena.runs import Runs
+from serena.refreshes import Refreshes
 from serena.store import Store
 from serena.worker import Worker, WorkerServices
 
@@ -46,12 +46,12 @@ def test_seed_makes_buckets_and_secrets(s3: Any, secretsmanager: Any) -> None:
     assert len(set(tokens.values())) == len(TENANTS) and all(len(t) >= 32 for t in tokens.values())
     key = json.loads(secretsmanager.get_secret_value(SecretId="serena/local/cinefiles/pdf-signing-key")["SecretString"])
     assert key["current"]["kid"] == "local-cinefiles" and len(key["current"]["key"]) >= 32
-    assert seed(settings, s3, secretsmanager) == {"buckets": [], "secrets": []}  # a second run changes nothing
+    assert seed(settings, s3, secretsmanager) == {"buckets": [], "secrets": []}  # a second seed changes nothing
     again = json.loads(secretsmanager.get_secret_value(SecretId=settings.etl_token_secret_ids["pahma"])["SecretString"])
     assert again["current"] == tokens["pahma"]
 
 
-def test_the_fake_etls_file_is_the_same_every_night() -> None:
+def test_the_fake_etls_file_is_the_same_every_day() -> None:
     assert fake_etl.tsv(fake_etl.rows("pahma", 5)) == fake_etl.tsv(fake_etl.rows("pahma", 5))
     assert fake_etl.rows("pahma", 5) != fake_etl.rows("bampfa", 5)
     kinds = {kind for _, _, kind, _ in fake_etl.rows("cinefiles", 6)}
@@ -64,7 +64,7 @@ def stack(store: Store, s3: Any, secretsmanager: Any, dynamodb: Any) -> Any:
     seed(settings, s3, secretsmanager)
     app = create_app(settings, store, s3=s3, secretsmanager=secretsmanager,
                      cspace_http=lambda tenant: TestClient(fake_app, base_url="http://fakecspace"))
-    services = WorkerServices(settings, museum.load_all(settings.tenants), MuseumSettings(store, 0), Runs(store),
+    services = WorkerServices(settings, museum.load_all(settings.tenants), MuseumSettings(store, 0), Refreshes(store),
                               store, s3)
     worker = Worker(services, sleep=lambda seconds: None)
 
@@ -76,38 +76,40 @@ def stack(store: Store, s3: Any, secretsmanager: Any, dynamodb: Any) -> Any:
     return TestClient(app, follow_redirects=False), TestClient(fake_app), worker, token
 
 
-def test_a_whole_night_then_a_file_is_fetched_and_served(stack: Any) -> None:
+def test_a_whole_day_then_a_file_is_fetched_and_served(stack: Any) -> None:
     serena, cspace, worker, token = stack
-    summary = fake_etl.night(serena, cspace, "pahma", token("pahma"), count=6, poll=0,
+    summary = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), count=6, poll=0,
                              wait=lambda seconds: worker.tick())
-    assert summary["state"] == "applied"
-    assert summary["preflight"]["result"] == "passed"
-    assert summary["apply"]["written"] == 7  # and PAHMA's restricted-image Blob
-    assert not any("restricted-image" in warning for warning in summary["preflight"]["warnings"])
+    assert summary["state"] == "updated"
+    assert summary["check"]["result"] == "passed"
+    assert summary["update"]["written"] == 7  # and PAHMA's restricted-image Blob
+    assert not any("restricted-image" in warning for warning in summary["check"]["warnings"])
     response = serena.get(summary["samples"]["image"])
     assert response.status_code == 302 and response.headers["location"].startswith("/local-cdn/pahma/objects/")
     assert serena.get(response.headers["location"]).status_code == 200
-    # The next night, the same file: no rows change.
-    again = fake_etl.night(serena, cspace, "pahma", token("pahma"), count=6, poll=0, wait=lambda s: worker.tick())
-    assert again["state"] == "applied" and again["preflight"]["added"] == 0
+    # The next day, the same servable list: no rows change.
+    again = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), count=6, poll=0,
+                                   wait=lambda s: worker.tick())
+    assert again["state"] == "updated" and again["check"]["added"] == 0
 
 
-def test_a_partial_night_stops_after_the_preflight(stack: Any) -> None:
+def test_a_failed_refresh_stops_after_the_check(stack: Any) -> None:
     serena, cspace, worker, token = stack
-    summary = fake_etl.night(serena, cspace, "cinefiles", token("cinefiles"), count=6, partial=True, poll=0,
+    summary = fake_etl.daily_refresh(serena, cspace, "cinefiles", token("cinefiles"), count=6, failed=True, poll=0,
                              wait=lambda seconds: worker.tick())
-    assert summary["state"] == "ready" and summary["apply"] is None
+    assert summary["state"] == "ready" and summary["update"] is None
     assert "pdf (restricted)" in summary["samples"]
 
 
-def test_a_night_with_different_rows_trips_the_threshold(stack: Any) -> None:
-    """What happens when ./serena etl pahma --rows 3 follows a 20-row night: preflight refuses, as it should."""
+def test_a_day_with_different_rows_trips_the_threshold(stack: Any) -> None:
+    """What happens when ./serena etl pahma --rows 3 follows a 20-row refresh: the servable list check
+    refuses, as it should."""
     serena, cspace, worker, token = stack
     tick = lambda seconds: worker.tick()  # noqa: E731
-    assert fake_etl.night(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "applied"
-    smaller = fake_etl.night(serena, cspace, "pahma", token("pahma"), count=3, poll=0, wait=tick)
-    assert smaller["state"] == "preflight_failed" and fake_etl.threshold_failed(smaller)
-    assert fake_etl.night(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "applied"
+    assert fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "updated"
+    smaller = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), count=3, poll=0, wait=tick)
+    assert smaller["state"] == "check_failed" and fake_etl.threshold_failed(smaller)
+    assert fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "updated"
 
 
 def test_the_restricted_image_blob_is_listed_without_a_media_csid() -> None:
@@ -117,7 +119,7 @@ def test_the_restricted_image_blob_is_listed_without_a_media_csid() -> None:
 
 
 
-def test_file_only_prints_the_nights_file_for_the_upload_page(monkeypatch: pytest.MonkeyPatch,
+def test_file_only_prints_the_days_file_for_the_upload_page(monkeypatch: pytest.MonkeyPatch,
                                                               capsysbinary: pytest.CaptureFixture[bytes]) -> None:
     class Local:
         secretsmanager_endpoint = "http://moto:5000"

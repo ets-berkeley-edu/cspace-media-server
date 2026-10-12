@@ -14,7 +14,7 @@ dependencies = [
   "pyyaml>=6",
   "defusedxml>=0.7",
   "pyvips[binary]>=3.0",  # checks fetched images decode; later makes watermarked copies (libvips bundled by the wheel)
-  "tzdata>=2024.1",  # America/Los_Angeles for a run's night, also where the OS has no time zone database
+  "tzdata>=2024.1",  # America/Los_Angeles for a refresh's refresh date, also where the OS has no time zone database
 ]
 
 [project.optional-dependencies]

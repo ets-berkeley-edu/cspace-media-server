@@ -40,7 +40,7 @@ def test_starting_settings(key: str) -> None:
     settings = museum.load(key).settings
     assert settings.watchdog_deadline == "08:00"
     assert (settings.etl_poll_interval_seconds, settings.etl_step_timeout_seconds) == (15, 1800)
-    assert settings.change_threshold_percent == 5
+    assert settings.delta_threshold_percent == 5
     assert settings.size_limit_mb == {"image": 500, "card": 500, "3D": 1024, "pdf": 200}
 
 
@@ -58,7 +58,7 @@ def _config(**changes: Any) -> dict[str, Any]:
     config: dict[str, Any] = {
         "key": "test", "name": "Test", "derivatives": ["Thumbnail"], "original": False,
         "settings": {"watchdog_deadline": "08:00", "etl_poll_interval_seconds": 15, "etl_step_timeout_seconds": 1800,
-                     "change_threshold_percent": 5, "size_limit_mb": {"image": 1, "card": 1, "3D": 1, "pdf": 1}},
+                     "delta_threshold_percent": 5, "size_limit_mb": {"image": 1, "card": 1, "3D": 1, "pdf": 1}},
     }
     config.update(changes)
     return config
@@ -85,7 +85,7 @@ def test_bad_configuration_fails(changes: dict[str, Any], message: str) -> None:
     [
         ({"watchdog_deadline": "8am"}, "HH:MM"),
         ({"watchdog_deadline": "24:00"}, "HH:MM"),
-        ({"change_threshold_percent": 0}, "greater than 0"),
+        ({"delta_threshold_percent": 0}, "greater than 0"),
         ({"size_limit_mb": {"image": 1, "card": 1, "3D": 1}}, "pdf"),
         ({"size_limit_mb": {"image": 0, "card": 1, "3D": 1, "pdf": 1}}, "positive"),
     ],

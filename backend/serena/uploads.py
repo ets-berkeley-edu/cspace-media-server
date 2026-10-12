@@ -2,7 +2,7 @@
 
 The body is streamed to the task's disk while it's decompressed (if gzip), hashed and counted, and written there
 gzip-compressed; nothing is held whole in memory. Only then, if it matches its headers, is it stored in S3. Its
-format is checked by the preflight, not here."""
+format is checked by the servable list check, not here."""
 from __future__ import annotations
 
 import gzip

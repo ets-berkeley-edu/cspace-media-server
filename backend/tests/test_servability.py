@@ -84,7 +84,7 @@ def test_takedowns(client: TestClient, store: Store, recorder: MemoryRecorder) -
 
 def test_restricted_image_blob(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     path = derivative("pahma", "Thumbnail", RESTRICTED_IMAGE)
-    assert _reason(client, recorder, path) == Reason.NOT_LISTED  # it must be in the nightly file like any other
+    assert _reason(client, recorder, path) == Reason.NOT_LISTED  # it must be in the daily file like any other
     add_blob(store, "pahma", RESTRICTED_IMAGE, None)  # listed with no Media CSID
     assert _reason(client, recorder, path) == Reason.RESTRICTED_IMAGE_NOT_UPLOADED
 

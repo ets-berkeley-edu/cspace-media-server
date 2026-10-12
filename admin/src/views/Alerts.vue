@@ -1,12 +1,12 @@
 <template>
   <v-container fluid>
     <h1 class="text-h5 mb-4">Alerts</h1>
-    <p class="mb-4">Every alert of the last 30 nights, newest first. Acknowledging one doesn't hide a problem: if it's still there, the watchdog raises it again the next night.</p>
+    <p class="mb-4">Every alert of the last 30 days, newest first. Acknowledging one doesn't hide a problem: if it's still there, the watchdog raises it again the next day.</p>
     <LoadError :message="error" />
     <v-table id="alerts-table" density="compact">
       <thead>
         <tr>
-          <th>Night</th>
+          <th>Refresh date</th>
           <th>Alert</th>
           <th>About</th>
           <th>Acknowledged</th>
@@ -14,7 +14,7 @@
       </thead>
       <tbody>
         <tr v-for="alert in alerts" :key="alert.key">
-          <td>{{ alert.night }}</td>
+          <td>{{ alert.refresh_date }}</td>
           <td>
             <strong>{{ alert.title }}</strong>
             <div class="text-body-2">{{ alert.message }}</div>
@@ -34,7 +34,7 @@
         </tr>
       </tbody>
     </v-table>
-    <p v-if="loaded && !alerts.length" class="mt-4">No alerts in the last 30 nights.</p>
+    <p v-if="loaded && !alerts.length" class="mt-4">No alerts in the last 30 days.</p>
   </v-container>
 </template>
 

@@ -248,7 +248,7 @@ def test_the_api_documentation(client: TestClient) -> None:
     sign_in(client)
     response = client.get("/admin/v1/museums/pahma/etl-api.json")
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
-    assert "/museums/{tenant}/runs" in response.json()["paths"]
+    assert "/museums/{tenant}/refreshes" in response.json()["paths"]
 
 
 # --- the built app
@@ -260,7 +260,7 @@ def test_the_built_app_is_served(store: Store, s3: Any, secretsmanager: Any, tmp
     (dist / "assets" / "app.js").write_text("console.log(1)")
     (tmp_path / "secret.txt").write_text("outside")
     client = TestClient(make_app(store, s3, secretsmanager, admin_dist_dir=str(dist)))
-    page = client.get("/admin/runs")
+    page = client.get("/admin/refreshes")
     assert page.text == "<html>admin app</html>" and "frame-ancestors 'none'" in page.headers["content-security-policy"]
     assert "script-src 'self'" in page.headers["content-security-policy"]
     assert client.get("/admin/assets/app.js").text == "console.log(1)"
@@ -270,4 +270,4 @@ def test_the_built_app_is_served(store: Store, s3: Any, secretsmanager: Any, tmp
 
 
 def test_without_a_built_app_only_the_api(client: TestClient) -> None:
-    assert client.get("/admin/runs").status_code == 404
+    assert client.get("/admin/refreshes").status_code == 404

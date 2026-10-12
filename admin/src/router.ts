@@ -4,8 +4,8 @@ import {refresh, session, signedInTo} from '@/session'
 import Alerts from '@/views/Alerts.vue'
 import AuditLog from '@/views/AuditLog.vue'
 import Overview from '@/views/Overview.vue'
-import RunDetail from '@/views/RunDetail.vue'
-import Runs from '@/views/Runs.vue'
+import RefreshDetail from '@/views/RefreshDetail.vue'
+import Refreshes from '@/views/Refreshes.vue'
 import SignIn from '@/views/SignIn.vue'
 import Upload from '@/views/Upload.vue'
 
@@ -13,8 +13,8 @@ export const routes = [
   {path: '/', name: 'home', component: SignIn, meta: {public: true}},
   {path: '/sign-in', name: 'sign-in', component: SignIn, meta: {public: true}},
   {path: '/:museum', name: 'overview', component: Overview},
-  {path: '/:museum/runs', name: 'runs', component: Runs},
-  {path: '/:museum/runs/:runId', name: 'run', component: RunDetail},
+  {path: '/:museum/refreshes', name: 'refreshes', component: Refreshes},
+  {path: '/:museum/refreshes/:refreshId', name: 'refresh', component: RefreshDetail},
   {path: '/:museum/upload', name: 'upload', component: Upload},
   {path: '/:museum/alerts', name: 'alerts', component: Alerts},
   {path: '/:museum/audit', name: 'audit', component: AuditLog},

@@ -29,7 +29,7 @@ def lines(compressed: IO[bytes]) -> Iterator[tuple[int, bytes]]:
 
 
 def read_rows(compressed: IO[bytes]) -> dict[str, Row]:
-    """The rows of a file that passed the preflight (no checks here)."""
+    """The rows of a servable list that passed its check (no checks here)."""
     rows = {}
     for number, line in lines(compressed):
         if number == 1:
