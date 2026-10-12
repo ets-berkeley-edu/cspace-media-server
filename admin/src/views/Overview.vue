@@ -10,27 +10,6 @@
       </router-link>, {{ stateOf(status.newest.state) }}.
     </p>
     <p v-else-if="status" class="mb-2">No refreshes yet.</p>
-    <v-alert
-      v-if="status?.override"
-      id="override-armed"
-      type="info"
-      density="compact"
-      class="mb-4"
-    >
-      The delta threshold is overridden for the next refresh (armed by {{ status.override.armed_by }} after
-      {{ status.override.after_refresh }}; expires {{ when(new Date(status.override.expires_at * 1000).toISOString()) }}).
-      Reason: {{ status.override.reason }}
-      <template #append>
-        <v-btn
-          id="cancel-override"
-          size="small"
-          variant="outlined"
-          @click="cancelOverride"
-        >
-          Cancel it
-        </v-btn>
-      </template>
-    </v-alert>
     <p class="mb-6">
       Settings, takedowns and the unserved-requests pages arrive in the next pull requests.
     </p>
@@ -66,7 +45,7 @@ import type {Status} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
 import {refresh, signedInTo} from '@/session'
-import {stateOf, when} from '@/words'
+import {stateOf} from '@/words'
 
 const route = useRoute()
 const router = useRouter()
@@ -82,11 +61,6 @@ async function load() {
   } catch (e) {
     error.value = problem(e)
   }
-}
-
-async function cancelOverride() {
-  await api.cancelOverride(String(route.params.museum))
-  await load()
 }
 
 watch(() => route.params.museum, load, {immediate: true})

@@ -43,20 +43,12 @@ def poll(client: TestClient, refresh: dict[str, Any]) -> dict[str, Any]:
     return body
 
 
-def refresh_date(client: TestClient, worker: Worker, blobs: dict[str, str], outcome: str = "loaded") -> dict[str, Any]:
-    """A whole refresh, as the ETL job drives it (design: The daily sequence)."""
+def refresh_date(client: TestClient, worker: Worker, blobs: dict[str, str]) -> dict[str, Any]:
+    """A whole refresh, as the ETL job drives it after its Solr refresh (design: The daily sequence; D80): start,
+    upload, check, poll. A passed check goes straight on to the servability update, in the same worker pass."""
     refresh = start(client)
     upload(client, refresh, file_of(blobs))
     assert client.post(refresh["links"]["check"], headers=auth()).status_code == 202
-    assert worker.tick() == 1
-    refresh = poll(client, refresh)
-    if refresh["state"] != "ready":
-        return refresh
-    response = client.post(refresh["links"]["solr_load"], json={"outcome": outcome, "rows": 1234}, headers=auth())
-    assert response.status_code == 200, response.text
-    if outcome != "loaded":
-        return poll(client, refresh)
-    assert client.post(refresh["links"]["update"], headers=auth()).status_code == 202
     assert worker.tick() == 1
     return poll(client, refresh)
 
@@ -71,7 +63,7 @@ def test_a_first_day(client: TestClient, worker: Worker, store: Store) -> None:
     assert refresh["state"] == "updated"
     assert refresh["check"]["result"] == "passed"
     assert "first servability update: the delta threshold doesn't apply" in refresh["check"]["warnings"]
-    assert refresh["solr_load"] == {"outcome": "loaded", "rows": 1234}
+    assert set(refresh["links"]) == {"self", "servable_list", "check"}  # no Solr refresh report or update call (D72)
     assert refresh["update"] == {"deleted": 0, "written": 50, "unchanged": 0}
     assert served(store) == blobs
     latest = client.get("/etl/v1/museums/pahma", headers=auth()).json()
@@ -102,29 +94,21 @@ def test_too_many_changes_fail_the_check(client: TestClient, worker: Worker, sto
     assert refresh["state"] == "check_failed"
     assert refresh["check"]["delta_percent"] == 10.0
     assert served(store) == first  # nothing updated
-    is_problem(client.post(refresh["links"]["solr_load"], json={"outcome": "loaded", "rows": 1}, headers=auth()), 409)
-    # Asking again re-checks the stored file (for a rerun after an admin's override, D64); without one it fails again.
-    assert client.post(refresh["links"]["check"], headers=auth()).status_code == 202
-    assert worker.tick() == 1
-    assert poll(client, refresh)["state"] == "check_failed" and served(store) == first
-
-
-def test_a_fallen_back_load_updates_nothing(client: TestClient, worker: Worker, store: Store) -> None:
-    refresh = refresh_date(client, worker, {"b1": "m1"}, outcome="fell_back")
-    assert refresh["state"] == "abandoned"
-    assert refresh["reasons"] == ["the public core's load fell back"]
-    assert served(store) == {}
-    is_problem(client.post(refresh["links"]["update"], headers=auth()), 409)
-    again = client.post(refresh["links"]["solr_load"], json={"outcome": "fell_back", "rows": 0}, headers=auth())
-    assert again.status_code == 200  # repeating it is safe
+    # Asking again without a corrected list returns the refresh as it is (an admin may override, D83).
+    assert client.post(refresh["links"]["check"], headers=auth()).status_code == 200
+    assert worker.tick() == 0
+    # The ETL job rerun with a corrected list: the same refresh, checked again, then updated.
+    again = refresh_date(client, worker, first)
+    assert again["refresh_id"] == refresh["refresh_id"] and again["state"] == "updated" and served(store) == first
 
 
 def test_calls_out_of_order(client: TestClient) -> None:
     refresh = start(client)
-    is_problem(client.post(refresh["links"]["check"], headers=auth()), 409)  # no file yet
-    is_problem(client.post(refresh["links"]["update"], headers=auth()), 409)
-    is_problem(client.post(refresh["links"]["solr_load"], json={"outcome": "loaded", "rows": 1}, headers=auth()), 409)
-    is_problem(client.post(refresh["links"]["solr_load"], json={"outcome": "maybe", "rows": 1}, headers=auth()), 400)
+    is_problem(client.post(refresh["links"]["check"], headers=auth()), 409)  # no servable list yet
+    # The Solr refresh report and the update call are gone (D72, D80).
+    base = refresh["links"]["self"]
+    assert client.post(f"{base}/solr-load", json={"outcome": "loaded", "rows": 1}, headers=auth()).status_code == 404
+    assert client.post(f"{base}/update", headers=auth()).status_code == 404
 
 
 def test_repeating_calls_is_safe(client: TestClient, worker: Worker) -> None:
@@ -133,14 +117,13 @@ def test_repeating_calls_is_safe(client: TestClient, worker: Worker) -> None:
     assert client.post(refresh["links"]["check"], headers=auth()).status_code == 202
     assert client.post(refresh["links"]["check"], headers=auth()).status_code == 202  # still queued
     worker.tick()
+    assert poll(client, refresh)["state"] == "updated"
     assert client.post(refresh["links"]["check"], headers=auth()).status_code == 200  # done: returned as it is
-    client.post(refresh["links"]["solr_load"], json={"outcome": "loaded", "rows": 1}, headers=auth())
-    assert client.post(refresh["links"]["solr_load"], json={"outcome": "loaded", "rows": 1},
-                       headers=auth()).status_code == 200
-    assert client.post(refresh["links"]["update"], headers=auth()).status_code == 202
-    assert client.post(refresh["links"]["update"], headers=auth()).status_code == 202
-    worker.tick()
-    assert client.post(refresh["links"]["update"], headers=auth()).status_code == 200
+    body = file_of({"b1": "m1"})
+    closed = client.put(refresh["links"]["servable_list"], content=body, headers={
+        **auth(), "Content-Type": "text/tab-separated-values", "X-Row-Count": "1",
+        "X-Content-SHA256": hashlib.sha256(body).hexdigest()})
+    is_problem(closed, 409)  # closed: a new list needs a new refresh
 
 
 def test_no_updated_refresh_yet(client: TestClient) -> None:
@@ -157,7 +140,7 @@ def test_an_interrupted_step_is_claimed_again(client: TestClient, worker: Worker
     assert worker.tick() == 0  # its claim is fresh
     clock.now = datetime(2026, 10, 10, 10, 40, tzinfo=UTC)  # 10 minutes later: stale
     assert worker.tick() == 1
-    assert poll(client, refresh)["state"] == "ready"
+    assert poll(client, refresh)["state"] == "updated"
 
 
 def test_an_update_that_keeps_failing(client: TestClient, worker: Worker, store: Store,
@@ -167,9 +150,6 @@ def test_an_update_that_keeps_failing(client: TestClient, worker: Worker, store:
     refresh = start(client)
     upload(client, refresh, file_of({"b1": "m1"}))
     client.post(refresh["links"]["check"], headers=auth())
-    worker.tick()
-    client.post(refresh["links"]["solr_load"], json={"outcome": "loaded", "rows": 1}, headers=auth())
-    client.post(refresh["links"]["update"], headers=auth())
 
     def throttled(**kwargs: object) -> None:
         raise ClientError({"Error": {"Code": "ThrottlingException", "Message": "x"}}, "BatchWriteItem")
@@ -178,7 +158,13 @@ def test_an_update_that_keeps_failing(client: TestClient, worker: Worker, store:
     assert worker.tick() == 1
     failed = poll(client, refresh)
     assert failed["state"] == "update_failed"
-    assert "after 3 attempts" in failed["reasons"][-1]
+    assert failed["check"]["result"] == "passed" and "after 3 attempts" in failed["reasons"][-1]
+    # The ETL job rerun: a list may be uploaded again to an update_failed refresh, and checked again.
+    monkeypatch.undo()
+    upload(client, refresh, file_of({"b1": "m1", "b2": "m2"}))
+    assert poll(client, refresh)["state"] == "received"
+    assert client.post(refresh["links"]["check"], headers=auth()).status_code == 202
+    assert worker.tick() == 1 and poll(client, refresh)["state"] == "updated"
 
 
 def test_another_museums_rows_are_left_alone(client: TestClient, worker: Worker, store: Store) -> None:

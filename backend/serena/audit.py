@@ -28,8 +28,6 @@ class Action(StrEnum):
     THRESHOLD_OVERRIDE = "threshold_override"
     FILE_UPLOAD = "file_upload"
     RESTRICTED_IMAGE_UPLOAD = "restricted_image_upload"
-    RECORD_LOAD = "record_load"  # "Record the Solr refresh and update Serena" after a failed refresh (D65)
-    THRESHOLD_OVERRIDE_CANCEL = "threshold_override_cancel"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
 
 

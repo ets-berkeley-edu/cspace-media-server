@@ -26,20 +26,12 @@
         Retry the servability update
       </v-btn>
       <v-btn
-        v-if="refresh.actions.includes('record_load')"
-        id="record-load"
-        color="primary"
-        @click="open('record_load')"
-      >
-        Record the Solr refresh and update Serena
-      </v-btn>
-      <v-btn
         v-if="refresh.actions.includes('override_threshold')"
         id="override-threshold"
         color="warning"
         @click="open('override_threshold')"
       >
-        Override the delta threshold for the next refresh
+        Override the delta threshold
       </v-btn>
     </div>
 
@@ -87,14 +79,6 @@
         </p>
       </template>
 
-      <template v-if="refresh.solr_load">
-        <h2 class="text-h6 mb-2">The Solr refresh</h2>
-        <p class="mb-4">
-          {{ refresh.solr_load.outcome }}<span v-if="refresh.solr_load.rows !== null">, {{ refresh.solr_load.rows }} documents</span>
-          <span v-if="refresh.solr_load.recorded_by_admin"> (recorded by an admin)</span>.
-        </p>
-      </template>
-
       <template v-if="refresh.update">
         <h2 class="text-h6 mb-2">The servability update</h2>
         <p class="mb-4">{{ refresh.update.deleted }} deleted, {{ refresh.update.written }} written, {{ refresh.update.unchanged }} unchanged.</p>
@@ -106,15 +90,6 @@
         <v-card-title>{{ titles[action] }}</v-card-title>
         <v-card-text>
           <p class="mb-4">{{ explanations[action] }}</p>
-          <template v-if="action === 'record_load'">
-            <v-checkbox id="confirm-loaded" v-model="confirmed" label="The Solr refresh succeeded on that refresh date: I checked the ETL job's report." />
-            <v-text-field
-              id="load-rows"
-              v-model="rows"
-              label="Documents loaded (optional, from the ETL job's report)"
-              type="number"
-            />
-          </template>
           <v-textarea
             id="reason"
             v-model="reason"
@@ -153,16 +128,13 @@ import {stateOf, when} from '@/words'
 
 const titles: Record<RefreshAction, string> = {
   retry_update: 'Retry the servability update',
-  record_load: 'Record the Solr refresh and update Serena',
   override_threshold: 'Override the delta threshold'
 }
 const explanations: Record<RefreshAction, string> = {
   retry_update: 'The worker runs the servability update again. Do this once whatever stopped it is fixed.',
-  record_load: 'The ETL job didn\'t report this refresh\'s Solr refresh. If the public core was refreshed, Serena records it ' +
-    'and runs the servability update, so Serena and the public core match again.',
-  override_threshold: 'The servable list check failed only because too many rows change. This arms an override for the ' +
-    'museum\'s next refresh: its servable list check skips the threshold once (every other check still applies). It expires ' +
-    'after 48 hours, and the team is emailed. Then ask the ETL team to rerun the ETL job.'
+  override_threshold: 'The servable list check failed only because more rows change than the delta threshold allows. ' +
+    'Do this once you know the change is expected. Serena checks the same servable list again without the delta ' +
+    'threshold (every other check still applies) and, if it passes, updates Serena from it. The team is emailed.'
 }
 
 const route = useRoute()
@@ -171,14 +143,11 @@ const error = ref('')
 const dialog = ref(false)
 const action = ref<RefreshAction>('retry_update')
 const reason = ref('')
-const confirmed = ref(false)
-const rows = ref('')
 const busy = ref(false)
 
 const museum = computed(() => String(route.params.museum))
-// Every action needs a reason (D62); recording a load also needs the confirmation (D65).
-const ready = computed(() => reason.value.length <= 500 && reason.value.trim().length > 0 &&
-  (action.value !== 'record_load' || confirmed.value))
+// Every action needs a reason (D62).
+const ready = computed(() => reason.value.length <= 500 && reason.value.trim().length > 0)
 
 async function load() {
   try {
@@ -191,8 +160,6 @@ async function load() {
 function open(which: RefreshAction) {
   action.value = which
   reason.value = ''
-  confirmed.value = false
-  rows.value = ''
   error.value = ''
   dialog.value = true
 }
@@ -206,12 +173,9 @@ async function act() {
     const id = refresh.value.refresh_id
     if (action.value === 'retry_update') {
       refresh.value = await api.retryUpdate(museum.value, id, reason.value.trim())
-    } else if (action.value === 'record_load') {
-      refresh.value = await api.recordLoad(museum.value, id, rows.value === '' ? null : Number(rows.value), reason.value.trim())
     } else {
-      await api.overrideThreshold(museum.value, id, reason.value.trim())
-      alertsChanged.value++
-      await load()
+      refresh.value = await api.overrideThreshold(museum.value, id, reason.value.trim())
+      alertsChanged.value++ // the override's alert
     }
     dialog.value = false
   } catch (e) {

@@ -5,11 +5,12 @@ A refresh brings Serena up to date for one museum on one refresh date. Serena as
 conditional write on the refresh's current state, so two calls can't race; a change from a state that doesn't allow it
 raises OutOfOrder (409).
 
-    started -> received -> checking -> ready | check_failed
-    ready -- loaded --> solr_loaded -> updating -> updated | update_failed
-    ready -- fell_back --> abandoned
+    started -> received -> checking -> check_failed
+                                     -> updating -> updated | update_failed
 
-A museum has at most one open refresh (any state but updated or abandoned), and it is always its newest."""
+A passed servable list check goes straight on to the servability update (decided October 12, 2026, D80). An open
+refresh is closed as abandoned when a later refresh date's refresh starts, or when an admin uploads a servable list
+(D82). A museum has at most one open refresh (any state but updated or abandoned), and it is always its newest."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -32,9 +33,7 @@ class State(StrEnum):
     STARTED = "started"
     RECEIVED = "received"
     CHECKING = "checking"
-    READY = "ready"
     CHECK_FAILED = "check_failed"
-    SOLR_LOADED = "solr_loaded"
     UPDATING = "updating"
     UPDATED = "updated"
     UPDATE_FAILED = "update_failed"
@@ -43,8 +42,9 @@ class State(StrEnum):
 
 CLOSED = frozenset({State.UPDATED, State.ABANDONED})
 BUSY = frozenset({State.CHECKING, State.UPDATING})  # the worker is on it: never abandoned
-# A servable list may be uploaded, or replaced, until the load's outcome is reported (and not while it's being checked).
-UPLOAD_ALLOWED = frozenset({State.STARTED, State.RECEIVED, State.READY, State.CHECK_FAILED})
+# A servable list may be uploaded, or replaced by a corrected one, except while the worker is on the refresh or once
+# it is closed.
+UPLOAD_ALLOWED = frozenset({State.STARTED, State.RECEIVED, State.CHECK_FAILED, State.UPDATE_FAILED})
 
 
 class OutOfOrder(Exception):
@@ -80,8 +80,9 @@ class Refresh:
     upload: Upload | None = None
     reasons: list[str] = field(default_factory=list)
     check: dict[str, Any] | None = None  # the servable list check's result
-    solr_load: dict[str, Any] | None = None  # the load outcome the ETL reported
     update: dict[str, Any] | None = None  # the servability update's counts
+    override: dict[str, Any] | None = None  # an admin's override of the delta threshold for this list (D83)
+    admin_upload: dict[str, Any] | None = None  # an admin upload: the refresh date the list is for (D75)
     owner: str | None = None  # the worker doing this refresh's step
     heartbeat_at: int | None = None  # when that worker last said it was still on it (Unix seconds)
 
@@ -123,6 +124,7 @@ def parse_refresh_id(tenant: str, refresh_id: str) -> tuple[str, int] | None:
     return refresh_date, number
 
 
+RESULTS = ("check", "update", "override", "admin_upload")
 _serializer = TypeSerializer()
 _deserializer = TypeDeserializer()
 
@@ -135,7 +137,7 @@ def _to_item(refresh: Refresh) -> dict[str, Any]:
     }
     if refresh.upload:
         plain["upload"] = vars(refresh.upload)
-    for name in ("check", "solr_load", "update"):
+    for name in RESULTS:
         if getattr(refresh, name) is not None:
             plain[name] = getattr(refresh, name)
     return {k: _serializer.serialize(_decimals(v)) for k, v in plain.items()}
@@ -175,8 +177,9 @@ def _from_item(item: dict[str, Any]) -> Refresh:
                    upload=Upload(upload["sha256"], int(upload["rows"]), int(upload["bytes"]), upload["key"],
                                  upload["uploaded_at"]) if upload else None,
                    reasons=list(plain.get("reasons", [])),
-                   check=_plain(plain.get("check")), solr_load=_plain(plain.get("solr_load")),
-                   update=_plain(plain.get("update")), owner=plain.get("owner"),
+                   check=_plain(plain.get("check")), update=_plain(plain.get("update")),
+                   override=_plain(plain.get("override")), admin_upload=_plain(plain.get("admin_upload")),
+                   owner=plain.get("owner"),
                    heartbeat_at=int(plain["heartbeat_at"]) if "heartbeat_at" in plain else None)
 
 
@@ -212,21 +215,23 @@ class Refreshes:
                                   ExpressionAttributeValues={":pk": {"S": tenant}}, Limit=limit)["Items"]
         return [_from_item(item) for item in items]
 
-    def start(self, tenant: str) -> tuple[Refresh, bool]:
+    def start(self, tenant: str, closing_reason: str | None = None) -> tuple[Refresh, bool]:
         """The museum's open refresh for today's refresh date, or a new one. Returns (refresh, created). Closes an
-        earlier refresh date's open refresh as abandoned, unless the worker is on it (Busy)."""
+        earlier refresh date's open refresh as abandoned, unless the worker is on it (Busy). With `closing_reason` (an
+        admin upload, D82), any open refresh is closed that way, today's included, and a new one always starts."""
         for _ in range(3):  # another call may start a refresh at the same moment: re-read and try again
             refresh_date = self.today()
             newest = self.newest(tenant)
             if newest is not None and newest.open:
-                if newest.refresh_date == refresh_date:
+                if newest.refresh_date == refresh_date and closing_reason is None:
                     return newest, False
                 if newest.state in BUSY:
                     step = "checked" if newest.state == State.CHECKING else "updated"
                     raise Busy(newest.refresh_id, newest.state,
                                f"refresh {newest.refresh_id} is still being {step}; try again")
                 try:
-                    self.transition(newest, State.ABANDONED, reason="a later refresh date's refresh started")
+                    self.transition(newest, State.ABANDONED,
+                                    reason=closing_reason or "a later refresh date's refresh started")
                 except OutOfOrder:
                     continue
             n = newest.n + 1 if newest is not None and newest.refresh_date == refresh_date else 1
@@ -243,8 +248,9 @@ class Refreshes:
 
     def transition(self, refresh: Refresh, to: State, *, upload: Upload | None = None, reason: str | None = None,
                    results: dict[str, dict[str, Any]] | None = None, release: bool = False) -> Refresh:
-        """Move the refresh to `to`, only if it is still in the state it was read in. `results` sets check,
-        solr_load or update; `release` ends the worker's claim."""
+        """Move the refresh to `to`, only if it is still in the state it was read in. `results` sets check, update,
+        override or admin_upload; a new upload removes an earlier override, which was for the earlier list.
+        `release` ends the worker's claim."""
         now = self.now()
         names = {"#state": "state"}
         values: dict[str, Any] = {":to": {"S": to.value}, ":from": {"S": refresh.state.value}, ":now": {"S": now}}
@@ -260,9 +266,15 @@ class Refreshes:
             update += ", reasons = list_append(if_not_exists(reasons, :empty), :reason)"
             values[":reason"] = {"L": [{"S": reason}]}
             values[":empty"] = {"L": []}
+        removing = []
+        if upload is not None and "override" not in (results or {}):
+            removing.append("#override")
+            names["#override"] = "override"
         if release:
-            update += " REMOVE #owner, heartbeat_at"
+            removing += ["#owner", "heartbeat_at"]
             names["#owner"] = "owner"
+        if removing:
+            update += " REMOVE " + ", ".join(removing)
         try:
             self.client.update_item(TableName=self.table,
                                     Key={"pk": {"S": refresh.tenant}, "sk": {"S": refresh.sort_key}},
@@ -275,6 +287,8 @@ class Refreshes:
         refresh.state, refresh.updated_at = to, now
         if upload is not None:
             refresh.upload = upload
+            if "override" not in (results or {}):
+                refresh.override = None
         if reason is not None:
             refresh.reasons.append(reason)
         for name, result in (results or {}).items():

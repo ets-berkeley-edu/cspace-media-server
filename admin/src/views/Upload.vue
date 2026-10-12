@@ -2,9 +2,10 @@
   <v-container fluid>
     <h1 class="text-h5 mb-4">Upload a servable list</h1>
     <p class="mb-4">
-      For a failed refresh where the ETL job refreshed the public core but its servable list never reached Serena. Take
-      that refresh date's servable list from the ETL server. Serena checks it as it checks every servable list and, if
-      it passes, runs the servability update. If it fails, nothing changes and the refresh shows why.
+      For a failed refresh: when the servable list didn't reach Serena, or needs replacing. Run the servable list script
+      on the ETL server, then upload the list it makes. Serena closes the museum's open refresh, if there is one, starts
+      a new one, checks the list as it checks every servable list and, if it passes, runs the servability update. If it
+      fails, nothing changes and the refresh shows why.
     </p>
     <v-alert
       v-if="error"
@@ -42,7 +43,7 @@
       <v-checkbox
         id="confirm-loaded"
         v-model="confirmed"
-        label="The Solr refresh succeeded on that refresh date with this servable list: I checked the ETL job's report."
+        label="This servable list was made from the live public core: I ran the servable list script on the ETL server."
       />
       <v-btn
         id="upload-button"
@@ -67,7 +68,7 @@ const route = useRoute()
 const router = useRouter()
 const file = ref<File | File[] | null>(null)
 const today = pacificDate()
-const refreshDate = ref(pacificDate(1)) // a failed refresh is usually yesterday's
+const refreshDate = ref(today) // the list is made from the live public core, so it's today's (D75)
 const confirmed = ref(false)
 const reason = ref('')
 const busy = ref(false)

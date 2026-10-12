@@ -20,6 +20,6 @@ describe('the audit log, readable', () => {
       .toBe('Threshold overridden · 2026-10-11 · pahma-2026-10-11-2')
     expect(targetOf('alert_acknowledge', '2026-10-11#missed_deadline#2026-10-11'))
       .toBe('Missed deadline · 2026-10-11')
-    expect(targetOf('record_load', 'pahma-2026-10-11-3')).toBe('pahma-2026-10-11-3')
+    expect(targetOf('update_retry', 'pahma-2026-10-11-3')).toBe('pahma-2026-10-11-3')
   })
 })

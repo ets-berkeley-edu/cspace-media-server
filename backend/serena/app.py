@@ -21,7 +21,6 @@ from .config import Settings, get_settings
 from .cspace.clients import CSpaceClients, HttpFactory
 from .fetch import Fetcher
 from .museum_settings import MuseumSettings
-from .overrides import Overrides
 from .refreshes import Refreshes
 from .secret_cache import SecretCache, secretsmanager_client
 from .store import Store, dynamodb_client
@@ -95,7 +94,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
 
     # The app records alerts (an admin's override, D62) but doesn't email them: the worker does.
     app.state.admin_refreshes = admin_refreshes.RefreshServices(
-        Refreshes(store, clock) if clock else Refreshes(store), Overrides(store), Alerts(store, None, ""), s3)
+        Refreshes(store, clock) if clock else Refreshes(store), Alerts(store, None, ""), s3)
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
         Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), Audit(store),

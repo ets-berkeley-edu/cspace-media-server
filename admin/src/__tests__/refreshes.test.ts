@@ -12,7 +12,7 @@ import {pacificDate} from '@/words'
 const REFRESH = {
   refresh_id: 'pahma-2026-10-10-1', refresh_date: '2026-10-10', state: 'update_failed', created_at: '2026-10-10T10:00:00+00:00',
   updated_at: '2026-10-10T10:05:00+00:00', rows: 40, reasons: ['servability update failed after 3 attempts'], newest: true,
-  file_name: 'servable-list.pahma.2026-10-10.tsv', upload: null, check: null, solr_load: null, update: null,
+  file_name: 'servable-list.pahma.2026-10-10.tsv', upload: null, check: null, update: null, override: null,
   actions: ['retry_update']
 }
 
@@ -44,6 +44,30 @@ describe('a refresh', () => {
     const post = calls.find(c => c.method === 'POST')
     expect(post?.body).toEqual({reason: 'DynamoDB is back'})
     expect(post?.headers['X-Serena-Admin']).toBe('1')
+    wrapper.unmount()
+  })
+})
+
+describe('overriding the delta threshold', () => {
+  it('sends the reason and shows the refresh being checked again', async () => {
+    const failed = {...REFRESH, state: 'check_failed', actions: ['override_threshold']}
+    const calls = fakeApi({
+      'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: failed},
+      'POST /museums/pahma/refreshes/pahma-2026-10-10-1/override-threshold':
+        {body: {...failed, state: 'checking', actions: [], override: {at: '2026-10-10T16:00:00+00:00'}}}
+    })
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#override-threshold').text()).toBe('Override the delta threshold')
+    await wrapper.find('#override-threshold').trigger('click')
+    await flushPromises()
+    const reason = document.querySelector('#reason') as HTMLTextAreaElement
+    reason.value = 'PAHMA republished many images'
+    reason.dispatchEvent(new Event('input'))
+    await flushPromises()
+    ;(document.querySelector('#confirm-action') as HTMLButtonElement).click()
+    await vi.waitFor(() => expect(wrapper.find('#refresh-state').text()).toBe('Checking the servable list'))
+    expect(calls.find(c => c.method === 'POST')?.body).toEqual({reason: 'PAHMA republished many images'})
+    expect(wrapper.find('#override-threshold').exists()).toBe(false)
     wrapper.unmount()
   })
 })
@@ -85,7 +109,7 @@ describe('uploading a servable list', () => {
     const {wrapper, router} = await at('/pahma/upload', Upload)
     const file = new File(['blob_csid\tmedia_csid\tkind\taccess\n'], 'servable-list.pahma.2026-10-09.tsv')
     const vm = wrapper.vm as unknown as {$: {setupState: {file: File | null, refreshDate: string, confirmed: boolean, reason: string}}}
-    expect(vm.$.setupState.refreshDate).toBe(pacificDate(1)) // yesterday, to start
+    expect(vm.$.setupState.refreshDate).toBe(pacificDate()) // today, to start (D75)
     vm.$.setupState.file = file
     vm.$.setupState.refreshDate = '2026-10-09'
     vm.$.setupState.confirmed = true
@@ -94,7 +118,7 @@ describe('uploading a servable list', () => {
     await wrapper.find('form').trigger('submit')
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/pahma/refreshes/pahma-2026-10-11-1'))
     const put = calls.find(c => c.method === 'PUT')
-    expect(put?.headers['X-Loaded-Confirmed']).toBe('yes')
+    expect(put?.headers['X-Live-Core-Confirmed']).toBe('yes')
     expect(put?.headers['X-Refresh-Date']).toBe('2026-10-09')
     expect(put?.headers['X-File-Name']).toBe('servable-list.pahma.2026-10-09.tsv')
     expect(put?.headers['X-Reason']).toBe('ETL%20log%20checked%3A%20caf%C3%A9')

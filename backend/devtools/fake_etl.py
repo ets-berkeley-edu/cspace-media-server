@@ -1,14 +1,14 @@
 """A fake ETL: runs one museum's whole ETL job through Serena's ETL API, as the real one will (design: The daily
 sequence, The ETL API; Jira CSW-1027). Local development only.
 
-    python -m devtools.fake_etl --museum pahma           # a whole refresh: start, upload, servable list check, load,
-                                                         # servability update
-    python -m devtools.fake_etl --museum pahma --failed  # a failed refresh: stops after the servable list check, as an
-                                                         # ETL job whose Solr load never finishes; the watchdog notices
-                                                         # at the deadline
+    python -m devtools.fake_etl --museum pahma           # a whole daily refresh: the Solr refresh's stand-in, the
+                                                         # servable list, then start, upload, check and poll
+    python -m devtools.fake_etl --museum pahma --failed  # a failed refresh: Serena is never called, as when it can't
+                                                         # be reached; the repair is an admin upload (D85)
 
-It adds synthetic Media records to the CollectionSpace simulator first, and lists them in the servable list, so
-each listed file can then be fetched on a miss. The CSIDs are made from the museum and a number, so the same --rows
+It adds synthetic Media records to the CollectionSpace simulator first (the stand-in for the Solr refresh), and lists
+them in the servable list (the stand-in for the servable list script), so each listed file can then be fetched on a
+miss. The CSIDs are made from the museum and a number, so the same --rows
 gives the same servable list every day (the delta threshold passes). The museum's ETL token is read from the
 local Secrets Manager stand-in, as the real ETL reads its own from its secret store; it's never printed."""
 from __future__ import annotations
@@ -30,7 +30,7 @@ from serena.config import get_settings
 from serena.museum import load
 
 NAMESPACE = uuid.UUID("3f6b0c55-2c4e-4f6e-9d4b-6a1c0b6e5a10")  # for the synthetic CSIDs; not a secret
-DONE = {"ready", "check_failed", "updated", "update_failed", "abandoned"}
+DONE = {"check_failed", "updated", "update_failed", "abandoned"}
 
 # What each museum's synthetic servable list holds: (kind, access) by row, repeating.
 MIX: dict[str, list[tuple[str, str]]] = {
@@ -90,24 +90,21 @@ def _wait(serena: httpx.Client, refresh: dict[str, Any], headers: dict[str, str]
 def daily_refresh(serena: httpx.Client, cspace: httpx.Client, tenant: str, token: str, count: int = 20,
                   failed: bool = False, poll: float | None = None, wait: Callable[[float], None] = time.sleep,
                   timeout: float = 300.0) -> dict[str, Any]:
-    """Runs the ETL job's Serena part and returns a summary: the refresh's final state, its counts, and sample paths
-    to request."""
+    """Runs the ETL job in the order of the daily sequence (design: The daily sequence; D70, D81) and returns a
+    summary: the refresh's final state (None when Serena wasn't called), its counts, and sample paths to request."""
     listed = rows(tenant, count)
-    add_to_simulator(cspace, listed)
-    headers = {"Authorization": f"Bearer {token}"}
-    refresh = _call(serena.post(f"/etl/v1/museums/{tenant}/refreshes", headers=headers))
-    every = poll if poll is not None else float(refresh["poll_interval_seconds"])
-
-    body = tsv(listed)
-    upload = {**headers, "Content-Type": "text/tab-separated-values", "Content-Encoding": "gzip",
-              "X-Row-Count": str(len(listed)), "X-Content-SHA256": hashlib.sha256(body).hexdigest()}
-    _call(serena.put(refresh["links"]["servable_list"], content=gzip.compress(body), headers=upload))
-    refresh = _call(serena.post(refresh["links"]["check"], headers=headers))
-    refresh = _wait(serena, refresh, headers, DONE, every, wait, timeout)
-    if refresh["state"] == "ready" and not failed:
-        _call(serena.post(refresh["links"]["solr_load"], headers=headers, json={"outcome": "loaded", "rows": count}))
-        refresh = _call(serena.post(refresh["links"]["update"], headers=headers))
-        refresh = _wait(serena, refresh, headers, DONE - {"ready"}, every, wait, timeout)
+    add_to_simulator(cspace, listed)  # the Solr refresh's stand-in; `listed` is the servable list script's
+    refresh: dict[str, Any] = {"refresh_id": None, "state": None}
+    if not failed:
+        headers = {"Authorization": f"Bearer {token}"}
+        refresh = _call(serena.post(f"/etl/v1/museums/{tenant}/refreshes", headers=headers))
+        every = poll if poll is not None else float(refresh["poll_interval_seconds"])
+        body = tsv(listed)
+        upload = {**headers, "Content-Type": "text/tab-separated-values", "Content-Encoding": "gzip",
+                  "X-Row-Count": str(len(listed)), "X-Content-SHA256": hashlib.sha256(body).hexdigest()}
+        _call(serena.put(refresh["links"]["servable_list"], content=gzip.compress(body), headers=upload))
+        refresh = _call(serena.post(refresh["links"]["check"], headers=headers))
+        refresh = _wait(serena, refresh, headers, DONE, every, wait, timeout)
 
     samples: dict[str, str] = {}
     for blob, media, kind, access in listed:
@@ -142,8 +139,8 @@ def main() -> None:
     parser.add_argument("--museum", required=True)
     parser.add_argument("--rows", type=int, default=20)
     parser.add_argument("--failed", action="store_true",
-                        help="a failed refresh: stop after the servable list check (no Solr load, no servability "
-                             "update)")
+                        help="a failed refresh: the Solr refresh's stand-in and the servable list, but Serena is "
+                             "never called")
     parser.add_argument("--serena", default="http://web:8000")
     parser.add_argument("--cspace", default="http://fakecspace:8180")
     parser.add_argument("--poll", type=float, default=2.0, help="seconds between polls (faster than the API says)")
@@ -167,6 +164,11 @@ def main() -> None:
     if args.json:
         print(json.dumps(summary))
         return
+    if summary["failed"]:
+        print(f"Failed refresh: {args.museum}'s records were added and its servable list made, but Serena wasn't "
+              "called.\n  Repair it with an admin upload: ./serena etl " + args.museum + f" --rows {args.rows} "
+              "--file-only > <file>, then \"Upload a servable list\" in the admin app.")
+        return
     print(f"{summary['refresh_id']}: {summary['state']}")
     for problem in (summary.get("check") or {}).get("errors", []):
         print(f"  servable list check: {problem['problem']}")
@@ -176,9 +178,6 @@ def main() -> None:
         print("  The servable list changes more rows than the delta threshold allows: the last updated refresh had a "
               "different --rows.\n  Use the same --rows as that refresh, or start afresh with ./serena down and "
               "./serena up.")
-    if summary["failed"]:
-        print("Failed refresh: the Solr load and the servability update weren't reported. The watchdog raises a missed "
-              "deadline at the museum's deadline.")
     for kind, path in summary["samples"].items():
         print(f"  {kind:<20} {args.public}{path}")
 

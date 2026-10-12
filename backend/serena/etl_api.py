@@ -11,7 +11,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, cast
 
 from boto3.exceptions import Boto3Error
 from botocore.exceptions import BotoCoreError, ClientError
@@ -49,8 +49,6 @@ class Links(BaseModel):
     self: str
     servable_list: str
     check: str
-    solr_load: str
-    update: str
 
 
 class UploadInfo(BaseModel):
@@ -77,17 +75,11 @@ class RefreshOut(BaseModel):
         None, description="The servable list check's result: result (passed or failed), rows, added, removed, changed, "
                           "previous_rows, threshold_percent, delta_percent, error_count, errors (the first 20, each "
                           "with line, field and problem), warnings")
-    solr_load: dict[str, Any] | None = Field(None, description="The load outcome the ETL reported")
     update: dict[str, Any] | None = Field(None,
                                           description="The servability update's counts: deleted, written, unchanged")
     reasons: list[str] = Field(default_factory=list,
                                description="Why the refresh is in its state, when that needs saying")
     links: Links
-
-
-class SolrLoad(BaseModel):
-    outcome: Literal["loaded", "fell_back"] = Field(description="loaded, or fell_back to the previous day's data")
-    rows: int = Field(ge=0, description="Documents loaded into the public core")
 
 
 class Ping(BaseModel):
@@ -105,10 +97,9 @@ def _out(services: Services, refresh: Refresh) -> RefreshOut:
         step_timeout_seconds=current.etl_step_timeout_seconds,
         upload=UploadInfo(sha256=upload.sha256, rows=upload.rows, bytes=upload.bytes, uploaded_at=upload.uploaded_at)
         if upload else None,
-        check=refresh.check, solr_load=refresh.solr_load, update=refresh.update,
+        check=refresh.check, update=refresh.update,
         reasons=refresh.reasons,
-        links=Links(self=base, servable_list=f"{base}/servable-list", check=f"{base}/check",
-                    solr_load=f"{base}/solr-load", update=f"{base}/update"))
+        links=Links(self=base, servable_list=f"{base}/servable-list", check=f"{base}/check"))
 
 
 def _json(model: BaseModel, status: int = 200) -> JSONResponse:
@@ -230,8 +221,8 @@ def create_etl_app(services: Services) -> FastAPI:
         content_encoding: Annotated[str | None, Header(description="gzip, or absent")] = None,
     ) -> JSONResponse:
         """Streams the servable list to Serena. Uploading the same list again changes nothing; a corrected list
-        replaces the previous one until the load's outcome is reported, and must then be checked again. Its format is
-        checked by the servable list check."""
+        replaces the previous one while the refresh is started, received, check_failed or update_failed, and must then
+        be checked again. Its format is checked by the servable list check."""
         if content_type.split(";")[0].strip().lower() != "text/tab-separated-values":
             raise ProblemError(415, "the-etl-api", "Wrong content type", "Send text/tab-separated-values")
         sha = x_content_sha256.strip().lower()
@@ -245,10 +236,10 @@ def create_etl_app(services: Services) -> FastAPI:
             raise ProblemError(503, "the-etl-api", "Storage not configured", "Serena has no bucket for this museum")
         refresh = await asyncio.to_thread(refresh_of, tenant, refresh_id)
         if refresh.state not in UPLOAD_ALLOWED:
-            busy = " (Serena is checking it)" if refresh.state in BUSY else ""
+            busy = " (Serena is working on it)" if refresh.state in BUSY else ""
             raise ProblemError(409, "the-etl-api", "Out of order",
                                f"refresh {refresh.refresh_id} is {refresh.state.value}{busy}; a servable list can be "
-                               "uploaded only before the load's outcome is reported")
+                               "uploaded only while the refresh is started, received, check_failed or update_failed")
         try:
             received = await uploads.receive(request.stream(), gzipped=encoding == "gzip",
                                              max_bytes=services.settings.upload_max_mb * 1024 * 1024,
@@ -284,7 +275,7 @@ def create_etl_app(services: Services) -> FastAPI:
         return _json(_out(services, refresh))
 
     def step(tenant: str, refresh_id: str, allowed: State | frozenset[State], to: State, done: frozenset[State],
-             what: str, results: dict[str, dict[str, Any]] | None = None, reason: str | None = None) -> JSONResponse:
+             what: str) -> JSONResponse:
         """Moves a refresh from `allowed` to `to`; a refresh already in `to` or past it (`done`) is returned as it is,
         so repeating the call is safe. Anything else is out of order."""
         refresh = refresh_of(tenant, refresh_id)
@@ -296,7 +287,7 @@ def create_etl_app(services: Services) -> FastAPI:
             raise ProblemError(409, "the-etl-api", "Out of order",
                                f"refresh {refresh.refresh_id} is {refresh.state.value}; {what} needs it {needed}")
         try:
-            refresh = services.refreshes.transition(refresh, to, results=results, reason=reason)
+            refresh = services.refreshes.transition(refresh, to)
         except OutOfOrder as error:
             raise out_of_order(error) from None
         log.info("step requested",
@@ -307,42 +298,15 @@ def create_etl_app(services: Services) -> FastAPI:
               responses={200: {"description": "The servable list check is already done; the refresh is returned as "
                                               "it is", "model": RefreshOut},
                          **openapi_responses(401, 403, 404, 409, 503)},
-              summary="Check the servable list without changing anything")
+              summary="Check the servable list, then update Serena from it")
     def request_check(tenant: Tenant, refresh_id: str) -> JSONResponse:
-        """Queues the servable list check (202); poll the refresh until it is ready or check_failed. Allowed once a
-        servable list is uploaded (received), and again after a failed check: with a corrected list, or with the same
-        list when the ETL job is rerun after an admin overrode the delta threshold for it."""
-        return step(tenant, refresh_id, frozenset({State.RECEIVED, State.CHECK_FAILED}), State.CHECKING,
-                    frozenset({State.CHECKING, State.READY, State.SOLR_LOADED, State.UPDATING, State.UPDATED}),
+        """Queues the servable list check (202). When it passes, the worker goes straight on to the servability update
+        (decided October 12, 2026, D80): poll the refresh until it is updated, check_failed or update_failed. Allowed
+        once a servable list is uploaded (received). After a failed check, upload a corrected list first."""
+        return step(tenant, refresh_id, State.RECEIVED, State.CHECKING,
+                    frozenset({State.CHECKING, State.CHECK_FAILED, State.UPDATING, State.UPDATED,
+                               State.UPDATE_FAILED}),
                     "the servable list check")
-
-    @app.post("/museums/{tenant}/refreshes/{refresh_id}/solr-load", response_model=RefreshOut,
-              responses=openapi_responses(400, 401, 403, 404, 409, 503),
-              summary="Report the public core's load")
-    def report_solr_load(tenant: Tenant, refresh_id: str, body: SolrLoad) -> JSONResponse:
-        """Allowed once the servable list check passed (ready). loaded: the refresh waits for the servability update
-        (solr_loaded). fell_back: the refresh is abandoned and Serena changes nothing, so both keep yesterday's data."""
-        if body.outcome == "loaded":
-            return step(tenant, refresh_id, State.READY, State.SOLR_LOADED,
-                        frozenset({State.SOLR_LOADED, State.UPDATING, State.UPDATED}), "the load report",
-                        results={"solr_load": body.model_dump()})
-        refresh = refresh_of(tenant, refresh_id)
-        if refresh.state == State.ABANDONED and (refresh.solr_load or {}).get("outcome") == "fell_back":
-            return _json(_out(services, refresh))
-        return step(tenant, refresh_id, State.READY, State.ABANDONED, frozenset(), "the load report",
-                    results={"solr_load": body.model_dump()}, reason="the public core's load fell back")
-
-    @app.post("/museums/{tenant}/refreshes/{refresh_id}/update", response_model=RefreshOut, status_code=202,
-              responses={200: {"description": "The servability update is already done; the refresh is returned as it "
-                                              "is",
-                               "model": RefreshOut}, **openapi_responses(401, 403, 404, 409, 503)},
-              summary="Update Serena from the servable list")
-    def request_update(tenant: Tenant, refresh_id: str) -> JSONResponse:
-        """Queues the servability update (202); poll the refresh until it is updated or update_failed. Allowed only
-        after the servable list check passed and the load reported loaded (solr_loaded). Report the ETL job a success
-        only once the refresh is updated."""
-        return step(tenant, refresh_id, State.SOLR_LOADED, State.UPDATING,
-                    frozenset({State.UPDATING, State.UPDATED}), "the servability update")
 
     @app.get("/museums/{tenant}", response_model=RefreshOut, responses=openapi_responses(401, 403, 404, 503),
              summary="The museum's latest updated refresh")

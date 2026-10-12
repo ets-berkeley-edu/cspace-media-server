@@ -187,17 +187,18 @@ def test_a_corrected_file_replaces_the_previous_one(client: TestClient, store: S
     is_problem(put(client, refresh, FILE + b"b9\tm9\timage\tpublic\n"), 409)  # not while it's being checked
     current = refreshes.get("pahma", refresh["refresh_id"])
     assert current is not None
-    refreshes.transition(current, State.READY)
+    refreshes.transition(current, State.CHECK_FAILED)
     corrected = put(client, refresh, FILE + b"b9\tm9\timage\tpublic\n").json()
     assert (corrected["state"], corrected["upload"]["rows"]) == ("received", 4)  # to be checked again
 
 
-def test_no_upload_after_the_load_is_reported(client: TestClient, store: Store, clock: Clock) -> None:
+@pytest.mark.parametrize("state", [State.UPDATING, State.UPDATED, State.ABANDONED])
+def test_no_upload_while_updating_or_once_closed(client: TestClient, store: Store, clock: Clock, state: State) -> None:
     refresh = start(client)
     refreshes = Refreshes(store, clock)
     current = refreshes.get("pahma", refresh["refresh_id"])
     assert current is not None
-    refreshes.transition(current, State.SOLR_LOADED)
+    refreshes.transition(current, state)
     is_problem(put(client, refresh, FILE), 409)
 
 
