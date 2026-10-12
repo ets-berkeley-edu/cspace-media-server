@@ -41,7 +41,7 @@ def start(client: TestClient, tenant: str = "pahma") -> dict[str, Any]:
 
 
 def put(client: TestClient, run: dict[str, Any], body: bytes, **headers: str) -> Any:
-    return client.put(run["links"]["blob_media"], content=body, headers=upload_headers(body, **headers))
+    return client.put(run["links"]["servable_list"], content=body, headers=upload_headers(body, **headers))
 
 
 def is_problem(response: Any, status: int) -> None:

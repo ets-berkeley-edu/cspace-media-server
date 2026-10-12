@@ -1,4 +1,4 @@
-"""The Blob-to-Media file (design: The Blob-to-Media file) and the servability rows made from it.
+"""The servable list (design: The servable list) and the servability rows made from it.
 
 Reading never holds the compressed file whole; the rows themselves are kept in a dict, about a few hundred bytes each
 (PAHMA's few hundred thousand rows: some tens of MB)."""

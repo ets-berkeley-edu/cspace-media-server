@@ -89,7 +89,7 @@ class Run:
 
     @property
     def file_name(self) -> str:
-        return f"blob-media.{self.tenant}.{self.night}.tsv"
+        return f"servable-list.{self.tenant}.{self.night}.tsv"
 
     @property
     def open(self) -> bool:

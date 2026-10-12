@@ -47,7 +47,7 @@ class Services:
 
 class Links(BaseModel):
     self: str
-    blob_media: str
+    servable_list: str
     preflight: str
     solr_load: str
     apply: str
@@ -65,8 +65,8 @@ class RunOut(BaseModel):
     museum: str = Field(examples=["pahma"])
     night: str = Field(description="The Pacific date when the run started", examples=["2026-10-10"])
     state: State
-    file_name: str = Field(description="The name to give the Blob-to-Media file",
-                           examples=["blob-media.pahma.2026-10-10.tsv"])
+    file_name: str = Field(description="The name to give the servable list",
+                           examples=["servable-list.pahma.2026-10-10.tsv"])
     poll_interval_seconds: int = Field(description="How long to wait between polls; use this value, not a fixed one",
                                        examples=[15])
     step_timeout_seconds: int = Field(description="How long a step may take before the ETL carries on without Serena",
@@ -103,7 +103,7 @@ def _out(services: Services, run: Run) -> RunOut:
         if upload else None,
         preflight=run.preflight, solr_load=run.solr_load, apply=run.apply,
         reasons=run.reasons,
-        links=Links(self=base, blob_media=f"{base}/blob-media", preflight=f"{base}/preflight",
+        links=Links(self=base, servable_list=f"{base}/servable-list", preflight=f"{base}/preflight",
                     solr_load=f"{base}/solr-load", apply=f"{base}/apply"))
 
 
@@ -113,7 +113,7 @@ def _json(model: BaseModel, status: int = 200) -> JSONResponse:
 
 def create_etl_app(services: Services) -> FastAPI:
     app = FastAPI(title="Serena ETL API", version="1",
-                  summary="How the nightly Solr ETL hands each night's Blob-to-Media file to Serena",
+                  summary="How the nightly Solr ETL hands each night's servable list to Serena",
                   description="See docs/design.md, The ETL API and The nightly sequence. Every call needs the museum's "
                               "bearer token (`Authorization: Bearer <token>`). Errors are application/problem+json.",
                   docs_url=None, redoc_url=None, openapi_url=None)
@@ -210,13 +210,13 @@ def create_etl_app(services: Services) -> FastAPI:
     def get_run(tenant: Tenant, run_id: str) -> JSONResponse:
         return _json(_out(services, run_of(tenant, run_id)))
 
-    @app.put("/museums/{tenant}/runs/{run_id}/blob-media", response_model=RunOut,
+    @app.put("/museums/{tenant}/runs/{run_id}/servable-list", response_model=RunOut,
              responses=openapi_responses(400, 401, 403, 404, 409, 413, 415, 422, 503),
-             summary="Upload the night's Blob-to-Media file",
+             summary="Upload the night's servable list",
              openapi_extra={"requestBody": {"required": True, "content": {
                  "text/tab-separated-values": {"schema": {"type": "string", "format": "binary"},
                                                "example": "blob_csid\tmedia_csid\tkind\taccess\n"}}}})
-    async def put_blob_media(
+    async def put_servable_list(
         request: Request,
         tenant: Tenant,
         run_id: str,
@@ -264,7 +264,7 @@ def create_etl_app(services: Services) -> FastAPI:
             if run.upload is not None and run.upload.sha256 == sha:
                 log.info("same file uploaded again", extra={"museum": tenant, "run_id": run.run_id})
                 return _json(_out(services, run))
-            key = f"blob-media/{run.run_id}/{run.file_name}.gz"
+            key = f"servable-list/{run.run_id}/{run.file_name}.gz"
             await asyncio.to_thread(uploads.store, services.s3, bucket, key, received)
             upload = Upload(sha, received.rows, received.size, key, services.runs.now())
             try:

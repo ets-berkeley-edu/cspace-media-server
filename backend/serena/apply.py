@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import tables
-from .blob_media import Row, item, row_of
+from .servable_list import Row, item, row_of
 from .store import Store
 
 BATCH = 25  # DynamoDB's limit per BatchWriteItem

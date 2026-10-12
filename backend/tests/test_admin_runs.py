@@ -259,8 +259,8 @@ def test_an_override_expires_and_can_be_cancelled(app: Any, admin: TestClient, e
 def admin_upload(admin: TestClient, body: bytes, confirmed: bool = True,
                  reason: str = "ETL%20log%20checked%3A%20caf%C3%A9") -> Any:
     return admin.put("/admin/v1/museums/pahma/uploads", content=body, headers={
-        **CHANGES, "X-Loaded-Confirmed": "yes" if confirmed else "", "X-File-Name": "blob-media.pahma.2026-10-09.tsv",
-        "X-Night": "2026-10-09", "X-Reason": reason})
+        **CHANGES, "X-Loaded-Confirmed": "yes" if confirmed else "",
+        "X-File-Name": "servable-list.pahma.2026-10-09.tsv", "X-Night": "2026-10-09", "X-Reason": reason})
 
 
 @pytest.mark.parametrize("compress", [False, True])
@@ -272,7 +272,7 @@ def test_upload_a_nights_file(admin: TestClient, etl: TestClient, worker: Worker
     run = response.json()
     assert run["state"] == "preflighting" and run["upload"]["rows"] == len(BLOBS)
     assert run["uploaded_night"] == "2026-10-09"  # the run's own night is tonight
-    assert any("uploaded by an admin: blob-media.pahma.2026-10-09.tsv, the night of 2026-10-09: ETL log checked: "
+    assert any("uploaded by an admin: servable-list.pahma.2026-10-09.tsv, the night of 2026-10-09: ETL log checked: "
                "café" in r for r in run["reasons"])
     assert worker.tick() == 1  # the preflight; it passes, and the apply is queued at once
     assert run_of(admin, run["run_id"])["state"] == "applying"
@@ -286,7 +286,7 @@ def test_upload_a_nights_file(admin: TestClient, etl: TestClient, worker: Worker
 
 def test_an_uploaded_file_that_fails_preflight_changes_nothing(admin: TestClient, worker: Worker,
                                                                store: Store) -> None:
-    run = admin_upload(admin, b"not\ta\tBlob-to-Media\tfile\n").json()
+    run = admin_upload(admin, b"not\ta\tservable\tlist\n").json()
     worker.tick()
     assert run_of(admin, run["run_id"])["state"] == "preflight_failed"
     assert store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"] == []

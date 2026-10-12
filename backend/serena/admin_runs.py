@@ -245,7 +245,7 @@ def create_router() -> APIRouter:
                 raise HTTPException(409, busy.detail) from None
             if not created:
                 raise HTTPException(409, f"Run {run.run_id} has just started: try again once it finishes.")
-            key = f"blob-media/{run.run_id}/{run.file_name}.gz"
+            key = f"servable-list/{run.run_id}/{run.file_name}.gz"
             await asyncio.to_thread(uploads.store, r.s3, bucket, key, received)
             name = FILE_NAME.sub("", os.path.basename(unquote(x_file_name)))[:120] or "the file"
             note = (f"file uploaded by an admin: {name}" + (f", the night of {night}" if night else "")

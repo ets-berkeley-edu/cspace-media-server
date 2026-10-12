@@ -22,7 +22,7 @@ class Reason(StrEnum):
     BAD_CSID = "bad_csid"
     DERIVATIVE_NOT_SERVED = "derivative_not_served"
     # Servability (design: The steps, step 2)
-    NOT_LISTED = "not_listed"  # not in the last applied Blob-to-Media file
+    NOT_LISTED = "not_listed"  # not in the last applied servable list
     KIND_NOT_SERVED = "kind_not_served"  # audio or video, for now
     RESTRICTED = "restricted"  # access restricted, without a signed link or of a kind without signed access
     SIGNATURE_INVALID = "signature_invalid"  # a signed link that is malformed, has an unknown key ID or doesn't match

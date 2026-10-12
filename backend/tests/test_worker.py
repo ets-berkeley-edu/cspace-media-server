@@ -32,7 +32,7 @@ def worker(store: Store, s3: Any, clock: Any) -> Worker:
 
 
 def upload(client: TestClient, run: dict[str, Any], body: bytes) -> None:
-    response = client.put(run["links"]["blob_media"], content=gzip.compress(body), headers={
+    response = client.put(run["links"]["servable_list"], content=gzip.compress(body), headers={
         **auth(), "Content-Type": "text/tab-separated-values", "Content-Encoding": "gzip",
         "X-Row-Count": str(body.count(b"\n") - 1), "X-Content-SHA256": hashlib.sha256(body).hexdigest()})
     assert response.status_code == 200, response.text

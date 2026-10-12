@@ -1,6 +1,6 @@
 """Whether a Blob may be served (design: The steps, step 2; Kinds; Servability).
 
-A Blob is servable when the last applied Blob-to-Media file lists it, its kind is one Serena serves, its access is
+A Blob is servable when the last applied servable list includes it, its kind is one Serena serves, its access is
 public (or restricted, with a valid signed link, for a kind the museum allows signed access to), and its Media record
 has no active takedown. Then the request must fit the kind: a 3D file or PDF only as
 its original file, and an image's original only where the museum serves originals."""

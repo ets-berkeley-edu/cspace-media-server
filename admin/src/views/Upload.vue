@@ -2,7 +2,7 @@
   <v-container fluid>
     <h1 class="text-h5 mb-4">Upload a night's file</h1>
     <p class="mb-4">
-      For a partial night where the ETL loaded the public core but its Blob-to-Media file never reached Serena. Take
+      For a partial night where the ETL loaded the public core but its servable list never reached Serena. Take
       that night's file from the ETL server. Serena checks it as it checks every night's file and, if it passes,
       applies it. If it fails, nothing changes and the run shows why.
     </p>
@@ -19,7 +19,7 @@
       <v-file-input
         id="file"
         v-model="file"
-        label="The Blob-to-Media file (.tsv or .tsv.gz)"
+        label="The servable list (.tsv or .tsv.gz)"
         accept=".tsv,.gz,.txt"
       />
       <v-text-field

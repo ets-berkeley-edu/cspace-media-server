@@ -23,12 +23,12 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from . import apply as applying
 from . import preflight
-from .blob_media import read_rows
 from .config import Settings
 from .museum import Museum
 from .museum_settings import MuseumSettings
 from .overrides import Overrides
 from .runs import OutOfOrder, Run, Runs, State
+from .servable_list import read_rows
 from .store import Store
 from .watchdog import Watchdog
 

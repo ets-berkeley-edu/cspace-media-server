@@ -19,7 +19,7 @@ Key decisions:
 - **Same URLs, keyed by Blob CSID.** Glimmer and any other client keep requesting
   `…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content` and `…/blobs/<blob CSID>/content`; nothing
   in Glimmer changes. A URL keyed by Media CSID is added for clients that want it.
-- **The ETL decides what is public.** Each night the ETL hands Serena a Blob-to-Media file listing every Blob in the
+- **The ETL decides what is public.** Each night the ETL hands Serena a servable list of every Blob in the
   public core, with its Media CSID, kind and access. Serena serves a Blob only if that file lists it as public, in a
   kind Serena serves, and its Media record has no takedown in Serena. Serena never reads Solr or CollectionSpace's
   Postgres.
@@ -51,13 +51,13 @@ Three things are easy to blur, and this design keeps them apart:
 
 | Part | What it is | Reads | Produces |
 | --- | --- | --- | --- |
-| The ETL (`cspace-solr-ucb`) | A nightly job per museum | CollectionSpace's Postgres | The public Solr core, and the Blob-to-Media file for Serena |
+| The ETL (`cspace-solr-ucb`) | A nightly job per museum | CollectionSpace's Postgres | The public Solr core, and the servable list for Serena |
 | The public core | Data | n/a | What every client of the core sees |
 | Glimmer, and other clients | Applications | The public core, live | Requests to Serena's URLs |
-| Serena | The media server | The Blob-to-Media file (never Solr) | Images and documents |
+| Serena | The media server | The servable list (never Solr) | Images and documents |
 
 Glimmer is the client we know; others may read the public cores, and this design assumes they do. Serena depends
-only on the public core, through the Blob-to-Media file, never on Glimmer. Changes on Glimmer's side (new URL
+only on the public core, through the servable list, never on Glimmer. Changes on Glimmer's side (new URL
 shapes, a move to Media CSIDs) follow Glimmer's own timeline.
 
 Two rules follow (decided October 9, 2026):
@@ -95,7 +95,7 @@ What Serena improves:
 | Replacing a Media record's image always creates a new Blob record. The old Blob is left orphaned; CollectionSpace doesn't delete it. | A Blob CSID is never reused for different content. |
 | The Media service serves a Media record's current file: `media/<csid>/blob/content` and `media/<csid>/blob/derivatives/<name>/content`. It also returns soft-deleted Media records and their files. | Serena fetches through the Media service, after checking the record isn't deleted. |
 | Publication (`approvedforweb` / `postToPublic`), sensitivity (for PAHMA, the related Object's status) and access (for Cinefiles, the document's access code and record status) live on the Media, Object and Organization records, not on the Blob. | Serena doesn't evaluate them. The ETL does, per museum, in `cspace-solr-ucb`, and tells Serena the result (see Restricted files). |
-| The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its restricted-image Blob; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The Blob-to-Media file mirrors these fields, with a kind and an access value per Blob. |
+| The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its restricted-image Blob; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The servable list mirrors these fields, with a kind and an access value per Blob. |
 | Cinefiles staff set a document's access in CollectionSpace: "Access code override" on the document (Object) record, otherwise "Publication access code" on the Organization record named in its Source field. The values are PFA Staff Only, In House Only, Campus (UCB), Education (\*.edu) and World. A document's Record status must be approved for it to be in the public core. Cinefiles' ETL has no Media-level publish flag: every Media record of an included document is in the public core. | For Cinefiles, the access code restricts a PDF and the record status removes a whole document; unpublishing a Media record changes nothing. |
 | Cinefiles' access code is computed into a table (`cinefiles_denorm.doclist_view`, column `code`) by a nightly "denorm" job that Lyrasis runs, not RTL; the ETL reads that table. | Restriction for Cinefiles depends on that job having run. The ETL takes a PDF's access from the same `code` that becomes `code_s` in the public core, so Glimmer and Serena agree. |
 | The ETL runs nightly, starting at 03:01 for all museums in parallel. It empties each core and reloads it; if a load fails it reloads the previous night's data. Its output is immutable. | New files appear, and CollectionSpace-driven takedowns take effect, within about 24 hours. |
@@ -150,7 +150,7 @@ flowchart LR
   F -->|origin access control| K
   E[Nightly ETL] -->|public core| P[(Solr)]
   P --> G[Glimmer and other clients]
-  E -->|ETL API: Blob-to-Media file| A
+  E -->|ETL API: servable list| A
   W[Serena worker: preflight, apply, watchdog] --> D
   W -->|alarms| N[SNS email]
   M[Admin web app] --> A
@@ -159,9 +159,9 @@ flowchart LR
 | Component | What it does |
 | --- | --- |
 | Serena app | Answers file requests (checks servability, finds or fetches the file, redirects); serves the ETL API and the admin app |
-| Worker | Preflights and applies each night's Blob-to-Media file; runs the watchdog |
+| Worker | Preflights and applies each night's servable list; runs the watchdog |
 | DynamoDB | Servability records, takedowns, runs, settings, alerts, unserved-request counts, the cache index, the audit log |
-| S3 buckets | One private, KMS-encrypted bucket per museum, holding every file Serena has fetched or watermarked, and each applied Blob-to-Media file |
+| S3 buckets | One private, KMS-encrypted bucket per museum, holding every file Serena has fetched or watermarked, and each applied servable list |
 | CloudFront | Delivers files from S3 to browsers, only through signed URLs; serves the unavailable images without a signature |
 | Admin web app | Runs and alerts, settings, takedowns, restricted-image Blobs, why a file is or isn't served |
 | SNS | Emails alarms to the team's mailing list |
@@ -188,7 +188,7 @@ and ignores any query string apart from the signature parameters on a request fo
 files). A request under a museum Serena doesn't serve gets the default unavailable image.
 
 A CSID is 1 to 64 letters, digits and hyphens (decided October 9, 2026). That covers the usual UUIDs and the CSIDs
-that aren't UUIDs, such as PAHMA's restricted-image Blob. The same rule applies to the CSIDs in the Blob-to-Media file
+that aren't UUIDs, such as PAHMA's restricted-image Blob. The same rule applies to the CSIDs in the servable list
 and in each museum's configuration. It keeps malformed paths out; whether a Blob is served is decided only by the
 nightly file.
 
@@ -208,7 +208,7 @@ the access logs show which sizes are requested (see Open questions).
 
 ### Kinds
 
-Each Blob in the Blob-to-Media file has a kind (decided October 9, 2026):
+Each Blob in the servable list has a kind (decided October 9, 2026):
 
 | Kind | Served | As | Checks on fetch | Watermarked |
 | --- | --- | --- | --- | --- |
@@ -227,7 +227,7 @@ files and 200 MB for PDFs, for every museum (decided October 9, 2026); the value
 
 Any museum may have images or documents that mustn't be public: PAHMA and Cinefiles do today. Which files are
 restricted is decided by the ETL, with each museum's own rules; Serena never encodes a museum's rule (decided October
-9, 2026). It sees only the result, per Blob, in the Blob-to-Media file:
+9, 2026). It sees only the result, per Blob, in the servable list:
 
 | In the nightly file | Meaning | Serena |
 | --- | --- | --- |
@@ -240,7 +240,7 @@ What each museum's ETL does today:
 | Museum | Withheld or restricted by the ETL |
 | --- | --- |
 | PAHMA | Images not approved for the web, or whose Object is sensitive: left out of the public core and shown as its restricted-image Blob (see Restricted-image Blob). |
-| Cinefiles | Documents whose record status isn't approved: left out, with all their files. PDFs of documents whose access code isn't World: listed with `access` restricted; Glimmer shows them only to readers signed in to it, who have accepted Cinefiles' copyright terms. Page images of those documents: public, which Cinefiles staff accept (October 9, 2026). See The Blob-to-Media file for the rule. |
+| Cinefiles | Documents whose record status isn't approved: left out, with all their files. PDFs of documents whose access code isn't World: listed with `access` restricted; Glimmer shows them only to readers signed in to it, who have accepted Cinefiles' copyright terms. Page images of those documents: public, which Cinefiles staff accept (October 9, 2026). See The servable list for the rule. |
 | BAMPFA, Botanical Garden, UCJEPS | Files their ETL rules don't publish: left out. |
 
 Signed access is part of each museum's configuration (its YAML file; not a setting admins change), listing the kinds
@@ -405,7 +405,7 @@ Each case has its own reason, so the admin app can say why a file isn't served:
 | `unknown_path` | Not one of the shapes in URLs |
 | `bad_csid` | The CSID isn't in CollectionSpace's format |
 | `derivative_not_served` | A derivative not on the museum's list |
-| `not_listed` | The Blob isn't in the last applied Blob-to-Media file |
+| `not_listed` | The Blob isn't in the last applied servable list |
 | `kind_not_served` | Audio or video, for now |
 | `restricted` | A restricted Blob requested without a signed link, or of a kind the museum doesn't allow signed access to |
 | `signature_invalid` | A signed link that is malformed (a `uid` that isn't digits included), has an unknown key ID or doesn't match |
@@ -496,13 +496,17 @@ valid signed link where the museum allows it), and its Media CSID has no active 
 the last applied night's file. The museum's restricted-image Blob must be listed there too, like any other (decided
 October 9, 2026).
 
-### The Blob-to-Media file
+### The servable list
+
+The ETL's list of the files Serena may serve: every Blob the public core links to, with the Media record to fetch it
+through, its kind and who may see it. Serena checks it (the preflight) and applies it to its servability table. It was
+called the Blob-to-Media file until October 11, 2026.
 
 Written each night per museum by the ETL, by the same step that builds the public core (Jira CSW-1027; decided
 October 9, 2026):
 
 - Tab-separated, UTF-8, header `blob_csid`, `media_csid`, `kind`, `access`; named
-  `blob-media.<tenant>.<YYYY-MM-DD>.tsv` (Serena returns the name when a run starts).
+  `servable-list.<tenant>.<YYYY-MM-DD>.tsv` (Serena returns the name when a run starts).
 - One row per Blob CSID in the public core's image, card, audio, video, 3D and PDF fields: no more and no fewer.
 - `kind`: image, card, audio, video, 3D or pdf. A Blob in several fields takes the first that applies of pdf, 3D, card,
   image.
@@ -525,7 +529,7 @@ October 9, 2026):
 Per museum, the ETL drives each step through Serena's ETL API (decided October 9, 2026):
 
 1. Start a run with Serena.
-2. Extract and merge, writing the public core's data and the Blob-to-Media file.
+2. Extract and merge, writing the public core's data and the servable list.
 3. Upload the file and ask Serena to preflight it. If the preflight fails, stop: the public core isn't loaded, and
    both the public core and Serena keep yesterday's data.
 4. Load the public core (with the ETL's fallback to the previous night's data if the load fails).
@@ -544,8 +548,8 @@ night through its watchdog, and an admin brings it up to date:
 - If not: upload that night's file (from the ETL server) in the admin app; it is preflighted, then applied.
 - Otherwise Serena catches up with the next night's run.
 
-The principle (decided October 9, 2026): if the ETL run succeeded (a working public core and a valid Blob-to-Media
-file), an admin can always bring Serena up to date. The steps go in a runbook, reviewed with the DevOps team.
+The principle (decided October 9, 2026): if the ETL run succeeded (a working public core and a valid servable
+list), an admin can always bring Serena up to date. The steps go in a runbook, reviewed with the DevOps team.
 
 ### The ETL API
 
@@ -564,7 +568,7 @@ the AWS libraries' own logging stays at warnings, since at debug it would log a 
 | `GET` | `/etl/v1/ping` | Checks connectivity and the token; answers with the museum the token belongs to, and nothing else |
 | `POST` | `/etl/v1/museums/{tenant}/runs` | Starts a run: Serena assigns the run ID and night, and returns the file name, `poll_interval_seconds`, `step_timeout_seconds` and the links for the run's other calls. If a run for that museum and night is still open, returns it |
 | `GET` | `…/runs/{run_id}` | The run's status |
-| `PUT` | `…/runs/{run_id}/blob-media` | Uploads the file (`text/tab-separated-values`, gzip allowed), with `X-Row-Count` (data rows) and `X-Content-SHA256` (of the uncompressed file) |
+| `PUT` | `…/runs/{run_id}/servable-list` | Uploads the file (`text/tab-separated-values`, gzip allowed), with `X-Row-Count` (data rows) and `X-Content-SHA256` (of the uncompressed file) |
 | `POST` | `…/runs/{run_id}/preflight` | Checks the file without applying it (202; poll until `ready` or `preflight_failed`). Allowed once a file is received, and again after a failed preflight: with a corrected file, or with the same file once an admin has overridden the change threshold |
 | `POST` | `…/runs/{run_id}/solr-load` | Records the public core's load outcome, `{"outcome": "loaded" or "fell_back", "rows": <documents loaded>}`; allowed once the preflight passed |
 | `POST` | `…/runs/{run_id}/apply` | Applies the file; only after the preflight passed and the load reported `loaded` (202; poll until `applied` or `apply_failed`) |
@@ -594,7 +598,7 @@ Run states: `started` → `received` → `preflighting` → `ready` or `prefligh
 - Every state change is a conditional write on the run's current state, so two calls at once can't both succeed.
 
 Uploads (decided October 9, 2026): the body is streamed to the task's disk while it's decompressed, hashed and
-counted, then stored gzip-compressed in the museum's bucket at `blob-media/<run ID>/<file name>.gz`. At most 500 MB
+counted, then stored gzip-compressed in the museum's bucket at `servable-list/<run ID>/<file name>.gz`. At most 500 MB
 uncompressed (a setting, `SERENA_UPLOAD_MAX_MB`). A gzip body is decompressed in bounded pieces, so a small body that
 expands hugely is refused like a large one. The format is checked by the preflight, not here.
 
@@ -875,7 +879,7 @@ reachable only from campus networks.
 - **Least privilege.** The app's task role can read the servability table; read and write the takedown and settings
   tables (the admin app's takedowns and settings are served by the app), the cache index, runs, alerts,
   unserved-request counts, audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
-  uploaded Blob-to-Media files; use the KMS key; and read its own secrets. The worker's role can read and write
+  uploaded servable lists; use the KMS key; and read its own secrets. The worker's role can read and write
   servability (deleting rows included, for an apply), runs and alerts, read the settings, read and put the applied
   files in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
 - **Logs and metrics.** Structured JSON logs to CloudWatch and embedded metrics: requests, hits, misses, unserved
@@ -967,7 +971,7 @@ The F numbers follow the team's list of follow-ups.
 - **F8. Cinefiles PDFs.** Settled October 9, 2026: restricted PDFs are served only with a link Glimmer signs (see
   Restricted files), and restricted documents' page images stay public. Still to confirm with Cinefiles staff: that code
   4 alone means public; what PFA Staff Only and In House Only should mean (served to signed-in readers like the other
-  restricted codes, or never), and if they differ, whether the Blob-to-Media file should carry the access code itself;
+  restricted codes, or never), and if they differ, whether the servable list should carry the access code itself;
   whether records of who read which PDF are wanted (Serena would record `uid`); whether the email address can come out
   of Glimmer's PDF links; whether documents with several PDFs should show them all; whether the unavailable image is
   acceptable where a portal embeds a restricted PDF whose link has expired; whether documents with neither an access
