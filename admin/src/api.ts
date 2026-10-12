@@ -137,6 +137,30 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: {file
   return data as T
 }
 
+/** One request in the log: served, or unserved with its reason (D103). */
+export interface RequestLine {
+  at: string
+  outcome: 'served' | 'unserved'
+  reason: string
+  path: string
+  kind: string
+  cache: string
+  signed: boolean
+}
+
+export type RequestRange = '1h' | '24h' | '7d'
+
+export interface RequestsReport {
+  range: RequestRange
+  start: string
+  end: string
+  max_lines: number
+  truncated: boolean // more lines than max_lines: only the newest are listed (D107)
+  days: {day: string, served: number, unserved: Record<string, number>, unserved_total: number}[]
+  top_paths: {path: string, requests: number}[]
+  lines: RequestLine[]
+}
+
 /** A failed load's message, for the page to show. */
 export function problem(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Serena couldn\'t be reached. Reload the page to try again.'
@@ -152,6 +176,19 @@ export const api = {
   audit: (museum: string) => call<{days: number, entries: AuditEntry[]}>('GET', `/museums/${museum}/audit`),
   // Every entry the museum keeps, as CSV: a plain link, so the browser saves the file (D96).
   auditExportUrl: (museum: string) => `${PREFIX}/museums/${museum}/audit/export.csv`,
+  requests: (museum: string, range: RequestRange) =>
+    call<RequestsReport>('GET', `/museums/${museum}/requests?range=${range}`),
+  // The lines matching the page's range and filters, as CSV: a plain link, so the browser saves the file (D113).
+  requestsExportUrl: (museum: string, range: RequestRange, outcome: string, reason: string) => {
+    const query = new URLSearchParams({range})
+    if (outcome) {
+      query.set('outcome', outcome)
+    }
+    if (reason) {
+      query.set('reason', reason)
+    }
+    return `${PREFIX}/museums/${museum}/requests/export.csv?${query}`
+  },
   settings: (museum: string) => call<SettingsResponse>('GET', `/museums/${museum}/settings`),
   changeSetting: (museum: string, name: string, value: string | number, reason: string) =>
     call<SettingsResponse>('PUT', `/museums/${museum}/settings/${encodeURIComponent(name)}`, {value, reason}),

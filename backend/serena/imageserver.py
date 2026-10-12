@@ -36,9 +36,14 @@ def _unavailable(request: Request, tenant: str | None, reason: Reason) -> Redire
     return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
 
 
-def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_kid: str | None = None) -> Response:
+def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_kid: str | None = None,
+              kind: str | None = None, cache: str = "hit") -> Response:
     """302 to a signed URL for the stored object (design: Signed URLs, Responses). The URL is never logged. A restricted
-    file served on a portal's signed link gets Cache-Control: no-store, so the browser asks again next time."""
+    file served on a portal's signed link gets Cache-Control: no-store, so the browser asks again next time.
+
+    The "served" line is what the admin app's Requests page reads (D103): the path (from paths.log_path(), so without
+    the PDF link suffix or a query string), the kind, the cache (hit, or miss when it was just fetched) and whether a
+    signed link was used."""
     signer: signing.Signer | None = request.app.state.signer
     if signer is None:
         log.error("no signer configured: set SERENA_CDN_BASE_URL and SERENA_CLOUDFRONT_KEY_SECRET_ID")
@@ -46,10 +51,12 @@ def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_ki
     now = datetime.now(UTC)
     expires = signing.expiry(now)
     url = signer.url(tenant, entry.key, expires)
+    served = {"museum": tenant, "path": paths.log_path(request.url.path), "kind": kind, "cache": cache,
+              "signed": signed_kid is not None}
     if signed_kid is not None:
-        log.info("served", extra={"museum": tenant, "cache": "hit", "signed": True, "kid": signed_kid})
+        log.info("served", extra={**served, "kid": signed_kid})
         return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
-    log.info("served", extra={"museum": tenant, "cache": "hit"})
+    log.info("served", extra=served)
     max_age = max(expires - int(now.timestamp()), 0)
     return RedirectResponse(url, status_code=302, headers={"Cache-Control": f"private, max-age={max_age}"})
 
@@ -64,8 +71,8 @@ def _vouch(request: Request, tenant: str, blob_csid: str) -> Callable[[], signed
     return check
 
 
-def _recorder(request: Request) -> Recorder:
-    recorder: Recorder = request.app.state.unserved
+def _recorder(request: Request) -> Recorder | None:
+    recorder: Recorder | None = request.app.state.unserved
     return recorder
 
 
@@ -87,15 +94,18 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
             # Never an unwatermarked copy of a size the museum watermarks (design: Watermarks).
             return _unavailable(request, tenant, Reason.WATERMARK_NOT_BUILT)
         entry = cache_index.lookup(request.app.state.store, tenant, parsed.blob_csid, parsed.derivative)
+        cache = "hit"
         if entry is None and decision.record is not None:
             # A miss: the light check, then fetch, check and store (design: The steps, steps 4 and 5).
             fetched = request.app.state.fetcher.get(museum, decision.record, parsed.derivative)
             if isinstance(fetched, Reason):
                 return _unavailable(request, tenant, fetched)
             entry = fetched
+            cache = "miss"
         if entry is None:
             return _unavailable(request, tenant, Reason.INTERNAL_ERROR)
-        return _redirect(request, tenant, entry, decision.signed_kid)
+        kind = decision.record.kind if decision.record is not None else None
+        return _redirect(request, tenant, entry, decision.signed_kid, kind, cache)
     except signed_links.SigningKeysUnavailable:
         # Already logged, with the museum; fail closed (design: Signed links).
         return _unavailable(request, tenant, Reason.INTERNAL_ERROR)

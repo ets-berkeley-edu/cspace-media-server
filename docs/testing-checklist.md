@@ -288,7 +288,7 @@ The API's tests cover each setting, its bounds, the alerts, the export and the d
 checks the pages in Chrome. Start afresh from the pull request's branch (see the top of this file), open
 http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 
-- [ ] Open "Settings" (in the menu, after "Alerts"). Expect the title "PAHMA Settings", and five cards: Watchdog (deadline 08:00), The ETL job (poll
+- [ ] Open "Settings" (in the menu, after "Requests"). Expect the title "PAHMA Settings", and five cards: Watchdog (deadline 08:00), The ETL job (poll
   interval 15, step timeout 1800), Servable list check (delta threshold 5), Size limits (image 500, card 500, 3D 1024,
   pdf 200) and Audit log (90 days), each "default value".
 - [ ] Click "Change" beside the step timeout. Type `10` and a reason, and click "Save". Expect a red message that it
@@ -316,3 +316,36 @@ http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 - [ ] On "Audit log", click "Export CSV". Expect a file `serena-audit-pahma-<today>.csv`. Open it in Excel: expect
   the columns time (UTC), admin, action, target and details, oldest first, and nothing run as a formula. Reload the
   page: expect an "audit export" entry at the top, with the number of entries.
+
+## 16. The Requests page, locally (15 minutes, before merging a pull request that changes it)
+
+The API's tests cover the four queries, the museum filter, the one-minute cache, a slow or failed query and the CSV
+export. Locally the page reads a log file inside the app's container in place of CloudWatch, so this checks the page
+and the log lines; the CloudWatch queries themselves are checked once Serena is in QA (see design.md, Open questions).
+Start afresh from the pull request's branch (see the top of this file).
+
+- [ ] In a terminal, run `./serena smoke`. It ends "Smoke test passed: a refresh updated, and
+  /pahma/imageserver/blobs/<CSID>/derivatives/Medium/content fetched, stored and served." Copy that path.
+- [ ] Ask for the same image again, and for two that aren't served, replacing `<path>` with the path you copied:
+  ```
+  curl -s -o /dev/null http://localhost:8300<path>
+  curl -s -o /dev/null http://localhost:8300/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/content
+  curl -s -o /dev/null "http://localhost:8300/pahma/imageserver/blobs/not-a-csid/content?uid=12345&sig=abc"
+  ```
+- [ ] Open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`). Open "Requests" (in the menu,
+  after "Alerts"). Expect a spinner and "Reading Serena's log…" for a moment, then the title "PAHMA Requests" and
+  "Last 24 hours" chosen.
+- [ ] Under "By day", expect today with 2 served and 2 unserved ("not listed 2"). Under "Most requested", expect your
+  path with 2 requests at the top.
+- [ ] In the table, expect four lines, newest first: two "unserved" with the reason "not listed" (their paths with no
+  `?uid=…` or `sig=…`), then your path twice, "served", kind "image", cache "hit" (newer) and "miss" (older: the
+  smoke test's first fetch).
+- [ ] Click "Time" in the header: expect the oldest first; click again for newest first.
+- [ ] Choose Outcome "Unserved": expect the two unserved lines. Choose Reason "not listed": still two. Choose Outcome
+  "Served": expect your two lines, and the Reason filter cleared and greyed out.
+- [ ] With Outcome "Unserved", click "Export CSV". Expect a file `serena-requests-pahma-<today>.csv` with the columns
+  time (UTC), outcome, reason, path, kind, cache and signed link, and the two unserved lines only.
+- [ ] Click "Last hour", then "Last 7 days": each shows the spinner, then the same counts (everything happened today).
+- [ ] Open "Overview": expect "What Serena served and couldn't serve is on the Requests page."
+- [ ] Sign in to BAMPFA as well (the menu at the top, "Sign in to another museum") and open its "Requests": expect "No
+  requests in this range." in both cards and "No requests match." in the table; PAHMA's requests never appear.

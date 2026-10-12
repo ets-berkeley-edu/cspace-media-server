@@ -18,6 +18,18 @@ export const RETENTION_LABELS: Record<number, string> = {
 /** The page sizes the Refreshes, Alerts and Audit log tables offer; 25 to start (D92). */
 export const PAGE_SIZES = [10, 25, 50, 100].map(n => ({value: n, title: String(n)}))
 
+/** The Requests page's ranges (D106). */
+export const REQUEST_RANGES = [
+  {value: '1h', title: 'Last hour'},
+  {value: '24h', title: 'Last 24 hours'},
+  {value: '7d', title: 'Last 7 days'}
+]
+
+/** An unserved request's reason, readable: not_listed → "not listed". */
+export function reasonOf(reason: string): string {
+  return reason.replace(/_/g, ' ')
+}
+
 export function stateOf(state: string): string {
   return STATES[state] || state
 }

@@ -25,12 +25,11 @@ TAKEDOWNS = Table("takedowns")  # pk <tenant>#<media CSID>
 REFRESHES = Table("refreshes", sort_key="sk")  # pk <tenant>, sk <refresh ID>
 SETTINGS = Table("settings")  # pk <tenant>
 ALERTS = Table("alerts", sort_key="sk")  # pk <tenant>, sk <time>
-UNSERVED = Table("unserved", sort_key="sk", ttl_attribute="expires_at")  # pk <tenant>#<bucket>, sk <reason>
 CACHE_INDEX = Table("cache-index")  # pk <tenant>#<blob CSID>#<derivative>
 AUDIT = Table("audit", sort_key="sk")  # pk <tenant>, sk <time>#<admin>#<random>
 ADMIN_SESSIONS = Table("admin-sessions", ttl_attribute="expires_at")  # pk SHA-256 of the session's token
 
-ALL = (SERVABILITY, TAKEDOWNS, REFRESHES, SETTINGS, ALERTS, UNSERVED, CACHE_INDEX, AUDIT, ADMIN_SESSIONS)
+ALL = (SERVABILITY, TAKEDOWNS, REFRESHES, SETTINGS, ALERTS, CACHE_INDEX, AUDIT, ADMIN_SESSIONS)
 
 
 def full_name(prefix: str, table: Table) -> str:

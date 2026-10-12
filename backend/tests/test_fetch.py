@@ -122,6 +122,19 @@ def test_a_miss_is_fetched_stored_and_served(client: TestClient, store: Store, s
     assert len(fake.calls) == calls  # CollectionSpace isn't asked again
 
 
+def test_the_served_line_says_miss_then_hit(client: TestClient, store: Store,
+                                            caplog: pytest.LogCaptureFixture) -> None:
+    """What the Requests page shows (D103)."""
+    caplog.set_level(logging.INFO, logger="serena.imageserver")
+    add_blob(store, "pahma", BLOB, MEDIA)
+    fake.add(MEDIA)
+    client.get(path())
+    client.get(path())
+    served = [r for r in caplog.records if r.getMessage() == "served"]
+    assert [(r.museum, r.path, r.kind, r.cache, r.signed) for r in served] == [  # type: ignore[attr-defined]
+        ("pahma", path(), "image", "miss", False), ("pahma", path(), "image", "hit", False)]
+
+
 def test_only_the_media_service_is_called(client: TestClient, store: Store) -> None:
     add_blob(store, "pahma", BLOB, MEDIA)
     fake.add(MEDIA)
