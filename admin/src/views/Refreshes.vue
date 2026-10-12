@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-4">Refreshes</h1>
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Refreshes</h1>
     <p class="mb-4">
       This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it. Open a refresh
       to see its servable list, its checks and what an admin can do.
@@ -32,6 +32,7 @@
 <script setup lang="ts">
 import {computed, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
+import {museumName} from '@/session'
 import type {RefreshSummary} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'

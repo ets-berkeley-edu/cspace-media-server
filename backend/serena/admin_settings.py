@@ -1,9 +1,9 @@
 """The admin app's Settings page (design: Admin web app, Records; decided October 12, 2026, D86 to D90, D97).
 
-Each museum's settings have starting values in its YAML file; an admin's value, stored in the Settings table,
-overrides one until it's removed ("Use the starting value"). Every change needs a reason and is audited with the value
-before and after. A change to the delta threshold or the audit log's retention also raises an alert, which the worker
-emails: both weaken a protection. The app and the worker read the settings again within about a minute."""
+Each museum's settings have default values (the starting values in its YAML file); an admin's value, stored in the
+Settings table, overrides one until it's removed ("Use default"). Every change needs a reason and is audited with the
+value before and after. A change to the delta threshold or the audit log's retention also raises an alert, which the
+worker emails: both weaken a protection. The app and the worker read the settings again within about a minute."""
 from __future__ import annotations
 
 import logging
@@ -117,14 +117,14 @@ def create_router() -> APIRouter:
         removed = st.audit.count_before(museum.key, {days: now - timedelta(days=days) for days in AUDIT_RETENTION_DAYS})
         return {
             "settings": [{"name": s.name, "group": s.group, "label": s.label, "value": value_of(current, s.name),
-                          "starting": value_of(museum.settings, s.name),
+                          "default": value_of(museum.settings, s.name),
                           "changed": value_of(current, s.name) != value_of(museum.settings, s.name)}
                          for s in SETTINGS],
             "audit_retention_choices": [{"days": days, "entries_removed": removed[days]}
                                         for days in AUDIT_RETENTION_DAYS]}
 
     def change(request: Request, session: Any, st: SettingsServices, name: str, value: Any, reason: str,
-               to_starting: bool) -> dict[str, Any]:
+               to_default: bool) -> dict[str, Any]:
         admin = services(request)
         setting = BY_NAME.get(name)
         if setting is None:
@@ -135,7 +135,7 @@ def create_router() -> APIRouter:
             before = value_of(merged(museum, overrides), name)
         except ValidationError:
             before = value_of(museum.settings, name)
-        if to_starting:
+        if to_default:
             value = value_of(museum.settings, name)
         updated = with_value(museum, overrides, name, value)
         try:
@@ -148,8 +148,8 @@ def create_router() -> APIRouter:
             raise HTTPException(409, "Another admin changed this museum's settings just now: reload and try again.")
         st.museum_settings.forget(museum.key)
         details = {"before": before, "after": after, "reason": reason}
-        if to_starting:
-            details["starting_value"] = True
+        if to_default:
+            details["default_value"] = True
         st.audit.record(museum.key, session.user, Action.SETTINGS_CHANGE, name, details)
         if setting.alerted and before != after:
             at = st.clock().astimezone(UTC).isoformat(timespec="seconds")
@@ -166,11 +166,11 @@ def create_router() -> APIRouter:
 
     @router.put("/settings/{name}", dependencies=[Depends(changes)])
     def put_setting(name: str, body: Change, request: Request, session: SignedIn, st: Settings_) -> dict[str, Any]:
-        return change(request, session, st, name, body.value, _clean(body.reason), to_starting=False)
+        return change(request, session, st, name, body.value, _clean(body.reason), to_default=False)
 
     @router.post("/settings/{name}/reset", dependencies=[Depends(changes)])
     def reset_setting(name: str, body: Reason, request: Request, session: SignedIn, st: Settings_) -> dict[str, Any]:
-        """Use the starting value (D90): removes the admin's value for this setting."""
-        return change(request, session, st, name, None, _clean(body.reason), to_starting=True)
+        """"Use default" (D90): removes the admin's value for this setting."""
+        return change(request, session, st, name, None, _clean(body.reason), to_default=True)
 
     return router

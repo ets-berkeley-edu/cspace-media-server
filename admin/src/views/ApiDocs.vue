@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-2">ETL API documentation</h1>
+    <h1 id="page-title" class="text-h5 mb-2">{{ museumName(String(route.params.museum)) }} ETL API documentation</h1>
     <p class="mb-4">
       Generated from Serena's code, so it always matches what this Serena accepts. Read-only: requests can't be sent
       from here.
@@ -14,6 +14,7 @@ import 'swagger-ui-dist/swagger-ui.css'
 import SwaggerUIBundle from 'swagger-ui-dist/swagger-ui-bundle.js'
 import {onMounted, ref} from 'vue'
 import {useRoute} from 'vue-router'
+import {museumName} from '@/session'
 import {api} from '@/api'
 
 const route = useRoute()

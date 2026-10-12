@@ -890,7 +890,8 @@ reachable only from campus networks.
   - Every request that changes something carries `X-Serena-Admin: 1`, which a cross-site form can't send; without it
     the API answers 403. The app and its API share an origin, with no CORS.
   - A failed sign-in is logged without the username (it may be anyone's, or a mistyped password) and isn't audited.
-- **Pages.** Served by the app with a Content-Security-Policy that allows scripts only from Serena (no CDN).
+- **Pages.** Served by the app with a Content-Security-Policy that allows scripts only from Serena (no CDN). Every page's
+  title but the Overview's starts with the museum's name, for example "PAHMA Settings".
 - **First-release features:**
   - alerts: the banner, the alerts page and acknowledging (see Watchdog and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
@@ -900,8 +901,8 @@ reachable only from campus networks.
     the ETL's poll interval (5 to 300 seconds) and step timeout (60 to 7,200 seconds), the delta threshold (0.1 to
     100%), the size limits by kind (1 to 2,048 MB) and the audit retention (D97). Any admin of the museum may change
     one, with a reason; the audit log records the value before and after; a change to the delta threshold or the
-    audit retention raises an emailed alert. Each setting shows its starting value, and "Use the starting value"
-    removes the admin's value. For the audit retention, the page says how many entries a shorter period would remove
+    audit retention raises an emailed alert. Each setting shows its default value (the starting value in
+    configuration), and "Use default" removes the admin's value. For the audit retention, the page says how many entries a shorter period would remove
     at the next daily removal;
   - the audit log's CSV export: every entry the museum keeps, oldest first (time, admin, action, target, details),
     with any cell a spreadsheet could run as a formula made safe (D96); the export is audited;

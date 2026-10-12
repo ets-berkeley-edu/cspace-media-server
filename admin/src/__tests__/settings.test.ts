@@ -9,8 +9,8 @@ import Settings from '@/views/Settings.vue'
 
 const SETTINGS = {
   settings: [
-    {name: 'delta_threshold_percent', group: 'check', label: 'Delta threshold (%)', value: 5, starting: 5, changed: false},
-    {name: 'audit_retention_days', group: 'audit', label: 'How long the audit log is kept (days)', value: 90, starting: 90,
+    {name: 'delta_threshold_percent', group: 'check', label: 'Delta threshold (%)', value: 5, default: 5, changed: false},
+    {name: 'audit_retention_days', group: 'audit', label: 'How long the audit log is kept (days)', value: 90, default: 90,
       changed: false}
   ],
   audit_retention_choices: [{days: 90, entries_removed: 0}, {days: 183, entries_removed: 0}]
@@ -25,14 +25,15 @@ async function at(path: string, component: unknown) {
 }
 
 describe('the Settings page', () => {
-  it('changes a setting only with a reason, and shows the starting value', async () => {
+  it('changes a setting only with a reason, and shows the default value', async () => {
     const changed = {...SETTINGS, settings: [{...SETTINGS.settings[0], value: 12.5, changed: true}, SETTINGS.settings[1]]}
     const calls = fakeApi({
       'GET /museums/pahma/settings': {body: SETTINGS},
       'PUT /museums/pahma/settings/delta_threshold_percent': {body: changed}
     })
     const wrapper = await at('/pahma/settings', Settings)
-    expect(wrapper.find('#setting-delta_threshold_percent').text()).toContain('the starting value')
+    expect(wrapper.find('#page-title').text()).toBe('PAHMA Settings')
+    expect(wrapper.find('#setting-delta_threshold_percent').text()).toContain('default value')
     await wrapper.find('#setting-delta_threshold_percent .change').trigger('click')
     await flushPromises()
     const save = () => document.querySelector('#save-setting') as HTMLButtonElement
@@ -46,11 +47,11 @@ describe('the Settings page', () => {
     reason.dispatchEvent(new Event('input'))
     await flushPromises()
     save().click()
-    await vi.waitFor(() => expect(wrapper.find('#setting-delta_threshold_percent').text()).toContain('starting value 5'))
+    await vi.waitFor(() => expect(wrapper.find('#setting-delta_threshold_percent').text()).toContain('changed; default value 5'))
     const put = calls.find(c => c.method === 'PUT')
     expect(put?.body).toEqual({value: '12.5', reason: 'PAHMA republishes its images this week'})
     expect(put?.headers['X-Serena-Admin']).toBe('1')
-    expect(wrapper.find('#setting-delta_threshold_percent .reset').exists()).toBe(true)
+    expect(wrapper.find('#setting-delta_threshold_percent .reset').text()).toBe('Use default')
     wrapper.unmount()
   })
 })

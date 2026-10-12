@@ -90,7 +90,7 @@ export interface SettingItem {
   group: string // watchdog, etl, check, size_limits or audit
   label: string
   value: string | number
-  starting: string | number
+  default: string | number // the value in Serena's configuration
   changed: boolean
 }
 

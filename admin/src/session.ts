@@ -20,6 +20,11 @@ export async function refresh(): Promise<void> {
   session.loaded = true
 }
 
+/** The museum's name as the app shows it (for example PAHMA), for page titles. */
+export function museumName(museum: string): string {
+  return signedInTo(museum)?.name || museum.toUpperCase()
+}
+
 export function signedInTo(museum: string): SignedIn | undefined {
   return session.signedIn.find(s => s.museum === museum)
 }

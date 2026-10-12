@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-4">Alerts</h1>
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Alerts</h1>
     <p class="mb-4">
       Every alert of the last 30 days, newest first. Click a column's name to sort by it. Acknowledging one doesn't hide a
       problem: if it's still there, the watchdog raises it again the next day.
@@ -44,7 +44,7 @@ import {useRoute} from 'vue-router'
 import type {AlertItem} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
-import {alertsChanged} from '@/session'
+import {alertsChanged, museumName} from '@/session'
 import {PAGE_SIZES, when} from '@/words'
 
 // Sortable: when, refresh date, alert, about and acknowledged (D94); the alert sorts by its title.

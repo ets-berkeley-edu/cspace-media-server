@@ -1,7 +1,7 @@
 <template>
   <v-container fluid>
     <div class="d-flex align-center flex-wrap ga-4 mb-4">
-      <h1 class="text-h5">Audit log</h1>
+      <h1 id="page-title" class="text-h5">{{ museumName(museum) }} Audit log</h1>
       <v-spacer />
       <v-btn
         id="export-audit"
@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import {computed, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
+import {museumName} from '@/session'
 import type {AuditEntry} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'

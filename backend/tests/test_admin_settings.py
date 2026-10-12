@@ -45,7 +45,7 @@ def kinds_of_alerts(store: Store) -> list[str]:
     return sorted(i["kind"]["S"] for i in store.client.scan(TableName=store.table(tables.ALERTS))["Items"])
 
 
-def test_the_settings_and_their_starting_values(client: TestClient) -> None:
+def test_the_settings_and_their_default_values(client: TestClient) -> None:
     assert client.get(URL).status_code == 401
     sign_in(client)
     body = client.get(URL).json()
@@ -55,7 +55,7 @@ def test_the_settings_and_their_starting_values(client: TestClient) -> None:
                               "size_limit_mb.3D", "size_limit_mb.pdf", "audit_retention_days"]
     assert settings["watchdog_deadline"] == {"name": "watchdog_deadline", "group": "watchdog",
                                              "label": "Deadline for today's refresh (HH:MM, Pacific)",
-                                             "value": "08:00", "starting": "08:00", "changed": False}
+                                             "value": "08:00", "default": "08:00", "changed": False}
     assert [c["days"] for c in body["audit_retention_choices"]] == [90, 183, 365, 548, 730, 1095]
 
 
@@ -64,7 +64,7 @@ def test_change_a_setting(app: Any, client: TestClient, store: Store) -> None:
     response = put(client, "etl_step_timeout_seconds", 900)
     assert response.status_code == 200, response.text
     assert settings_of(response.json())["etl_step_timeout_seconds"] | {"label": ""} == {
-        "name": "etl_step_timeout_seconds", "group": "etl", "label": "", "value": 900, "starting": 1800,
+        "name": "etl_step_timeout_seconds", "group": "etl", "label": "", "value": 900, "default": 1800,
         "changed": True}
     # The app reads it at once (the other tasks within a minute), and so does the ETL API.
     assert app.state.museum_settings.get(museum.load("pahma")).etl_step_timeout_seconds == 900
@@ -108,15 +108,15 @@ def test_refused_without_the_header_a_reason_or_a_known_setting(client: TestClie
     assert put(client, "no_such_setting", 1).status_code == 404
 
 
-def test_a_size_limit_and_the_starting_value(client: TestClient, store: Store) -> None:
+def test_a_size_limit_and_use_default(client: TestClient, store: Store) -> None:
     sign_in(client)
     settings = settings_of(put(client, "size_limit_mb.pdf", 300).json())
     assert settings["size_limit_mb.pdf"]["value"] == 300 and not settings["size_limit_mb.image"]["changed"]
     response = client.post(f"{URL}/size_limit_mb.pdf/reset", headers=CHANGES, json={"reason": "back to normal"})
     assert response.status_code == 200 and not settings_of(response.json())["size_limit_mb.pdf"]["changed"]
-    assert store.settings_overrides("pahma") == {}  # the admin's value is gone: a new starting value takes effect
+    assert store.settings_overrides("pahma") == {}  # the admin's value is gone: a new default takes effect
     entry = client.get("/admin/v1/museums/pahma/audit").json()["entries"][0]
-    assert entry["details"] == {"before": 300, "after": 200, "reason": "back to normal", "starting_value": True}
+    assert entry["details"] == {"before": 300, "after": 200, "reason": "back to normal", "default_value": True}
 
 
 def test_two_admins_cant_undo_each_others_change(store: Store) -> None:

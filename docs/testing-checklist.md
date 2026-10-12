@@ -288,18 +288,18 @@ The API's tests cover each setting, its bounds, the alerts, the export and the d
 checks the pages in Chrome. Start afresh from the pull request's branch (see the top of this file), open
 http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 
-- [ ] Open "Settings" (in the menu, after "Alerts"). Expect five cards: Watchdog (deadline 08:00), The ETL job (poll
+- [ ] Open "Settings" (in the menu, after "Alerts"). Expect the title "PAHMA Settings", and five cards: Watchdog (deadline 08:00), The ETL job (poll
   interval 15, step timeout 1800), Servable list check (delta threshold 5), Size limits (image 500, card 500, 3D 1024,
-  pdf 200) and Audit log (90 days), each "the starting value".
+  pdf 200) and Audit log (90 days), each "default value".
 - [ ] Click "Change" beside the step timeout. Type `10` and a reason, and click "Save". Expect a red message that it
-  must be greater than or equal to 60, and the value unchanged. Click "Change" again, type `900` and a reason, and save. Expect 900, "changed; starting value
-  1800", and a "Use the starting value" button.
+  must be greater than or equal to 60, and the value unchanged. Click "Change" again, type `900` and a reason, and save. Expect 900, "changed; default value
+  1800", and a "Use default" button.
 - [ ] Open "Audit log". Expect a "settings change" entry for `etl_step_timeout_seconds` with Before 1800, After 900 and
   your reason.
-- [ ] Back on "Settings", click "Use the starting value" beside the step timeout, give a reason and confirm. Expect 1800
-  and "the starting value" again.
+- [ ] Back on "Settings", click "Use default" beside the step timeout, give a reason and confirm. Expect 1800 and
+  "default value" again.
 - [ ] Change the delta threshold to `12.5`, with a reason. Within a minute, expect the banner: "An admin changed a
-  setting", naming the delta threshold, from 5.0 to 12.5, and your reason. Set it back with "Use the starting value"
+  setting", naming the delta threshold, from 5.0 to 12.5, and your reason. Set it back with "Use default"
   (another alert). Acknowledge both.
 - [ ] Change the audit log's retention: the choices are 90 days and 6, 12, 18, 24 and 36 months. Choose 6 months, give
   a reason and save. Expect "6 months" and an alert as above. (A fresh stack has no entries older than 90 days, so no
@@ -308,6 +308,8 @@ http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
   Open "Refreshes". Expect 25 rows, newest first, and, at the foot of the table, "Items per page" (10, 25, 50, 100)
   and the pages. Click "Last change" in the header: expect the oldest refresh first, taken from all 30, not only the
   page on screen; click again for newest first. Choose 100 per page: expect all 30 on one page.
+- [ ] Expect every page's title but the Overview's to start with "PAHMA" (for example "PAHMA Refreshes", "PAHMA:
+  Start a refresh", "PAHMA refresh pahma-<today>-1").
 - [ ] Open "Alerts" and "Audit log": expect the same sorting by any column's name (on the Audit log, every column but
   Details), and the same choice of page sizes.
 - [ ] On "Audit log", click "Export CSV". Expect a file `serena-audit-pahma-<today>.csv`. Open it in Excel: expect

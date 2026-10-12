@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-4">Start a refresh</h1>
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(String(route.params.museum)) }}: Start a refresh</h1>
     <p class="mb-4">
       An admin refresh, for a failed refresh: when the servable list didn't reach Serena, or needs replacing. Run the
       servable list script on the ETL server, then choose the list it makes. Serena closes the museum's open refresh, if
@@ -61,6 +61,7 @@
 <script setup lang="ts">
 import {computed, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
+import {museumName} from '@/session'
 import {ApiError, api} from '@/api'
 import {pacificDate} from '@/words'
 

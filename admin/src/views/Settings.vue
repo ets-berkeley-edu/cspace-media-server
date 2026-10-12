@@ -1,10 +1,10 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-4">Settings</h1>
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Settings</h1>
     <p class="mb-4">
-      This museum's settings. Each starts at the value in Serena's configuration; an admin's value replaces it until
-      someone chooses "Use the starting value". Every change needs a reason and goes in the audit log, and changing the
-      delta threshold or the audit retention also emails the team. Serena uses a change within about a minute.
+      This museum's settings. Each has a default value in Serena's configuration; an admin's value replaces it until
+      someone chooses "Use default". Every change needs a reason and goes in the audit log, and changing the delta
+      threshold or the audit retention also emails the team. Serena uses a change within about a minute.
     </p>
     <LoadError :message="error" />
     <v-alert
@@ -32,8 +32,8 @@
               <td>{{ setting.label }}</td>
               <td class="font-weight-bold setting-value">{{ shown(setting, setting.value) }}</td>
               <td class="text-body-2">
-                <span v-if="setting.changed">changed; starting value {{ shown(setting, setting.starting) }}</span>
-                <span v-else>the starting value</span>
+                <span v-if="setting.changed">changed; default value {{ shown(setting, setting.default) }}</span>
+                <span v-else>default value</span>
               </td>
               <td class="text-right text-no-wrap">
                 <v-btn
@@ -51,7 +51,7 @@
                   class="reset"
                   @click="open(setting, true)"
                 >
-                  Use the starting value
+                  Use default
                 </v-btn>
               </td>
             </tr>
@@ -62,10 +62,10 @@
 
     <v-dialog v-model="dialog" max-width="560">
       <v-card v-if="editing">
-        <v-card-title>{{ toStarting ? 'Use the starting value' : 'Change' }}: {{ editing.label }}</v-card-title>
+        <v-card-title>{{ toDefault ? 'Use default' : 'Change' }}: {{ editing.label }}</v-card-title>
         <v-card-text>
-          <p v-if="toStarting" class="mb-4">
-            Back to {{ shown(editing, editing.starting) }} (now {{ shown(editing, editing.value) }}).
+          <p v-if="toDefault" class="mb-4">
+            Back to the default value, {{ shown(editing, editing.default) }} (now {{ shown(editing, editing.value) }}).
           </p>
           <v-select
             v-else-if="editing.name === 'audit_retention_days'"
@@ -107,7 +107,7 @@
             :loading="busy"
             @click="save"
           >
-            {{ toStarting ? 'Use the starting value' : 'Save' }}
+            {{ toDefault ? 'Use default' : 'Save' }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -121,7 +121,7 @@ import {useRoute} from 'vue-router'
 import type {SettingItem, SettingsResponse} from '@/api'
 import {ApiError, api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
-import {alertsChanged} from '@/session'
+import {alertsChanged, museumName} from '@/session'
 import {RETENTION_LABELS} from '@/words'
 
 const GROUPS: Record<string, string> = {
@@ -147,7 +147,7 @@ const error = ref('')
 const saveError = ref('')
 const dialog = ref(false)
 const editing = ref<SettingItem | null>(null)
-const toStarting = ref(false)
+const toDefault = ref(false)
 const value = ref<string | number>('')
 const reason = ref('')
 const busy = ref(false)
@@ -163,11 +163,11 @@ const removing = computed(() => {
   if (editing.value?.name !== 'audit_retention_days') {
     return 0
   }
-  const days = toStarting.value ? Number(editing.value.starting) : Number(value.value)
+  const days = toDefault.value ? Number(editing.value.default) : Number(value.value)
   return data.value?.audit_retention_choices.find(c => c.days === days)?.entries_removed || 0
 })
 const ready = computed(() => reason.value.trim().length > 0 && reason.value.length <= 500 &&
-  (toStarting.value || String(value.value).trim() !== ''))
+  (toDefault.value || String(value.value).trim() !== ''))
 
 function shown(setting: SettingItem, v: string | number): string {
   return setting.name === 'audit_retention_days' ? (RETENTION_LABELS[Number(v)] || `${v} days`) : String(v)
@@ -182,9 +182,9 @@ async function load() {
   }
 }
 
-function open(setting: SettingItem, starting: boolean) {
+function open(setting: SettingItem, toTheDefault: boolean) {
   editing.value = setting
-  toStarting.value = starting
+  toDefault.value = toTheDefault
   value.value = setting.value
   reason.value = ''
   saveError.value = ''
@@ -198,7 +198,7 @@ async function save() {
   busy.value = true
   try {
     const name = editing.value.name
-    data.value = toStarting.value
+    data.value = toDefault.value
       ? await api.resetSetting(museum.value, name, reason.value.trim())
       : await api.changeSetting(museum.value, name, typeof value.value === 'string' ? value.value.trim() : value.value,
                                 reason.value.trim())
