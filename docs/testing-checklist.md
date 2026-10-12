@@ -182,7 +182,7 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 - [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
   `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.
 
-## 12. The admin app, locally (15 minutes, before merging pull request 11)
+## 12. The admin app, locally (15 minutes, before merging a pull request that changes the admin app's sign-in)
 
 The unit tests stub the API, and CI doesn't run a browser. This checks the app in Chrome.
 
@@ -191,10 +191,16 @@ The unit tests stub the API, and CI doesn't run a browser. This checks the app i
 - [ ] Open "API documentation". Expect Swagger UI listing the ETL API's endpoints, with no "Try it out" button, and
   nothing in the browser's console about the Content-Security-Policy.
 - [ ] Open "Audit log". Expect the sign-in, with `admin` and the time.
-- [ ] From the museum menu, sign in to another museum as well. Expect both in the menu, and switching between them.
-- [ ] Sign out of PAHMA. Expect the other museum still signed in.
-- [ ] Sign in to BAMPFA as `pahma-admin`, and to PAHMA as `viewer`. Expect a message naming the `Serena_Admin` role,
-  each time.
+- [ ] From the museum menu, sign in to BAMPFA as well, as `admin`. Expect both in the menu, and switching between them.
+- [ ] Sign out of PAHMA. Expect BAMPFA still signed in.
+- [ ] Two sign-ins that must be refused. The simulator's accounts have their name as their password: `admin` is a
+  Serena admin of every museum, `pahma-admin` of PAHMA only, and `viewer` of none. Go to
+  http://localhost:5373/admin/sign-in and:
+  - sign in to BAMPFA as `pahma-admin` (password `pahma-admin`). Expect it refused, with a message naming the
+    `Serena_Admin` role;
+  - sign in to PAHMA as `viewer` (password `viewer`). Expect the same.
+
+  Expect the museum menu unchanged: BAMPFA still signed in as `admin`, and PAHMA not signed in.
 - [ ] `./serena ui`. Expect 2 passed (needs Chrome and python3.11).
 
 ## 13. Admin sign-in against a real museum, in QA (15 minutes per museum, once Serena is in QA)
