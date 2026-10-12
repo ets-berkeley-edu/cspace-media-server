@@ -179,8 +179,17 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 - [ ] `./serena etl pahma --rows 3`. Expect `check_failed`, with the threshold explained: 17 of PAHMA's 21 rows (its 20
   plus the restricted-image Blob) would be removed, 80.95%, more than its 5% threshold. This is the servable list check protecting the servability table, not a fault.
 - [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
-- [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
-  `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.
+- [ ] Note the digest of each base image under this item, so a later pull request can pin them by digest too:
+
+  ```
+  docker buildx imagetools inspect python:3.11-slim | grep -m1 Digest
+  docker image inspect --format '{{index .RepoDigests 0}}' motoserver/moto:5.2.3
+  docker image inspect --format '{{index .RepoDigests 0}}' node:22-alpine
+  ```
+
+  `python:3.11-slim` is the base of the image built from `backend/Dockerfile`; Docker Desktop keeps it as build cache,
+  not as a named image, so its digest comes from Docker Hub (or `docker pull` it first and use `docker image inspect`).
+  The other two are the `moto` and `admin` containers' images. Each line ends in `sha256:…`, the digest to pin.
 
 ## 12. The admin app, locally (15 minutes, before merging a pull request that changes the admin app's sign-in)
 
