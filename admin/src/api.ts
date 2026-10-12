@@ -24,6 +24,7 @@ export interface SignedIn {
 
 export interface Me {
   environment: string
+  build: string // which code this is, for example "feature/x @ 1a2b3c4"; empty: not shown
   sessions: SignedIn[]
 }
 
@@ -56,7 +57,7 @@ export interface Check {
   warnings: string[]
 }
 
-export type RefreshAction = 'retry_update' | 'record_load' | 'override_threshold'
+export type RefreshAction = 'retry_update' | 'override_threshold'
 
 export interface RefreshSummary {
   refresh_id: string
@@ -66,7 +67,7 @@ export interface RefreshSummary {
   updated_at: string
   rows: number | null
   reasons: string[]
-  uploaded_refresh_date: string | null // an admin's upload: the refresh date the servable list is for
+  admin_refresh_date: string | null // an admin refresh: the refresh date its servable list is for
 }
 
 export interface Refresh extends RefreshSummary {
@@ -74,22 +75,13 @@ export interface Refresh extends RefreshSummary {
   file_name: string
   upload: {rows: number, bytes: number, sha256: string, uploaded_at: string} | null
   check: Check | null
-  solr_load: {outcome: string, rows: number | null, recorded_by_admin?: boolean} | null
   update: {deleted: number, written: number, unchanged: number} | null
+  override: {at: string} | null // an admin overrode the delta threshold for this servable list (D83)
   actions: RefreshAction[]
-}
-
-export interface Override {
-  armed_by: string
-  armed_at: number
-  expires_at: number
-  after_refresh: string
-  reason: string
 }
 
 export interface Status {
   newest: Refresh | null
-  override: Override | null
   unacknowledged: number
 }
 
@@ -149,17 +141,15 @@ export const api = {
   refresh: (museum: string, refreshId: string) => call<Refresh>('GET', `/museums/${museum}/refreshes/${refreshId}`),
   retryUpdate: (museum: string, refreshId: string, reason: string) =>
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/retry-update`, {reason}),
-  recordLoad: (museum: string, refreshId: string, rows: number | null, reason: string) =>
-    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/record-load`, {confirmed: true, rows, reason}),
   overrideThreshold: (museum: string, refreshId: string, reason: string) =>
-    call<{override: Override}>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {reason}),
-  cancelOverride: (museum: string) => call<{override: null}>('DELETE', `/museums/${museum}/threshold-override`),
-  // The file name and reason are URL-encoded: a header carries only ASCII.
-  upload: (museum: string, file: File, refreshDate: string, reason: string) =>
-    call<Refresh>('PUT', `/museums/${museum}/uploads`, undefined, {
+    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {reason}),
+  // An admin refresh, with the servable list as the body. The file name and reason are URL-encoded: a header carries
+  // only ASCII.
+  startRefresh: (museum: string, file: File, refreshDate: string, reason: string) =>
+    call<Refresh>('POST', `/museums/${museum}/refreshes`, undefined, {
       file,
       headers: {
-        'X-Loaded-Confirmed': 'yes',
+        'X-Live-Core-Confirmed': 'yes',
         'X-File-Name': encodeURIComponent(file.name),
         'X-Refresh-Date': refreshDate,
         'X-Reason': encodeURIComponent(reason)

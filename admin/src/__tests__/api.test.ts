@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest'
 import {fakeApi} from './fake'
 import {ApiError, api} from '@/api'
+import {refresh, session} from '@/session'
 
 describe('the admin API client', () => {
   it('sends the app header with changes, not with reads', async () => {
@@ -13,6 +14,13 @@ describe('the admin API client', () => {
     expect(calls[0].headers['X-Serena-Admin']).toBeUndefined()
     expect(calls[1].headers['X-Serena-Admin']).toBe('1')
     expect(calls[1].body).toEqual({museum: 'pahma', username: 'admin', password: 'secret-for-the-test'})
+  })
+
+  it('learns which environment and code this is', async () => {
+    fakeApi({'GET /me': {body: {environment: 'Local · simulator', build: 'feature/x @ 1a2b3c4', sessions: []}}})
+    await refresh()
+    expect(session.environment).toBe('Local · simulator')
+    expect(session.build).toBe('feature/x @ 1a2b3c4')
   })
 
   it('turns Serena\'s explanation into the error\'s message', async () => {

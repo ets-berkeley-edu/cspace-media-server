@@ -108,14 +108,14 @@ def create_router() -> APIRouter:
 
     @router.get("/me")
     def me(request: Request, s: Services) -> dict[str, Any]:
-        """The museums this browser is signed in to, and as whom."""
+        """The museums this browser is signed in to, and as whom; and which environment and code this is."""
         signed: list[dict[str, str]] = []
         for tenant, museum in s.museums.items():
             token = request.cookies.get(cookie_name(s.settings, tenant))
             session = s.sessions.get(tenant, token) if token else None
             if session is not None:
                 signed.append({"museum": tenant, "name": museum.name, "user": session.user})
-        return {"environment": s.settings.env_label, "sessions": signed}
+        return {"environment": s.settings.env_label, "build": s.settings.build, "sessions": signed}
 
     @router.post("/sessions", dependencies=[Depends(changes)])
     def sign_in(body: SignIn, s: Services, response: Response) -> dict[str, str]:

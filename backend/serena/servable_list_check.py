@@ -60,8 +60,8 @@ def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, thres
           override: bool = False) -> Result:
     """`new` is the uploaded servable list (gzip); `previous` the rows of the servable list of the last servability
     update, None for a first servability update.
-    `override`: an admin overrode the threshold for this refresh (decided October 10, 2026, D64); the change is still
-    counted and shown, but doesn't fail the servable list check."""
+    `override`: an admin overrode the delta threshold for this refresh's servable list (decided October 12, 2026,
+    D83); the change is still counted and shown, but doesn't fail the servable list check."""
     problems = _Problems()
     rows: dict[str, Row] = {}
     seen_header = False

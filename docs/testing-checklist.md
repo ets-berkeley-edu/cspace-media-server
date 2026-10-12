@@ -6,6 +6,18 @@ repository was set up. Tick an item when it's done, and note anything odd under 
 Change this file through pull requests, like `docs/design.md`. When a pull request needs checks by hand, add a
 section here in the same pull request.
 
+**Testing a pull request locally.** The checks and the code change together, so take both from the pull request's
+branch, in the same clone:
+
+```
+git switch <the pull request's branch> && git pull && ./serena down && ./serena up
+```
+
+Then read this file in that clone (or on GitHub on that branch, never on `main`). `./serena up` prints the branch and
+commit it built, and the admin app's header shows them beside "Local · simulator", for example
+"Local · simulator · feature/x @ 1a2b3c4". If they don't name the pull request's branch and latest commit, you're
+testing other code: run the line above again. "+ local changes" means the clone has changes not yet committed.
+
 ## 1. A replaced image is served on a cache miss (10 minutes, once Serena is in QA)
 
 Replacing a Media record's image creates a new Blob. Until the next daily update, clients still request the old
@@ -62,8 +74,10 @@ museum's token secret in Secrets Manager, and a call from the ETL server (the on
 
 The tests run whole refreshes against moto with synthetic servable lists. These checks use a real servable list, DynamoDB and S3.
 
-- [ ] Run one museum's ETL job against QA. Expect the refresh to go `started`, `received`, `checking`, `ready`,
-  `solr_loaded`, `updating`, `updated`, and the servability table to hold exactly the servable list's rows for that museum.
+- [ ] Run one museum's ETL job against QA. Expect the refresh to go `started`, `received`, `checking`,
+  `updating`, `updated`, after the Solr refresh, and the servability table to hold exactly the servable list's rows for that museum.
+- [ ] On the ETL server, compare the servable list's row count with the number of `blobmedia_ss` values in the
+  museum's public core: expect them equal.
 - [ ] Note how long the servable list check and the servability update took for the largest museum (PAHMA), and the worker's memory.
 - [ ] The next day, expect the servable list check's added, removed and changed counts to match a diff of the two files.
 - [ ] Stop the worker's task during a servability update; a new task starts. Expect the servability update to start again after about
@@ -81,9 +95,9 @@ The tests use moto's SNS. These checks need the real topic and the team's mailin
 - [ ] Make a servable list check fail (upload a servable list with a bad kind). Expect an email titled "A servable list check failed" with the refresh ID
   and the reason.
 - [ ] Check the email has no personal data and no link with a token or signature in it.
-- [ ] Override a museum's delta threshold in the admin app. Expect an "An admin overrode the delta threshold"
-  email within 5 minutes (the web app records the alert; the worker sends it on its next pass), with the refresh ID and
-  the reason. Cancel the override and arm it again: expect a second email.
+- [ ] Make a servable list check fail only on the delta threshold, then override it in the admin app. Expect an email
+  titled "An admin overrode the delta threshold" within 5 minutes (the web app records the alert; the worker sends it
+  on its next pass), with the refresh ID and the reason. Do it again on a second refresh: expect a second email.
 - [ ] Try to unsubscribe from the email's link without signing in to AWS: expect it to be refused (the subscription
   requires authentication to unsubscribe).
 
@@ -172,15 +186,24 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
   shows one fetch).
 - [ ] `./serena etl cinefiles`. Open the `pdf` sample: expect a one-page PDF. Open the `pdf (restricted)` sample:
   expect the unavailable image (no signed link).
-- [ ] `./serena etl bampfa --failed`. Expect `ready`, and the refresh left there.
+- [ ] `./serena etl bampfa --failed`. Expect a note that Serena wasn't called, and no new BAMPFA refresh in Serena.
 - [ ] `./serena smoke`, after the refreshes above. Expect "Smoke test passed".
 - [ ] `./serena etl pahma --rows 3`. Expect `check_failed`, with the threshold explained: 17 of PAHMA's 21 rows (its 20
   plus the restricted-image Blob) would be removed, 80.95%, more than its 5% threshold. This is the servable list check protecting the servability table, not a fault.
 - [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
-- [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
-  `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.
+- [ ] Note the digest of each base image under this item, so a later pull request can pin them by digest too:
 
-## 12. The admin app, locally (15 minutes, before merging pull request 11)
+  ```
+  docker buildx imagetools inspect python:3.11-slim | grep -m1 Digest
+  docker image inspect --format '{{index .RepoDigests 0}}' motoserver/moto:5.2.3
+  docker image inspect --format '{{index .RepoDigests 0}}' node:22-alpine
+  ```
+
+  `python:3.11-slim` is the base of the image built from `backend/Dockerfile`; Docker Desktop keeps it as build cache,
+  not as a named image, so its digest comes from Docker Hub (or `docker pull` it first and use `docker image inspect`).
+  The other two are the `moto` and `admin` containers' images. Each line ends in `sha256:…`, the digest to pin.
+
+## 12. The admin app, locally (15 minutes, before merging a pull request that changes the admin app's sign-in)
 
 The unit tests stub the API, and CI doesn't run a browser. This checks the app in Chrome.
 
@@ -189,10 +212,16 @@ The unit tests stub the API, and CI doesn't run a browser. This checks the app i
 - [ ] Open "API documentation". Expect Swagger UI listing the ETL API's endpoints, with no "Try it out" button, and
   nothing in the browser's console about the Content-Security-Policy.
 - [ ] Open "Audit log". Expect the sign-in, with `admin` and the time.
-- [ ] From the museum menu, sign in to another museum as well. Expect both in the menu, and switching between them.
-- [ ] Sign out of PAHMA. Expect the other museum still signed in.
-- [ ] Sign in to BAMPFA as `pahma-admin`, and to PAHMA as `viewer`. Expect a message naming the `Serena_Admin` role,
-  each time.
+- [ ] From the museum menu, sign in to BAMPFA as well, as `admin`. Expect both in the menu, and switching between them.
+- [ ] Sign out of PAHMA. Expect BAMPFA still signed in.
+- [ ] Two sign-ins that must be refused. The simulator's accounts have their name as their password: `admin` is a
+  Serena admin of every museum, `pahma-admin` of PAHMA only, and `viewer` of none. Go to
+  http://localhost:5373/admin/sign-in and:
+  - sign in to BAMPFA as `pahma-admin` (password `pahma-admin`). Expect it refused, with a message naming the
+    `Serena_Admin` role;
+  - sign in to PAHMA as `viewer` (password `viewer`). Expect the same.
+
+  Expect the museum menu unchanged: BAMPFA still signed in as `admin`, and PAHMA not signed in.
 - [ ] `./serena ui`. Expect 2 passed (needs Chrome and python3.11).
 
 ## 13. Admin sign-in against a real museum, in QA (15 minutes per museum, once Serena is in QA)
@@ -207,44 +236,48 @@ Set up: the museum's CollectionSpace administrators have created the `Serena_Adm
 - [ ] Check the cookies in the browser's developer tools: `serena_admin_<museum>`, HttpOnly, Secure, SameSite Strict,
   path `/admin`.
 
-## 14. Refreshes and alerts in the admin app, locally (20 minutes, before merging pull request 12)
+## 14. Refreshes and alerts in the admin app, locally (20 minutes, before merging a pull request that changes them)
 
 The API's tests cover each action, and the pages were checked in a headless browser in Claude's workspace. This
 checks them in Chrome on a Mac. Start afresh: `./serena down && ./serena up`, then open http://localhost:5373/admin/
 and sign in to PAHMA as `admin` (password `admin`).
 
 About alerts: the watchdog runs in the worker every 5 minutes. Past 08:00 Pacific, its first pass raises "Today's refresh
-isn't finished by the deadline" for every museum, because no refresh has started: acknowledge PAHMA's. A failed servable list check
-raises its own alert on the watchdog's next pass. The banner checks for new alerts on every page change and every
+isn't finished by the deadline" for every museum, because no refresh has started: acknowledge PAHMA's. A failed
+servable list check raises its own alert at once, from the worker. The banner checks for new alerts on every page change and every
 minute, so an alert appears within a minute of being raised. The banner disappears only once every alert in it is
 acknowledged.
 
-- [ ] In a terminal: `./serena etl pahma`. Expect `updated`. In the app, open "Refreshes": expect that refresh, `Updated`, with
-  its row count.
-- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed`. In the app, open "Refreshes", then the refresh:
-  expect "Servable list check failed", the problem (the delta as a percentage of rows, against the 5% threshold), and an
-  orange button, "Override the delta threshold for the next refresh".
+- [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-1: updated`, one servable list check warning
+  (PAHMA's first servability update, so the delta threshold doesn't apply), and the counts: `servable list: 21 rows`
+  (the 20 synthetic rows plus PAHMA's restricted-image Blob) and `servability update: 21 written, 0 deleted, 0
+  unchanged`. In the app, open "Refreshes": expect that refresh, `Updated`, with 21 in the Rows column.
+- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed` and `servable list: 4 rows; 0 added, 17
+  removed, 0 changed (80.95% of the last servability update's 21 rows)`. In the app, open "Refreshes", then the
+  refresh: expect "Servable list check failed", the problem (80.95% of the rows would change; the threshold is 5%), and
+  an orange button, "Override the delta threshold". Within a minute, expect the banner, and the "Alerts" page, to show
+  "A servable list check failed" for that refresh.
 - [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", is greyed
   out until you type a reason. Type one and click it. Expect:
-  - the banner, with "An admin overrode the delta threshold" (and, within a few minutes, "A servable list check failed");
-  - the orange button gone from the refresh's page;
-  - on "Overview", a blue note that the threshold is overridden for the next refresh, with who, after which refresh, when it
-    expires and the reason, and a "Cancel it" button. Don't click it: the next items need the override.
+  - the banner, with "An admin overrode the delta threshold" as well ("A servable list check failed" stays until
+    acknowledged);
+  - after reloading the page, the same refresh `Updated`, with no orange button, its reasons naming the override and
+    its check's warnings saying the delta threshold was skipped.
 - [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"
   page with your name and the time.
-- [ ] In a terminal: `./serena etl pahma --rows 3` again (the ETL team's rerun of the ETL job). Expect the same refresh,
-  `updated`, and the line "servable list check warning: the delta threshold was overridden by an admin for this refresh". In the
-  app: the refresh's reasons name the override, and "Overview" no longer shows it.
-- [ ] In a terminal: `./serena etl pahma --rows 3 --failed`. Expect `ready`. In the app, open that refresh and click
-  "Record the Solr refresh and update Serena". In the dialog, the blue button is greyed out until you tick the checkbox and
-  type a reason. Do both and click it. Reload the page: expect the refresh `Updated`.
-- [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv`. In the app, open "Upload a
-  servable list". Choose the file (in the Mac file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and press
-  Return). The refresh date starts as yesterday, with a calendar picker; leave it. Type a reason, tick the checkbox and
-  click "Upload and update Serena" (greyed out until all are done). Expect the new refresh's page, "an admin's upload of the servable list for <yesterday>" beside today's refresh date,
-  and, after reloading the page, `Updated`.
-- [ ] Open "Audit log". Expect the override, each acknowledgement, the recorded load and the upload, each with `admin`.
+- [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-3: check_failed` and `servable list: 21 rows; 17 added,
+  0 removed, 0 changed (425.0% of the last servability update's 4 rows)`: after the override, Serena serves the
+  3-row list (4 rows with the restricted-image Blob), so the default 20 rows are far over the delta threshold. This is
+  on purpose: leave the refresh `check_failed` (open), and the admin refresh below repairs it.
+- [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv` (the stand-in for running
+  the servable list script on the ETL server). In the app, open "Start a refresh". Choose the file (in the Mac
+  file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and press Return). The refresh date starts as
+  today, with a calendar picker; leave it. Type a reason, tick "This servable list was made from the live public core"
+  and click "Start the refresh" (greyed out until all are done). Expect the new refresh's page, "an admin refresh, with
+  the servable list for <today>", and, after reloading the page, `Updated`. On "Refreshes", expect the `check_failed`
+  refresh now `Abandoned`, its reasons naming the admin refresh.
+- [ ] Open "Audit log". Expect the override, each acknowledgement and the admin refresh, each with `admin`.
 - [ ] In a terminal: `./serena logs --no-follow web | grep threshold_overridden`. Expect the override's alert, logged
   once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
-  `./serena logs --no-follow worker | grep '"threshold_overridden": true'`: expect one line, the rerun's
-  "servable list check done".
+  `./serena logs --no-follow worker | grep '"threshold_overridden": true'`: expect one line, the
+  override's "servable list check done".

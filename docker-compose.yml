@@ -5,6 +5,7 @@
 # memory, so `./serena down` forgets it all. The admin app runs on Vite's dev server: http://localhost:5373/admin/
 x-serena-env: &serena-env
   SERENA_ENV_LABEL: Local · simulator
+  SERENA_BUILD: ${SERENA_BUILD:-}   # ./serena up sets it: the clone's branch and commit, shown in the admin app
   SERENA_LOG_LEVEL: INFO
   # Each museum has its own CollectionSpace: here, the simulator under a host name per museum (its network aliases).
   SERENA_TENANTS: '{"bampfa": "http://bampfa.fakecspace:8180", "botgarden": "http://botgarden.fakecspace:8180", "cinefiles": "http://cinefiles.fakecspace:8180", "pahma": "http://pahma.fakecspace:8180", "ucjeps": "http://ucjeps.fakecspace:8180"}'

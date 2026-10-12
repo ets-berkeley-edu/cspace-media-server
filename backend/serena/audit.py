@@ -26,10 +26,8 @@ class Action(StrEnum):
     SETTINGS_CHANGE = "settings_change"
     UPDATE_RETRY = "update_retry"
     THRESHOLD_OVERRIDE = "threshold_override"
-    FILE_UPLOAD = "file_upload"
+    ADMIN_REFRESH = "admin_refresh"
     RESTRICTED_IMAGE_UPLOAD = "restricted_image_upload"
-    RECORD_LOAD = "record_load"  # "Record the Solr refresh and update Serena" after a failed refresh (D65)
-    THRESHOLD_OVERRIDE_CANCEL = "threshold_override_cancel"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
 
 

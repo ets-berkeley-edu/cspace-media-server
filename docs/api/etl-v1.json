@@ -14,22 +14,12 @@
           "servable_list": {
             "title": "Servable List",
             "type": "string"
-          },
-          "solr_load": {
-            "title": "Solr Load",
-            "type": "string"
-          },
-          "update": {
-            "title": "Update",
-            "type": "string"
           }
         },
         "required": [
           "self",
           "servable_list",
-          "check",
-          "solr_load",
-          "update"
+          "check"
         ],
         "title": "Links",
         "type": "object"
@@ -144,19 +134,6 @@
             "title": "Refresh Id",
             "type": "string"
           },
-          "solr_load": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The load outcome the ETL reported",
-            "title": "Solr Load"
-          },
           "state": {
             "$ref": "#/components/schemas/State"
           },
@@ -205,39 +182,12 @@
         "title": "RefreshOut",
         "type": "object"
       },
-      "SolrLoad": {
-        "properties": {
-          "outcome": {
-            "description": "loaded, or fell_back to the previous day's data",
-            "enum": [
-              "loaded",
-              "fell_back"
-            ],
-            "title": "Outcome",
-            "type": "string"
-          },
-          "rows": {
-            "description": "Documents loaded into the public core",
-            "minimum": 0.0,
-            "title": "Rows",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "outcome",
-          "rows"
-        ],
-        "title": "SolrLoad",
-        "type": "object"
-      },
       "State": {
         "enum": [
           "started",
           "received",
           "checking",
-          "ready",
           "check_failed",
-          "solr_loaded",
           "updating",
           "updated",
           "update_failed",
@@ -533,7 +483,7 @@
     },
     "/museums/{tenant}/refreshes/{refresh_id}/check": {
       "post": {
-        "description": "Queues the servable list check (202); poll the refresh until it is ready or check_failed. Allowed once a\nservable list is uploaded (received), and again after a failed check: with a corrected list, or with the same\nlist when the ETL job is rerun after an admin overrode the delta threshold for it.",
+        "description": "Queues the servable list check (202). When it passes, the worker goes straight on to the servability update\n(decided October 12, 2026, D80): poll the refresh until it is updated, check_failed or update_failed. Allowed\nonce a servable list is uploaded (received). After a failed check, upload a corrected list first.",
         "operationId": "request_check_museums__tenant__refreshes__refresh_id__check_post",
         "parameters": [
           {
@@ -627,12 +577,12 @@
             "description": "Serena can't check right now (tokens or storage unavailable); try again"
           }
         },
-        "summary": "Check the servable list without changing anything"
+        "summary": "Check the servable list, then update Serena from it"
       }
     },
     "/museums/{tenant}/refreshes/{refresh_id}/servable-list": {
       "put": {
-        "description": "Streams the servable list to Serena. Uploading the same list again changes nothing; a corrected list\nreplaces the previous one until the load's outcome is reported, and must then be checked again. Its format is\nchecked by the servable list check.",
+        "description": "Streams the servable list to Serena. Uploading the same list again changes nothing; a corrected list\nreplaces the previous one while the refresh is started, received, check_failed or update_failed, and must then\nbe checked again. Its format is checked by the servable list check.",
         "operationId": "put_servable_list_museums__tenant__refreshes__refresh_id__servable_list_put",
         "parameters": [
           {
@@ -821,214 +771,6 @@
           }
         },
         "summary": "Upload the servable list"
-      }
-    },
-    "/museums/{tenant}/refreshes/{refresh_id}/solr-load": {
-      "post": {
-        "description": "Allowed once the servable list check passed (ready). loaded: the refresh waits for the servability update\n(solr_loaded). fell_back: the refresh is abandoned and Serena changes nothing, so both keep yesterday's data.",
-        "operationId": "report_solr_load_museums__tenant__refreshes__refresh_id__solr_load_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "refresh_id",
-            "required": true,
-            "schema": {
-              "title": "Refresh Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tenant",
-            "required": true,
-            "schema": {
-              "title": "Tenant",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SolrLoad"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RefreshOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "A header or parameter is missing or malformed"
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Serena doesn't know"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The token is for another museum"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No such museum or refresh"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The call is out of order for the refresh's state"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Serena can't check right now (tokens or storage unavailable); try again"
-          }
-        },
-        "summary": "Report the public core's load"
-      }
-    },
-    "/museums/{tenant}/refreshes/{refresh_id}/update": {
-      "post": {
-        "description": "Queues the servability update (202); poll the refresh until it is updated or update_failed. Allowed only\nafter the servable list check passed and the load reported loaded (solr_loaded). Report the ETL job a success\nonly once the refresh is updated.",
-        "operationId": "request_update_museums__tenant__refreshes__refresh_id__update_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "refresh_id",
-            "required": true,
-            "schema": {
-              "title": "Refresh Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tenant",
-            "required": true,
-            "schema": {
-              "title": "Tenant",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RefreshOut"
-                }
-              }
-            },
-            "description": "The servability update is already done; the refresh is returned as it is"
-          },
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RefreshOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Serena doesn't know"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The token is for another museum"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No such museum or refresh"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The call is out of order for the refresh's state"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Serena can't check right now (tokens or storage unavailable); try again"
-          }
-        },
-        "summary": "Update Serena from the servable list"
       }
     },
     "/ping": {

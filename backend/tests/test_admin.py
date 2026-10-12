@@ -36,7 +36,7 @@ class Clock:
 def make_app(store: Store, s3: Any, secretsmanager: Any, http: Any = None, **settings: Any) -> Any:
     options: dict[str, Any] = {"admin_cookie_secure": False, **settings}
     config = Settings(tenants=TENANTS, table_prefix="t", buckets={t: f"b-{t}" for t in TENANTS}, env_label="Test",
-                      _env_file=None, **options)
+                      build="feature/test @ 1a2b3c4", _env_file=None, **options)
     # The museum is the first label of the host name the simulator is called by (pahma.cspace.test).
     factory = http or (lambda tenant: TestClient(fake_app, base_url=TENANTS[tenant]))
     return create_app(config, store, s3=s3, secretsmanager=secretsmanager, cspace_http=factory)
@@ -101,6 +101,7 @@ def test_sign_in(client: TestClient, store: Store) -> None:
         assert flag.lower() in cookie.lower()
     me = client.get("/admin/v1/me").json()
     assert me["environment"] == "Test" and [s["museum"] for s in me["sessions"]] == ["pahma"]
+    assert me["build"] == "feature/test @ 1a2b3c4"
     token = response.cookies["serena_admin_pahma"]
     item = store.client.get_item(TableName=store.table(tables.ADMIN_SESSIONS), Key={"pk": {"S": token_hash(token)}})
     assert item["Item"]["user"]["S"] == "admin"

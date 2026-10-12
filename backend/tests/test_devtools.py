@@ -93,23 +93,40 @@ def test_a_whole_day_then_a_file_is_fetched_and_served(stack: Any) -> None:
     assert again["state"] == "updated" and again["check"]["added"] == 0
 
 
-def test_a_failed_refresh_stops_after_the_check(stack: Any) -> None:
+def test_a_failed_refresh_never_calls_serena(stack: Any) -> None:
+    """--failed (D85): the simulator's records and the servable list are made, but Serena isn't called, as when it
+    can't be reached; the repair is an admin refresh."""
     serena, cspace, worker, token = stack
     summary = fake_etl.daily_refresh(serena, cspace, "cinefiles", token("cinefiles"), count=6, failed=True, poll=0,
-                             wait=lambda seconds: worker.tick())
-    assert summary["state"] == "ready" and summary["update"] is None
+                                     wait=lambda seconds: worker.tick())
+    assert summary["state"] is None and summary["refresh_id"] is None
     assert "pdf (restricted)" in summary["samples"]
+    headers = {"Authorization": f"Bearer {token('cinefiles')}"}
+    assert serena.get("/etl/v1/museums/cinefiles", headers=headers).status_code == 404  # no refresh at all
 
 
 def test_a_day_with_different_rows_trips_the_threshold(stack: Any) -> None:
     """What happens when ./serena etl pahma --rows 3 follows a 20-row refresh: the servable list check
-    refuses, as it should."""
+    refuses, as it should. Rerunning the ETL job with the right list repairs the same refresh."""
     serena, cspace, worker, token = stack
     tick = lambda seconds: worker.tick()  # noqa: E731
     assert fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "updated"
     smaller = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), count=3, poll=0, wait=tick)
     assert smaller["state"] == "check_failed" and fake_etl.threshold_failed(smaller)
     assert fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "updated"
+
+
+def test_the_counts_are_printed(stack: Any) -> None:
+    """./serena etl prints the rows and counts the admin app shows, so a check needs no browser."""
+    serena, cspace, worker, token = stack
+    tick = lambda seconds: worker.tick()  # noqa: E731
+    first = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)
+    assert fake_etl.count_lines(first) == ["  servable list: 21 rows",
+                                           "  servability update: 21 written, 0 deleted, 0 unchanged"]
+    smaller = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), count=3, poll=0, wait=tick)
+    assert fake_etl.count_lines(smaller) == [
+        "  servable list: 4 rows; 0 added, 17 removed, 0 changed (80.95% of the last servability update's 21 rows)"]
+    assert fake_etl.count_lines({"refresh_id": None, "state": None, "check": None, "update": None}) == []
 
 
 def test_the_restricted_image_blob_is_listed_without_a_media_csid() -> None:

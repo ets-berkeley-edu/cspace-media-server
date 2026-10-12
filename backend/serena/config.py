@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     tenants: dict[str, str] = {}
     # Which environment this is (for example "QA"), shown in the admin app; empty: none.
     env_label: str = ""
+    # Which code this is, shown beside the environment in the admin app, so a tester sees at once what they're testing.
+    # ./serena up sets it to the clone's branch and commit (for example "feature/x @ 1a2b3c4"); empty: not shown.
+    build: str = ""
     # The admin app (design: Admin web app): its sessions' idle and absolute timeouts, its cookies' name prefix
     # (<prefix>_<museum>) and whether they're Secure (false only for a local stack on http), and the built app's
     # directory (None: no built app here; locally Vite's dev server serves it).
