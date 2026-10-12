@@ -307,7 +307,8 @@ http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 - [ ] In a terminal, make some refreshes: `for i in $(seq 30); do ./serena etl pahma > /dev/null; done` (about a minute).
   Open "Refreshes". Expect 25 rows, newest first, and, at the foot of the table, "Items per page" (10, 25, 50, 100)
   and the pages. Click "Last change" in the header: expect the oldest refresh first, taken from all 30, not only the
-  page on screen; click again for newest first. Choose 100 per page: expect all 30 on one page.
+  page on screen; click again for newest first, and a third time for oldest first again (a column is always sorted, one
+  way or the other; there's no unsorted state). Choose 100 per page: expect all 30 on one page.
 - [ ] Expect every page's title but the Overview's to start with "PAHMA" (for example "PAHMA Refreshes", "PAHMA:
   Start a refresh", "PAHMA refresh pahma-<today>-1").
 - [ ] Open "Alerts" and "Audit log": expect the same sorting by any column's name (on the Audit log, every column but

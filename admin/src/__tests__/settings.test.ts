@@ -75,6 +75,9 @@ describe('the tables', () => {
     await rows?.trigger('click') // descending
     await flushPromises()
     expect(ids()[0]).toBe('pahma-2026-10-01-1')
+    await rows?.trigger('click') // ascending again: never unsorted
+    await flushPromises()
+    expect(ids()[0]).toBe('pahma-2026-10-30-1')
     wrapper.unmount()
   })
 

@@ -11,6 +11,7 @@
       :headers="headers"
       :items="refreshes"
       :sort-by="[{key: 'updated_at', order: 'desc'}]"
+      must-sort
       :items-per-page="25"
       :items-per-page-options="PAGE_SIZES"
       :loading="!loaded && !error"

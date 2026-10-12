@@ -896,7 +896,7 @@ reachable only from campus networks.
   - alerts: the banner, the alerts page and acknowledging (see Watchdog and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
   - the Refreshes, Alerts and Audit log pages show the last 30 days, newest first; the browser sorts all 30 days by a
-    column's name and pages them, 25 rows to start (10, 25, 50 or 100) (decided October 12, 2026, D91 to D94);
+    column's name (each click switches between ascending and descending; a table is always sorted) and pages them, 25 rows to start (10, 25, 50 or 100) (decided October 12, 2026, D91 to D94);
   - per-museum settings, on a Settings page (D86 to D90, D95): the watchdog deadline (one time a day, HH:MM Pacific),
     the ETL's poll interval (5 to 300 seconds) and step timeout (60 to 7,200 seconds), the delta threshold (0.1 to
     100%), the size limits by kind (1 to 2,048 MB) and the audit retention (D97). Any admin of the museum may change

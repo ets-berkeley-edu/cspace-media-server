@@ -23,6 +23,7 @@
       :headers="headers"
       :items="entries"
       :sort-by="[{key: 'at', order: 'desc'}]"
+      must-sort
       :items-per-page="25"
       :items-per-page-options="PAGE_SIZES"
       :loading="!loaded && !error"
