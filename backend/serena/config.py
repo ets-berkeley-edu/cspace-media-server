@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     etl_token_secret_ids: dict[str, str] = {}
     secretsmanager_endpoint: str | None = None  # local development only
     secret_cache_seconds: float = 300.0  # how long each task keeps a secret before reading it again
-    upload_max_mb: int = 500  # the largest Blob-to-Media file accepted, uncompressed
+    upload_max_mb: int = 500  # the largest servable list accepted, uncompressed
     upload_dir: str | None = None  # where uploads are written while they're checked; None: the system's temp directory
     # The worker (design: Preflight and apply): how often it looks for work, how often it renews its claim on a step,
     # and how old a claim may get before the step counts as interrupted and is started again.

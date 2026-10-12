@@ -5,7 +5,7 @@ PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
 It's being built, one pull request at a time. So far it parses the legacy imageserver paths, decides from its records in
-DynamoDB whether each file may be served, and takes each night's Blob-to-Media file through its ETL API: its worker
+DynamoDB whether each file may be served, and takes each night's servable list through its ETL API: its worker
 preflights and applies it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file
 from CollectionSpace, checks it and stores it; every file is served through a signed CloudFront link, and restricted
 PDFs only on a portal's signed link. The design is `docs/design.md`.

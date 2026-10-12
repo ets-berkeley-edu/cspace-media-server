@@ -12,7 +12,7 @@ import {pacificDate} from '@/words'
 const RUN = {
   run_id: 'pahma-2026-10-10-1', night: '2026-10-10', state: 'apply_failed', created_at: '2026-10-10T10:00:00+00:00',
   updated_at: '2026-10-10T10:05:00+00:00', rows: 40, reasons: ['apply failed after 3 attempts'], newest: true,
-  file_name: 'blob-media.pahma.2026-10-10.tsv', upload: null, preflight: null, solr_load: null, apply: null,
+  file_name: 'servable-list.pahma.2026-10-10.tsv', upload: null, preflight: null, solr_load: null, apply: null,
   actions: ['retry_apply']
 }
 
@@ -83,7 +83,7 @@ describe('uploading a night\'s file', () => {
       return new Response(JSON.stringify(body), {status: 200})
     }))
     const {wrapper, router} = await at('/pahma/upload', Upload)
-    const file = new File(['blob_csid\tmedia_csid\tkind\taccess\n'], 'blob-media.pahma.2026-10-09.tsv')
+    const file = new File(['blob_csid\tmedia_csid\tkind\taccess\n'], 'servable-list.pahma.2026-10-09.tsv')
     const vm = wrapper.vm as unknown as {$: {setupState: {file: File | null, night: string, confirmed: boolean, reason: string}}}
     expect(vm.$.setupState.night).toBe(pacificDate(1)) // last night, to start
     vm.$.setupState.file = file
@@ -96,7 +96,7 @@ describe('uploading a night\'s file', () => {
     const put = calls.find(c => c.method === 'PUT')
     expect(put?.headers['X-Loaded-Confirmed']).toBe('yes')
     expect(put?.headers['X-Night']).toBe('2026-10-09')
-    expect(put?.headers['X-File-Name']).toBe('blob-media.pahma.2026-10-09.tsv')
+    expect(put?.headers['X-File-Name']).toBe('servable-list.pahma.2026-10-09.tsv')
     expect(put?.headers['X-Reason']).toBe('ETL%20log%20checked%3A%20caf%C3%A9')
     expect(put?.headers['X-Serena-Admin']).toBe('1')
     expect(put?.body).toBe(file)

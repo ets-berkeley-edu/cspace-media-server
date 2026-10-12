@@ -4,7 +4,7 @@ import io
 import pytest
 
 from serena import museum, preflight
-from serena.blob_media import HEADER, Row
+from serena.servable_list import HEADER, Row
 
 PAHMA = museum.load("pahma")  # its restricted-image Blob: 59a733dd-d641-4e1a-8552
 UCJEPS = museum.load("ucjeps")  # no restricted-image Blob

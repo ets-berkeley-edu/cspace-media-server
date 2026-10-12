@@ -17,7 +17,7 @@ at a time, following the plan; the design is `docs/design.md`. `README.md` descr
   per museum: HTTP Basic, its password a secret in AWS Secrets Manager, never stored anywhere else and never logged.
   Every call to CollectionSpace goes through the Media service, by Media CSID.
 - **The ETL's nightly output is the first source of what may be served.** Each night the ETL hands Serena, through
-  Serena's ETL API, a Blob-to-Media file listing every Blob in the museum's public Solr core (`blob_ss`, `card_ss`,
+  Serena's ETL API, a servable list of every Blob in the museum's public Solr core (`blob_ss`, `card_ss`,
   the primary image field, the audio, video and 3D CSID fields, and `pdf_ss`) with its Media CSID, kind and access. A
   Blob CSID is servable only if that file lists it as public, its kind is one Serena serves, and its Media record has
   no active takedown in Serena. Takedowns are the only override. Serena never changes the ETL's output, and never

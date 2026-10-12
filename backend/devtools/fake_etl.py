@@ -5,7 +5,7 @@ sequence, The ETL API; Jira CSW-1027). Local development only.
     python -m devtools.fake_etl --museum pahma --partial   # stops after the preflight, as a night whose Solr load
                                                            # never finishes: the watchdog notices at the deadline
 
-It adds synthetic Media records to the CollectionSpace simulator first, and lists them in the Blob-to-Media file, so
+It adds synthetic Media records to the CollectionSpace simulator first, and lists them in the servable list, so
 each listed file can then be fetched on a miss. The CSIDs are made from the museum and a number, so the same
 --rows gives the same file every night (preflight's change threshold passes). The museum's ETL token is read from the
 local Secrets Manager stand-in, as the real ETL reads its own from its secret store; it's never printed."""
@@ -97,7 +97,7 @@ def night(serena: httpx.Client, cspace: httpx.Client, tenant: str, token: str, c
     body = tsv(listed)
     upload = {**headers, "Content-Type": "text/tab-separated-values", "Content-Encoding": "gzip",
               "X-Row-Count": str(len(listed)), "X-Content-SHA256": hashlib.sha256(body).hexdigest()}
-    _call(serena.put(run["links"]["blob_media"], content=gzip.compress(body), headers=upload))
+    _call(serena.put(run["links"]["servable_list"], content=gzip.compress(body), headers=upload))
     run = _call(serena.post(run["links"]["preflight"], headers=headers))
     run = _wait(serena, run, headers, DONE, every, wait, timeout)
     if run["state"] == "ready" and not partial:

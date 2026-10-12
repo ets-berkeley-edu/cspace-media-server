@@ -80,9 +80,9 @@ def test_start_a_run(client: TestClient) -> None:
     assert response.status_code == 201
     run = response.json()
     assert (run["run_id"], run["night"], run["state"]) == ("pahma-2026-10-10-1", "2026-10-10", "started")
-    assert run["file_name"] == "blob-media.pahma.2026-10-10.tsv"
+    assert run["file_name"] == "servable-list.pahma.2026-10-10.tsv"
     assert (run["poll_interval_seconds"], run["step_timeout_seconds"]) == (15, 1800)
-    assert run["links"]["blob_media"] == "/etl/v1/museums/pahma/runs/pahma-2026-10-10-1/blob-media"
+    assert run["links"]["servable_list"] == "/etl/v1/museums/pahma/runs/pahma-2026-10-10-1/servable-list"
     assert response.headers["cache-control"] == "no-store"
 
 
@@ -156,13 +156,14 @@ def test_upload(client: TestClient, s3: Any) -> None:
     assert body["state"] == "received"
     assert body["upload"]["rows"] == 3
     assert body["upload"]["sha256"] == hashlib.sha256(FILE).hexdigest()
-    stored = s3.get_object(Bucket="b-pahma", Key="blob-media/pahma-2026-10-10-1/blob-media.pahma.2026-10-10.tsv.gz")
+    key = "servable-list/pahma-2026-10-10-1/servable-list.pahma.2026-10-10.tsv.gz"
+    stored = s3.get_object(Bucket="b-pahma", Key=key)
     assert gzip.decompress(stored["Body"].read()) == FILE
 
 
 def test_upload_gzipped(client: TestClient) -> None:
     run = start(client)
-    response = client.put(run["links"]["blob_media"], content=gzip.compress(FILE),
+    response = client.put(run["links"]["servable_list"], content=gzip.compress(FILE),
                           headers=upload_headers(FILE, **{"Content-Encoding": "gzip"}))
     assert response.status_code == 200, response.text
     assert response.json()["upload"]["rows"] == 3
@@ -209,13 +210,13 @@ def test_no_upload_after_the_load_is_reported(client: TestClient, store: Store, 
 ])
 def test_upload_refused(client: TestClient, headers: dict[str, str], status: int) -> None:
     run = start(client)
-    is_problem(client.put(run["links"]["blob_media"], content=FILE, headers={**upload_headers(FILE), **headers}),
+    is_problem(client.put(run["links"]["servable_list"], content=FILE, headers={**upload_headers(FILE), **headers}),
                status)
 
 
 def test_missing_headers(client: TestClient) -> None:
     run = start(client)
-    response = client.put(run["links"]["blob_media"], content=FILE,
+    response = client.put(run["links"]["servable_list"], content=FILE,
                           headers={**auth(), "Content-Type": "text/tab-separated-values"})
     is_problem(response, 400)
     assert "x-row-count" in response.json()["detail"]
@@ -230,14 +231,14 @@ def test_too_large(client: TestClient) -> None:
 def test_too_large_when_decompressed(client: TestClient) -> None:
     run = start(client)
     bomb = gzip.compress(b"\n" * (5 * 1024 * 1024))  # a few KB that expand to 5 MB
-    response = client.put(run["links"]["blob_media"], content=bomb,
+    response = client.put(run["links"]["servable_list"], content=bomb,
                           headers={**upload_headers(b""), "Content-Encoding": "gzip"})
     is_problem(response, 413)
 
 
 def test_bad_gzip(client: TestClient) -> None:
     run = start(client)
-    response = client.put(run["links"]["blob_media"], content=b"not gzip",
+    response = client.put(run["links"]["servable_list"], content=b"not gzip",
                           headers={**upload_headers(FILE), "Content-Encoding": "gzip"})
     is_problem(response, 400)
 

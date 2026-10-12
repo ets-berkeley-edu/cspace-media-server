@@ -12,7 +12,7 @@ Replacing a Media record's image creates a new Blob. Until the next nightly upda
 Blob CSID. On a cache miss Serena checks only that the Media record exists and isn't deleted, then fetches through the
 Media service, which returns the record's current image (decided October 9, 2026).
 
-Set up, on a test tenant: pick a Blob CSID that the last applied Blob-to-Media file lists as public and that isn't in
+Set up, on a test tenant: pick a Blob CSID that the last applied servable list has as public and that isn't in
 Serena's cache yet. After the nightly update, replace the image on its Media record in CollectionSpace. Don't wait for
 the next nightly update.
 
@@ -52,8 +52,8 @@ museum's token secret in Secrets Manager, and a call from the ETL server (the on
 
 - [ ] From the ETL server, `GET /etl/v1/ping` with each museum's token. Expect `200` and `{"museum": "<that museum>"}`.
 - [ ] With one museum's token on another museum's path (`POST /etl/v1/museums/<other>/runs`), expect `403`.
-- [ ] Start a run, then upload a real night's Blob-to-Media file (gzip). Expect `received`, with the row count the ETL
-  reports, and the file in the museum's bucket under `blob-media/<run ID>/`, encrypted with the museum's KMS key.
+- [ ] Start a run, then upload a real night's servable list (gzip). Expect `received`, with the row count the ETL
+  reports, and the file in the museum's bucket under `servable-list/<run ID>/`, encrypted with the museum's KMS key.
 - [ ] Rotate one museum's token (new one in `current`, old one in `previous`). Within 5 minutes both work; after
   `previous` is cleared, only the new one.
 - [ ] In CloudWatch, search Serena's logs for the tokens: expect no match.

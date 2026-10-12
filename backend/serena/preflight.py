@@ -1,4 +1,4 @@
-"""The preflight: checks a night's Blob-to-Media file without applying it (design: Preflight and apply).
+"""The preflight: checks a night's servable list without applying it (design: Preflight and apply).
 
 Fails on any malformed line, a value outside the rules, a Blob listed twice, or more change than the museum's
 threshold allows; warns on a missing restricted-image Blob and on a Media CSID listed for several Blobs. The result
@@ -9,9 +9,9 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import IO, Any
 
-from .blob_media import ACCESS, HEADER, KINDS, Row, lines
 from .csid import is_csid
 from .museum import Museum
+from .servable_list import ACCESS, HEADER, KINDS, Row, lines
 
 MAX_PROBLEMS = 20  # problems listed in the run; all are counted
 
