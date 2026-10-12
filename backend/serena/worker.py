@@ -7,7 +7,8 @@ Every few seconds it reads each museum's newest refresh (a museum has at most on
 A refresh in `checking` or `updating` is claimed with a conditional write that sets an owner and a heartbeat, renewed
 while the step runs; a step whose heartbeat has gone stale was interrupted and is started again, so a restart never
 loses a step (decided October 9, 2026, D33). Both steps are safe to repeat. A passed check goes straight on to the
-servability update, under the same claim (decided October 12, 2026, D80)."""
+servability update, under the same claim (decided October 12, 2026, D80). Once a day it also removes audit entries
+older than each museum's audit retention (D98)."""
 from __future__ import annotations
 
 import logging
@@ -19,16 +20,18 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
 
 from . import servability_update as updating
 from . import servable_list_check as checking
+from .audit import Audit
 from .config import Settings
 from .museum import Museum
 from .museum_settings import MuseumSettings
-from .refreshes import OutOfOrder, Refresh, Refreshes, State
+from .refreshes import PACIFIC, OutOfOrder, Refresh, Refreshes, State
 from .servable_list import read_rows
 from .store import Store
 from .watchdog import Watchdog
@@ -72,6 +75,7 @@ class Worker:
         self.sleep = sleep
         self.monotonic = monotonic
         self.watched_at: float | None = None
+        self.purged_on: str | None = None  # the Pacific date of the last removal of old audit entries
         self.owner = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         self.stopping = threading.Event()
 
@@ -105,10 +109,33 @@ class Worker:
             log.exception("watchdog pass failed")
         return True
 
+    def purge_audit(self, now: datetime | None = None) -> int:
+        """Once a Pacific day, removes each museum's audit entries older than its audit retention (D98), by the
+        setting in force now. Returns how many were removed."""
+        now = now or datetime.now(UTC)
+        today = now.astimezone(PACIFIC).date().isoformat()
+        if self.purged_on == today:
+            return 0
+        self.purged_on = today
+        audit = Audit(self.s.store)
+        removed = 0
+        for key, museum in sorted(self.s.museums.items()):
+            try:
+                days = self.s.museum_settings.get(museum).audit_retention_days
+                count = audit.purge(key, now - timedelta(days=days))
+            except Exception:
+                log.exception("old audit entries not removed", extra={"museum": key})
+                continue
+            if count:
+                log.info("old audit entries removed", extra={"museum": key, "removed": count, "days": days})
+            removed += count
+        return removed
+
     def run_forever(self) -> None:
         log.info("worker started", extra={"owner": self.owner})
         while not self.stopping.is_set():
             self.watch()
+            self.purge_audit()
             if not self.tick():
                 self.stopping.wait(self.s.settings.worker_poll_seconds)
         log.info("worker stopped", extra={"owner": self.owner})

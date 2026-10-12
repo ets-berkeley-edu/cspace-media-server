@@ -281,3 +281,35 @@ acknowledged.
   once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
   `./serena logs --no-follow worker | grep '"threshold_overridden": true'`: expect one line, the
   override's "servable list check done".
+
+## 15. Settings, sorting and the audit log in the admin app, locally (20 minutes, before merging a pull request that changes them)
+
+The API's tests cover each setting, its bounds, the alerts, the export and the daily removal of old audit entries. This
+checks the pages in Chrome. Start afresh from the pull request's branch (see the top of this file), open
+http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
+
+- [ ] Open "Settings" (in the menu, after "Alerts"). Expect five cards: Watchdog (deadline 08:00), The ETL job (poll
+  interval 15, step timeout 1800), Servable list check (delta threshold 5), Size limits (image 500, card 500, 3D 1024,
+  pdf 200) and Audit log (90 days), each "the starting value".
+- [ ] Click "Change" beside the step timeout. Type `10` and a reason, and click "Save". Expect a red message that it
+  must be greater than or equal to 60, and the value unchanged. Click "Change" again, type `900` and a reason, and save. Expect 900, "changed; starting value
+  1800", and a "Use the starting value" button.
+- [ ] Open "Audit log". Expect a "settings change" entry for `etl_step_timeout_seconds` with Before 1800, After 900 and
+  your reason.
+- [ ] Back on "Settings", click "Use the starting value" beside the step timeout, give a reason and confirm. Expect 1800
+  and "the starting value" again.
+- [ ] Change the delta threshold to `12.5`, with a reason. Within a minute, expect the banner: "An admin changed a
+  setting", naming the delta threshold, from 5.0 to 12.5, and your reason. Set it back with "Use the starting value"
+  (another alert). Acknowledge both.
+- [ ] Change the audit log's retention: the choices are 90 days and 6, 12, 18, 24 and 36 months. Choose 6 months, give
+  a reason and save. Expect "6 months" and an alert as above. (A fresh stack has no entries older than 90 days, so no
+  warning about entries to be removed appears.)
+- [ ] In a terminal, make some refreshes: `for i in $(seq 30); do ./serena etl pahma > /dev/null; done` (about a minute).
+  Open "Refreshes". Expect 25 rows, newest first, and, at the foot of the table, "Items per page" (10, 25, 50, 100)
+  and the pages. Click "Last change" in the header: expect the oldest refresh first, taken from all 30, not only the
+  page on screen; click again for newest first. Choose 100 per page: expect all 30 on one page.
+- [ ] Open "Alerts" and "Audit log": expect the same sorting by any column's name (on the Audit log, every column but
+  Details), and the same choice of page sizes.
+- [ ] On "Audit log", click "Export CSV". Expect a file `serena-audit-pahma-<today>.csv`. Open it in Excel: expect
+  the columns time (UTC), admin, action, target and details, oldest first, and nothing run as a formula. Reload the
+  page: expect an "audit export" entry at the top, with the number of entries.

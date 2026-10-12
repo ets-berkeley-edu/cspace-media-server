@@ -15,6 +15,7 @@ settings:
   etl_poll_interval_seconds: 15       # returned to the ETL in every refresh response
   etl_step_timeout_seconds: 1800
   delta_threshold_percent: 5          # the servable list check fails if added + removed + changed rows exceed this percentage
+  audit_retention_days: 90             # how long the audit log is kept: 90, 183, 365, 548, 730 or 1095 days
   size_limit_mb:                      # largest file fetched, by kind (starting values, to confirm for production)
     image: 500
     card: 500

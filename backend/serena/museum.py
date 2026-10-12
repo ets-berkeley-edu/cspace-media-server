@@ -20,18 +20,24 @@ SERVED_KINDS = ("image", "card", "3D", "pdf")
 Kind = Literal["image", "card", "3D", "pdf"]
 
 _DEADLINE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+# How long a museum's audit log is kept, in days: 90 days, or 6, 12, 18, 24 or 36 months (decided October 12, 2026,
+# D97).
+AUDIT_RETENTION_DAYS = (90, 183, 365, 548, 730, 1095)
 
 
 class StartingSettings(BaseModel):
-    """Starting values of the settings admins change in the admin app (design: Records, Settings)."""
+    """Starting values of the settings admins change in the admin app (design: Records, Settings). The bounds keep a
+    typo from breaking the daily refresh (decided October 12, 2026, D88); an admin's value is checked against them
+    too."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     watchdog_deadline: str = Field(description="HH:MM, Pacific time")
-    etl_poll_interval_seconds: int = Field(gt=0)
-    etl_step_timeout_seconds: int = Field(gt=0)
-    delta_threshold_percent: float = Field(gt=0, le=100)
+    etl_poll_interval_seconds: int = Field(ge=5, le=300)
+    etl_step_timeout_seconds: int = Field(ge=60, le=7200)
+    delta_threshold_percent: float = Field(ge=0.1, le=100)
     size_limit_mb: dict[Kind, int]
+    audit_retention_days: int = 90
 
     @field_validator("watchdog_deadline")
     @classmethod
@@ -46,9 +52,16 @@ class StartingSettings(BaseModel):
         missing = [kind for kind in SERVED_KINDS if kind not in limits]
         if missing:
             raise ValueError(f"size_limit_mb needs a limit for {', '.join(missing)}")
-        if any(limit <= 0 for limit in limits.values()):
-            raise ValueError("size limits must be positive")
+        if any(not 1 <= limit <= 2048 for limit in limits.values()):
+            raise ValueError("size limits must be 1 to 2,048 MB")
         return limits
+
+    @field_validator("audit_retention_days")
+    @classmethod
+    def _retention(cls, days: int) -> int:
+        if days not in AUDIT_RETENTION_DAYS:
+            raise ValueError(f"audit_retention_days must be one of {', '.join(map(str, AUDIT_RETENTION_DAYS))}")
+        return days
 
 
 class Museum(BaseModel):

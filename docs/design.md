@@ -514,11 +514,11 @@ where the table is read as a list, a sort key:
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
 | Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
 | Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
-| Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold and size limits, over the starting values in configuration; a value that isn't valid is ignored; each task reads them again after a minute |
+| Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits and audit retention, over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its banner and alerts page |
 | Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
 | Cache index | see Storage | | |
-| Audit log | `<tenant>` | `<time>#<admin>#<random>` (the random part keeps two actions in the same microsecond apart) | the admin action, its target, details (before and after, for a setting); kept indefinitely |
+| Audit log | `<tenant>` | `<time>#<admin>#<random>` (the random part keeps two actions in the same microsecond apart) | the admin action, its target, details (before and after, for a setting); kept for the museum's audit retention (90 days to start; an admin's setting: 90 days, or 6, 12, 18, 24 or 36 months), the worker removing older entries once a day by the setting then in force (decided October 12, 2026, D97, D98) |
 | Admin sessions | SHA-256 of the session's token | | museum, admin, started, last seen; expire by TTL after 8 hours |
 
 A Blob is servable when its servability record exists, its kind is served, its access is public (or restricted, with a
@@ -737,7 +737,8 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 An alert shows in the admin app's banner (the newest 5 not yet acknowledged, checked on every page change and every
 minute) until an admin acknowledges it, one at a time; the app's alerts page lists the last 30 days' alerts, acknowledged or not. An alert is logged, and is emailed through one Amazon SNS topic
 per environment (`SERENA_ALERT_TOPIC_ARN`) to the team's mailing list. Besides the watchdog's alerts, an admin's
-override of the delta threshold raises one, so the team hears of it. The subscription requires authentication to
+override of the delta threshold raises one, and so does an admin's change to the delta threshold or the audit retention
+("An admin changed a setting"), so the team hears of each. The subscription requires authentication to
 unsubscribe. Without a topic (local development) alerts are recorded and logged, not emailed.
 
 Each alert is keyed by what it is about, `<refresh date>#<kind>#<subject>` (the subject is the refresh ID or the refresh date), so the
@@ -893,7 +894,17 @@ reachable only from campus networks.
 - **First-release features:**
   - alerts: the banner, the alerts page and acknowledging (see Watchdog and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
-  - per-museum settings: the watchdog deadline, the ETL's poll interval and step timeout, size limits;
+  - the Refreshes, Alerts and Audit log pages show the last 30 days, newest first; the browser sorts all 30 days by a
+    column's name and pages them, 25 rows to start (10, 25, 50 or 100) (decided October 12, 2026, D91 to D94);
+  - per-museum settings, on a Settings page (D86 to D90, D95): the watchdog deadline (one time a day, HH:MM Pacific),
+    the ETL's poll interval (5 to 300 seconds) and step timeout (60 to 7,200 seconds), the delta threshold (0.1 to
+    100%), the size limits by kind (1 to 2,048 MB) and the audit retention (D97). Any admin of the museum may change
+    one, with a reason; the audit log records the value before and after; a change to the delta threshold or the
+    audit retention raises an emailed alert. Each setting shows its starting value, and "Use the starting value"
+    removes the admin's value. For the audit retention, the page says how many entries a shorter period would remove
+    at the next daily removal;
+  - the audit log's CSV export: every entry the museum keeps, oldest first (time, admin, action, target, details),
+    with any cell a spreadsheet could run as a formula made safe (D96); the export is audited;
   - restricted-image Blob upload;
   - takedown and unlock by Media CSID;
   - a lookup of why a file is or isn't served; the page of recent unserved requests; the list of files Serena knows it
@@ -902,7 +913,7 @@ reachable only from campus networks.
     description generated from the code (decided October 10, 2026);
   - an audit log of every admin action: sign-in, sign-out, signing everyone out, takedown, unlock, a settings change
     (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, an
-    admin refresh and the restricted-image upload, each
+    admin refresh, an audit export and the restricted-image upload, each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
 - **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
   objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October
@@ -922,8 +933,8 @@ reachable only from campus networks.
   tables (the admin app's takedowns and settings are served by the app), the cache index, refreshes, alerts,
   unserved-request counts, audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
   uploaded servable lists; use the KMS key; and read its own secrets. The worker's role can read and write
-  servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and put the
-  servable lists in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
+  servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
+  delete audit entries (the daily removal, D98), read and put the servable lists in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
 - **Logs and metrics.** Structured JSON logs to CloudWatch and embedded metrics: requests, hits, misses, unserved
   requests by reason, fetch time, upstream errors by cause, duplicate fetches, refresh outcomes. No passwords, tokens,
   signed URLs or personal data in logs: the PDF link suffix is removed before anything is logged, and the query
@@ -1052,6 +1063,9 @@ The F numbers follow the team's list of follow-ups.
   if several clients get the same URL, only the first one to use it gets a response? To discuss (raised October 8,
   2026).
 - **Notifications list.** The team mailing list that receives alarms.
+- **Audit retention policy (D99).** Before production, ask the campus information security office (and records
+  management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
+  lowest choice to match.
 
 Settled since October 8 and recorded above: the restricted-image Blob (stored from an admin upload), 3D files (served),
 the delta threshold (5%, counting changed rows), admin sign-in (CollectionSpace account and role), restricted

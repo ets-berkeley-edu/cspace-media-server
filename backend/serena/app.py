@@ -13,7 +13,18 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import admin_api, admin_refreshes, etl_api, imageserver, logs, museum, signed_links, signing, tables
+from . import (
+    admin_api,
+    admin_refreshes,
+    admin_settings,
+    etl_api,
+    imageserver,
+    logs,
+    museum,
+    signed_links,
+    signing,
+    tables,
+)
 from .admin_sessions import Sessions
 from .alerts import Alerts
 from .audit import Audit
@@ -92,13 +103,17 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         """For the load balancer: answers "ok" and nothing else about Serena."""
         return PlainTextResponse("ok", headers={"Cache-Control": "no-store"})
 
-    # The app records alerts (an admin's override, D62) but doesn't email them: the worker does.
+    # The app records alerts (an admin's override or setting change, D62, D89) but doesn't email them: the worker does.
+    app_alerts = Alerts(store, None, "")
+    audit = Audit(store)  # real time: entries are ordered by it
     app.state.admin_refreshes = admin_refreshes.RefreshServices(
-        Refreshes(store, clock) if clock else Refreshes(store), Alerts(store, None, ""), s3)
+        Refreshes(store, clock) if clock else Refreshes(store), app_alerts, s3)
+    app.state.admin_settings = admin_settings.SettingsServices(
+        app.state.museum_settings, store, app_alerts, audit, *((clock,) if clock else ()))
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
-        Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), Audit(store),
-        cspace_http or _admin_http), routers=(admin_refreshes.create_router(),))
+        Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), audit,
+        cspace_http or _admin_http), routers=(admin_refreshes.create_router(), admin_settings.create_router()))
     app.include_router(imageserver.router)
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})

@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from typing import Annotated, Any
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from . import uploads
@@ -28,7 +28,7 @@ from .refreshes import Busy, OutOfOrder, Refresh, Refreshes, State, Upload
 
 log = logging.getLogger("serena.admin")
 
-DAYS_OF_ALERTS = 30  # D67
+DAYS_SHOWN = 30  # the Refreshes and Alerts pages show the last 30 days (D67, D93)
 FILE_NAME = re.compile(r"[^\w.\- ]")
 
 
@@ -120,9 +120,10 @@ def create_router() -> APIRouter:
                                       if not a["acknowledged_at"])}
 
     @router.get("/refreshes")
-    def list_refreshes(session: SignedIn, r: Refreshes_,
-                       limit: Annotated[int, Query(ge=1, le=100)] = 30) -> dict[str, Any]:
-        return {"refreshes": [summary(refresh) for refresh in r.refreshes.recent(session.tenant, limit)]}
+    def list_refreshes(session: SignedIn, r: Refreshes_) -> dict[str, Any]:
+        """The last 30 days' refreshes, newest first; the app sorts and pages them (D91, D93)."""
+        return {"days": DAYS_SHOWN,
+                "refreshes": [summary(refresh) for refresh in r.refreshes.since(session.tenant, _since(r))]}
 
     @router.get("/refreshes/{refresh_id}")
     def get_refresh(refresh_id: str, session: SignedIn, r: Refreshes_) -> dict[str, Any]:
@@ -251,7 +252,7 @@ def create_router() -> APIRouter:
 
 
 def _since(r: RefreshServices) -> str:
-    return (date.fromisoformat(r.refreshes.today()) - timedelta(days=DAYS_OF_ALERTS)).isoformat()
+    return (date.fromisoformat(r.refreshes.today()) - timedelta(days=DAYS_SHOWN)).isoformat()
 
 
 async def _sniff(chunks: AsyncIterator[bytes]) -> tuple[AsyncIterator[bytes], bool]:

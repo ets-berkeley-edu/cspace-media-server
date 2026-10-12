@@ -11,6 +11,7 @@ import {VChip} from 'vuetify/components/VChip'
 import {VDialog} from 'vuetify/components/VDialog'
 import {VFileInput} from 'vuetify/components/VFileInput'
 import {VForm} from 'vuetify/components/VForm'
+import {VDataTable} from 'vuetify/components/VDataTable'
 import {VContainer, VSpacer} from 'vuetify/components/VGrid'
 import {VList, VListItem, VListItemTitle} from 'vuetify/components/VList'
 import {VMain} from 'vuetify/components/VMain'
@@ -29,7 +30,7 @@ import {VTextarea} from 'vuetify/components/VTextarea'
 export default createVuetify({
   components: {
     VAlert, VApp, VAppBar, VAppBarTitle, VBtn, VCard, VCardActions, VCardText, VCardTitle, VCheckbox, VChip,
-    VContainer, VDialog, VFileInput, VForm, VList, VListItem, VListItemTitle, VMain, VMenu, VNavigationDrawer,
+    VContainer, VDataTable, VDialog, VFileInput, VForm, VList, VListItem, VListItemTitle, VMain, VMenu, VNavigationDrawer,
     VSelect, VSpacer, VTable, VTextField, VTextarea
   },
   icons: {defaultSet: 'mdi', aliases, sets: {mdi}},

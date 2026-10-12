@@ -85,9 +85,14 @@ def test_bad_configuration_fails(changes: dict[str, Any], message: str) -> None:
     [
         ({"watchdog_deadline": "8am"}, "HH:MM"),
         ({"watchdog_deadline": "24:00"}, "HH:MM"),
-        ({"delta_threshold_percent": 0}, "greater than 0"),
+        ({"delta_threshold_percent": 0}, "greater than or equal to 0.1"),
+        ({"delta_threshold_percent": 101}, "less than or equal to 100"),
+        ({"etl_poll_interval_seconds": 4}, "greater than or equal to 5"),
+        ({"etl_step_timeout_seconds": 7201}, "less than or equal to 7200"),
         ({"size_limit_mb": {"image": 1, "card": 1, "3D": 1}}, "pdf"),
-        ({"size_limit_mb": {"image": 0, "card": 1, "3D": 1, "pdf": 1}}, "positive"),
+        ({"size_limit_mb": {"image": 0, "card": 1, "3D": 1, "pdf": 1}}, "1 to 2,048 MB"),
+        ({"size_limit_mb": {"image": 2049, "card": 1, "3D": 1, "pdf": 1}}, "1 to 2,048 MB"),
+        ({"audit_retention_days": 30}, "must be one of 90, 183"),
     ],
 )
 def test_bad_settings_fail(settings: dict[str, Any], message: str) -> None:
