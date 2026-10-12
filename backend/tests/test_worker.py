@@ -175,6 +175,42 @@ def test_another_museums_rows_are_left_alone(client: TestClient, worker: Worker,
     assert set(current_rows(store, "ucjeps")) == {"u1"}
 
 
+def test_a_failed_step_raises_its_alert_at_once(store: Store, s3: Any, clock: Any, client: TestClient,
+                                                monkeypatch: pytest.MonkeyPatch) -> None:
+    """The team hears of a failed check or servability update at once, not on the watchdog's next pass."""
+    from botocore.exceptions import ClientError
+
+    from serena.alerts import Alerts
+    from serena.watchdog import Watchdog
+
+    settings = Settings(tenants=TENANTS, table_prefix="t", buckets={t: f"b-{t}" for t in TENANTS}, _env_file=None)
+    museums = museum.load_all(TENANTS)
+    watchdog = Watchdog(museums, MuseumSettings(store, 0), Refreshes(store, clock), Alerts(store, None, "", clock),
+                        clock)
+    worker = Worker(WorkerServices(settings, museums, MuseumSettings(store, 0), Refreshes(store, clock), store, s3,
+                                   watchdog), sleep=lambda seconds: None)
+
+    def kinds() -> list[str]:
+        items = store.client.scan(TableName=store.table(tables.ALERTS))["Items"]
+        return sorted(item["kind"]["S"] for item in items)
+
+    first = {f"b{i}": f"m{i}" for i in range(100)}
+    refresh_date(client, worker, first)
+    clock.now = datetime(2026, 10, 11, 10, 30, tzinfo=UTC)
+    failed = refresh_date(client, worker, {f"b{i}": f"m{i}" for i in range(90)})  # 10% removed
+    assert failed["state"] == "check_failed" and kinds() == ["check_failed"]
+    assert watchdog.check_museum("pahma")[0].kind.value == "check_failed"  # its later passes record nothing more
+    assert kinds() == ["check_failed"]
+
+    def throttled(**kwargs: object) -> None:
+        raise ClientError({"Error": {"Code": "ThrottlingException", "Message": "x"}}, "BatchWriteItem")
+
+    clock.now = datetime(2026, 10, 12, 10, 30, tzinfo=UTC)
+    monkeypatch.setattr(store.client, "batch_write_item", throttled)
+    assert refresh_date(client, worker, {**first, "b0": "other"})["state"] == "update_failed"
+    assert kinds() == ["check_failed", "update_failed"]
+
+
 def test_the_worker_stops_when_asked(worker: Worker) -> None:
     worker.stopping.set()  # what SIGTERM does
     worker.run_forever()  # returns at once instead of looping

@@ -729,7 +729,8 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 - a museum's refresh for today hasn't reached `updated` or `abandoned` by the museum's deadline (08:00 to start; admins
   set it in the admin app), including when no refresh started at all. This is how Serena notices a failed refresh;
 - a museum's newest refresh is `check_failed`, `update_failed` or `abandoned` (an abandoned refresh's reasons say whether
-  a later refresh date's refresh or an admin refresh closed it);
+  a later refresh date's refresh or an admin refresh closed it). The worker raises the first two at once, when the
+  step fails; the watchdog's later passes raise them again, which records and emails nothing more;
 - Serena hasn't had a servability update for a museum in 24 hours. Only a museum that has had one can be late: before
   its first servability update there's nothing to compare with.
 

@@ -243,8 +243,8 @@ checks them in Chrome on a Mac. Start afresh: `./serena down && ./serena up`, th
 and sign in to PAHMA as `admin` (password `admin`).
 
 About alerts: the watchdog runs in the worker every 5 minutes. Past 08:00 Pacific, its first pass raises "Today's refresh
-isn't finished by the deadline" for every museum, because no refresh has started: acknowledge PAHMA's. A failed servable list check
-raises its own alert on the watchdog's next pass. The banner checks for new alerts on every page change and every
+isn't finished by the deadline" for every museum, because no refresh has started: acknowledge PAHMA's. A failed
+servable list check raises its own alert at once, from the worker. The banner checks for new alerts on every page change and every
 minute, so an alert appears within a minute of being raised. The banner disappears only once every alert in it is
 acknowledged.
 
@@ -255,11 +255,12 @@ acknowledged.
 - [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed` and `servable list: 4 rows; 0 added, 17
   removed, 0 changed (80.95% of the last servability update's 21 rows)`. In the app, open "Refreshes", then the
   refresh: expect "Servable list check failed", the problem (80.95% of the rows would change; the threshold is 5%), and
-  an orange button, "Override the delta threshold".
+  an orange button, "Override the delta threshold". Within a minute, expect the banner, and the "Alerts" page, to show
+  "A servable list check failed" for that refresh.
 - [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", is greyed
   out until you type a reason. Type one and click it. Expect:
-  - the banner, with "An admin overrode the delta threshold". (If the watchdog's 5-minute pass ran while the refresh was
-    `check_failed`, the banner also has "A servable list check failed"; it stays until acknowledged.)
+  - the banner, with "An admin overrode the delta threshold" as well ("A servable list check failed" stays until
+    acknowledged);
   - after reloading the page, the same refresh `Updated`, with no orange button, its reasons naming the override and
     its check's warnings saying the delta threshold was skipped.
 - [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"

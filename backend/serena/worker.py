@@ -127,6 +127,16 @@ class Worker:
         finally:
             heartbeat.halt.set()
 
+    def _alert(self, refresh: Refresh) -> None:
+        """A failed step's alert, raised at once (design: The daily sequence); the watchdog raises it again later if
+        this fails."""
+        if self.s.watchdog is None:
+            return
+        try:
+            self.s.watchdog.raise_failure(refresh)
+        except Exception:
+            log.exception("alert for a failed step not raised", extra={"refresh_id": refresh.refresh_id})
+
     def _file(self, tenant: str, key: str) -> Any:
         """The stored (gzip) servable list, downloaded to a temporary file on the task's disk."""
         handle = tempfile.TemporaryFile(dir=self.s.settings.upload_dir)
@@ -158,6 +168,7 @@ class Worker:
             self.s.refreshes.transition(refresh, State.CHECK_FAILED, results={"check": result.summary()},
                                         reason=f"servable list check failed: {result.error_count} problem(s)",
                                         release=True)
+            self._alert(refresh)
             return
         # Passed: the servability update follows at once, under the same claim (D80).
         self.s.refreshes.transition(refresh, State.UPDATING, results={"check": result.summary()})
@@ -180,6 +191,7 @@ class Worker:
                     self.s.refreshes.transition(refresh, State.UPDATE_FAILED, release=True,
                                                 reason=f"servability update failed after {UPDATE_ATTEMPTS} attempts "
                                                        f"({type(error).__name__}); an admin can retry it")
+                    self._alert(refresh)
                     return
                 self.sleep(2 ** attempt)
         self.s.refreshes.transition(refresh, State.UPDATED, results={"update": vars(counts)}, release=True)
