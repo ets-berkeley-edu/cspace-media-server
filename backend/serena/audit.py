@@ -1,7 +1,7 @@
 """The audit log of admin actions (design: Records, Admin web app; decided October 10, 2026).
 
 One entry per action: the museum, the time, the admin (their CollectionSpace username), the action, its target (a
-Media CSID, run ID or setting name) and, for a setting, the values before and after. Never a password, token or
+Media CSID, refresh ID or setting name) and, for a setting, the values before and after. Never a password, token or
 file's content. Failed sign-ins aren't recorded here: their username may be anyone's. Entries are kept indefinitely."""
 from __future__ import annotations
 
@@ -24,11 +24,11 @@ class Action(StrEnum):
     TAKEDOWN = "takedown"
     UNLOCK = "unlock"
     SETTINGS_CHANGE = "settings_change"
-    APPLY_RETRY = "apply_retry"
+    UPDATE_RETRY = "update_retry"
     THRESHOLD_OVERRIDE = "threshold_override"
     FILE_UPLOAD = "file_upload"
     RESTRICTED_IMAGE_UPLOAD = "restricted_image_upload"
-    RECORD_LOAD = "record_load"  # "record tonight's load and apply" after a partial night (D65)
+    RECORD_LOAD = "record_load"  # "Record the Solr refresh and update Serena" after a failed refresh (D65)
     THRESHOLD_OVERRIDE_CANCEL = "threshold_override_cancel"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
 

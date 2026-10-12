@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from serena import etl_api, tables
 from serena.app import create_app
 from serena.config import Settings
-from serena.runs import Runs, State
+from serena.refreshes import Refreshes, State
 from serena.store import Store
 
 # --- tokens
@@ -39,11 +39,11 @@ def test_no_or_unknown_token(client: TestClient, header: str | None) -> None:
 
 
 def test_a_token_for_another_museum(client: TestClient) -> None:
-    is_problem(client.post("/etl/v1/museums/cinefiles/runs", headers=auth("pahma")), 403)
+    is_problem(client.post("/etl/v1/museums/cinefiles/refreshes", headers=auth("pahma")), 403)
 
 
 def test_a_museum_serena_doesnt_serve(client: TestClient) -> None:
-    is_problem(client.post("/etl/v1/museums/nowhere/runs", headers=auth()), 404)
+    is_problem(client.post("/etl/v1/museums/nowhere/refreshes", headers=auth()), 404)
 
 
 def test_tokens_that_cant_be_read(store: Store, s3: Any, secretsmanager: Any) -> None:
@@ -65,37 +65,38 @@ def test_a_rotation_reaches_the_task(store: Store, s3: Any, secretsmanager: Any)
 
 def test_the_token_is_never_logged(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
-    run = start(client)
-    put(client, run, FILE)
+    refresh = start(client)
+    put(client, refresh, FILE)
     client.get("/etl/v1/ping", headers={"Authorization": "Bearer " + "y" * 43})
     for record in caplog.records:
         assert TOKENS["pahma"] not in record.getMessage()
         assert TOKENS["pahma"] not in json.dumps({k: str(v) for k, v in vars(record).items()})
 
 
-# --- runs
+# --- refreshes
 
-def test_start_a_run(client: TestClient) -> None:
-    response = client.post("/etl/v1/museums/pahma/runs", headers=auth())
+def test_start_a_refresh(client: TestClient) -> None:
+    response = client.post("/etl/v1/museums/pahma/refreshes", headers=auth())
     assert response.status_code == 201
-    run = response.json()
-    assert (run["run_id"], run["night"], run["state"]) == ("pahma-2026-10-10-1", "2026-10-10", "started")
-    assert run["file_name"] == "servable-list.pahma.2026-10-10.tsv"
-    assert (run["poll_interval_seconds"], run["step_timeout_seconds"]) == (15, 1800)
-    assert run["links"]["servable_list"] == "/etl/v1/museums/pahma/runs/pahma-2026-10-10-1/servable-list"
+    refresh = response.json()
+    assert (refresh["refresh_id"], refresh["refresh_date"], refresh["state"]) == ("pahma-2026-10-10-1", "2026-10-10",
+                                                                                 "started")
+    assert refresh["file_name"] == "servable-list.pahma.2026-10-10.tsv"
+    assert (refresh["poll_interval_seconds"], refresh["step_timeout_seconds"]) == (15, 1800)
+    assert refresh["links"]["servable_list"] == "/etl/v1/museums/pahma/refreshes/pahma-2026-10-10-1/servable-list"
     assert response.headers["cache-control"] == "no-store"
 
 
-def test_starting_again_returns_the_open_run(client: TestClient) -> None:
+def test_starting_again_returns_the_open_refresh(client: TestClient) -> None:
     first = start(client)
-    response = client.post("/etl/v1/museums/pahma/runs", headers=auth())
+    response = client.post("/etl/v1/museums/pahma/refreshes", headers=auth())
     assert response.status_code == 200
-    assert response.json()["run_id"] == first["run_id"]
+    assert response.json()["refresh_id"] == first["refresh_id"]
 
 
-def test_the_night_is_the_pacific_date(client: TestClient, clock: Clock) -> None:
+def test_the_day_is_the_pacific_date(client: TestClient, clock: Clock) -> None:
     clock.now = datetime(2026, 10, 10, 6, 59, tzinfo=UTC)  # 23:59 Pacific, October 9
-    assert start(client)["night"] == "2026-10-09"
+    assert start(client)["refresh_date"] == "2026-10-09"
 
 
 def test_an_admins_values_reach_the_etl(client: TestClient, store: Store) -> None:
@@ -104,53 +105,53 @@ def test_an_admins_values_reach_the_etl(client: TestClient, store: Store) -> Non
     assert start(client)["poll_interval_seconds"] == 30
 
 
-def test_a_later_night_abandons_an_earlier_open_run(client: TestClient, clock: Clock) -> None:
+def test_a_later_day_abandons_an_earlier_open_refresh(client: TestClient, clock: Clock) -> None:
     first = start(client)
     clock.now = datetime(2026, 10, 11, 10, 30, tzinfo=UTC)
     second = start(client)
-    assert second["run_id"] == "pahma-2026-10-11-1"
+    assert second["refresh_id"] == "pahma-2026-10-11-1"
     old = client.get(first["links"]["self"], headers=auth()).json()
     assert old["state"] == "abandoned"
-    assert old["reasons"] == ["a later night's run started"]
+    assert old["reasons"] == ["a later refresh date's refresh started"]
 
 
-def test_a_later_night_waits_for_a_busy_run(client: TestClient, store: Store, clock: Clock) -> None:
+def test_a_later_day_waits_for_a_busy_refresh(client: TestClient, store: Store, clock: Clock) -> None:
     first = start(client)
-    runs = Runs(store, clock)
-    run = runs.get("pahma", first["run_id"])
-    assert run is not None
-    runs.transition(run, State.PREFLIGHTING)
+    refreshes = Refreshes(store, clock)
+    refresh = refreshes.get("pahma", first["refresh_id"])
+    assert refresh is not None
+    refreshes.transition(refresh, State.CHECKING)
     clock.now = datetime(2026, 10, 11, 10, 30, tzinfo=UTC)
-    response = client.post("/etl/v1/museums/pahma/runs", headers=auth())
+    response = client.post("/etl/v1/museums/pahma/refreshes", headers=auth())
     is_problem(response, 409)
-    assert "still being preflighted" in response.json()["detail"]
+    assert "still being checked" in response.json()["detail"]
 
 
-def test_a_new_run_the_same_night_once_closed(client: TestClient, store: Store, clock: Clock) -> None:
+def test_a_new_refresh_the_same_day_once_closed(client: TestClient, store: Store, clock: Clock) -> None:
     first = start(client)
-    runs = Runs(store, clock)
-    run = runs.get("pahma", first["run_id"])
-    assert run is not None
-    runs.transition(run, State.ABANDONED)
-    assert start(client)["run_id"] == "pahma-2026-10-10-2"
+    refreshes = Refreshes(store, clock)
+    refresh = refreshes.get("pahma", first["refresh_id"])
+    assert refresh is not None
+    refreshes.transition(refresh, State.ABANDONED)
+    assert start(client)["refresh_id"] == "pahma-2026-10-10-2"
 
 
-def test_museums_have_their_own_runs(client: TestClient) -> None:
-    assert start(client, "pahma")["run_id"] != start(client, "ucjeps")["run_id"]
-    is_problem(client.get("/etl/v1/museums/ucjeps/runs/pahma-2026-10-10-1", headers=auth("ucjeps")), 404)
+def test_museums_have_their_own_refreshes(client: TestClient) -> None:
+    assert start(client, "pahma")["refresh_id"] != start(client, "ucjeps")["refresh_id"]
+    is_problem(client.get("/etl/v1/museums/ucjeps/refreshes/pahma-2026-10-10-1", headers=auth("ucjeps")), 404)
 
 
-@pytest.mark.parametrize("run_id", ["pahma-2026-10-10-9", "pahma-2026-13-01-1", "pahma-x", "pahma-2026-10-10-01"])
-def test_no_such_run(client: TestClient, run_id: str) -> None:
+@pytest.mark.parametrize("refresh_id", ["pahma-2026-10-10-9", "pahma-2026-13-01-1", "pahma-x", "pahma-2026-10-10-01"])
+def test_no_such_refresh(client: TestClient, refresh_id: str) -> None:
     start(client)
-    is_problem(client.get(f"/etl/v1/museums/pahma/runs/{run_id}", headers=auth()), 404)
+    is_problem(client.get(f"/etl/v1/museums/pahma/refreshes/{refresh_id}", headers=auth()), 404)
 
 
 # --- upload
 
 def test_upload(client: TestClient, s3: Any) -> None:
-    run = start(client)
-    response = put(client, run, FILE)
+    refresh = start(client)
+    response = put(client, refresh, FILE)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["state"] == "received"
@@ -162,42 +163,42 @@ def test_upload(client: TestClient, s3: Any) -> None:
 
 
 def test_upload_gzipped(client: TestClient) -> None:
-    run = start(client)
-    response = client.put(run["links"]["servable_list"], content=gzip.compress(FILE),
+    refresh = start(client)
+    response = client.put(refresh["links"]["servable_list"], content=gzip.compress(FILE),
                           headers=upload_headers(FILE, **{"Content-Encoding": "gzip"}))
     assert response.status_code == 200, response.text
     assert response.json()["upload"]["rows"] == 3
 
 
 def test_the_same_file_again_changes_nothing(client: TestClient) -> None:
-    run = start(client)
-    first = put(client, run, FILE).json()
-    again = put(client, run, FILE).json()
+    refresh = start(client)
+    first = put(client, refresh, FILE).json()
+    again = put(client, refresh, FILE).json()
     assert again["upload"] == first["upload"]
 
 
 def test_a_corrected_file_replaces_the_previous_one(client: TestClient, store: Store, clock: Clock) -> None:
-    run = start(client)
-    put(client, run, FILE)
-    runs = Runs(store, clock)
-    current = runs.get("pahma", run["run_id"])
+    refresh = start(client)
+    put(client, refresh, FILE)
+    refreshes = Refreshes(store, clock)
+    current = refreshes.get("pahma", refresh["refresh_id"])
     assert current is not None
-    runs.transition(current, State.PREFLIGHTING)
-    is_problem(put(client, run, FILE + b"b9\tm9\timage\tpublic\n"), 409)  # not while it's being preflighted
-    current = runs.get("pahma", run["run_id"])
+    refreshes.transition(current, State.CHECKING)
+    is_problem(put(client, refresh, FILE + b"b9\tm9\timage\tpublic\n"), 409)  # not while it's being checked
+    current = refreshes.get("pahma", refresh["refresh_id"])
     assert current is not None
-    runs.transition(current, State.READY)
-    corrected = put(client, run, FILE + b"b9\tm9\timage\tpublic\n").json()
-    assert (corrected["state"], corrected["upload"]["rows"]) == ("received", 4)  # to be preflighted again
+    refreshes.transition(current, State.READY)
+    corrected = put(client, refresh, FILE + b"b9\tm9\timage\tpublic\n").json()
+    assert (corrected["state"], corrected["upload"]["rows"]) == ("received", 4)  # to be checked again
 
 
 def test_no_upload_after_the_load_is_reported(client: TestClient, store: Store, clock: Clock) -> None:
-    run = start(client)
-    runs = Runs(store, clock)
-    current = runs.get("pahma", run["run_id"])
+    refresh = start(client)
+    refreshes = Refreshes(store, clock)
+    current = refreshes.get("pahma", refresh["refresh_id"])
     assert current is not None
-    runs.transition(current, State.SOLR_LOADED)
-    is_problem(put(client, run, FILE), 409)
+    refreshes.transition(current, State.SOLR_LOADED)
+    is_problem(put(client, refresh, FILE), 409)
 
 
 @pytest.mark.parametrize(("headers", "status"), [
@@ -209,36 +210,36 @@ def test_no_upload_after_the_load_is_reported(client: TestClient, store: Store, 
     ({"Content-Encoding": "br"}, 415),
 ])
 def test_upload_refused(client: TestClient, headers: dict[str, str], status: int) -> None:
-    run = start(client)
-    is_problem(client.put(run["links"]["servable_list"], content=FILE, headers={**upload_headers(FILE), **headers}),
+    refresh = start(client)
+    is_problem(client.put(refresh["links"]["servable_list"], content=FILE, headers={**upload_headers(FILE), **headers}),
                status)
 
 
 def test_missing_headers(client: TestClient) -> None:
-    run = start(client)
-    response = client.put(run["links"]["servable_list"], content=FILE,
+    refresh = start(client)
+    response = client.put(refresh["links"]["servable_list"], content=FILE,
                           headers={**auth(), "Content-Type": "text/tab-separated-values"})
     is_problem(response, 400)
     assert "x-row-count" in response.json()["detail"]
 
 
 def test_too_large(client: TestClient) -> None:
-    run = start(client)
+    refresh = start(client)
     body = HEADER.encode() + b"x" * (1024 * 1024)  # the limit is 1 MB in these tests
-    is_problem(put(client, run, body), 413)
+    is_problem(put(client, refresh, body), 413)
 
 
 def test_too_large_when_decompressed(client: TestClient) -> None:
-    run = start(client)
+    refresh = start(client)
     bomb = gzip.compress(b"\n" * (5 * 1024 * 1024))  # a few KB that expand to 5 MB
-    response = client.put(run["links"]["servable_list"], content=bomb,
+    response = client.put(refresh["links"]["servable_list"], content=bomb,
                           headers={**upload_headers(b""), "Content-Encoding": "gzip"})
     is_problem(response, 413)
 
 
 def test_bad_gzip(client: TestClient) -> None:
-    run = start(client)
-    response = client.put(run["links"]["servable_list"], content=b"not gzip",
+    refresh = start(client)
+    response = client.put(refresh["links"]["servable_list"], content=b"not gzip",
                           headers={**upload_headers(FILE), "Content-Encoding": "gzip"})
     is_problem(response, 400)
 
@@ -248,13 +249,13 @@ def test_bad_gzip(client: TestClient) -> None:
 def test_storage_failing_is_503(client: TestClient, s3: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     from botocore.exceptions import EndpointConnectionError
 
-    run = start(client)
+    refresh = start(client)
 
     def unreachable(*args: object, **kwargs: object) -> None:
         raise EndpointConnectionError(endpoint_url="https://s3.test")
 
     monkeypatch.setattr(s3, "upload_file", unreachable)
-    response = put(client, run, FILE)
+    response = put(client, refresh, FILE)
     is_problem(response, 503)
     assert "s3.test" not in response.text  # no internals
 
@@ -266,7 +267,7 @@ def test_records_failing_is_503(client: TestClient, store: Store, monkeypatch: p
         raise ClientError({"Error": {"Code": "ProvisionedThroughputExceededException", "Message": "x"}}, "Query")
 
     monkeypatch.setattr(store.client, "query", throttled)
-    is_problem(client.post("/etl/v1/museums/pahma/runs", headers=auth()), 503)
+    is_problem(client.post("/etl/v1/museums/pahma/refreshes", headers=auth()), 503)
 
 
 # --- documentation

@@ -3,12 +3,8 @@
     "schemas": {
       "Links": {
         "properties": {
-          "apply": {
-            "title": "Apply",
-            "type": "string"
-          },
-          "preflight": {
-            "title": "Preflight",
+          "check": {
+            "title": "Check",
             "type": "string"
           },
           "self": {
@@ -22,14 +18,18 @@
           "solr_load": {
             "title": "Solr Load",
             "type": "string"
+          },
+          "update": {
+            "title": "Update",
+            "type": "string"
           }
         },
         "required": [
           "self",
           "servable_list",
-          "preflight",
+          "check",
           "solr_load",
-          "apply"
+          "update"
         ],
         "title": "Links",
         "type": "object"
@@ -80,9 +80,9 @@
         "title": "Problem",
         "type": "object"
       },
-      "RunOut": {
+      "RefreshOut": {
         "properties": {
-          "apply": {
+          "check": {
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -92,8 +92,8 @@
                 "type": "null"
               }
             ],
-            "description": "The apply's counts: deleted, written, unchanged",
-            "title": "Apply"
+            "description": "The servable list check's result: result (passed or failed), rows, added, removed, changed, previous_rows, threshold_percent, delta_percent, error_count, errors (the first 20, each with line, field and problem), warnings",
+            "title": "Check"
           },
           "file_name": {
             "description": "The name to give the servable list",
@@ -113,14 +113,6 @@
             "title": "Museum",
             "type": "string"
           },
-          "night": {
-            "description": "The Pacific date when the run started",
-            "examples": [
-              "2026-10-10"
-            ],
-            "title": "Night",
-            "type": "string"
-          },
           "poll_interval_seconds": {
             "description": "How long to wait between polls; use this value, not a fixed one",
             "examples": [
@@ -129,32 +121,27 @@
             "title": "Poll Interval Seconds",
             "type": "integer"
           },
-          "preflight": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The preflight's result: result (passed or failed), rows, added, removed, changed, previous_rows, threshold_percent, change_percent, error_count, errors (the first 20, each with line, field and problem), warnings",
-            "title": "Preflight"
-          },
           "reasons": {
-            "description": "Why the run is in its state, when that needs saying",
+            "description": "Why the refresh is in its state, when that needs saying",
             "items": {
               "type": "string"
             },
             "title": "Reasons",
             "type": "array"
           },
-          "run_id": {
+          "refresh_date": {
+            "description": "The Pacific date when the refresh started",
+            "examples": [
+              "2026-10-10"
+            ],
+            "title": "Refresh Date",
+            "type": "string"
+          },
+          "refresh_id": {
             "examples": [
               "pahma-2026-10-10-1"
             ],
-            "title": "Run Id",
+            "title": "Refresh Id",
             "type": "string"
           },
           "solr_load": {
@@ -174,12 +161,25 @@
             "$ref": "#/components/schemas/State"
           },
           "step_timeout_seconds": {
-            "description": "How long a step may take before the ETL carries on without Serena",
+            "description": "How long a step may take before the ETL job carries on without Serena",
             "examples": [
               1800
             ],
             "title": "Step Timeout Seconds",
             "type": "integer"
+          },
+          "update": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The servability update's counts: deleted, written, unchanged",
+            "title": "Update"
           },
           "upload": {
             "anyOf": [
@@ -193,22 +193,22 @@
           }
         },
         "required": [
-          "run_id",
+          "refresh_id",
           "museum",
-          "night",
+          "refresh_date",
           "state",
           "file_name",
           "poll_interval_seconds",
           "step_timeout_seconds",
           "links"
         ],
-        "title": "RunOut",
+        "title": "RefreshOut",
         "type": "object"
       },
       "SolrLoad": {
         "properties": {
           "outcome": {
-            "description": "loaded, or fell_back to the previous night's data",
+            "description": "loaded, or fell_back to the previous day's data",
             "enum": [
               "loaded",
               "fell_back"
@@ -234,13 +234,13 @@
         "enum": [
           "started",
           "received",
-          "preflighting",
+          "checking",
           "ready",
-          "preflight_failed",
+          "check_failed",
           "solr_loaded",
-          "applying",
-          "applied",
-          "apply_failed",
+          "updating",
+          "updated",
+          "update_failed",
           "abandoned"
         ],
         "title": "State",
@@ -249,7 +249,7 @@
       "UploadInfo": {
         "properties": {
           "bytes": {
-            "description": "Size of the uncompressed file",
+            "description": "Size of the uncompressed servable list",
             "title": "Bytes",
             "type": "integer"
           },
@@ -259,7 +259,7 @@
             "type": "integer"
           },
           "sha256": {
-            "description": "SHA-256 of the uncompressed file, as sent in X-Content-SHA256",
+            "description": "SHA-256 of the uncompressed servable list, as sent in X-Content-SHA256",
             "title": "Sha256",
             "type": "string"
           },
@@ -286,8 +286,8 @@
     }
   },
   "info": {
-    "description": "See docs/design.md, The ETL API and The nightly sequence. Every call needs the museum's bearer token (`Authorization: Bearer <token>`). Errors are application/problem+json.",
-    "summary": "How the nightly Solr ETL hands each night's servable list to Serena",
+    "description": "See docs/design.md, The ETL API and The daily sequence. Every call needs the museum's bearer token (`Authorization: Bearer <token>`). Errors are application/problem+json.",
+    "summary": "How the daily Solr ETL job hands each servable list to Serena",
     "title": "Serena ETL API",
     "version": "1"
   },
@@ -295,8 +295,8 @@
   "paths": {
     "/museums/{tenant}": {
       "get": {
-        "description": "For troubleshooting. 404 if the museum has no applied run yet.",
-        "operationId": "latest_applied_museums__tenant__get",
+        "description": "For troubleshooting. 404 if the museum has no updated refresh yet.",
+        "operationId": "latest_updated_museums__tenant__get",
         "parameters": [
           {
             "in": "path",
@@ -313,7 +313,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
@@ -347,7 +347,7 @@
                 }
               }
             },
-            "description": "No such museum or run"
+            "description": "No such museum or refresh"
           },
           "503": {
             "content": {
@@ -360,13 +360,13 @@
             "description": "Serena can't check right now (tokens or storage unavailable); try again"
           }
         },
-        "summary": "The museum's latest applied run"
+        "summary": "The museum's latest updated refresh"
       }
     },
-    "/museums/{tenant}/runs": {
+    "/museums/{tenant}/refreshes": {
       "post": {
-        "description": "Serena assigns the run ID and the night (the Pacific date now). If the museum's run for tonight is still\nopen, returns it (200). An earlier night's open run is closed as abandoned, unless Serena is preflighting or\napplying it: then 409, and the ETL tries again (decided October 9, 2026, D30).",
-        "operationId": "start_run_museums__tenant__runs_post",
+        "description": "Serena assigns the refresh ID and the refresh date (the Pacific date now). If the museum's refresh for today\nis still open, returns it (200). An earlier refresh date's open refresh is closed as abandoned, unless Serena is\nchecking or updating it: then 409, and the ETL job tries again (decided October 9, 2026, D30).",
+        "operationId": "start_refresh_museums__tenant__refreshes_post",
         "parameters": [
           {
             "in": "path",
@@ -383,17 +383,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
-            "description": "The museum's open run for tonight, returned instead of a new one"
+            "description": "The museum's open refresh for today, returned instead of a new one"
           },
           "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
@@ -427,7 +427,7 @@
                 }
               }
             },
-            "description": "No such museum or run"
+            "description": "No such museum or refresh"
           },
           "409": {
             "content": {
@@ -437,7 +437,7 @@
                 }
               }
             },
-            "description": "The call is out of order for the run's state"
+            "description": "The call is out of order for the refresh's state"
           },
           "503": {
             "content": {
@@ -450,19 +450,19 @@
             "description": "Serena can't check right now (tokens or storage unavailable); try again"
           }
         },
-        "summary": "Start tonight's run"
+        "summary": "Start today's refresh"
       }
     },
-    "/museums/{tenant}/runs/{run_id}": {
+    "/museums/{tenant}/refreshes/{refresh_id}": {
       "get": {
-        "operationId": "get_run_museums__tenant__runs__run_id__get",
+        "operationId": "get_refresh_museums__tenant__refreshes__refresh_id__get",
         "parameters": [
           {
             "in": "path",
-            "name": "run_id",
+            "name": "refresh_id",
             "required": true,
             "schema": {
-              "title": "Run Id",
+              "title": "Refresh Id",
               "type": "string"
             }
           },
@@ -481,7 +481,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
@@ -515,7 +515,7 @@
                 }
               }
             },
-            "description": "No such museum or run"
+            "description": "No such museum or refresh"
           },
           "503": {
             "content": {
@@ -528,20 +528,20 @@
             "description": "Serena can't check right now (tokens or storage unavailable); try again"
           }
         },
-        "summary": "The run's status"
+        "summary": "The refresh's status"
       }
     },
-    "/museums/{tenant}/runs/{run_id}/apply": {
+    "/museums/{tenant}/refreshes/{refresh_id}/check": {
       "post": {
-        "description": "Queues the apply (202); poll the run until it is applied or apply_failed. Allowed only after the\npreflight passed and the load reported loaded (solr_loaded). Report the night a success only once the run\nis applied.",
-        "operationId": "request_apply_museums__tenant__runs__run_id__apply_post",
+        "description": "Queues the servable list check (202); poll the refresh until it is ready or check_failed. Allowed once a\nservable list is uploaded (received), and again after a failed check: with a corrected list, or with the same\nlist when the ETL job is rerun after an admin overrode the delta threshold for it.",
+        "operationId": "request_check_museums__tenant__refreshes__refresh_id__check_post",
         "parameters": [
           {
             "in": "path",
-            "name": "run_id",
+            "name": "refresh_id",
             "required": true,
             "schema": {
-              "title": "Run Id",
+              "title": "Refresh Id",
               "type": "string"
             }
           },
@@ -560,17 +560,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
-            "description": "The file is already applied; the run is returned as it is"
+            "description": "The servable list check is already done; the refresh is returned as it is"
           },
           "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
@@ -604,7 +604,7 @@
                 }
               }
             },
-            "description": "No such museum or run"
+            "description": "No such museum or refresh"
           },
           "409": {
             "content": {
@@ -614,7 +614,7 @@
                 }
               }
             },
-            "description": "The call is out of order for the run's state"
+            "description": "The call is out of order for the refresh's state"
           },
           "503": {
             "content": {
@@ -627,119 +627,20 @@
             "description": "Serena can't check right now (tokens or storage unavailable); try again"
           }
         },
-        "summary": "Apply the file"
+        "summary": "Check the servable list without changing anything"
       }
     },
-    "/museums/{tenant}/runs/{run_id}/preflight": {
-      "post": {
-        "description": "Queues the preflight (202); poll the run until it is ready or preflight_failed. Allowed once a file is\nuploaded (received), and again after a failed preflight: with a corrected file, or with the same file when the\nnight is rerun after an admin overrode the change threshold for it.",
-        "operationId": "request_preflight_museums__tenant__runs__run_id__preflight_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tenant",
-            "required": true,
-            "schema": {
-              "title": "Tenant",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
-              }
-            },
-            "description": "The preflight is already done; the run is returned as it is"
-          },
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Serena doesn't know"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The token is for another museum"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No such museum or run"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The call is out of order for the run's state"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Serena can't check right now (tokens or storage unavailable); try again"
-          }
-        },
-        "summary": "Check the uploaded file without applying it"
-      }
-    },
-    "/museums/{tenant}/runs/{run_id}/servable-list": {
+    "/museums/{tenant}/refreshes/{refresh_id}/servable-list": {
       "put": {
-        "description": "Streams the file to Serena. Uploading the same file again changes nothing; a corrected file replaces the\nprevious one until the load's outcome is reported, and must then be preflighted again. The file's format is\nchecked by the preflight.",
-        "operationId": "put_servable_list_museums__tenant__runs__run_id__servable_list_put",
+        "description": "Streams the servable list to Serena. Uploading the same list again changes nothing; a corrected list\nreplaces the previous one until the load's outcome is reported, and must then be checked again. Its format is\nchecked by the servable list check.",
+        "operationId": "put_servable_list_museums__tenant__refreshes__refresh_id__servable_list_put",
         "parameters": [
           {
             "in": "path",
-            "name": "run_id",
+            "name": "refresh_id",
             "required": true,
             "schema": {
-              "title": "Run Id",
+              "title": "Refresh Id",
               "type": "string"
             }
           },
@@ -776,12 +677,12 @@
             }
           },
           {
-            "description": "Hex SHA-256 of the uncompressed file",
+            "description": "Hex SHA-256 of the uncompressed servable list",
             "in": "header",
             "name": "x-content-sha256",
             "required": true,
             "schema": {
-              "description": "Hex SHA-256 of the uncompressed file",
+              "description": "Hex SHA-256 of the uncompressed servable list",
               "title": "X-Content-Sha256",
               "type": "string"
             }
@@ -822,7 +723,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
@@ -866,7 +767,7 @@
                 }
               }
             },
-            "description": "No such museum or run"
+            "description": "No such museum or refresh"
           },
           "409": {
             "content": {
@@ -876,7 +777,7 @@
                 }
               }
             },
-            "description": "The call is out of order for the run's state"
+            "description": "The call is out of order for the refresh's state"
           },
           "413": {
             "content": {
@@ -886,7 +787,7 @@
                 }
               }
             },
-            "description": "The file is larger than Serena accepts"
+            "description": "The servable list is larger than Serena accepts"
           },
           "415": {
             "content": {
@@ -919,20 +820,20 @@
             "description": "Serena can't check right now (tokens or storage unavailable); try again"
           }
         },
-        "summary": "Upload the night's servable list"
+        "summary": "Upload the servable list"
       }
     },
-    "/museums/{tenant}/runs/{run_id}/solr-load": {
+    "/museums/{tenant}/refreshes/{refresh_id}/solr-load": {
       "post": {
-        "description": "Allowed once the preflight passed (ready). loaded: the run waits for the apply (solr_loaded). fell_back:\nthe run is abandoned and Serena applies nothing, so both keep yesterday's data.",
-        "operationId": "report_solr_load_museums__tenant__runs__run_id__solr_load_post",
+        "description": "Allowed once the servable list check passed (ready). loaded: the refresh waits for the servability update\n(solr_loaded). fell_back: the refresh is abandoned and Serena changes nothing, so both keep yesterday's data.",
+        "operationId": "report_solr_load_museums__tenant__refreshes__refresh_id__solr_load_post",
         "parameters": [
           {
             "in": "path",
-            "name": "run_id",
+            "name": "refresh_id",
             "required": true,
             "schema": {
-              "title": "Run Id",
+              "title": "Refresh Id",
               "type": "string"
             }
           },
@@ -961,7 +862,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RefreshOut"
                 }
               }
             },
@@ -1005,7 +906,7 @@
                 }
               }
             },
-            "description": "No such museum or run"
+            "description": "No such museum or refresh"
           },
           "409": {
             "content": {
@@ -1015,7 +916,7 @@
                 }
               }
             },
-            "description": "The call is out of order for the run's state"
+            "description": "The call is out of order for the refresh's state"
           },
           "503": {
             "content": {
@@ -1029,6 +930,105 @@
           }
         },
         "summary": "Report the public core's load"
+      }
+    },
+    "/museums/{tenant}/refreshes/{refresh_id}/update": {
+      "post": {
+        "description": "Queues the servability update (202); poll the refresh until it is updated or update_failed. Allowed only\nafter the servable list check passed and the load reported loaded (solr_loaded). Report the ETL job a success\nonly once the refresh is updated.",
+        "operationId": "request_update_museums__tenant__refreshes__refresh_id__update_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "refresh_id",
+            "required": true,
+            "schema": {
+              "title": "Refresh Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tenant",
+            "required": true,
+            "schema": {
+              "title": "Tenant",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshOut"
+                }
+              }
+            },
+            "description": "The servability update is already done; the refresh is returned as it is"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No token, or a token Serena doesn't know"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The token is for another museum"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such museum or refresh"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The call is out of order for the refresh's state"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Serena can't check right now (tokens or storage unavailable); try again"
+          }
+        },
+        "summary": "Update Serena from the servable list"
       }
     },
     "/ping": {

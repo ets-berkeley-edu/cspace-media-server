@@ -36,8 +36,9 @@ def response(problem: Problem, headers: dict[str, str] | None = None) -> JSONRes
 def openapi_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
     """The error responses an endpoint documents."""
     meaning = {400: "A header or parameter is missing or malformed", 401: "No token, or a token Serena doesn't know",
-               403: "The token is for another museum", 404: "No such museum or run",
-               409: "The call is out of order for the run's state", 413: "The file is larger than Serena accepts",
+               403: "The token is for another museum", 404: "No such museum or refresh",
+               409: "The call is out of order for the refresh's state",
+               413: "The servable list is larger than Serena accepts",
                415: "The file isn't sent as text/tab-separated-values",
                422: "The file doesn't match its row count or SHA-256",
                503: "Serena can't check right now (tokens or storage unavailable); try again"}

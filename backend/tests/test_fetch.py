@@ -131,7 +131,7 @@ def test_only_the_media_service_is_called(client: TestClient, store: Store) -> N
 
 
 def test_a_replaced_image_serves_the_current_file(client: TestClient, store: Store, s3: Any) -> None:
-    add_blob(store, "pahma", BLOB, MEDIA)  # last night's Blob
+    add_blob(store, "pahma", BLOB, MEDIA)  # the last servable list's Blob
     fake.add(MEDIA)
     current = samples.png(shade=32)
     fake.media[MEDIA].files["Medium"] = (current, "image/png")  # replaced in CollectionSpace since

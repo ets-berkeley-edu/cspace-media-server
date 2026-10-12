@@ -8,26 +8,26 @@ section here in the same pull request.
 
 ## 1. A replaced image is served on a cache miss (10 minutes, once Serena is in QA)
 
-Replacing a Media record's image creates a new Blob. Until the next nightly update, clients still request the old
+Replacing a Media record's image creates a new Blob. Until the next daily update, clients still request the old
 Blob CSID. On a cache miss Serena checks only that the Media record exists and isn't deleted, then fetches through the
 Media service, which returns the record's current image (decided October 9, 2026).
 
-Set up, on a test tenant: pick a Blob CSID that the last applied servable list has as public and that isn't in
-Serena's cache yet. After the nightly update, replace the image on its Media record in CollectionSpace. Don't wait for
-the next nightly update.
+Set up, on a test tenant: pick a Blob CSID that the last updated servable list has as public and that isn't in
+Serena's cache yet. After the daily update, replace the image on its Media record in CollectionSpace. Don't wait for
+the next daily update.
 
 - [ ] Request the old Blob at its legacy URL (`…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content`).
   Expect the new image, not the old one and not an error.
 - [ ] In Serena's log, expect the light check for that Media record, then a fetch through the Media service
   (`media/<media CSID>/blob/derivatives/<size>/content`), and no request by the old Blob CSID.
-- [ ] After the next nightly update, expect the old Blob's URL to get the museum's unavailable image, and the new
+- [ ] After the next daily update, expect the old Blob's URL to get the museum's unavailable image, and the new
   Blob's URL to get the new image.
 
 ## 2. A soft-deleted Media record isn't served on a cache miss (10 minutes, once Serena is in QA)
 
 The Media service returns soft-deleted Media records and their files, so Serena's light check must catch them.
 
-Set up, on a test tenant: pick a Blob CSID that the last applied file lists as public and that isn't cached, and
+Set up, on a test tenant: pick a Blob CSID that the last updated servable list lists as public and that isn't cached, and
 soft-delete its Media record in CollectionSpace.
 
 - [ ] Request the Blob at its legacy URL. Expect the museum's unavailable image.
@@ -36,7 +36,7 @@ soft-delete its Media record in CollectionSpace.
 
 ## 3. A Media record with no image gets the unavailable image (10 minutes, once Serena is in QA)
 
-Set up, on a test tenant: pick a Blob CSID that the last applied file lists as public and that isn't cached, and
+Set up, on a test tenant: pick a Blob CSID that the last updated servable list lists as public and that isn't cached, and
 remove the image from its Media record in CollectionSpace.
 
 - [ ] Request the Blob at its legacy URL. Expect the museum's unavailable image, not an error.
@@ -51,38 +51,38 @@ museum's token secret in Secrets Manager, and a call from the ETL server (the on
 `/etl/` from).
 
 - [ ] From the ETL server, `GET /etl/v1/ping` with each museum's token. Expect `200` and `{"museum": "<that museum>"}`.
-- [ ] With one museum's token on another museum's path (`POST /etl/v1/museums/<other>/runs`), expect `403`.
-- [ ] Start a run, then upload a real night's servable list (gzip). Expect `received`, with the row count the ETL
-  reports, and the file in the museum's bucket under `servable-list/<run ID>/`, encrypted with the museum's KMS key.
+- [ ] With one museum's token on another museum's path (`POST /etl/v1/museums/<other>/refreshes`), expect `403`.
+- [ ] Start a refresh, then upload a real day's servable list (gzip). Expect `received`, with the row count the ETL
+  reports, and the file in the museum's bucket under `servable-list/<refresh ID>/`, encrypted with the museum's KMS key.
 - [ ] Rotate one museum's token (new one in `current`, old one in `previous`). Within 5 minutes both work; after
   `previous` is cleared, only the new one.
 - [ ] In CloudWatch, search Serena's logs for the tokens: expect no match.
 
-## 5. A whole night through the worker, in QA (30 minutes, once Serena and the ETL change are in QA)
+## 5. A whole daily refresh through the worker, in QA (30 minutes, once Serena and the ETL change are in QA)
 
-The tests run whole nights against moto with synthetic files. These checks use a real night's file, DynamoDB and S3.
+The tests run whole refreshes against moto with synthetic servable lists. These checks use a real servable list, DynamoDB and S3.
 
-- [ ] Run one museum's nightly job against QA. Expect the run to go `started`, `received`, `preflighting`, `ready`,
-  `solr_loaded`, `applying`, `applied`, and the servability table to hold exactly the file's rows for that museum.
-- [ ] Note how long the preflight and the apply took for the largest museum (PAHMA), and the worker's memory.
-- [ ] The next night, expect the preflight's added, removed and changed counts to match a diff of the two files.
-- [ ] Stop the worker's task while it applies a night; a new task starts. Expect the apply to start again after about
-  5 minutes and end `applied`, with the table matching the file.
-- [ ] Upload a file with 10% of the rows removed: expect `preflight_failed`, the change as a share, and the table
+- [ ] Run one museum's ETL job against QA. Expect the refresh to go `started`, `received`, `checking`, `ready`,
+  `solr_loaded`, `updating`, `updated`, and the servability table to hold exactly the servable list's rows for that museum.
+- [ ] Note how long the servable list check and the servability update took for the largest museum (PAHMA), and the worker's memory.
+- [ ] The next day, expect the servable list check's added, removed and changed counts to match a diff of the two files.
+- [ ] Stop the worker's task during a servability update; a new task starts. Expect the servability update to start again after about
+  5 minutes and end `updated`, with the table matching the servable list.
+- [ ] Upload a file with 10% of the rows removed: expect `check_failed`, the delta as a percentage, and the table
   unchanged.
 
 ## 6. Alerts by email, in QA (15 minutes, once Serena and its SNS topic are in QA)
 
 The tests use moto's SNS. These checks need the real topic and the team's mailing list subscribed to it.
 
-- [ ] Set a museum's deadline a few minutes ahead in the admin app (or its Settings item) and run no night for it.
-  Expect one email to the mailing list within 5 minutes after the deadline, naming the museum, the night and what
+- [ ] Set a museum's deadline a few minutes ahead in the admin app (or its Settings item) and start no refresh for it.
+  Expect one email to the mailing list within 5 minutes after the deadline, naming the museum, the refresh date and what
   to do, and one alert record. Expect no second email on the next passes.
-- [ ] Make a night's preflight fail (upload a file with a bad kind). Expect a "preflight failed" email with the run ID
+- [ ] Make a servable list check fail (upload a servable list with a bad kind). Expect an email titled "A servable list check failed" with the refresh ID
   and the reason.
 - [ ] Check the email has no personal data and no link with a token or signature in it.
-- [ ] Override a museum's change threshold in the admin app. Expect an "An admin overrode the change threshold"
-  email within 5 minutes (the web app records the alert; the worker sends it on its next pass), with the run ID and
+- [ ] Override a museum's delta threshold in the admin app. Expect an "An admin overrode the delta threshold"
+  email within 5 minutes (the web app records the alert; the worker sends it on its next pass), with the refresh ID and
   the reason. Cancel the override and arm it again: expect a second email.
 - [ ] Try to unsubscribe from the email's link without signing in to AWS: expect it to be refused (the subscription
   requires authentication to unsubscribe).
@@ -166,16 +166,16 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 
 - [ ] With Docker Desktop running, from the repository's root: `./serena up`. Expect "Serena (Local · simulator) is up"
   within a couple of minutes, and nothing else on ports 8300, 8380 or 9300. If the BMU's stack is running, both run.
-- [ ] `./serena etl pahma`. Expect `applied`, one preflight warning (PAHMA's first load, so the change threshold
+- [ ] `./serena etl pahma`. Expect `updated`, one servable list check warning (PAHMA's first servability update, so the delta threshold
   doesn't apply), and sample addresses for an image and a card. Open the image one in a browser: expect a grey
   square. Open it again: expect the same, now from Serena's store (`./serena logs --no-follow web | grep '"fetched"'`
   shows one fetch).
 - [ ] `./serena etl cinefiles`. Open the `pdf` sample: expect a one-page PDF. Open the `pdf (restricted)` sample:
   expect the unavailable image (no signed link).
-- [ ] `./serena etl bampfa --partial`. Expect `ready`, and the run left there.
-- [ ] `./serena smoke`, after the nights above. Expect "Smoke test passed".
-- [ ] `./serena etl pahma --rows 3`. Expect `preflight_failed`, with the threshold explained: 17 of PAHMA's 21 rows (its 20
-  plus the restricted-image Blob) would be removed, 80.95%, more than its 5% threshold. This is preflight protecting the servability table, not a fault.
+- [ ] `./serena etl bampfa --failed`. Expect `ready`, and the refresh left there.
+- [ ] `./serena smoke`, after the refreshes above. Expect "Smoke test passed".
+- [ ] `./serena etl pahma --rows 3`. Expect `check_failed`, with the threshold explained: 17 of PAHMA's 21 rows (its 20
+  plus the restricted-image Blob) would be removed, 80.95%, more than its 5% threshold. This is the servable list check protecting the servability table, not a fault.
 - [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
 - [ ] Note each image's digest (`docker compose -p serena images`) under this item, so a later pull request can pin
   `python:3.11-slim` and `motoserver/moto:5.2.3` by digest too.
@@ -207,44 +207,44 @@ Set up: the museum's CollectionSpace administrators have created the `Serena_Adm
 - [ ] Check the cookies in the browser's developer tools: `serena_admin_<museum>`, HttpOnly, Secure, SameSite Strict,
   path `/admin`.
 
-## 14. Runs and alerts in the admin app, locally (20 minutes, before merging pull request 12)
+## 14. Refreshes and alerts in the admin app, locally (20 minutes, before merging pull request 12)
 
 The API's tests cover each action, and the pages were checked in a headless browser in Claude's workspace. This
 checks them in Chrome on a Mac. Start afresh: `./serena down && ./serena up`, then open http://localhost:5373/admin/
 and sign in to PAHMA as `admin` (password `admin`).
 
-About alerts: the watchdog runs in the worker every 5 minutes. Past 08:00 Pacific, its first pass raises "Tonight's run
-isn't finished by the deadline" for every museum, because no run has started: acknowledge PAHMA's. A failed preflight
+About alerts: the watchdog runs in the worker every 5 minutes. Past 08:00 Pacific, its first pass raises "Today's refresh
+isn't finished by the deadline" for every museum, because no refresh has started: acknowledge PAHMA's. A failed servable list check
 raises its own alert on the watchdog's next pass. The banner checks for new alerts on every page change and every
 minute, so an alert appears within a minute of being raised. The banner disappears only once every alert in it is
 acknowledged.
 
-- [ ] In a terminal: `./serena etl pahma`. Expect `applied`. In the app, open "Runs": expect that run, `Applied`, with
+- [ ] In a terminal: `./serena etl pahma`. Expect `updated`. In the app, open "Refreshes": expect that refresh, `Updated`, with
   its row count.
-- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `preflight_failed`. In the app, open "Runs", then the run:
-  expect "Preflight failed", the problem (the share of rows that would change, against the 5% threshold), and an
-  orange button, "Override the change threshold for the next run".
-- [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the change threshold", is greyed
+- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed`. In the app, open "Refreshes", then the refresh:
+  expect "Servable list check failed", the problem (the delta as a percentage of rows, against the 5% threshold), and an
+  orange button, "Override the delta threshold for the next refresh".
+- [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", is greyed
   out until you type a reason. Type one and click it. Expect:
-  - the banner, with "An admin overrode the change threshold" (and, within a few minutes, "Preflight failed");
-  - the orange button gone from the run's page;
-  - on "Overview", a blue note that the threshold is overridden for the next run, with who, after which run, when it
+  - the banner, with "An admin overrode the delta threshold" (and, within a few minutes, "A servable list check failed");
+  - the orange button gone from the refresh's page;
+  - on "Overview", a blue note that the threshold is overridden for the next refresh, with who, after which refresh, when it
     expires and the reason, and a "Cancel it" button. Don't click it: the next items need the override.
 - [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"
   page with your name and the time.
-- [ ] In a terminal: `./serena etl pahma --rows 3` again (the ETL team's rerun of the night). Expect the same run,
-  `applied`, and the line "preflight warning: the change threshold was overridden by an admin for this run". In the
-  app: the run's reasons name the override, and "Overview" no longer shows it.
-- [ ] In a terminal: `./serena etl pahma --rows 3 --partial`. Expect `ready`. In the app, open that run and click
-  "Record tonight's load and apply". In the dialog, the blue button is greyed out until you tick the checkbox and
-  type a reason. Do both and click it. Expect the run `Applied` after a refresh.
-- [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-night.tsv`. In the app, open "Upload a
-  night's file". Choose the file (in the Mac file picker, press Cmd+Shift+G, type `/tmp/pahma-night.tsv` and press
-  Return). The night starts as yesterday, with a calendar picker; leave it. Type a reason, tick the checkbox and
-  click "Upload and apply" (greyed out until all are done). Expect the new run's page, "an admin's upload of the night of <yesterday>'s file" beside tonight's night,
-  and `Applied` after a refresh.
+- [ ] In a terminal: `./serena etl pahma --rows 3` again (the ETL team's rerun of the ETL job). Expect the same refresh,
+  `updated`, and the line "servable list check warning: the delta threshold was overridden by an admin for this refresh". In the
+  app: the refresh's reasons name the override, and "Overview" no longer shows it.
+- [ ] In a terminal: `./serena etl pahma --rows 3 --failed`. Expect `ready`. In the app, open that refresh and click
+  "Record the Solr refresh and update Serena". In the dialog, the blue button is greyed out until you tick the checkbox and
+  type a reason. Do both and click it. Reload the page: expect the refresh `Updated`.
+- [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv`. In the app, open "Upload a
+  servable list". Choose the file (in the Mac file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and press
+  Return). The refresh date starts as yesterday, with a calendar picker; leave it. Type a reason, tick the checkbox and
+  click "Upload and update Serena" (greyed out until all are done). Expect the new refresh's page, "an admin's upload of the servable list for <yesterday>" beside today's refresh date,
+  and, after reloading the page, `Updated`.
 - [ ] Open "Audit log". Expect the override, each acknowledgement, the recorded load and the upload, each with `admin`.
 - [ ] In a terminal: `./serena logs --no-follow web | grep threshold_overridden`. Expect the override's alert, logged
   once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
   `./serena logs --no-follow worker | grep '"threshold_overridden": true'`: expect one line, the rerun's
-  "preflight done".
+  "servable list check done".

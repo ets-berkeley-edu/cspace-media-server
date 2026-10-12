@@ -15,7 +15,7 @@ from .csid import is_csid
 
 # The derivatives CollectionSpace makes (design: CollectionSpace and ETL facts), in size order.
 DERIVATIVES = ("Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg")
-# The kinds Serena serves (design: Kinds). audio and video are listed in the nightly file but not served yet.
+# The kinds Serena serves (design: Kinds). audio and video are in the servable list but not served yet.
 SERVED_KINDS = ("image", "card", "3D", "pdf")
 Kind = Literal["image", "card", "3D", "pdf"]
 
@@ -30,7 +30,7 @@ class StartingSettings(BaseModel):
     watchdog_deadline: str = Field(description="HH:MM, Pacific time")
     etl_poll_interval_seconds: int = Field(gt=0)
     etl_step_timeout_seconds: int = Field(gt=0)
-    change_threshold_percent: float = Field(gt=0, le=100)
+    delta_threshold_percent: float = Field(gt=0, le=100)
     size_limit_mb: dict[Kind, int]
 
     @field_validator("watchdog_deadline")

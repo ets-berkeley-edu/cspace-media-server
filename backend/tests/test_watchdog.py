@@ -8,7 +8,7 @@ from conftest import TENANTS
 from serena import museum, tables
 from serena.alerts import Alerts, Kind
 from serena.museum_settings import MuseumSettings
-from serena.runs import Runs, State
+from serena.refreshes import Refreshes, State
 from serena.store import Store
 from serena.watchdog import Watchdog
 
@@ -48,7 +48,7 @@ def emailed(topic: tuple[Any, str, Any]) -> list[str]:
 def watchdog(store: Store, topic: tuple[Any, str, Any], clock: Clock) -> Watchdog:
     sns, arn, _ = topic
     museums = {"pahma": museum.load("pahma")}
-    return Watchdog(museums, MuseumSettings(store, 0), Runs(store, clock), Alerts(store, sns, arn, clock), clock)
+    return Watchdog(museums, MuseumSettings(store, 0), Refreshes(store, clock), Alerts(store, sns, arn, clock), clock)
 
 
 def alerts_of(store: Store, tenant: str = "pahma") -> list[dict[str, Any]]:
@@ -67,16 +67,16 @@ def test_nothing_before_the_deadline(watchdog: Watchdog, clock: Clock) -> None:
     assert watchdog.check() == []
 
 
-def test_no_run_by_the_deadline(watchdog: Watchdog, clock: Clock, store: Store, topic: Any) -> None:
+def test_no_refresh_by_the_deadline(watchdog: Watchdog, clock: Clock, store: Store, topic: Any) -> None:
     at(clock, 8, 0)
     (alert,) = watchdog.check()
-    assert (alert.kind, alert.night, alert.subject) == (Kind.MISSED_DEADLINE, "2026-10-10", "2026-10-10")
-    assert "no run started" in alert.message
+    assert (alert.kind, alert.refresh_date, alert.subject) == (Kind.MISSED_DEADLINE, "2026-10-10", "2026-10-10")
+    assert "no refresh started" in alert.message
     (item,) = alerts_of(store)
     assert item["sk"]["S"] == "2026-10-10#missed_deadline#2026-10-10"
     assert "emailed_at" in item
     (body,) = emailed(topic)
-    assert "pahma" in body and "Tonight's run isn't finished by the deadline" in body
+    assert "pahma" in body and "Today's refresh isn't finished by the deadline" in body
 
 
 def test_an_alert_is_recorded_and_emailed_once(watchdog: Watchdog, clock: Clock, store: Store, topic: Any) -> None:
@@ -88,21 +88,21 @@ def test_an_alert_is_recorded_and_emailed_once(watchdog: Watchdog, clock: Clock,
     assert len(emailed(topic)) == 1
 
 
-def test_an_unfinished_run_by_the_deadline(watchdog: Watchdog, clock: Clock, store: Store) -> None:
-    runs = Runs(store, clock)
+def test_an_unfinished_refresh_by_the_deadline(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    refreshes = Refreshes(store, clock)
     at(clock, 3, 1)
-    run, _ = runs.start("pahma")
-    runs.transition(run, State.RECEIVED)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.RECEIVED)
     at(clock, 8, 0)
     (alert,) = watchdog.check()
     assert alert.kind == Kind.MISSED_DEADLINE and "(received)" in alert.message
 
 
-def test_an_applied_night_raises_nothing(watchdog: Watchdog, clock: Clock, store: Store) -> None:
-    runs = Runs(store, clock)
+def test_an_updated_day_raises_nothing(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    refreshes = Refreshes(store, clock)
     at(clock, 3, 1)
-    run, _ = runs.start("pahma")
-    runs.transition(run, State.APPLIED)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.UPDATED)
     at(clock, 9, 0)
     assert watchdog.check() == []
 
@@ -121,34 +121,34 @@ def test_the_deadline_in_winter(watchdog: Watchdog, clock: Clock) -> None:
     assert [a.kind for a in watchdog.check()] == [Kind.MISSED_DEADLINE]
 
 
-@pytest.mark.parametrize(("state", "kind"), [(State.PREFLIGHT_FAILED, Kind.PREFLIGHT_FAILED),
-                                             (State.APPLY_FAILED, Kind.APPLY_FAILED),
+@pytest.mark.parametrize(("state", "kind"), [(State.CHECK_FAILED, Kind.CHECK_FAILED),
+                                             (State.UPDATE_FAILED, Kind.UPDATE_FAILED),
                                              (State.ABANDONED, Kind.ABANDONED)])
-def test_failed_runs(watchdog: Watchdog, clock: Clock, store: Store, state: State, kind: Kind) -> None:
-    runs = Runs(store, clock)
+def test_failed_refreshes(watchdog: Watchdog, clock: Clock, store: Store, state: State, kind: Kind) -> None:
+    refreshes = Refreshes(store, clock)
     at(clock, 3, 1)
-    run, _ = runs.start("pahma")
-    runs.transition(run, state, reason="the reason")
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, state, reason="the reason")
     at(clock, 3, 10)
     (alert,) = watchdog.check()
-    assert (alert.kind, alert.subject) == (kind, run.run_id)
+    assert (alert.kind, alert.subject) == (kind, refresh.refresh_id)
     assert "the reason" in alert.message
 
 
 def test_not_updated_in_24_hours(watchdog: Watchdog, clock: Clock, store: Store) -> None:
-    runs = Runs(store, clock)
+    refreshes = Refreshes(store, clock)
     at(clock, 3, 30)
-    run, _ = runs.start("pahma")
-    runs.transition(run, State.APPLIED)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.UPDATED)
     at(clock, 3, 29, day=11)
     assert [a.kind for a in watchdog.check()] == []
     at(clock, 3, 31, day=11)
     assert [a.kind for a in watchdog.check()] == [Kind.NOT_UPDATED]
 
 
-def test_a_museum_that_never_applied_a_night_isnt_late(watchdog: Watchdog, clock: Clock) -> None:
+def test_a_museum_that_never_updated_a_day_isnt_late(watchdog: Watchdog, clock: Clock) -> None:
     at(clock, 3, 0, day=20)
-    assert watchdog.check() == []  # before the deadline, and no applied night to be 24 hours old
+    assert watchdog.check() == []  # before the deadline, and no servability update to be 24 hours old
 
 
 def test_an_email_that_failed_is_sent_again(watchdog: Watchdog, clock: Clock, store: Store, topic: Any,
@@ -174,20 +174,20 @@ def test_an_email_that_failed_is_sent_again(watchdog: Watchdog, clock: Clock, st
 
 def test_without_a_topic_alerts_are_recorded(store: Store, clock: Clock) -> None:
     museums = {"pahma": museum.load("pahma")}
-    dog = Watchdog(museums, MuseumSettings(store, 0), Runs(store, clock), Alerts(store, None, "", clock), clock)
+    dog = Watchdog(museums, MuseumSettings(store, 0), Refreshes(store, clock), Alerts(store, None, "", clock), clock)
     at(clock, 8, 0)
     dog.check()
     (item,) = alerts_of(store)
     assert "emailed_at" not in item
 
 
-def test_the_worker_runs_the_watchdog_at_its_interval(store: Store, s3: Any, watchdog: Watchdog) -> None:
+def test_the_worker_refreshes_the_watchdog_at_its_interval(store: Store, s3: Any, watchdog: Watchdog) -> None:
     from serena.config import Settings
     from serena.worker import Worker, WorkerServices
 
     settings = Settings(tenants=TENANTS, table_prefix="t", watchdog_seconds=300, _env_file=None)
     now = [1000.0]
-    worker = Worker(WorkerServices(settings, watchdog.museums, watchdog.museum_settings, watchdog.runs, store, s3,
+    worker = Worker(WorkerServices(settings, watchdog.museums, watchdog.museum_settings, watchdog.refreshes, store, s3,
                                    watchdog), monotonic=lambda: now[0])
     assert worker.watch()
     now[0] += 299

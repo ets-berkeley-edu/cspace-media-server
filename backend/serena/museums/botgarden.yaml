@@ -13,10 +13,10 @@ watermark_sizes: [Thumbnail, Medium, OriginalJpeg]
 # The CollectionSpace role that marks a Serena admin (design: Admin web app)
 admin_role: Serena_Admin
 settings:
-  watchdog_deadline: "08:00"          # Pacific time: the night's run must be applied or abandoned by then
-  etl_poll_interval_seconds: 15       # returned to the ETL in every run response
+  watchdog_deadline: "08:00"          # Pacific time: today's refresh must be updated or abandoned by then
+  etl_poll_interval_seconds: 15       # returned to the ETL in every refresh response
   etl_step_timeout_seconds: 1800
-  change_threshold_percent: 5         # preflight fails if added + removed + changed rows exceed this share
+  delta_threshold_percent: 5          # the servable list check fails if added + removed + changed rows exceed this percentage
   size_limit_mb:                      # largest file fetched, by kind (starting values, to confirm for production)
     image: 500
     card: 500

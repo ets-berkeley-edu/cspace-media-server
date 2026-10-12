@@ -1,4 +1,4 @@
-"""The ETL API, /etl/v1/ (design: The ETL API). The ETL drives each night through it.
+"""The ETL API, /etl/v1/ (design: The ETL API). The ETL job drives each refresh through it.
 
 Every call needs the museum's bearer token. Errors are application/problem+json with reasons, never internals. Its
 OpenAPI description is generated from this module into docs/api/etl-v1.json (python -m serena.etl_api), and a test
@@ -26,7 +26,7 @@ from .config import Settings
 from .museum import Museum
 from .museum_settings import MuseumSettings
 from .problems import Problem, ProblemError, openapi_responses, response
-from .runs import BUSY, UPLOAD_ALLOWED, OutOfOrder, Run, Runs, State, Upload
+from .refreshes import BUSY, UPLOAD_ALLOWED, OutOfOrder, Refresh, Refreshes, State, Upload
 from .tokens import Tokens, TokenStoreUnavailable
 
 log = logging.getLogger("serena.etl")
@@ -40,7 +40,7 @@ class Services:
     settings: Settings
     museums: dict[str, Museum]
     museum_settings: MuseumSettings
-    runs: Runs
+    refreshes: Refreshes
     tokens: Tokens
     s3: Any
 
@@ -48,42 +48,45 @@ class Services:
 class Links(BaseModel):
     self: str
     servable_list: str
-    preflight: str
+    check: str
     solr_load: str
-    apply: str
+    update: str
 
 
 class UploadInfo(BaseModel):
-    sha256: str = Field(description="SHA-256 of the uncompressed file, as sent in X-Content-SHA256")
+    sha256: str = Field(description="SHA-256 of the uncompressed servable list, as sent in X-Content-SHA256")
     rows: int = Field(description="Data rows, not counting the header")
-    bytes: int = Field(description="Size of the uncompressed file")
+    bytes: int = Field(description="Size of the uncompressed servable list")
     uploaded_at: str
 
 
-class RunOut(BaseModel):
-    run_id: str = Field(examples=["pahma-2026-10-10-1"])
+class RefreshOut(BaseModel):
+    refresh_id: str = Field(examples=["pahma-2026-10-10-1"])
     museum: str = Field(examples=["pahma"])
-    night: str = Field(description="The Pacific date when the run started", examples=["2026-10-10"])
+    refresh_date: str = Field(description="The Pacific date when the refresh started", examples=["2026-10-10"])
     state: State
     file_name: str = Field(description="The name to give the servable list",
                            examples=["servable-list.pahma.2026-10-10.tsv"])
     poll_interval_seconds: int = Field(description="How long to wait between polls; use this value, not a fixed one",
                                        examples=[15])
-    step_timeout_seconds: int = Field(description="How long a step may take before the ETL carries on without Serena",
+    step_timeout_seconds: int = Field(description="How long a step may take before the ETL job carries on without "
+                                                  "Serena",
                                       examples=[1800])
     upload: UploadInfo | None = None
-    preflight: dict[str, Any] | None = Field(
-        None, description="The preflight's result: result (passed or failed), rows, added, removed, changed, "
-                          "previous_rows, threshold_percent, change_percent, error_count, errors (the first 20, each "
+    check: dict[str, Any] | None = Field(
+        None, description="The servable list check's result: result (passed or failed), rows, added, removed, changed, "
+                          "previous_rows, threshold_percent, delta_percent, error_count, errors (the first 20, each "
                           "with line, field and problem), warnings")
     solr_load: dict[str, Any] | None = Field(None, description="The load outcome the ETL reported")
-    apply: dict[str, Any] | None = Field(None, description="The apply's counts: deleted, written, unchanged")
-    reasons: list[str] = Field(default_factory=list, description="Why the run is in its state, when that needs saying")
+    update: dict[str, Any] | None = Field(None,
+                                          description="The servability update's counts: deleted, written, unchanged")
+    reasons: list[str] = Field(default_factory=list,
+                               description="Why the refresh is in its state, when that needs saying")
     links: Links
 
 
 class SolrLoad(BaseModel):
-    outcome: Literal["loaded", "fell_back"] = Field(description="loaded, or fell_back to the previous night's data")
+    outcome: Literal["loaded", "fell_back"] = Field(description="loaded, or fell_back to the previous day's data")
     rows: int = Field(ge=0, description="Documents loaded into the public core")
 
 
@@ -91,20 +94,21 @@ class Ping(BaseModel):
     museum: str = Field(description="The museum the token belongs to", examples=["pahma"])
 
 
-def _out(services: Services, run: Run) -> RunOut:
-    current = services.museum_settings.get(services.museums[run.tenant])
-    base = f"{PREFIX}/museums/{run.tenant}/runs/{run.run_id}"
-    upload = run.upload
-    return RunOut(
-        run_id=run.run_id, museum=run.tenant, night=run.night, state=run.state, file_name=run.file_name,
+def _out(services: Services, refresh: Refresh) -> RefreshOut:
+    current = services.museum_settings.get(services.museums[refresh.tenant])
+    base = f"{PREFIX}/museums/{refresh.tenant}/refreshes/{refresh.refresh_id}"
+    upload = refresh.upload
+    return RefreshOut(
+        refresh_id=refresh.refresh_id, museum=refresh.tenant, refresh_date=refresh.refresh_date, state=refresh.state,
+        file_name=refresh.file_name,
         poll_interval_seconds=current.etl_poll_interval_seconds,
         step_timeout_seconds=current.etl_step_timeout_seconds,
         upload=UploadInfo(sha256=upload.sha256, rows=upload.rows, bytes=upload.bytes, uploaded_at=upload.uploaded_at)
         if upload else None,
-        preflight=run.preflight, solr_load=run.solr_load, apply=run.apply,
-        reasons=run.reasons,
-        links=Links(self=base, servable_list=f"{base}/servable-list", preflight=f"{base}/preflight",
-                    solr_load=f"{base}/solr-load", apply=f"{base}/apply"))
+        check=refresh.check, solr_load=refresh.solr_load, update=refresh.update,
+        reasons=refresh.reasons,
+        links=Links(self=base, servable_list=f"{base}/servable-list", check=f"{base}/check",
+                    solr_load=f"{base}/solr-load", update=f"{base}/update"))
 
 
 def _json(model: BaseModel, status: int = 200) -> JSONResponse:
@@ -113,8 +117,8 @@ def _json(model: BaseModel, status: int = 200) -> JSONResponse:
 
 def create_etl_app(services: Services) -> FastAPI:
     app = FastAPI(title="Serena ETL API", version="1",
-                  summary="How the nightly Solr ETL hands each night's servable list to Serena",
-                  description="See docs/design.md, The ETL API and The nightly sequence. Every call needs the museum's "
+                  summary="How the daily Solr ETL job hands each servable list to Serena",
+                  description="See docs/design.md, The ETL API and The daily sequence. Every call needs the museum's "
                               "bearer token (`Authorization: Bearer <token>`). Errors are application/problem+json.",
                   docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -174,11 +178,11 @@ def create_etl_app(services: Services) -> FastAPI:
 
     Tenant = Annotated[str, Depends(for_museum)]
 
-    def run_of(tenant: str, run_id: str) -> Run:
-        run = services.runs.get(tenant, run_id)
-        if run is None:
-            raise ProblemError(404, "the-etl-api", "No such run", f"{tenant} has no run {run_id}")
-        return run
+    def refresh_of(tenant: str, refresh_id: str) -> Refresh:
+        refresh = services.refreshes.get(tenant, refresh_id)
+        if refresh is None:
+            raise ProblemError(404, "the-etl-api", "No such refresh", f"{tenant} has no refresh {refresh_id}")
+        return refresh
 
     def out_of_order(error: OutOfOrder) -> ProblemError:
         return ProblemError(409, "the-etl-api", "Out of order", error.detail)
@@ -189,45 +193,45 @@ def create_etl_app(services: Services) -> FastAPI:
         """Answers with the museum the token belongs to (decided October 9, 2026, D32)."""
         return _json(Ping(museum=museum))
 
-    @app.post("/museums/{tenant}/runs", response_model=RunOut, status_code=201,
-              responses={200: {"description": "The museum's open run for tonight, returned instead of a new one",
-                               "model": RunOut}, **openapi_responses(401, 403, 404, 409, 503)},
-              summary="Start tonight's run")
-    def start_run(tenant: Tenant) -> JSONResponse:
-        """Serena assigns the run ID and the night (the Pacific date now). If the museum's run for tonight is still
-        open, returns it (200). An earlier night's open run is closed as abandoned, unless Serena is preflighting or
-        applying it: then 409, and the ETL tries again (decided October 9, 2026, D30)."""
+    @app.post("/museums/{tenant}/refreshes", response_model=RefreshOut, status_code=201,
+              responses={200: {"description": "The museum's open refresh for today, returned instead of a new one",
+                               "model": RefreshOut}, **openapi_responses(401, 403, 404, 409, 503)},
+              summary="Start today's refresh")
+    def start_refresh(tenant: Tenant) -> JSONResponse:
+        """Serena assigns the refresh ID and the refresh date (the Pacific date now). If the museum's refresh for today
+        is still open, returns it (200). An earlier refresh date's open refresh is closed as abandoned, unless Serena is
+        checking or updating it: then 409, and the ETL job tries again (decided October 9, 2026, D30)."""
         try:
-            run, created = services.runs.start(tenant)
+            refresh, created = services.refreshes.start(tenant)
         except OutOfOrder as error:  # Busy included
             raise out_of_order(error) from None
-        log.info("run started" if created else "open run returned",
-                 extra={"museum": tenant, "run_id": run.run_id, "state": run.state.value})
-        return _json(_out(services, run), 201 if created else 200)
+        log.info("refresh started" if created else "open refresh returned",
+                 extra={"museum": tenant, "refresh_id": refresh.refresh_id, "state": refresh.state.value})
+        return _json(_out(services, refresh), 201 if created else 200)
 
-    @app.get("/museums/{tenant}/runs/{run_id}", response_model=RunOut,
-             responses=openapi_responses(401, 403, 404, 503), summary="The run's status")
-    def get_run(tenant: Tenant, run_id: str) -> JSONResponse:
-        return _json(_out(services, run_of(tenant, run_id)))
+    @app.get("/museums/{tenant}/refreshes/{refresh_id}", response_model=RefreshOut,
+             responses=openapi_responses(401, 403, 404, 503), summary="The refresh's status")
+    def get_refresh(tenant: Tenant, refresh_id: str) -> JSONResponse:
+        return _json(_out(services, refresh_of(tenant, refresh_id)))
 
-    @app.put("/museums/{tenant}/runs/{run_id}/servable-list", response_model=RunOut,
+    @app.put("/museums/{tenant}/refreshes/{refresh_id}/servable-list", response_model=RefreshOut,
              responses=openapi_responses(400, 401, 403, 404, 409, 413, 415, 422, 503),
-             summary="Upload the night's servable list",
+             summary="Upload the servable list",
              openapi_extra={"requestBody": {"required": True, "content": {
                  "text/tab-separated-values": {"schema": {"type": "string", "format": "binary"},
                                                "example": "blob_csid\tmedia_csid\tkind\taccess\n"}}}})
     async def put_servable_list(
         request: Request,
         tenant: Tenant,
-        run_id: str,
+        refresh_id: str,
         content_type: Annotated[str, Header(description="text/tab-separated-values")],
         x_row_count: Annotated[int, Header(ge=0, description="Data rows, not counting the header")],
-        x_content_sha256: Annotated[str, Header(description="Hex SHA-256 of the uncompressed file")],
+        x_content_sha256: Annotated[str, Header(description="Hex SHA-256 of the uncompressed servable list")],
         content_encoding: Annotated[str | None, Header(description="gzip, or absent")] = None,
     ) -> JSONResponse:
-        """Streams the file to Serena. Uploading the same file again changes nothing; a corrected file replaces the
-        previous one until the load's outcome is reported, and must then be preflighted again. The file's format is
-        checked by the preflight."""
+        """Streams the servable list to Serena. Uploading the same list again changes nothing; a corrected list
+        replaces the previous one until the load's outcome is reported, and must then be checked again. Its format is
+        checked by the servable list check."""
         if content_type.split(";")[0].strip().lower() != "text/tab-separated-values":
             raise ProblemError(415, "the-etl-api", "Wrong content type", "Send text/tab-separated-values")
         sha = x_content_sha256.strip().lower()
@@ -239,109 +243,115 @@ def create_etl_app(services: Services) -> FastAPI:
         bucket = services.settings.buckets.get(tenant)
         if bucket is None:
             raise ProblemError(503, "the-etl-api", "Storage not configured", "Serena has no bucket for this museum")
-        run = await asyncio.to_thread(run_of, tenant, run_id)
-        if run.state not in UPLOAD_ALLOWED:
-            busy = " (Serena is preflighting it)" if run.state in BUSY else ""
+        refresh = await asyncio.to_thread(refresh_of, tenant, refresh_id)
+        if refresh.state not in UPLOAD_ALLOWED:
+            busy = " (Serena is checking it)" if refresh.state in BUSY else ""
             raise ProblemError(409, "the-etl-api", "Out of order",
-                               f"run {run.run_id} is {run.state.value}{busy}; a file can be uploaded only before the "
-                               "load's outcome is reported")
+                               f"refresh {refresh.refresh_id} is {refresh.state.value}{busy}; a servable list can be "
+                               "uploaded only before the load's outcome is reported")
         try:
             received = await uploads.receive(request.stream(), gzipped=encoding == "gzip",
                                              max_bytes=services.settings.upload_max_mb * 1024 * 1024,
                                              directory=services.settings.upload_dir)
         except uploads.TooLarge:
-            raise ProblemError(413, "the-etl-api", "File too large",
+            raise ProblemError(413, "the-etl-api", "Servable list too large",
                                f"At most {services.settings.upload_max_mb} MB uncompressed") from None
         except uploads.BadGzip:
             raise ProblemError(400, "the-etl-api", "Bad gzip", "The body isn't valid gzip") from None
         try:
             if received.sha256 != sha:
                 raise ProblemError(422, "the-etl-api", "SHA-256 doesn't match",
-                                   "X-Content-SHA256 must be the SHA-256 of the uncompressed file")
+                                   "X-Content-SHA256 must be the SHA-256 of the uncompressed servable list")
             if received.rows != x_row_count:
                 raise ProblemError(422, "the-etl-api", "Row count doesn't match",
-                                   f"X-Row-Count is {x_row_count}; the file has {received.rows} data rows")
-            if run.upload is not None and run.upload.sha256 == sha:
-                log.info("same file uploaded again", extra={"museum": tenant, "run_id": run.run_id})
-                return _json(_out(services, run))
-            key = f"servable-list/{run.run_id}/{run.file_name}.gz"
+                                   f"X-Row-Count is {x_row_count}; the servable list has {received.rows} data rows")
+            if refresh.upload is not None and refresh.upload.sha256 == sha:
+                log.info("same servable list uploaded again",
+                         extra={"museum": tenant, "refresh_id": refresh.refresh_id})
+                return _json(_out(services, refresh))
+            key = f"servable-list/{refresh.refresh_id}/{refresh.file_name}.gz"
             await asyncio.to_thread(uploads.store, services.s3, bucket, key, received)
-            upload = Upload(sha, received.rows, received.size, key, services.runs.now())
+            upload = Upload(sha, received.rows, received.size, key, services.refreshes.now())
             try:
-                run = await asyncio.to_thread(services.runs.transition, run, State.RECEIVED, upload=upload)
+                refresh = await asyncio.to_thread(services.refreshes.transition, refresh, State.RECEIVED,
+                                                  upload=upload)
             except OutOfOrder as error:
                 raise out_of_order(error) from None
         finally:
             os.unlink(received.path)
-        log.info("file received", extra={"museum": tenant, "run_id": run.run_id, "rows": received.rows})
-        return _json(_out(services, run))
+        log.info("servable list received",
+                 extra={"museum": tenant, "refresh_id": refresh.refresh_id, "rows": received.rows})
+        return _json(_out(services, refresh))
 
-    def step(tenant: str, run_id: str, allowed: State | frozenset[State], to: State, done: frozenset[State],
+    def step(tenant: str, refresh_id: str, allowed: State | frozenset[State], to: State, done: frozenset[State],
              what: str, results: dict[str, dict[str, Any]] | None = None, reason: str | None = None) -> JSONResponse:
-        """Moves a run from `allowed` to `to`; a run already in `to` or past it (`done`) is returned as it is, so
-        repeating the call is safe. Anything else is out of order."""
-        run = run_of(tenant, run_id)
-        if run.state in done:
-            return _json(_out(services, run), 202 if run.state in BUSY else 200)
+        """Moves a refresh from `allowed` to `to`; a refresh already in `to` or past it (`done`) is returned as it is,
+        so repeating the call is safe. Anything else is out of order."""
+        refresh = refresh_of(tenant, refresh_id)
+        if refresh.state in done:
+            return _json(_out(services, refresh), 202 if refresh.state in BUSY else 200)
         states = allowed if isinstance(allowed, frozenset) else frozenset({allowed})
-        if run.state not in states:
+        if refresh.state not in states:
             needed = " or ".join(sorted(s.value for s in states))
             raise ProblemError(409, "the-etl-api", "Out of order",
-                               f"run {run.run_id} is {run.state.value}; {what} needs it {needed}")
+                               f"refresh {refresh.refresh_id} is {refresh.state.value}; {what} needs it {needed}")
         try:
-            run = services.runs.transition(run, to, results=results, reason=reason)
+            refresh = services.refreshes.transition(refresh, to, results=results, reason=reason)
         except OutOfOrder as error:
             raise out_of_order(error) from None
-        log.info("step requested", extra={"museum": tenant, "run_id": run.run_id, "state": run.state.value})
-        return _json(_out(services, run), 202 if to in BUSY else 200)
+        log.info("step requested",
+                 extra={"museum": tenant, "refresh_id": refresh.refresh_id, "state": refresh.state.value})
+        return _json(_out(services, refresh), 202 if to in BUSY else 200)
 
-    @app.post("/museums/{tenant}/runs/{run_id}/preflight", response_model=RunOut, status_code=202,
-              responses={200: {"description": "The preflight is already done; the run is returned as it is",
-                               "model": RunOut}, **openapi_responses(401, 403, 404, 409, 503)},
-              summary="Check the uploaded file without applying it")
-    def request_preflight(tenant: Tenant, run_id: str) -> JSONResponse:
-        """Queues the preflight (202); poll the run until it is ready or preflight_failed. Allowed once a file is
-        uploaded (received), and again after a failed preflight: with a corrected file, or with the same file when the
-        night is rerun after an admin overrode the change threshold for it."""
-        return step(tenant, run_id, frozenset({State.RECEIVED, State.PREFLIGHT_FAILED}), State.PREFLIGHTING,
-                    frozenset({State.PREFLIGHTING, State.READY, State.SOLR_LOADED, State.APPLYING, State.APPLIED}),
-                    "the preflight")
+    @app.post("/museums/{tenant}/refreshes/{refresh_id}/check", response_model=RefreshOut, status_code=202,
+              responses={200: {"description": "The servable list check is already done; the refresh is returned as "
+                                              "it is", "model": RefreshOut},
+                         **openapi_responses(401, 403, 404, 409, 503)},
+              summary="Check the servable list without changing anything")
+    def request_check(tenant: Tenant, refresh_id: str) -> JSONResponse:
+        """Queues the servable list check (202); poll the refresh until it is ready or check_failed. Allowed once a
+        servable list is uploaded (received), and again after a failed check: with a corrected list, or with the same
+        list when the ETL job is rerun after an admin overrode the delta threshold for it."""
+        return step(tenant, refresh_id, frozenset({State.RECEIVED, State.CHECK_FAILED}), State.CHECKING,
+                    frozenset({State.CHECKING, State.READY, State.SOLR_LOADED, State.UPDATING, State.UPDATED}),
+                    "the servable list check")
 
-    @app.post("/museums/{tenant}/runs/{run_id}/solr-load", response_model=RunOut,
+    @app.post("/museums/{tenant}/refreshes/{refresh_id}/solr-load", response_model=RefreshOut,
               responses=openapi_responses(400, 401, 403, 404, 409, 503),
               summary="Report the public core's load")
-    def report_solr_load(tenant: Tenant, run_id: str, body: SolrLoad) -> JSONResponse:
-        """Allowed once the preflight passed (ready). loaded: the run waits for the apply (solr_loaded). fell_back:
-        the run is abandoned and Serena applies nothing, so both keep yesterday's data."""
+    def report_solr_load(tenant: Tenant, refresh_id: str, body: SolrLoad) -> JSONResponse:
+        """Allowed once the servable list check passed (ready). loaded: the refresh waits for the servability update
+        (solr_loaded). fell_back: the refresh is abandoned and Serena changes nothing, so both keep yesterday's data."""
         if body.outcome == "loaded":
-            return step(tenant, run_id, State.READY, State.SOLR_LOADED,
-                        frozenset({State.SOLR_LOADED, State.APPLYING, State.APPLIED}), "the load report",
+            return step(tenant, refresh_id, State.READY, State.SOLR_LOADED,
+                        frozenset({State.SOLR_LOADED, State.UPDATING, State.UPDATED}), "the load report",
                         results={"solr_load": body.model_dump()})
-        run = run_of(tenant, run_id)
-        if run.state == State.ABANDONED and (run.solr_load or {}).get("outcome") == "fell_back":
-            return _json(_out(services, run))
-        return step(tenant, run_id, State.READY, State.ABANDONED, frozenset(), "the load report",
+        refresh = refresh_of(tenant, refresh_id)
+        if refresh.state == State.ABANDONED and (refresh.solr_load or {}).get("outcome") == "fell_back":
+            return _json(_out(services, refresh))
+        return step(tenant, refresh_id, State.READY, State.ABANDONED, frozenset(), "the load report",
                     results={"solr_load": body.model_dump()}, reason="the public core's load fell back")
 
-    @app.post("/museums/{tenant}/runs/{run_id}/apply", response_model=RunOut, status_code=202,
-              responses={200: {"description": "The file is already applied; the run is returned as it is",
-                               "model": RunOut}, **openapi_responses(401, 403, 404, 409, 503)},
-              summary="Apply the file")
-    def request_apply(tenant: Tenant, run_id: str) -> JSONResponse:
-        """Queues the apply (202); poll the run until it is applied or apply_failed. Allowed only after the
-        preflight passed and the load reported loaded (solr_loaded). Report the night a success only once the run
-        is applied."""
-        return step(tenant, run_id, State.SOLR_LOADED, State.APPLYING,
-                    frozenset({State.APPLYING, State.APPLIED}), "the apply")
+    @app.post("/museums/{tenant}/refreshes/{refresh_id}/update", response_model=RefreshOut, status_code=202,
+              responses={200: {"description": "The servability update is already done; the refresh is returned as it "
+                                              "is",
+                               "model": RefreshOut}, **openapi_responses(401, 403, 404, 409, 503)},
+              summary="Update Serena from the servable list")
+    def request_update(tenant: Tenant, refresh_id: str) -> JSONResponse:
+        """Queues the servability update (202); poll the refresh until it is updated or update_failed. Allowed only
+        after the servable list check passed and the load reported loaded (solr_loaded). Report the ETL job a success
+        only once the refresh is updated."""
+        return step(tenant, refresh_id, State.SOLR_LOADED, State.UPDATING,
+                    frozenset({State.UPDATING, State.UPDATED}), "the servability update")
 
-    @app.get("/museums/{tenant}", response_model=RunOut, responses=openapi_responses(401, 403, 404, 503),
-             summary="The museum's latest applied run")
-    def latest_applied(tenant: Tenant) -> JSONResponse:
-        """For troubleshooting. 404 if the museum has no applied run yet."""
-        run = services.runs.latest_applied(tenant)
-        if run is None:
-            raise ProblemError(404, "the-etl-api", "No applied run", f"{tenant} has no applied run yet")
-        return _json(_out(services, run))
+    @app.get("/museums/{tenant}", response_model=RefreshOut, responses=openapi_responses(401, 403, 404, 503),
+             summary="The museum's latest updated refresh")
+    def latest_updated(tenant: Tenant) -> JSONResponse:
+        """For troubleshooting. 404 if the museum has no updated refresh yet."""
+        refresh = services.refreshes.latest_updated(tenant)
+        if refresh is None:
+            raise ProblemError(404, "the-etl-api", "No updated refresh", f"{tenant} has no updated refresh yet")
+        return _json(_out(services, refresh))
 
     return app
 

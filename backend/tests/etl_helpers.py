@@ -11,7 +11,8 @@ from fastapi.testclient import TestClient
 TOKENS = {tenant: random.token_urlsafe(32) for tenant in TENANTS}
 OLD_PAHMA = random.token_urlsafe(32)
 HEADER = "blob_csid\tmedia_csid\tkind\taccess\n"
-ROWS = "".join(f"b{n}\tm{n}\timage\tpublic\n" for n in range(3))  # synthetic CSIDs; the format is preflight's job
+# Synthetic CSIDs; the format is the servable list check's job.
+ROWS = "".join(f"b{n}\tm{n}\timage\tpublic\n" for n in range(3))
 FILE = (HEADER + ROWS).encode()
 
 
@@ -34,14 +35,14 @@ def upload_headers(body: bytes, tenant: str = "pahma", **extra: str) -> dict[str
 
 
 def start(client: TestClient, tenant: str = "pahma") -> dict[str, Any]:
-    response = client.post(f"/etl/v1/museums/{tenant}/runs", headers=auth(tenant))
+    response = client.post(f"/etl/v1/museums/{tenant}/refreshes", headers=auth(tenant))
     assert response.status_code in (200, 201), response.text
     body: dict[str, Any] = response.json()
     return body
 
 
-def put(client: TestClient, run: dict[str, Any], body: bytes, **headers: str) -> Any:
-    return client.put(run["links"]["servable_list"], content=body, headers=upload_headers(body, **headers))
+def put(client: TestClient, refresh: dict[str, Any], body: bytes, **headers: str) -> Any:
+    return client.put(refresh["links"]["servable_list"], content=body, headers=upload_headers(body, **headers))
 
 
 def is_problem(response: Any, status: int) -> None:

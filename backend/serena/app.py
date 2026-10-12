@@ -13,7 +13,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 
-from . import admin_api, admin_runs, etl_api, imageserver, logs, museum, signed_links, signing, tables
+from . import admin_api, admin_refreshes, etl_api, imageserver, logs, museum, signed_links, signing, tables
 from .admin_sessions import Sessions
 from .alerts import Alerts
 from .audit import Audit
@@ -22,7 +22,7 @@ from .cspace.clients import CSpaceClients, HttpFactory
 from .fetch import Fetcher
 from .museum_settings import MuseumSettings
 from .overrides import Overrides
-from .runs import Runs
+from .refreshes import Refreshes
 from .secret_cache import SecretCache, secretsmanager_client
 from .store import Store, dynamodb_client
 from .tokens import Tokens
@@ -85,7 +85,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
             log.warning("no signing key secret for a museum with signed access: its restricted files aren't served",
                         extra={"museum": key})
     app.mount(etl_api.PREFIX, etl_api.create_etl_app(etl_api.Services(
-        settings, museums, app.state.museum_settings, Runs(store, clock) if clock else Runs(store), tokens, s3)))
+        settings, museums, app.state.museum_settings, Refreshes(store, clock) if clock else Refreshes(store), tokens,
+        s3)))
 
     @app.get("/health", include_in_schema=False)
     def health() -> PlainTextResponse:
@@ -93,12 +94,12 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         return PlainTextResponse("ok", headers={"Cache-Control": "no-store"})
 
     # The app records alerts (an admin's override, D62) but doesn't email them: the worker does.
-    app.state.admin_runs = admin_runs.RunServices(Runs(store, clock) if clock else Runs(store), Overrides(store),
-                                                  Alerts(store, None, ""), s3)
+    app.state.admin_refreshes = admin_refreshes.RefreshServices(
+        Refreshes(store, clock) if clock else Refreshes(store), Overrides(store), Alerts(store, None, ""), s3)
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
         Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), Audit(store),
-        cspace_http or _admin_http), routers=(admin_runs.create_router(),))
+        cspace_http or _admin_http), routers=(admin_refreshes.create_router(),))
     app.include_router(imageserver.router)
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})

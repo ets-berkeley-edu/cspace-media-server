@@ -7,7 +7,7 @@
       density="compact"
       class="mb-2"
     >
-      <strong>{{ alert.title }}</strong> · {{ alert.night }}<template v-if="alert.subject !== alert.night"> · {{ alert.subject }}</template>
+      <strong>{{ alert.title }}</strong> · {{ alert.refresh_date }}<template v-if="alert.subject !== alert.refresh_date"> · {{ alert.subject }}</template>
       <div class="text-body-2">{{ alert.message }}</div>
       <template #append>
         <v-btn

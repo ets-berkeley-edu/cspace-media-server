@@ -7,16 +7,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Serena, the new media server for UC Berkeley's CollectionSpace museums (BAMPFA, the Botanical Garden, Cinefiles,
 PAHMA, UCJEPS), replacing the legacy `imageserver` Django webapp in `cspace-webapps-common`. It serves the images and
 documents that the museums' public portals (Glimmer, and any other client of the public Solr cores) link to, deciding
-what may be served from the nightly Solr ETL's output, and has an admin web app. It is being built one pull request
+what may be served from the daily Solr ETL's output, and has an admin web app. It is being built one pull request
 at a time, following the plan; the design is `docs/design.md`. `README.md` describes what it does.
 
 ## Rules that are not negotiable
 
-- **Serena never reads CollectionSpace's Postgres.** Only the nightly Solr ETL
+- **Serena never reads CollectionSpace's Postgres.** Only the daily Solr ETL
   (`cspace-deployment/cspace-solr-ucb`) does. Serena uses the CollectionSpace API, with a read-only service account
   per museum: HTTP Basic, its password a secret in AWS Secrets Manager, never stored anywhere else and never logged.
   Every call to CollectionSpace goes through the Media service, by Media CSID.
-- **The ETL's nightly output is the first source of what may be served.** Each night the ETL hands Serena, through
+- **The ETL's daily output is the first source of what may be served.** Each day the ETL job hands Serena, through
   Serena's ETL API, a servable list of every Blob in the museum's public Solr core (`blob_ss`, `card_ss`,
   the primary image field, the audio, video and 3D CSID fields, and `pdf_ss`) with its Media CSID, kind and access. A
   Blob CSID is servable only if that file lists it as public, its kind is one Serena serves, and its Media record has
@@ -37,7 +37,7 @@ at a time, following the plan; the design is `docs/design.md`. `README.md` descr
   logged or recorded, and never forward it. Never log the signature on a signed PDF link, and don't log or record the
   reader's `uid` unless the design says so.
 - **The ETL decides what is restricted, per museum.** Never put a museum's rule (an access code, a sensitivity flag)
-  in Serena: it acts only on the nightly file's listing and `access` value.
+  in Serena: it acts only on the daily file's listing and `access` value.
 - **Restricted files only with a valid signed link,** for a kind the museum allows signed access to (see "Restricted
   files" in the design). Fail closed: a missing, malformed, expired or unmatched signature gets the unavailable image.
 - **Don't describe security weaknesses of the legacy imageserver in this repository** (it's public). Describe Serena's
@@ -61,7 +61,7 @@ pip install --no-deps --no-build-isolation -e .
 ruff check . && mypy && pytest -q          # what CI runs
 pytest -q tests/test_logs.py               # one test file
 python -m serena.etl_api --openapi > ../docs/api/etl-v1.json   # after changing the ETL API
-python -m serena.worker                    # the worker (preflight and apply); same settings as the app
+python -m serena.worker                    # the worker (servable list check and servability update); same settings as the app
 uvicorn fakecspace.app:app --port 8180    # the CollectionSpace simulator (synthetic files and account)
 ```
 
@@ -69,8 +69,8 @@ The local stack, from the repository's root (Docker only; never AWS or a real Co
 
 ```
 ./serena up            # app, worker, simulator and moto: http://localhost:8300
-./serena etl pahma     # a night through the ETL API with the fake ETL (--partial, --rows N)
-./serena smoke         # a night, then one image fetched, stored and served (CI's `stack` job)
+./serena etl pahma     # a daily refresh through the ETL API with the fake ETL (--failed, --rows N)
+./serena smoke         # a daily refresh, then one image fetched, stored and served (CI's `stack` job)
 ./serena logs worker   # follow a service's logs
 ./serena down          # stop; moto forgets everything
 ```
@@ -86,7 +86,7 @@ To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with
 The admin web app (Vue, TypeScript, Vuetify) is in `admin/` (the BMU's `frontend/` is the model), with npm
 dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `npm run lint`, `npm run typecheck`,
 `npm test`, `npm run build`; CI's `admin` job runs all four, and `npm audit` runs on every pull request
-(security.yml) and weekly. Its API is `backend/serena/admin_api.py` (sign-in, audit) and `backend/serena/admin_runs.py` (runs,
+(security.yml) and weekly. Its API is `backend/serena/admin_api.py` (sign-in, audit) and `backend/serena/admin_refreshes.py` (refreshes,
 overrides, uploads, alerts). The Selenium tests are in `serenade/`
 (`./serena ui`, against the local stack only).
 

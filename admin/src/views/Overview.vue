@@ -3,13 +3,13 @@
     <h1 id="overview-title" class="text-h5 mb-4">{{ signed?.name }}</h1>
     <p class="mb-4">Signed in as {{ signed?.user }}.</p>
     <LoadError :message="error" />
-    <p v-if="status?.newest" id="newest-run" class="mb-2">
-      Newest run:
-      <router-link :to="{name: 'run', params: {museum: String(route.params.museum), runId: status.newest.run_id}}">
-        {{ status.newest.run_id }}
+    <p v-if="status?.newest" id="newest-refresh" class="mb-2">
+      Newest refresh:
+      <router-link :to="{name: 'refresh', params: {museum: String(route.params.museum), refreshId: status.newest.refresh_id}}">
+        {{ status.newest.refresh_id }}
       </router-link>, {{ stateOf(status.newest.state) }}.
     </p>
-    <p v-else-if="status" class="mb-2">No runs yet.</p>
+    <p v-else-if="status" class="mb-2">No refreshes yet.</p>
     <v-alert
       v-if="status?.override"
       id="override-armed"
@@ -17,8 +17,8 @@
       density="compact"
       class="mb-4"
     >
-      The change threshold is overridden for the next run (armed by {{ status.override.armed_by }} after
-      {{ status.override.after_run }}; expires {{ when(new Date(status.override.expires_at * 1000).toISOString()) }}).
+      The delta threshold is overridden for the next refresh (armed by {{ status.override.armed_by }} after
+      {{ status.override.after_refresh }}; expires {{ when(new Date(status.override.expires_at * 1000).toISOString()) }}).
       Reason: {{ status.override.reason }}
       <template #append>
         <v-btn

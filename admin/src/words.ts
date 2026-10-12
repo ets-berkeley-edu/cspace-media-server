@@ -1,14 +1,14 @@
-/** How the app names run states and timestamps (one place, so every page says the same). */
+/** How the app names refresh states and timestamps (one place, so every page says the same). */
 export const STATES: Record<string, string> = {
   started: 'Started',
   received: 'File received',
-  preflighting: 'Preflighting',
-  ready: 'Preflight passed; waiting for the load report',
-  preflight_failed: 'Preflight failed',
-  solr_loaded: 'Public core loaded; waiting for the apply',
-  applying: 'Applying',
-  applied: 'Applied',
-  apply_failed: 'Apply failed',
+  checking: 'Checking the servable list',
+  ready: 'Servable list check passed; waiting for the Solr refresh report',
+  check_failed: 'Servable list check failed',
+  solr_loaded: 'Solr refresh done; waiting for the servability update',
+  updating: 'Updating servability',
+  updated: 'Updated',
+  update_failed: 'Servability update failed',
   abandoned: 'Abandoned'
 }
 
@@ -20,7 +20,7 @@ export function when(iso: string | null | undefined): string {
   return iso ? iso.replace('T', ' ').replace(/(\.\d+)?(Z|\+00:00)$/, '').slice(0, 19) + ' UTC' : ''
 }
 
-/** A date in Pacific time, as YYYY-MM-DD: the museums' nights are Pacific dates (design: The ETL API). */
+/** A date in Pacific time, as YYYY-MM-DD: the museums' refresh dates are Pacific dates (design: The ETL API). */
 export function pacificDate(daysAgo = 0, now: Date = new Date()): string {
   const day = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
   return new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Los_Angeles'}).format(day)
@@ -48,16 +48,16 @@ export function detailLines(details: Record<string, unknown>): DetailLine[] {
     })
 }
 
-/** An audit entry's target, readable: an alert's key (`<night>#<kind>#<subject>[#<n>]`) as kind, night and subject. */
+/** An audit entry's target, readable: an alert's key (`<refresh date>#<kind>#<subject>[#<n>]`) as kind, refresh date and subject. */
 export function targetOf(action: string, target: string): string {
   if (action !== 'alert_acknowledge') {
     return target
   }
-  const [night, kind, subject] = target.split('#')
+  const [refreshDate, kind, subject] = target.split('#')
   if (!kind) {
     return target
   }
   const what = kind.replace(/_/g, ' ')
-  return [what.charAt(0).toUpperCase() + what.slice(1), night, subject !== night ? subject : '']
+  return [what.charAt(0).toUpperCase() + what.slice(1), refreshDate, subject !== refreshDate ? subject : '']
     .filter(Boolean).join(' · ')
 }

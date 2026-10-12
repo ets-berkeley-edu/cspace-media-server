@@ -18,10 +18,11 @@ class Table:
 
 
 # Every partition key is the string attribute "pk"; a sort key, where there is one, is "sk".
-# pk <tenant>#<blob CSID>; indexed by <tenant>#<media CSID> (requests by Media CSID) and by museum (the apply)
+# pk <tenant>#<blob CSID>; indexed by <tenant>#<media CSID> (requests by Media CSID) and by museum (the servability
+# update)
 SERVABILITY = Table("servability", indexes={"by_media": "media_key", "by_tenant": "tenant"})
 TAKEDOWNS = Table("takedowns")  # pk <tenant>#<media CSID>
-RUNS = Table("runs", sort_key="sk")  # pk <tenant>, sk <run ID>
+REFRESHES = Table("refreshes", sort_key="sk")  # pk <tenant>, sk <refresh ID>
 SETTINGS = Table("settings")  # pk <tenant>
 ALERTS = Table("alerts", sort_key="sk")  # pk <tenant>, sk <time>
 UNSERVED = Table("unserved", sort_key="sk", ttl_attribute="expires_at")  # pk <tenant>#<bucket>, sk <reason>
@@ -29,7 +30,7 @@ CACHE_INDEX = Table("cache-index")  # pk <tenant>#<blob CSID>#<derivative>
 AUDIT = Table("audit", sort_key="sk")  # pk <tenant>, sk <time>#<admin>#<random>
 ADMIN_SESSIONS = Table("admin-sessions", ttl_attribute="expires_at")  # pk SHA-256 of the session's token
 
-ALL = (SERVABILITY, TAKEDOWNS, RUNS, SETTINGS, ALERTS, UNSERVED, CACHE_INDEX, AUDIT, ADMIN_SESSIONS)
+ALL = (SERVABILITY, TAKEDOWNS, REFRESHES, SETTINGS, ALERTS, UNSERVED, CACHE_INDEX, AUDIT, ADMIN_SESSIONS)
 
 
 def full_name(prefix: str, table: Table) -> str:

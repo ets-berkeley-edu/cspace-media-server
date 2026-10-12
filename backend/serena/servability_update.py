@@ -1,9 +1,10 @@
-"""The apply: makes the servability table match a night's file (design: Preflight and apply).
+"""The servability update: makes the servability table match a refresh's servable list (design: Servable list check
+and servability update).
 
-It reads the museum's rows from the table itself (through the by_tenant index), so it is right even after an apply
-that stopped partway (decided October 9, 2026, D35). It deletes the rows of Blobs no longer listed first, then writes
-the new and changed rows; unchanged rows aren't touched. Deleting first means an apply that stops halfway never
-serves a Blob the new night dropped. Every write is safe to repeat."""
+It reads the museum's rows from the table itself (through the by_tenant index), so it is right even after a
+servability update that stopped partway (decided October 9, 2026, D35). It deletes the rows of Blobs no longer listed
+first, then writes the new and changed rows; unchanged rows aren't touched. Deleting first means a servability update
+that stops halfway never serves a Blob the new servable list dropped. Every write is safe to repeat."""
 from __future__ import annotations
 
 import time
@@ -56,7 +57,7 @@ def _write(store: Store, requests: list[dict[str, Any]], sleep: Callable[[float]
             raise RuntimeError("DynamoDB kept leaving writes unprocessed")
 
 
-def apply(store: Store, tenant: str, rows: dict[str, Row], sleep: Callable[[float], None] = time.sleep) -> Counts:
+def update(store: Store, tenant: str, rows: dict[str, Row], sleep: Callable[[float], None] = time.sleep) -> Counts:
     now = current_rows(store, tenant)
     counts = Counts()
     deletes = [{"DeleteRequest": {"Key": {"pk": {"S": f"{tenant}#{blob}"}}}} for blob in now if blob not in rows]

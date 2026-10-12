@@ -52,8 +52,9 @@ class Settings(BaseSettings):
     secret_cache_seconds: float = 300.0  # how long each task keeps a secret before reading it again
     upload_max_mb: int = 500  # the largest servable list accepted, uncompressed
     upload_dir: str | None = None  # where uploads are written while they're checked; None: the system's temp directory
-    # The worker (design: Preflight and apply): how often it looks for work, how often it renews its claim on a step,
-    # and how old a claim may get before the step counts as interrupted and is started again.
+    # The worker (design: Servable list check and servability update): how often it looks for work, how often it
+    # renews its claim on a step, and how old a claim may get before the step counts as interrupted and is started
+    # again.
     worker_poll_seconds: float = 5.0
     worker_heartbeat_seconds: float = 30.0
     worker_heartbeat_stale_seconds: float = 300.0
