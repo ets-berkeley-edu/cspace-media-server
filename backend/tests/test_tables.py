@@ -16,7 +16,7 @@ def test_servability_is_indexed_by_media_csid_and_by_museum(dynamodb: Any) -> No
                     "by_tenant": [{"AttributeName": "tenant", "KeyType": "HASH"}]}
 
 
-def test_unserved_counts_expire(dynamodb: Any) -> None:
-    ttl = dynamodb.describe_time_to_live(TableName="t-unserved")["TimeToLiveDescription"]
+def test_admin_sessions_expire(dynamodb: Any) -> None:
+    ttl = dynamodb.describe_time_to_live(TableName="t-admin-sessions")["TimeToLiveDescription"]
     assert ttl["TimeToLiveStatus"] == "ENABLED"
     assert ttl["AttributeName"] == "expires_at"

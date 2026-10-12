@@ -116,7 +116,7 @@ Goals:
 - Make a repeated request cheap: CollectionSpace is normally asked for a given file only once, ever.
 - Watermark for any museum that wants it, now or later, at no per-request cost.
 - Scale horizontally; keep all state outside the app's tasks, apart from short-lived caches and counts that a task
-  can lose without harm (a museum's settings for a minute, unserved-request counts until the next write).
+  can lose without harm (a museum's settings for a minute, the Requests page's report for a minute).
 - Show what's happening, to the team and to museum admins: requests, cache hits and misses, files not served and why,
   fetch times and errors, daily refreshes.
 
@@ -160,11 +160,12 @@ flowchart LR
 | --- | --- |
 | Serena app | Answers file requests (checks servability, finds or fetches the file, redirects); serves the ETL API and the admin app |
 | Worker | Checks each day's servable list and updates servability from it; runs the watchdog |
-| DynamoDB | Servability records, takedowns, refreshes, settings, alerts, unserved-request counts, the cache index, the audit log |
+| DynamoDB | Servability records, takedowns, refreshes, settings, alerts, the cache index, the audit log |
 | S3 buckets | One private, KMS-encrypted bucket per museum, holding every file Serena has fetched or watermarked, and each servable list it has updated from |
 | CloudFront | Delivers files from S3 to browsers, only through signed URLs; serves the unavailable images without a signature |
-| Admin web app | Refreshes and alerts, settings, takedowns, restricted-image Blobs, why a file is or isn't served |
+| Admin web app | Refreshes and alerts, settings, what Serena served and couldn't serve, takedowns, restricted-image Blobs, why a file is or isn't served |
 | SNS | Emails alarms to the team's mailing list |
+| CloudWatch Logs | The app's and worker's JSON logs; the admin app's Requests page queries the app's log with Logs Insights |
 
 ## Serving a request
 
@@ -396,8 +397,8 @@ Serena never returns an error page or a stack trace to the browser.
 
 ### Requests Serena doesn't serve
 
-Every request answered with the unavailable image is logged with its reason, and counted (decided October 9, 2026).
-Each case has its own reason, so the admin app can say why a file isn't served:
+Every request answered with the unavailable image is logged with its reason (decided October 9, 2026). Each case has
+its own reason, so the admin app can say why a file isn't served:
 
 | Reason | When |
 | --- | --- |
@@ -426,14 +427,13 @@ Each case has its own reason, so the admin app can say why a file isn't served:
 | `fetch_busy` | A miss: not enough local disk to fetch it now |
 | `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
 
-The reasons for a miss were decided October 10, 2026 (see Image fetch). Each task counts them in memory and writes the totals to
-the Unserved requests table every minute: one item per museum, 5-minute bucket and reason, with its count and the
-five most recent paths, expiring after 30 days (decided October 9, 2026). A request under a museum Serena doesn't
-serve is counted under `default`. A task that stops abruptly loses at most a
-minute of counts. Paths aren't counted one by one, because there is no bound on how many different paths a crawler
-asks for. The records hold no IP addresses and no email addresses, and the PDF link suffix is removed.
-The admin app shows them as a page of recent unserved requests, and a list of files Serena knows it can't serve, and
-why (for example restricted files, files that failed their checks, fetch errors).
+The reasons for a miss were decided October 10, 2026 (see Image fetch). The "unserved" log line holds the museum, the
+reason and the path, with the PDF link suffix removed; never an IP address, a query string or an email address. A
+request under a museum Serena doesn't serve is logged with no museum, so no museum's admins see it. The admin app's
+Requests page reads these lines, with the "served" ones (see Admin web app, The Requests page). Until October 12,
+2026, each task also counted them in an Unserved requests table, for a page of its own; the Requests page replaced
+both (D102). The admin app is also to list the files Serena knows it can't serve, and why (for example restricted
+files, files that failed their checks, fetch errors).
 
 ### Signed URLs
 
@@ -516,7 +516,6 @@ where the table is read as a list, a sort key:
 | Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits and audit retention, over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its banner and alerts page |
-| Unserved requests | `<tenant>#<bucket>` | reason | count, recent paths; expire after 30 days |
 | Cache index | see Storage | | |
 | Audit log | `<tenant>` | `<time>#<admin>#<random>` (the random part keeps two actions in the same microsecond apart) | the admin action, its target, details (before and after, for a setting); kept for the museum's audit retention (90 days to start; an admin's setting: 90 days, or 6, 12, 18, 24 or 36 months), the worker removing older entries once a day by the setting then in force (decided October 12, 2026, D97, D98) |
 | Admin sessions | SHA-256 of the session's token | | museum, admin, started, last seen; expire by TTL after 8 hours |
@@ -908,14 +907,41 @@ reachable only from campus networks.
     with any cell a spreadsheet could run as a formula made safe (D96); the export is audited;
   - restricted-image Blob upload;
   - takedown and unlock by Media CSID;
-  - a lookup of why a file is or isn't served; the page of recent unserved requests; the list of files Serena knows it
-    can't serve;
+  - the Requests page: what Serena served and couldn't serve (see The Requests page, below);
+  - a lookup of why a file is or isn't served; the list of files Serena knows it can't serve;
   - an "API documentation" button: Swagger UI, bundled with the app (no CDN), read-only, showing the ETL API's
     description generated from the code (decided October 10, 2026);
   - an audit log of every admin action: sign-in, sign-out, signing everyone out, takedown, unlock, a settings change
     (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, an
     admin refresh, an audit export and the restricted-image upload, each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
+- **The Requests page** (decided October 12, 2026, D100 to D113). What Serena served and couldn't serve for the
+  museum, from the app's log:
+  - **Lines.** The app logs one line per request (D103): "served", with the path, the kind, the cache (`hit`, or
+    `miss` when the file was just fetched) and whether a signed link was used; or "unserved", with the reason and the
+    path (see Requests Serena doesn't serve). Paths come without the PDF link suffix or a query string; no line holds
+    an IP address, a signed link's `uid` or `sig`, or an email address. The page reads these two lines only, not the
+    fetch lines: a failed fetch ends in an unserved request with its reason (D104).
+  - **Layout** (D105). At the top, counts by day (served; unserved by reason) and the 20 most-requested paths; below,
+    a table of lines, newest first, sorted by a column's name and paged like the other tables, filtered by outcome and
+    by reason. Times are UTC.
+  - **Range** (D106). The last hour, 24 hours or 7 days; 24 hours to start.
+  - **More than 10,000 lines** (D107). A Logs Insights query returns at most 10,000 rows: the table lists the newest
+    10,000 and says so; the counts and the most-requested paths cover every request.
+  - **Queries** (D108). The admin API runs four fixed queries (lines, served by day, unserved by day and reason, most
+    requested) with CloudWatch Logs Insights on the app's log group, at the same time, and waits for them, polling
+    every second, for up to 30 seconds; past that it stops them and asks the admin for a shorter range (504). Each
+    report is kept a minute per museum and range, so reloads don't start new queries. The page shows a spinner while
+    it waits. Logs Insights can't limit a query to one museum: every query filters on the signed-in museum, which comes
+    from Serena's list of museums and is checked to be lowercase letters before it goes into the query, so nothing an
+    admin types reaches a query.
+  - **Locally** (D109). With `SERENA_LOG_FILE` (allowed only with a local DynamoDB endpoint), the app also writes its
+    log lines to that file (20 MB and one rotated copy), and the admin API runs the same four queries in Python over
+    it, in place of CloudWatch. Tests use the same stand-in; a separate test checks the Logs Insights query text.
+  - **Who** (D111). Any admin of the museum; reading the page isn't audited (it holds no personal data).
+  - **CSV export** (D112, D113). "Export CSV" saves the lines matching the page's range and filters (at most
+    10,000), newest first (time, outcome, reason, path, kind, cache, signed link), formula-safe like the audit log's
+    export: `serena-requests-<museum>-<date>.csv`.
 - **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
   objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October
   10, 2026). Not in CI yet.
@@ -932,11 +958,13 @@ reachable only from campus networks.
 - **Infrastructure as code.** Terraform, in `deploy/`, with state in S3. No secrets in Terraform files or state.
 - **Least privilege.** The app's task role can read the servability table; read and write the takedown and settings
   tables (the admin app's takedowns and settings are served by the app), the cache index, refreshes, alerts,
-  unserved-request counts, audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
-  uploaded servable lists; use the KMS key; and read its own secrets. The worker's role can read and write
+  audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
+  uploaded servable lists; use the KMS key; read its own secrets; and run Logs Insights queries on its own log group
+  only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Requests page (D110). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
   delete audit entries (the daily removal, D98), read and put the servable lists in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
-- **Logs and metrics.** Structured JSON logs to CloudWatch and embedded metrics: requests, hits, misses, unserved
+- **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30
+  days and encrypted with the KMS key, D110) and embedded metrics: requests, hits, misses, unserved
   requests by reason, fetch time, upstream errors by cause, duplicate fetches, refresh outcomes. No passwords, tokens,
   signed URLs or personal data in logs: the PDF link suffix is removed before anything is logged, and the query
   string (where a signed link's `uid` and `sig` are) is never logged. Uvicorn's access log is off, since it would log
@@ -967,7 +995,8 @@ reachable only from campus networks.
   the Solr refresh), and prints its counts; `--failed` makes the servable list but never calls Serena (D85).
   `./serena smoke` runs a daily refresh and fetches, stores and serves one of its images; CI runs it on every code
   change. `./serena up` prints the clone's branch and commit, and the admin app shows them beside the environment
-  (`SERENA_BUILD`), so a tester sees at once which code the stack runs. The stack talks only to the simulator: there is no local mode against a real
+  (`SERENA_BUILD`), so a tester sees at once which code the stack runs. The app also writes its log lines to a file
+  inside its container (`SERENA_LOG_FILE`), which the Requests page reads in place of CloudWatch (D109). The stack talks only to the simulator: there is no local mode against a real
   CollectionSpace, which would need a museum's service-account password on a laptop; real-tenant checks happen in
   the AWS QA environment (decided October 10, 2026). The admin app runs on Vite's development server
   (http://localhost:5373/admin/), forwarding `/admin/v1` to the app. The simulator (`backend/fakecspace`) answers the three
@@ -1064,6 +1093,9 @@ The F numbers follow the team's list of follow-ups.
   if several clients get the same URL, only the first one to use it gets a response? To discuss (raised October 8,
   2026).
 - **Notifications list.** The team mailing list that receives alarms.
+- **Requests page queries in AWS.** The Logs Insights query text is tested only as text: run the four queries
+  against the QA environment's log group before production, to confirm the JSON fields (`message`, `logger`,
+  `museum`) and `datefloor` behave as expected.
 - **Audit retention policy (D99).** Before production, ask the campus information security office (and records
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
   lowest choice to match.

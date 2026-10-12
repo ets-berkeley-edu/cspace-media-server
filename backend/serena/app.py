@@ -1,7 +1,6 @@
 """The web app: built by create_app(), served by uvicorn (serena.main:app)."""
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncIterator, Callable
@@ -16,11 +15,13 @@ from fastapi.responses import PlainTextResponse
 from . import (
     admin_api,
     admin_refreshes,
+    admin_requests,
     admin_settings,
     etl_api,
     imageserver,
     logs,
     museum,
+    requests_log,
     signed_links,
     signing,
     tables,
@@ -36,18 +37,18 @@ from .refreshes import Refreshes
 from .secret_cache import SecretCache, secretsmanager_client
 from .store import Store, dynamodb_client
 from .tokens import Tokens
-from .unserved import DynamoRecorder, Recorder
+from .unserved import Recorder
 
 log = logging.getLogger("serena.app")
 
 
 def create_app(settings: Settings | None = None, store: Store | None = None, unserved: Recorder | None = None,
                s3: Any = None, secretsmanager: Any = None, clock: Callable[[], datetime] | None = None,
-               cspace_http: HttpFactory | None = None) -> FastAPI:
-    """The app. Tests pass their own store, recorder and clients (moto, the CollectionSpace simulator); otherwise
-    they use AWS and each museum's CollectionSpace."""
+               cspace_http: HttpFactory | None = None, log_reader: requests_log.Reader | None = None) -> FastAPI:
+    """The app. Tests pass their own store, recorder, log reader and clients (moto, the CollectionSpace simulator);
+    otherwise they use AWS and each museum's CollectionSpace."""
     settings = settings or get_settings()
-    logs.configure(settings.log_level)
+    logs.configure(settings.log_level, settings.log_file)
     museums = museum.load_all(settings.tenants)
     if store is None:
         client = dynamodb_client(settings)
@@ -56,16 +57,12 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
             if created:
                 log.info("created tables", extra={"tables": created})
         store = Store(client, settings.table_prefix)
-    recorder = unserved or DynamoRecorder(store.client, store.table(tables.UNSERVED))
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        flusher = asyncio.create_task(_flush_unserved(recorder, settings.unserved_flush_seconds))
         try:
             yield
         finally:
-            flusher.cancel()
-            await asyncio.to_thread(_flush_now, recorder)
             app.state.fetcher.clients.close()
 
     # No interactive API documentation here: the ETL API's description is generated into docs/api/ (design: The ETL
@@ -75,7 +72,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     app.state.museums = museums
     app.state.store = store
     app.state.museum_settings = MuseumSettings(store, settings.settings_cache_seconds)
-    app.state.unserved = recorder
+    app.state.unserved = unserved
 
     if s3 is None:
         s3 = boto3.client("s3", region_name=settings.aws_region, endpoint_url=settings.s3_endpoint)
@@ -108,31 +105,28 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     audit = Audit(store)  # real time: entries are ordered by it
     app.state.admin_refreshes = admin_refreshes.RefreshServices(
         Refreshes(store, clock) if clock else Refreshes(store), app_alerts, s3)
+    app.state.requests_log = requests_log.Requests(log_reader or _log_reader(settings))
     app.state.admin_settings = admin_settings.SettingsServices(
         app.state.museum_settings, store, app_alerts, audit, *((clock,) if clock else ()))
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
         Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), audit,
-        cspace_http or _admin_http), routers=(admin_refreshes.create_router(), admin_settings.create_router()))
+        cspace_http or _admin_http), routers=(admin_refreshes.create_router(), admin_settings.create_router(),
+                                            admin_requests.create_router()))
     app.include_router(imageserver.router)
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})
     return app
 
 
-def _flush_now(recorder: Recorder) -> None:
-    flush = getattr(recorder, "flush", None)
-    if flush is not None:
-        try:
-            flush()
-        except Exception:
-            log.exception("could not write unserved-request counts")
-
-
-async def _flush_unserved(recorder: Recorder, every_seconds: float) -> None:
-    while True:
-        await asyncio.sleep(every_seconds)
-        await asyncio.to_thread(_flush_now, recorder)
+def _log_reader(settings: Settings) -> requests_log.Reader | None:
+    """Where the Requests page reads the log (D109): CloudWatch Logs Insights in AWS, the local log file otherwise."""
+    if settings.log_group:
+        return requests_log.CloudWatchReader(boto3.client("logs", region_name=settings.aws_region),
+                                             settings.log_group)
+    if settings.log_file:
+        return requests_log.FileReader(settings.log_file)
+    return None
 
 
 def _signer(settings: Settings, secret_cache: SecretCache) -> signing.Signer | None:

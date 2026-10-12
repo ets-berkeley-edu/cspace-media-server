@@ -42,8 +42,12 @@ class Settings(BaseSettings):
     create_tables: bool = False
     # How long each task keeps a museum's settings before reading the Settings table again
     settings_cache_seconds: float = 60.0
-    # How often each task writes its counts of unserved requests to their table
-    unserved_flush_seconds: float = 60.0
+    # The admin app's Requests page reads what Serena served and couldn't serve from its log (design: The Requests
+    # page). In AWS: the app's CloudWatch log group, queried with Logs Insights. Local development only: a file the
+    # app also writes its JSON log lines to, read in place of CloudWatch. Neither: the page says the log isn't
+    # available here.
+    log_group: str = ""
+    log_file: str | None = None
 
     # Each museum's S3 bucket (design: Storage), from SERENA_BUCKETS as JSON: {"pahma": "..."}.
     buckets: dict[str, str] = {}
@@ -121,6 +125,8 @@ class Settings(BaseSettings):
     def _tables_only_locally(self) -> Settings:
         if self.create_tables and not self.dynamodb_endpoint:
             raise ValueError("create_tables is for local development: set dynamodb_endpoint (a local stand-in) too")
+        if self.log_file and not self.dynamodb_endpoint:
+            raise ValueError("log_file is for local development: set dynamodb_endpoint (a local stand-in) too")
         if self.local_cdn and not self.dynamodb_endpoint:
             raise ValueError("local_cdn is for local development: set dynamodb_endpoint (a local stand-in) too")
         if self.cdn_base_url and not self.cdn_base_url.startswith("https://"):

@@ -51,7 +51,11 @@ services:
 
   web:
     build: ./backend
-    environment: *serena-env
+    environment:
+      <<: *serena-env
+      # The Requests page's stand-in for CloudWatch Logs Insights: the app also writes its log lines here, and reads
+      # them back for the page (design: The Requests page). Inside the container only; `./serena down` forgets it.
+      SERENA_LOG_FILE: /tmp/serena.log
     depends_on:
       seed: { condition: service_completed_successfully }
       fakecspace: { condition: service_started }

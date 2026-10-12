@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import logging.handlers
 import re
 import sys
 from datetime import UTC, datetime
@@ -88,13 +89,26 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(_scrub_value(entry), ensure_ascii=False)
 
 
-def configure(level: str = "INFO") -> None:
+LOG_FILE_BYTES = 20 * 1024 * 1024  # local development: the log file and one rotated copy (<file>.1)
+
+
+def configure(level: str = "INFO", log_file: str | None = None) -> None:
     """Send every log, uvicorn's included, through one JSON handler on stderr. Call it when the app or worker starts
-    (after uvicorn has set up its own logging, which this replaces)."""
-    handler = logging.StreamHandler(sys.stderr)
+    (after uvicorn has set up its own logging, which this replaces). Locally, `log_file` (SERENA_LOG_FILE) also gets
+    every line, for the Requests page's stand-in for CloudWatch (requests_log.FileReader)."""
+    handler: logging.Handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(JsonFormatter())
+    handlers = [handler]
+    if log_file:
+        to_file = logging.handlers.RotatingFileHandler(log_file, maxBytes=LOG_FILE_BYTES, backupCount=1,
+                                                       encoding="utf-8")
+        to_file.setFormatter(JsonFormatter())
+        handlers.append(to_file)
     root = logging.getLogger()
-    root.handlers = [handler]
+    for old in root.handlers:
+        if old not in handlers and isinstance(old, logging.FileHandler):
+            old.close()
+    root.handlers = handlers
     root.setLevel(level)
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logger = logging.getLogger(name)
