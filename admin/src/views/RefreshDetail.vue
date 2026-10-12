@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-1">{{ refresh?.refresh_id }}</h1>
+    <h1 id="page-title" class="text-h5 mb-1">{{ museumName(museum) }} refresh {{ refresh?.refresh_id }}</h1>
     <p v-if="refresh" class="mb-4">
       <span id="refresh-state" class="font-weight-bold">{{ stateOf(refresh.state) }}</span>
       · refresh date {{ refresh.refresh_date }}<span v-if="refresh.admin_refresh_date"> · an admin refresh, with the servable list
@@ -123,7 +123,7 @@ import {computed, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import type {Refresh, RefreshAction} from '@/api'
 import {ApiError, api, problem as failure} from '@/api'
-import {alertsChanged} from '@/session'
+import {alertsChanged, museumName} from '@/session'
 import {stateOf, when} from '@/words'
 
 const titles: Record<RefreshAction, string> = {

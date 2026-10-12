@@ -6,6 +6,7 @@ import AuditLog from '@/views/AuditLog.vue'
 import Overview from '@/views/Overview.vue'
 import RefreshDetail from '@/views/RefreshDetail.vue'
 import Refreshes from '@/views/Refreshes.vue'
+import Settings from '@/views/Settings.vue'
 import SignIn from '@/views/SignIn.vue'
 import StartRefresh from '@/views/StartRefresh.vue'
 
@@ -17,6 +18,7 @@ export const routes = [
   {path: '/:museum/refreshes/:refreshId', name: 'refresh', component: RefreshDetail},
   {path: '/:museum/start-refresh', name: 'start-refresh', component: StartRefresh},
   {path: '/:museum/alerts', name: 'alerts', component: Alerts},
+  {path: '/:museum/settings', name: 'settings', component: Settings},
   {path: '/:museum/audit', name: 'audit', component: AuditLog},
   // Swagger UI is large: loaded only when the page is opened.
   {path: '/:museum/api', name: 'api', component: () => import('@/views/ApiDocs.vue')}

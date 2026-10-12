@@ -85,6 +85,21 @@ export interface Status {
   unacknowledged: number
 }
 
+export interface SettingItem {
+  name: string // a setting, or size_limit_mb.<kind>
+  group: string // watchdog, etl, check, size_limits or audit
+  label: string
+  value: string | number
+  default: string | number // the value in Serena's configuration
+  changed: boolean
+}
+
+export interface SettingsResponse {
+  settings: SettingItem[]
+  // For each audit retention a museum may choose: how many of today's entries a change to it would remove (D98).
+  audit_retention_choices: {days: number, entries_removed: number}[]
+}
+
 export interface AlertItem {
   key: string
   refresh_date: string
@@ -134,7 +149,14 @@ export const api = {
     call<SignedIn>('POST', '/sessions', {museum, username, password}),
   signOut: (museum: string) => call<{museum: string}>('DELETE', `/sessions/${museum}`),
   signOutAll: (museum: string) => call<{sessions_ended: number}>('POST', `/museums/${museum}/sign-out-all`),
-  audit: (museum: string) => call<{entries: AuditEntry[]}>('GET', `/museums/${museum}/audit`),
+  audit: (museum: string) => call<{days: number, entries: AuditEntry[]}>('GET', `/museums/${museum}/audit`),
+  // Every entry the museum keeps, as CSV: a plain link, so the browser saves the file (D96).
+  auditExportUrl: (museum: string) => `${PREFIX}/museums/${museum}/audit/export.csv`,
+  settings: (museum: string) => call<SettingsResponse>('GET', `/museums/${museum}/settings`),
+  changeSetting: (museum: string, name: string, value: string | number, reason: string) =>
+    call<SettingsResponse>('PUT', `/museums/${museum}/settings/${encodeURIComponent(name)}`, {value, reason}),
+  resetSetting: (museum: string, name: string, reason: string) =>
+    call<SettingsResponse>('POST', `/museums/${museum}/settings/${encodeURIComponent(name)}/reset`, {reason}),
   etlApiUrl: (museum: string) => `${PREFIX}/museums/${museum}/etl-api.json`,
   status: (museum: string) => call<Status>('GET', `/museums/${museum}/status`),
   refreshes: (museum: string) => call<{refreshes: RefreshSummary[]}>('GET', `/museums/${museum}/refreshes`),

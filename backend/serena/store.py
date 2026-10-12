@@ -61,8 +61,29 @@ class Store:
 
     def settings_overrides(self, tenant: str) -> dict[str, Any]:
         """An admin's values for a museum's settings (stored as JSON in the item's "values" attribute)."""
-        item = self.client.get_item(TableName=self.table(tables.SETTINGS), Key={"pk": {"S": tenant}}).get("Item")
+        return self.settings_with_version(tenant)[0]
+
+    def settings_with_version(self, tenant: str) -> tuple[dict[str, Any], int]:
+        """An admin's values for a museum's settings, and the item's version (0 when there is none yet), for
+        put_settings_overrides."""
+        item = self.client.get_item(TableName=self.table(tables.SETTINGS), Key={"pk": {"S": tenant}},
+                                    ConsistentRead=True).get("Item")
         if item is None or "values" not in item:
-            return {}
+            return {}, int(item["version"]["N"]) if item and "version" in item else 0
         values = json.loads(item["values"]["S"])
-        return values if isinstance(values, dict) else {}
+        version = int(item["version"]["N"]) if "version" in item else 0
+        return (values if isinstance(values, dict) else {}), version
+
+    def put_settings_overrides(self, tenant: str, values: dict[str, Any], version: int) -> bool:
+        """Replaces an admin's values for a museum's settings, only if the item is still at `version` (so two admins
+        changing settings at once can't undo each other's change). Returns False if it changed meanwhile."""
+        condition = "attribute_not_exists(version) OR version = :v" if version == 0 else "version = :v"
+        try:
+            self.client.put_item(
+                TableName=self.table(tables.SETTINGS), ConditionExpression=condition,
+                ExpressionAttributeValues={":v": {"N": str(version)}},
+                Item={"pk": {"S": tenant}, "values": {"S": json.dumps(values, sort_keys=True)},
+                      "version": {"N": str(version + 1)}})
+        except self.client.exceptions.ConditionalCheckFailedException:
+            return False
+        return True

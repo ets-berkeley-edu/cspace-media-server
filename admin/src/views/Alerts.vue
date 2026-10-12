@@ -1,40 +1,41 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h5 mb-4">Alerts</h1>
-    <p class="mb-4">Every alert of the last 30 days, newest first. Acknowledging one doesn't hide a problem: if it's still there, the watchdog raises it again the next day.</p>
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Alerts</h1>
+    <p class="mb-4">
+      Every alert of the last 30 days, newest first. Click a column's name to sort by it. Acknowledging one doesn't hide a
+      problem: if it's still there, the watchdog raises it again the next day.
+    </p>
     <LoadError :message="error" />
-    <v-table id="alerts-table" density="compact">
-      <thead>
-        <tr>
-          <th>Refresh date</th>
-          <th>Alert</th>
-          <th>About</th>
-          <th>Acknowledged</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="alert in alerts" :key="alert.key">
-          <td>{{ alert.refresh_date }}</td>
-          <td>
-            <strong>{{ alert.title }}</strong>
-            <div class="text-body-2">{{ alert.message }}</div>
-          </td>
-          <td>{{ alert.subject }}</td>
-          <td>
-            <span v-if="alert.acknowledged_at">{{ alert.acknowledged_by }}, {{ when(alert.acknowledged_at) }}</span>
-            <v-btn
-              v-else
-              size="small"
-              variant="outlined"
-              @click="acknowledge(alert.key)"
-            >
-              Acknowledge
-            </v-btn>
-          </td>
-        </tr>
-      </tbody>
-    </v-table>
-    <p v-if="loaded && !alerts.length" class="mt-4">No alerts in the last 30 days.</p>
+    <v-data-table
+      id="alerts-table"
+      :headers="headers"
+      :items="alerts"
+      :sort-by="[{key: 'created_at', order: 'desc'}]"
+      must-sort
+      :items-per-page="25"
+      :items-per-page-options="PAGE_SIZES"
+      :loading="!loaded && !error"
+      item-value="key"
+      density="compact"
+      no-data-text="No alerts in the last 30 days."
+    >
+      <template #[`item.title`]="{item}">
+        <strong>{{ item.title }}</strong>
+        <div class="text-body-2">{{ item.message }}</div>
+      </template>
+      <template #[`item.created_at`]="{item}">{{ when(item.created_at) }}</template>
+      <template #[`item.acknowledged_at`]="{item}">
+        <span v-if="item.acknowledged_at">{{ item.acknowledged_by }}, {{ when(item.acknowledged_at) }}</span>
+        <v-btn
+          v-else
+          size="small"
+          variant="outlined"
+          @click="acknowledge(item.key)"
+        >
+          Acknowledge
+        </v-btn>
+      </template>
+    </v-data-table>
   </v-container>
 </template>
 
@@ -44,8 +45,17 @@ import {useRoute} from 'vue-router'
 import type {AlertItem} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
-import {alertsChanged} from '@/session'
-import {when} from '@/words'
+import {alertsChanged, museumName} from '@/session'
+import {PAGE_SIZES, when} from '@/words'
+
+// Sortable: when, refresh date, alert, about and acknowledged (D94); the alert sorts by its title.
+const headers = [
+  {title: 'Raised', key: 'created_at'},
+  {title: 'Refresh date', key: 'refresh_date'},
+  {title: 'Alert', key: 'title'},
+  {title: 'About', key: 'subject'},
+  {title: 'Acknowledged', key: 'acknowledged_at'}
+]
 
 const route = useRoute()
 const museum = computed(() => String(route.params.museum))

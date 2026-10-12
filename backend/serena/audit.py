@@ -2,12 +2,14 @@
 
 One entry per action: the museum, the time, the admin (their CollectionSpace username), the action, its target (a
 Media CSID, refresh ID or setting name) and, for a setting, the values before and after. Never a password, token or
-file's content. Failed sign-ins aren't recorded here: their username may be anyone's. Entries are kept indefinitely."""
+file's content. Failed sign-ins aren't recorded here: their username may be anyone's. Entries are kept for the
+museum's audit retention (90 days to start; an admin's setting, 6 to 36 months), and the worker removes older ones once
+a day (decided October 12, 2026, D97, D98)."""
 from __future__ import annotations
 
 import json
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -24,6 +26,7 @@ class Action(StrEnum):
     TAKEDOWN = "takedown"
     UNLOCK = "unlock"
     SETTINGS_CHANGE = "settings_change"
+    AUDIT_EXPORT = "audit_export"
     UPDATE_RETRY = "update_retry"
     THRESHOLD_OVERRIDE = "threshold_override"
     ADMIN_REFRESH = "admin_refresh"
@@ -57,15 +60,71 @@ class Audit:
             "details": {"S": json.dumps(entry.details, sort_keys=True)}})
         return entry
 
-    def recent(self, tenant: str, limit: int = 100, before: str | None = None) -> list[Entry]:
-        """Newest first. `before`: an entry's time, for the next page."""
-        condition = "pk = :t"
-        values: dict[str, Any] = {":t": {"S": tenant}}
-        if before:
-            condition += " AND sk < :before"
-            values[":before"] = {"S": before}
-        items = self.store.client.query(TableName=self.store.table(tables.AUDIT), KeyConditionExpression=condition,
-                                        ExpressionAttributeValues=values, ScanIndexForward=False,
-                                        Limit=limit)["Items"]
-        return [Entry(tenant, i["at"]["S"], i["admin"]["S"], i["action"]["S"], i["target"]["S"],
-                      json.loads(i["details"]["S"])) for i in items]
+    def since(self, tenant: str, cutoff: datetime) -> list[Entry]:
+        """The museum's entries from `cutoff` on, newest first (the admin app's Audit log page, D93)."""
+        return list(self._query(tenant, newest_first=True, condition="pk = :t AND sk >= :cut",
+                                values={":cut": {"S": stamp(cutoff)}}))
+
+    def everything(self, tenant: str) -> Iterator[Entry]:
+        """All the museum's entries, oldest first (the CSV export, D96)."""
+        return self._query(tenant, newest_first=False)
+
+    def count_before(self, tenant: str, cutoffs: dict[int, datetime]) -> dict[int, int]:
+        """For each key, how many entries are older than its cutoff (what a shorter retention would remove)."""
+        counts = dict.fromkeys(cutoffs, 0)
+        marks = {key: stamp(cutoff) for key, cutoff in cutoffs.items()}
+        for sort_key in self._sort_keys(tenant):
+            for key, mark in marks.items():
+                if sort_key < mark:
+                    counts[key] += 1
+        return counts
+
+    def purge(self, tenant: str, cutoff: datetime) -> int:
+        """Deletes the museum's entries older than `cutoff` (the worker, once a day, D98); returns how many."""
+        mark = stamp(cutoff)
+        doomed = list(self._sort_keys(tenant, before=mark))
+        table = self.store.table(tables.AUDIT)
+        for start in range(0, len(doomed), 25):
+            requests: list[dict[str, Any]] = [{"DeleteRequest": {"Key": {"pk": {"S": tenant}, "sk": {"S": key}}}}
+                                              for key in doomed[start:start + 25]]
+            for _ in range(5):
+                unprocessed = self.store.client.batch_write_item(RequestItems={table: requests}).get(
+                    "UnprocessedItems", {}).get(table, [])
+                if not unprocessed:
+                    break
+                requests = unprocessed
+        return len(doomed)
+
+    def _sort_keys(self, tenant: str, before: str | None = None) -> Iterator[str]:
+        condition = "pk = :t" + (" AND sk < :before" if before else "")
+        values: dict[str, Any] = {":t": {"S": tenant}, **({":before": {"S": before}} if before else {})}
+        start: dict[str, Any] | None = None
+        while True:
+            options: dict[str, Any] = {"ExclusiveStartKey": start} if start else {}
+            page = self.store.client.query(TableName=self.store.table(tables.AUDIT), KeyConditionExpression=condition,
+                                           ExpressionAttributeValues=values, ProjectionExpression="sk", **options)
+            for item in page["Items"]:
+                yield item["sk"]["S"]
+            start = page.get("LastEvaluatedKey")
+            if not start:
+                return
+
+    def _query(self, tenant: str, newest_first: bool, condition: str = "pk = :t",
+               values: dict[str, Any] | None = None) -> Iterator[Entry]:
+        start: dict[str, Any] | None = None
+        while True:
+            options: dict[str, Any] = {"ExclusiveStartKey": start} if start else {}
+            page = self.store.client.query(TableName=self.store.table(tables.AUDIT), KeyConditionExpression=condition,
+                                           ExpressionAttributeValues={":t": {"S": tenant}, **(values or {})},
+                                           ScanIndexForward=not newest_first, **options)
+            for i in page["Items"]:
+                yield Entry(tenant, i["at"]["S"], i["admin"]["S"], i["action"]["S"], i["target"]["S"],
+                            json.loads(i["details"]["S"]))
+            start = page.get("LastEvaluatedKey")
+            if not start:
+                return
+
+
+def stamp(moment: datetime) -> str:
+    """A time as entries store it (and as their sort keys begin)."""
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")

@@ -36,6 +36,12 @@ class MuseumSettings:
             self._cache[museum.key] = (now, current)
         return current
 
+    def forget(self, tenant: str) -> None:
+        """Drops the museum's cached settings, so this task reads an admin's change at once (others within the cache's
+        lifetime)."""
+        with self._lock:
+            self._cache.pop(tenant, None)
+
     def _read(self, museum: Museum) -> StartingSettings:
         overrides = self.store.settings_overrides(museum.key)
         if not overrides:

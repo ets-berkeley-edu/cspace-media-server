@@ -7,9 +7,13 @@ logged. Each museum the admin signs in to has its own session and cookie. Every 
 must carry X-Serena-Admin: 1, which a cross-site form can't send; the cookies are also SameSite=Strict."""
 from __future__ import annotations
 
+import csv
+import io
+import json
 import logging
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -46,6 +50,16 @@ class AdminServices:
     sessions: Sessions
     audit: Audit
     http: HttpFactory  # a client for the museum's CollectionSpace, to read an admin's roles at sign-in
+
+
+DAYS_SHOWN = 30  # the Refreshes, Alerts and Audit log pages show the last 30 days (D93)
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value: str) -> str:
+    """A cell a spreadsheet won't run as a formula (CSV injection): an apostrophe before a leading =, +, -, @, tab or
+    CR."""
+    return f"'{value}" if value.startswith(FORMULA_START) else value
 
 
 def cookie_name(settings: Settings, tenant: str) -> str:
@@ -163,9 +177,27 @@ def create_router() -> APIRouter:
         return {"museum": session.tenant, "sessions_ended": ended}
 
     @router.get("/museums/{tenant}/audit")
-    def audit(session: SignedIn, s: Services, before: str | None = None, limit: int = 100) -> dict[str, Any]:
-        entries = s.audit.recent(session.tenant, max(1, min(limit, 500)), before)
-        return {"museum": session.tenant, "entries": [asdict(e) for e in entries]}
+    def audit(session: SignedIn, s: Services) -> dict[str, Any]:
+        """The last 30 days' entries, newest first; the app sorts and pages them (decided October 12, 2026, D91,
+        D93). The CSV export has the rest."""
+        entries = s.audit.since(session.tenant, s.audit.clock() - timedelta(days=DAYS_SHOWN))
+        return {"museum": session.tenant, "days": DAYS_SHOWN, "entries": [asdict(e) for e in entries]}
+
+    @router.get("/museums/{tenant}/audit/export.csv")
+    def audit_export(session: SignedIn, s: Services) -> Response:
+        """Every entry the museum still keeps, oldest first, as CSV (D96). The export is audited too."""
+        out = io.StringIO()
+        writer = csv.writer(out, lineterminator="\r\n")
+        writer.writerow(["time (UTC)", "admin", "action", "target", "details"])
+        rows = 0
+        for entry in s.audit.everything(session.tenant):
+            writer.writerow([csv_cell(value) for value in (
+                entry.at, entry.admin, entry.action, entry.target, json.dumps(entry.details, sort_keys=True))])
+            rows += 1
+        s.audit.record(session.tenant, session.user, Action.AUDIT_EXPORT, details={"entries": rows})
+        day = s.audit.clock().astimezone(UTC).date().isoformat()
+        return Response(out.getvalue(), media_type="text/csv; charset=utf-8", headers={
+            "Content-Disposition": f'attachment; filename="serena-audit-{session.tenant}-{day}.csv"'})
 
     @router.get("/museums/{tenant}/etl-api.json")
     def etl_api_document(session: SignedIn) -> Response:

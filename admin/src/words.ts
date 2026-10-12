@@ -10,6 +10,14 @@ export const STATES: Record<string, string> = {
   abandoned: 'Abandoned'
 }
 
+/** How the audit retention's choices read (D97). */
+export const RETENTION_LABELS: Record<number, string> = {
+  90: '90 days', 183: '6 months', 365: '12 months', 548: '18 months', 730: '24 months', 1095: '36 months'
+}
+
+/** The page sizes the Refreshes, Alerts and Audit log tables offer; 25 to start (D92). */
+export const PAGE_SIZES = [10, 25, 50, 100].map(n => ({value: n, title: String(n)}))
+
 export function stateOf(state: string): string {
   return STATES[state] || state
 }

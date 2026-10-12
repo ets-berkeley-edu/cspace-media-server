@@ -209,11 +209,19 @@ class Refreshes:
                                   Limit=1)["Items"]
         return _from_item(items[0]) if items else None
 
-    def recent(self, tenant: str, limit: int) -> list[Refresh]:
-        """The museum's newest refreshes, newest first (the admin app's Refreshes page)."""
-        items = self.client.query(TableName=self.table, KeyConditionExpression="pk = :pk", ScanIndexForward=False,
-                                  ExpressionAttributeValues={":pk": {"S": tenant}}, Limit=limit)["Items"]
-        return [_from_item(item) for item in items]
+    def since(self, tenant: str, refresh_date: str) -> list[Refresh]:
+        """The museum's refreshes from `refresh_date` on, newest first (the admin app's Refreshes page, D93)."""
+        found: list[Refresh] = []
+        start: dict[str, Any] | None = None
+        while True:
+            options: dict[str, Any] = {"ExclusiveStartKey": start} if start else {}
+            page = self.client.query(TableName=self.table, KeyConditionExpression="pk = :pk AND sk >= :since",
+                                     ScanIndexForward=False, **options,
+                                     ExpressionAttributeValues={":pk": {"S": tenant}, ":since": {"S": refresh_date}})
+            found += [_from_item(item) for item in page["Items"]]
+            start = page.get("LastEvaluatedKey")
+            if not start:
+                return found
 
     def start(self, tenant: str, closing_reason: str | None = None) -> tuple[Refresh, bool]:
         """The museum's open refresh for today's refresh date, or a new one. Returns (refresh, created). Closes an

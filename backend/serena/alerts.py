@@ -26,6 +26,7 @@ class Kind(StrEnum):
     ABANDONED = "abandoned"
     NOT_UPDATED = "not_updated"  # no servability update in 24 hours
     THRESHOLD_OVERRIDDEN = "threshold_overridden"  # an admin overrode the delta threshold for a refresh (D62, D83)
+    SETTING_CHANGED = "setting_changed"  # an admin changed the delta threshold or the audit retention (D89, D97)
 
 
 TITLES = {
@@ -35,6 +36,7 @@ TITLES = {
     Kind.ABANDONED: "A refresh was abandoned",
     Kind.NOT_UPDATED: "Serena hasn't had a servability update in 24 hours",
     Kind.THRESHOLD_OVERRIDDEN: "An admin overrode the delta threshold",
+    Kind.SETTING_CHANGED: "An admin changed a setting",
 }
 
 

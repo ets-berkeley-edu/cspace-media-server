@@ -11,7 +11,7 @@
     </p>
     <p v-else-if="status" class="mb-2">No refreshes yet.</p>
     <p class="mb-6">
-      Settings, takedowns and the unserved-requests pages arrive in the next pull requests.
+      Takedowns and the unserved-requests pages arrive in the next pull requests.
     </p>
     <v-btn
       id="sign-out-all"
