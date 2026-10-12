@@ -236,11 +236,14 @@ raises its own alert on the watchdog's next pass. The banner checks for new aler
 minute, so an alert appears within a minute of being raised. The banner disappears only once every alert in it is
 acknowledged.
 
-- [ ] In a terminal: `./serena etl pahma`. Expect `updated`. In the app, open "Refreshes": expect that refresh, `Updated`, with
-  its row count.
-- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed`. In the app, open "Refreshes", then the refresh:
-  expect "Servable list check failed", the problem (the delta as a percentage of rows, against the 5% threshold), and an
-  orange button, "Override the delta threshold".
+- [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-1: updated`, one servable list check warning
+  (PAHMA's first servability update, so the delta threshold doesn't apply), and the counts: `servable list: 21 rows`
+  (the 20 synthetic rows plus PAHMA's restricted-image Blob) and `servability update: 21 written, 0 deleted, 0
+  unchanged`. In the app, open "Refreshes": expect that refresh, `Updated`, with 21 in the Rows column.
+- [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed` and `servable list: 4 rows; 0 added, 17
+  removed, 0 changed (80.95% of the last servability update's 21 rows)`. In the app, open "Refreshes", then the
+  refresh: expect "Servable list check failed", the problem (80.95% of the rows would change; the threshold is 5%), and
+  an orange button, "Override the delta threshold".
 - [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", is greyed
   out until you type a reason. Type one and click it. Expect:
   - the banner, with "An admin overrode the delta threshold" (and, within a few minutes, "A servable list check failed");

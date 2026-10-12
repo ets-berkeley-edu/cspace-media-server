@@ -116,6 +116,19 @@ def test_a_day_with_different_rows_trips_the_threshold(stack: Any) -> None:
     assert fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)["state"] == "updated"
 
 
+def test_the_counts_are_printed(stack: Any) -> None:
+    """./serena etl prints the rows and counts the admin app shows, so a check needs no browser."""
+    serena, cspace, worker, token = stack
+    tick = lambda seconds: worker.tick()  # noqa: E731
+    first = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), poll=0, wait=tick)
+    assert fake_etl.count_lines(first) == ["  servable list: 21 rows",
+                                           "  servability update: 21 written, 0 deleted, 0 unchanged"]
+    smaller = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), count=3, poll=0, wait=tick)
+    assert fake_etl.count_lines(smaller) == [
+        "  servable list: 4 rows; 0 added, 17 removed, 0 changed (80.95% of the last servability update's 21 rows)"]
+    assert fake_etl.count_lines({"refresh_id": None, "state": None, "check": None, "update": None}) == []
+
+
 def test_the_restricted_image_blob_is_listed_without_a_media_csid() -> None:
     listed = fake_etl.rows("pahma", 2)
     assert listed[-1][0] == "59a733dd-d641-4e1a-8552" and listed[-1][1] == ""

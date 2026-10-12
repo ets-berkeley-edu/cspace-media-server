@@ -118,6 +118,24 @@ def daily_refresh(serena: httpx.Client, cspace: httpx.Client, tenant: str, token
             "update": refresh.get("update"), "failed": failed, "samples": samples}
 
 
+def count_lines(summary: dict[str, Any]) -> list[str]:
+    """The refresh's counts, as the admin app shows them: the servable list's rows (and, after an earlier servability
+    update, what changed), then the servability update's counts."""
+    lines = []
+    check = summary.get("check") or {}
+    if check:
+        line = f"  servable list: {check['rows']} rows"
+        if check.get("previous_rows") is not None:
+            line += (f"; {check['added']} added, {check['removed']} removed, {check['changed']} changed "
+                     f"({check['delta_percent']}% of the last servability update's {check['previous_rows']} rows)")
+        lines.append(line)
+    update = summary.get("update")
+    if update:
+        lines.append(f"  servability update: {update['written']} written, {update['deleted']} deleted, "
+                     f"{update['unchanged']} unchanged")
+    return lines
+
+
 def threshold_failed(summary: dict[str, Any]) -> bool:
     errors = (summary.get("check") or {}).get("errors", [])
     return any("threshold" in problem.get("problem", "") for problem in errors)
@@ -170,6 +188,8 @@ def main() -> None:
               "--file-only > <file>, then \"Start a refresh\" in the admin app.")
         return
     print(f"{summary['refresh_id']}: {summary['state']}")
+    for line in count_lines(summary):
+        print(line)
     for problem in (summary.get("check") or {}).get("errors", []):
         print(f"  servable list check: {problem['problem']}")
     for warning in (summary.get("check") or {}).get("warnings", []):
