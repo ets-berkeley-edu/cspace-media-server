@@ -265,8 +265,10 @@ acknowledged.
     its check's warnings saying the delta threshold was skipped.
 - [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"
   page with your name and the time.
-- [ ] In a terminal: `./serena etl pahma`. Expect `check_failed` again (20 rows after 3). Leave it: the admin refresh
-  below repairs it.
+- [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-3: check_failed` and `servable list: 21 rows; 17 added,
+  0 removed, 0 changed (425.0% of the last servability update's 4 rows)`: after the override, Serena serves the
+  3-row list (4 rows with the restricted-image Blob), so the default 20 rows are far over the delta threshold. This is
+  on purpose: leave the refresh `check_failed` (open), and the admin refresh below repairs it.
 - [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv` (the stand-in for running
   the servable list script on the ETL server). In the app, open "Start a refresh". Choose the file (in the Mac
   file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and press Return). The refresh date starts as
