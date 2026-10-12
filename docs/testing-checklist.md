@@ -246,7 +246,8 @@ acknowledged.
   an orange button, "Override the delta threshold".
 - [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", is greyed
   out until you type a reason. Type one and click it. Expect:
-  - the banner, with "An admin overrode the delta threshold" (and, within a few minutes, "A servable list check failed");
+  - the banner, with "An admin overrode the delta threshold". (If the watchdog's 5-minute pass ran while the refresh was
+    `check_failed`, the banner also has "A servable list check failed"; it stays until acknowledged.)
   - after reloading the page, the same refresh `Updated`, with no orange button, its reasons naming the override and
     its check's warnings saying the delta threshold was skipped.
 - [ ] Acknowledge each alert in the banner. Expect the banner gone once none is left, and the alerts on the "Alerts"
