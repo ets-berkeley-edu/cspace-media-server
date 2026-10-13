@@ -298,6 +298,8 @@
   const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: ""};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  // Text typed into the mockup never carries markup: it is shown on the page in many places.
+  const typed = el => el.value.replace(/[&<>"'`]/g, "");
   const name = () => MUSEUMS[S.museum];
 
   // Pacific time, in words; UTC in the tooltip.
@@ -940,7 +942,7 @@
   function bind() {
     document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = b.dataset.go; S.menu = false; render(); });
     const lf = $("#loginForm");
-    if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.museum = $("#loginMuseum").value; S.user = $("#loginUser").value || "admin"; S.lookup = null; render(); };
+    if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.museum = $("#loginMuseum").value; S.user = typed($("#loginUser")) || "admin"; S.lookup = null; render(); };
     const mb = $("#museumBtn"); if (mb) mb.onclick = () => { S.menu = !S.menu; render(); };
     document.querySelectorAll("[data-museum]").forEach(b => b.onclick = () => { S.museum = b.dataset.museum; S.menu = false; S.lookup = null; S.reason = ""; render(); });
     const so = $("#signOut"); if (so) so.onclick = () => { S.signedIn = false; S.menu = false; render(); };
@@ -966,7 +968,7 @@
     document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = b.dataset.layout; render(); });
     document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +b.dataset.blob; render(); });
     const lk = $("#lookupForm");
-    if (lk) lk.onsubmit = e => { e.preventDefault(); const q = $("#lookupInput").value.trim(); if (q) openLookup(q); };
+    if (lk) lk.onsubmit = e => { e.preventDefault(); const q = typed($("#lookupInput")).trim(); if (q) openLookup(q); };
     document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = b.dataset.copy; Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { b.textContent = "Copied"; }, () => { b.textContent = "Select it"; }); });
     const tb = $("#recallBtn"); if (tb) tb.onclick = () => { recallForm(); bindDialog(); };
     document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {
@@ -974,7 +976,7 @@
       dialog("Release a recall", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the recall only if CollectionSpace is right and the file should be served again.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
         `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="relConfirm" disabled>Release</button>`);
       bindDialog(() => {
-        const why = $("#relReason").value.trim();
+        const why = typed($("#relReason")).trim();
         t.r.recall.ended = {at: NOW, by: S.user, how: "Released", why};
         AUDIT.unshift({at: NOW, admin: S.user, action: "recall release", target: t.media, details: `Kept by ${t.kept.refresh} · Reason: ${why}`});
         ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin released a recall", about: t.media, msg: `${S.user} released the recall of Media record ${t.media}, which refresh ${t.kept.refresh} kept. Reason: ${why}.`, ack: null});
@@ -1034,15 +1036,15 @@
   function bindDialog(onConfirm) {
     document.querySelectorAll("#dlg [data-close]").forEach(b => b.onclick = close);
     const s = $("#tdSummary"); if (s) s.onclick = () => {
-      const tokens = $("#tdBox").value.split(/[\s,]+/).filter(Boolean);
+      const tokens = typed($("#tdBox")).split(/[\s,]+/).filter(Boolean);
       if (tokens.length > 12) { $("#tdErr").innerHTML = '<div class="err">More than 12 CSIDs: use a text file instead.</div>'; return; }
-      S.recallText = $("#tdBox").value; recallSummary(tokens); bindDialog();
+      S.recallText = typed($("#tdBox")); recallSummary(tokens); bindDialog();
     };
     const back = $("#tdBack"); if (back) back.onclick = () => { recallForm(); if (S.recallText !== undefined) $("#tdBox").value = S.recallText; bindDialog(); };
     const reason = $("#tdReason"), confirm = $("#tdConfirm");
     if (reason) reason.oninput = () => { confirm.disabled = !reason.value.trim() || !S.pendingRecall.length; };
     if (confirm) confirm.onclick = () => {
-      const why = reason.value.trim();
+      const why = typed(reason).trim();
       S.pendingRecall.forEach(r => {
         r.recall = {by: S.user, at: NOW, reason: why};
         AUDIT.unshift({at: NOW, admin: S.user, action: "recall", target: r.media, details: `Blob ${r.blobs.length ? r.blobs[0].blob : r.cs.blob} · Reason: ${why}`});
