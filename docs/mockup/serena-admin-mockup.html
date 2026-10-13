@@ -229,6 +229,9 @@
   .mini-checks .skip { opacity: 0.5; }
   .mini-checks .skip .dot { background: var(--bg-neutral); color: var(--text-neutral); }
   .answer { min-width: 0; }
+  table.compare th[scope=row] { background: none; color: var(--text-primary); width: 150px; white-space: normal; }
+  table.compare tr.diff td, table.compare tr.diff th { background: var(--bg-warning); }
+  .cs-down { border: 1px dashed var(--border-strong); border-radius: 8px; padding: 10px 12px; color: var(--text-secondary); font-size: 13px; }
   .answer-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; border-radius: 10px; padding: 12px 14px; }
   .answer-head.served { background: var(--bg-success); color: var(--text-success); }
   .answer-head.not { background: var(--bg-danger); color: var(--text-danger); }
@@ -261,6 +264,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no stored copy, the preview is CollectionSpace's thumbnail, not stored. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (unpublished since) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
       <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the stored copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
       <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
@@ -276,7 +280,7 @@
 <script>
 (() => {
   const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
-  const S = {layout: "A", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
+  const S = {layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   const name = () => MUSEUMS[S.museum];
@@ -380,6 +384,38 @@
     refused: {label: "A path Serena refuses", input: "/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/derivatives/Huge/content",
       refused: {head: "Not served: not a size PAHMA serves", why: "“Huge” isn't one of PAHMA's sizes: Thumbnail, Small, Medium, FullHD and OriginalJpeg.", next: "No CSID was looked up."}},
   };
+
+  // What CollectionSpace says now about each example's Media record, for the Inspector's comparison. Serena reads only
+  // the Media record (exists or soft-deleted, its Blob, when it changed, and the Media fields the ETL reads); the
+  // ETL's rules decide what's public, partly from the Object record, which Serena doesn't show.
+  const PAHMA_FIELDS = v => [["Publish to (Media)", v]];
+  LOOKUPS.served.blobs[0].cs = {state: "exists", blob: "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", updated: "2026-09-30T17:12:00Z", fields: PAHMA_FIELDS("All"),
+    next: "Nothing has changed in CollectionSpace since the last refresh."};
+  LOOKUPS.recalled.blobs[0].cs = {state: "exists", blob: BLOB, updated: "2026-10-13T06:20:00Z", fields: PAHMA_FIELDS("None"), fieldsChanged: true,
+    next: "Staff unpublished the Media record after the last refresh. If the next refresh (on a later day) leaves the file out, it ends the recall."};
+  LOOKUPS.notlisted.blobs[0].cs = {state: "exists", blob: "3e9a1b77-52d0-4c8f-a1e6-9f0b2d4c6e81", updated: "2026-08-02T21:40:00Z", fields: PAHMA_FIELDS("None"), media: "7c1d9e20-3b4a-4f5e-8a6b-9c0d1e2f3a4b",
+    next: "CollectionSpace has this Blob on a Media record that isn't published, which is why it's not in the servable list."};
+  LOOKUPS.restricted.blobs[0].cs = {state: "exists", blob: "7d4c2a10-9b8e-4f6d-a3c2-1e0f9d8c7b6a", updated: "2026-10-01T16:00:00Z", fields: [["Access code override (document)", "Glimmer readers only"]],
+    next: "Nothing has changed in CollectionSpace since the last refresh."};
+  LOOKUPS.twoblobs.blobs[0].cs = {state: "exists", blob: "aa11bb22-cc33-4d44-9e55-ff6677889900", updated: "2026-10-11T22:05:00Z", fields: PAHMA_FIELDS("All"),
+    next: "This is the Media record's current image."};
+  LOOKUPS.twoblobs.blobs[1].cs = {state: "exists", blob: "aa11bb22-cc33-4d44-9e55-ff6677889900", updated: "2026-10-11T22:05:00Z", fields: PAHMA_FIELDS("All"),
+    next: "The Media record now points to its new image. The next refresh drops this old Blob."};
+  const SIX = SIZES_PAHMA;
+  LOOKUPS.replacedtoday = {label: "Replaced in CollectionSpace today", input: "5e4d3c2b-1a09-4f8e-9d7c-6b5a4f3e2d1c",
+    blobs: [{blob: "5e4d3c2b-1a09-4f8e-9d7c-6b5a4f3e2d1c", media: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", kind: "image", access: "public",
+      verdict: {tone: "served", head: "Served", why: "Every check passes for every size.", next: "Sizes with a stored copy serve the old image; any other size is fetched from the Media record, which now returns the new image."},
+      checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Recall", "None"]],
+      sizes: SIX.map(sz => ({size: sz, served: true, stored: sz === "Medium" ? "JPEG · 180 KB · fetched Oct 10, 2:15 PM PDT" : null})),
+      cs: {state: "exists", blob: "61f0e9d8-c7b6-4a59-8e4d-3c2b1a0f9e8d", updated: "2026-10-13T16:45:00Z", fields: PAHMA_FIELDS("All"),
+        next: "Staff replaced the image this morning. The next refresh lists the new Blob and drops this one; until then, the stored Medium copy is the old image."}}]};
+  LOOKUPS.deletedtoday = {label: "Deleted in CollectionSpace today", input: "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091",
+    blobs: [{blob: "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091", media: "8091a2b3-c4d5-4e6f-8a7b-9c0d1e2f3a4b", kind: "image", access: "public",
+      verdict: {tone: "served", head: "Served (stored sizes only)", why: "Serena still lists it, so its stored Thumbnail is served. A size without a stored copy would be refused: the Media record is deleted in CollectionSpace.", next: "The next refresh drops it. To stop serving it now, recall it.", link: "recalls"},
+      checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Recall", "None"]],
+      sizes: SIX.map(sz => sz === "Thumbnail" ? {size: sz, served: true, stored: "JPEG · 11 KB · fetched Oct 3, 9:20 AM PDT"} : {size: sz, served: false, reason: "media deleted (on a fetch)", stored: null}),
+      cs: {state: "deleted", blob: "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091", updated: "2026-10-13T15:02:00Z", fields: PAHMA_FIELDS("All"),
+        next: "Staff deleted the Media record this morning. The next refresh drops this Blob."}}]};
 
   // ---- rendering
   function render() {
@@ -516,7 +552,7 @@
     const r = S.lookup;
     const ex = Object.entries(LOOKUPS).filter(([, v]) => !v.museum || v.museum === S.museum);
     let out = `${title(`${esc(name())} Media look up`)}
-      <p class="lead">Why Serena serves a file or not. Paste a file's URL or path, a Blob CSID or a Media CSID. Serena answers from its own records; it never asks CollectionSpace.</p>
+      <p class="lead">Why Serena serves a file or not. Paste a file's URL or path, a Blob CSID or a Media CSID. Serena's answer comes from its own records; below it, layout C also shows what CollectionSpace says now, for comparison.</p>
       <form class="lookup-form" id="lookupForm" role="search"><input type="search" id="lookupInput" placeholder="URL, path, Blob CSID or Media CSID" value="${esc(r ? r.input : "")}" aria-label="URL, path, Blob CSID or Media CSID"><button class="primary" type="submit">Look up</button></form>
       <div class="examples">Examples: ${ex.map(([k, v]) => `<button type="button" data-example="${k}">${esc(v.label)}</button>`).join("")}${S.museum !== "cinefiles" ? '<span>(the restricted PDF is under Cinefiles)</span>' : ""}</div>`;
     out += `<div class="layout-switch" role="group" aria-label="Mockup only: layout to review"><span>Mockup only, layout to review:</span>${Object.entries(LAYOUTS).map(([k, v]) => `<button type="button" data-layout="${k}" aria-pressed="${S.layout === k}">${k}. ${v}</button>`).join("")}</div>`;
@@ -568,12 +604,16 @@
   function layoutInspector(b) {
     const v = b.verdict;
     const stored = b.sizes.find(s => s.stored);
+    const cs = b.cs, down = S.cspaceDown;
+    const preview = stored ? `${thumbSvg(5, b.kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"')}<span class="cap">Serena's stored ${esc(stored.size)}</span>`
+      : cs && !down && cs.state !== "gone" ? `${thumbSvg(9, b.kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"')}<span class="cap">CollectionSpace's thumbnail (not stored)</span>`
+      : `<span class="cap">${cs && down ? "No stored copy; CollectionSpace can't be reached" : "No preview"}</span>`;
     const facts = [["Blob", csidHtml(b.blob)], ["Media record", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'],
       ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>']];
     const checks = b.checks.map(([st, t, d]) => `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><span><strong>${esc(t)}</strong><span class="visually-hidden"> ${SAY[st]}</span><br><span class="secondary">${esc(d)}</span></span></li>`).join("");
     return `<div class="inspector">
       <aside class="facts" aria-label="The file">
-        <div class="preview">${stored ? thumbSvg(5, b.kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"') : ""}<span class="cap">${stored ? `Serena's stored ${esc(stored.size)}` : "No stored copy to show"}</span></div>
+        <div class="preview">${preview}</div>
         <dl>${facts.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl>
         <h4>Checks</h4><ul class="mini-checks">${checks}</ul>
       </aside>
@@ -582,7 +622,29 @@
         <p class="secondary" style="margin:6px 0 14px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
         <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td></tr>`).join("")}</tbody></table></div>
         ${b.note ? `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>` : ""}
+        ${compareHtml(b)}
       </div></div>`;
+  }
+
+  // Serena's records beside what CollectionSpace says now, for the Inspector.
+  function compareHtml(b) {
+    let out = `<h3>Serena and CollectionSpace</h3>`;
+    if (!b.cs) return out + `<p class="secondary">Nothing to compare: ${b.media ? "CollectionSpace wasn't asked." : "this file has no Media record (the museum's placeholder image is served from uploaded files)."}</p>`;
+    if (S.cspaceDown) return out + `<div class="cs-down">CollectionSpace can't be reached, so there's nothing to compare with. Serena's answer above doesn't depend on it.</div>`;
+    const cs = b.cs;
+    const csState = {exists: "Exists", deleted: "Soft-deleted", gone: "Not found"}[cs.state];
+    const csMedia = cs.media || b.media;
+    const rows = [
+      ["Media record", b.media ? `<span class="mono">${esc(short(b.media))}</span>` : "—", `${csState}${csMedia && csMedia !== b.media ? ` · <span class="mono">${esc(short(csMedia))}</span>` : ""}`, cs.state !== "exists" || (csMedia !== b.media && b.media)],
+      ["Blob", `<span class="mono">${esc(short(b.blob))}</span>`, `<span class="mono">${esc(short(cs.blob))}</span>`, cs.blob !== b.blob],
+      ["Access", b.access ? esc(b.access) : "not listed", cs.fields.map(([k, v]) => `${esc(k)}: <strong>${esc(v)}</strong>`).join("<br>"), !!cs.fieldsChanged],
+      ["As of", `Refresh ${S.museum}-2026-10-12-1 (made Oct 12, 3:01 AM PDT)`, `Last changed ${when(cs.updated)}`, Date.parse(cs.updated) > Date.parse("2026-10-12T10:01:00Z")],
+    ];
+    out += `<div class="tw"><table class="compare"><thead><tr><th></th><th>Serena (the last refresh)</th><th>CollectionSpace now</th></tr></thead><tbody>
+      ${rows.map(([k, a, c, diff]) => `<tr class="${diff ? "diff" : ""}"><th scope="row">${k}${diff ? ' <span class="pill t-warning">differs</span>' : ""}</th><td>${a}</td><td>${c}</td></tr>`).join("")}</tbody></table></div>
+      <p class="secondary" style="margin:8px 0 0"><strong>What the next refresh will do:</strong> ${esc(cs.next)}</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">The ETL decides what's public from its own rules, partly from the Object record (a sensitive Object, for example), which isn't shown here. These are the Media record's fields only.</p>`;
+    return out;
   }
 
   function verdictHtml(v) {
