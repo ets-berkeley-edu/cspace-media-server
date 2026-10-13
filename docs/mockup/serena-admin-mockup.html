@@ -213,7 +213,12 @@
   /* C. Inspector */
   .inspector { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
   @media (max-width: 900px) { .inspector { grid-template-columns: 1fr; } }
+  .inspect-side { display: grid; gap: 12px; min-width: 0; }
   .facts { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface-1); min-width: 0; }
+  .facts .panel-title { margin: 0 0 8px; color: var(--text-primary); }
+  .facts details.more { margin-top: 10px; }
+  .facts details.more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-accent); width: fit-content; }
+  .facts details.more[open] summary { margin-bottom: 4px; }
   .facts .preview { aspect-ratio: 4 / 3; max-width: 100%; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; position: relative; display: grid; place-items: center; }
   .facts .preview svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .facts .preview .cap { position: relative; font-size: 12px; background: var(--surface-2); color: var(--text-secondary); padding: 2px 8px; border-radius: 10px; align-self: end; margin-bottom: 8px; }
@@ -264,6 +269,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's stored copy; CollectionSpace's Medium, not stored) and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
       <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no stored copy, the preview is CollectionSpace's thumbnail, not stored. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (unpublished since) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
       <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the stored copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
       <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
@@ -280,7 +286,7 @@
 <script>
 (() => {
   const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
-  const S = {layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
+  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   const name = () => MUSEUMS[S.museum];
@@ -605,17 +611,38 @@
     const v = b.verdict;
     const stored = b.sizes.find(s => s.stored);
     const cs = b.cs, down = S.cspaceDown;
-    const preview = stored ? `${thumbSvg(5, b.kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"')}<span class="cap">Serena's stored ${esc(stored.size)}</span>`
-      : cs && !down && cs.state !== "gone" ? `${thumbSvg(9, b.kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"')}<span class="cap">CollectionSpace's thumbnail (not stored)</span>`
-      : `<span class="cap">${cs && down ? "No stored copy; CollectionSpace can't be reached" : "No preview"}</span>`;
+    const pic = seed => thumbSvg(seed, b.kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"');
+    // The same image in both panels unless CollectionSpace's Media record now has another Blob.
+    const csSeed = cs && cs.blob !== b.blob ? 11 : 5;
+    const serenaPreview = stored ? `${pic(5)}<span class="cap">Serena's stored ${esc(stored.size)}</span>`
+      : `<span class="cap">No copy stored in Serena</span>`;
+    const csPreview = !b.media ? `<span class="cap">No Media record</span>`
+      : !cs ? `<span class="cap">Not asked</span>`
+      : down ? `<span class="cap">CollectionSpace can't be reached</span>`
+      : cs.state === "gone" ? `<span class="cap">No such Media record</span>`
+      : `${pic(csSeed)}<span class="cap">CollectionSpace's Medium${cs.state === "deleted" ? " (soft-deleted)" : ""}, not stored</span>`;
+    const csFacts = cs && !down ? [["State", {exists: "Exists", deleted: '<span class="pill t-warning">Soft-deleted</span>', gone: "Not found"}[cs.state]],
+      ["Blob", csidHtml(cs.blob) + (cs.blob !== b.blob ? ' <span class="pill t-warning">differs</span>' : "")],
+      ...cs.fields.map(([k, val]) => [esc(k), esc(val)]), ["Last changed", when(cs.updated)]] : [];
     const facts = [["Blob", csidHtml(b.blob)], ["Media record", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'],
       ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>']];
     const checks = b.checks.map(([st, t, d]) => `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><span><strong>${esc(t)}</strong><span class="visually-hidden"> ${SAY[st]}</span><br><span class="secondary">${esc(d)}</span></span></li>`).join("");
     return `<div class="inspector">
-      <aside class="facts" aria-label="The file">
-        <div class="preview">${preview}</div>
-        <dl>${facts.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl>
-        <h4>Checks</h4><ul class="mini-checks">${checks}</ul>
+      <aside class="inspect-side" aria-label="The file in Serena and in CollectionSpace">
+        <section class="facts" aria-label="In Serena">
+          <h4 class="panel-title">In Serena</h4>
+          <div class="preview">${serenaPreview}</div>
+          <details class="more" data-details="serena" ${S.open.serena ? "open" : ""}><summary>Details</summary>
+            <dl>${facts.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl>
+            <h4>Checks</h4><ul class="mini-checks">${checks}</ul>
+          </details>
+        </section>
+        <section class="facts" aria-label="In CollectionSpace now">
+          <h4 class="panel-title">In CollectionSpace now</h4>
+          <div class="preview">${csPreview}</div>
+          ${csFacts.length ? `<details class="more" data-details="cs" ${S.open.cs ? "open" : ""}><summary>Details</summary>
+            <dl>${csFacts.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl></details>` : ""}
+        </section>
       </aside>
       <div class="answer">
         <div class="answer-head ${v.tone}"><span class="mark" aria-hidden="true">${{served: "✓", not: "✕", depends: "!"}[v.tone]}</span><div><div class="head">${esc(v.head)}</div><div>${v.why}</div></div></div>
@@ -726,6 +753,7 @@
     document.querySelectorAll("[data-pagego]").forEach(b => b.onclick = () => { const [id, to] = b.dataset.pagego.split(":"); S.pages[id].page = +to; render(); });
     document.querySelectorAll("[data-ack]").forEach(b => b.onclick = () => { ALERTS[+b.dataset.ack].ack = {by: S.user, at: new Date().toISOString()}; render(); });
     document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => { S.lookup = LOOKUPS[b.dataset.example]; S.blobIndex = 0; render(); });
+    document.querySelectorAll("details[data-details]").forEach(d => d.ontoggle = () => { S.open[d.dataset.details] = d.open; });
     document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = b.dataset.layout; render(); });
     document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +b.dataset.blob; render(); });
     const lk = $("#lookupForm");
