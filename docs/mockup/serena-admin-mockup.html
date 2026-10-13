@@ -141,7 +141,7 @@
   .login h2 { margin: 0 0 4px; font-size: 20px; }
   .login button.primary { width: 100%; height: 36px; }
 
-  /* Look up a file */
+  /* Media look up */
   .lookup-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; margin-bottom: 6px; }
   .lookup-form input { flex: 1 1 320px; min-width: 0; height: 38px; font-size: 14px; }
   .lookup-form button { height: 38px; }
@@ -182,7 +182,7 @@
 <div class="page">
   <span class="status-pill">UI mockup · sample data only</span>
   <h1 class="mock-title">Serena admin app</h1>
-  <p class="subtitle">Every page of Serena's admin app, with made-up refreshes, alerts, requests and takedowns, for reviewing layout and wording. Nothing here talks to Serena, CollectionSpace or AWS. Start with <strong>Look up a file</strong>, the page being redesigned.</p>
+  <p class="subtitle">Every page of Serena's admin app, with made-up refreshes, alerts, requests and takedowns, for reviewing layout and wording. Nothing here talks to Serena, CollectionSpace or AWS. Start with <strong>Media look up</strong>, the page being redesigned.</p>
 
   <details class="mock-settings" id="mockSettings" open>
     <summary>Mockup settings</summary>
@@ -199,9 +199,9 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
-      <li><strong>Look up a file (redesigned):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
+      <li><strong>Media look up (redesigned):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the taken-down image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
-      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Refreshes, Start a refresh, Alerts), Files (Requests, Look up a file, Takedowns), Admin (Settings, Audit log, API documentation).</li>
+      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Refreshes, Start a refresh, Alerts), Files (Requests, Media look up, Takedowns), Admin (Settings, Audit log, API documentation).</li>
       <li><strong>Takedowns:</strong> "Take down" opens the form; "Show what would be taken down" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a takedown a refresh kept.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
     </ul>
@@ -262,7 +262,7 @@
     {at: "2026-10-10T15:20:00Z", admin: "admin", action: "alert acknowledge", target: "Check failed · 2026-10-10", details: ""},
   ];
 
-  // Look up a file: one example per case.
+  // Media look up: one example per case.
   const BLOB = "855049af-600c-5140-b50a-b429566c8278", MEDIA = "20349bfa-cad6-5f47-9acd-dcd34e3f0b98";
   const SIZES_PAHMA = ["original", "Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg"];
   const LOOKUPS = {
@@ -326,7 +326,7 @@
   }
 
   const NAV = [["Daily refresh", [["overview", "Overview"], ["refreshes", "Refreshes"], ["start", "Start a refresh"], ["alerts", "Alerts"]]],
-    ["Files", [["requests", "Requests"], ["lookup", "Look up a file"], ["takedowns", "Takedowns"]]],
+    ["Files", [["requests", "Requests"], ["lookup", "Media look up"], ["takedowns", "Takedowns"]]],
     ["Admin", [["settings", "Settings"], ["audit", "Audit log"], ["api", "API documentation"]]]];
 
   function frame() {
@@ -346,7 +346,7 @@
       <div class="card"><div class="label">Alerts waiting</div><div class="value num">${ALERTS.filter(a => !a.ack).length}</div><button class="link" data-go="alerts">Open alerts</button></div>
       <div class="card"><div class="label">Last 24 hours</div><div class="value num">48,210 served</div><div class="secondary num">1,904 unserved · <button class="link" data-go="requests">Requests</button></div></div>
       <div class="card"><div class="label">Active takedowns</div><div class="value num">${TAKEDOWNS.length}</div><div class="secondary">1 still public in CollectionSpace · <button class="link" data-go="takedowns">Takedowns</button></div></div></div>
-      <p class="secondary">What Serena served and couldn't serve is on the Requests page; "Look up a file" says why for any one file.</p>`,
+      <p class="secondary">What Serena served and couldn't serve is on the Requests page; "Media look up" says why for any one file.</p>`,
 
     refreshes: () => `${title(`${esc(name())} Refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it.</p>
       <div class="tw"><table><thead><tr><th>Refresh</th><th>Refresh date</th><th>State</th><th>Rows</th><th>Last change ▾</th></tr></thead><tbody>
@@ -388,11 +388,11 @@
     api: () => `${title(`${esc(name())} ETL API documentation`)}<p class="lead">The ETL API's description, generated from the code, read-only (Swagger UI in the app; not shown in the mockup).</p>`,
   };
 
-  // ---- Look up a file
+  // ---- Media look up
   function lookupPage() {
     const r = S.lookup;
     const ex = Object.entries(LOOKUPS).filter(([, v]) => !v.museum || v.museum === S.museum);
-    let out = `${title(`${esc(name())}: Look up a file`)}
+    let out = `${title(`${esc(name())} Media look up`)}
       <p class="lead">Why Serena serves a file or not. Paste a file's URL or path, a Blob CSID or a Media CSID. Serena answers from its own records; it never asks CollectionSpace.</p>
       <form class="lookup-form" id="lookupForm" role="search"><input type="search" id="lookupInput" placeholder="URL, path, Blob CSID or Media CSID" value="${esc(r ? r.input : "")}" aria-label="URL, path, Blob CSID or Media CSID"><button class="primary" type="submit">Look up</button></form>
       <div class="examples">Examples: ${ex.map(([k, v]) => `<button type="button" data-example="${k}">${esc(v.label)}</button>`).join("")}${S.museum !== "cinefiles" ? '<span>(the restricted PDF is under Cinefiles)</span>' : ""}</div>`;
