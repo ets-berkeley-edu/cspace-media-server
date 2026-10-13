@@ -512,7 +512,7 @@ where the table is read as a list, a sort key:
 | Table | Partition key | Sort key | Fields |
 | --- | --- | --- | --- |
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
-| Takedowns | `<tenant>#<media CSID>` | | the Blob CSID the Media record had when it was taken down; who, when, why; and, once a servability update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A takedown that ends is deleted; its history is in the audit log (see How a takedown ends) |
+| Takedowns | `<tenant>#<media CSID>` | | indexed by museum (`by_tenant`, for the Takedowns page and the servability update); the Blob CSID the Media record had when it was taken down; who, when, why; and, once a servability update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A takedown that ends is deleted; its history is in the audit log (see How a takedown ends) |
 | Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits and audit retention, over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its banner and alerts page |
@@ -790,7 +790,8 @@ the plan, D127); until then, its requests are logged as `placeholder_not_uploade
   Blob CSID), then `GET blobs/<csid>` and a search for the Media record whose `blobCsid` is that CSID. A CSID neither
   knows, or one the table doesn't know while CollectionSpace can't be reached, is listed as not found and isn't taken
   down: Serena serves none of them today, and storing a Blob CSID as if it were a Media CSID would do nothing while
-  looking as if it worked (D117). The rest of the list goes ahead.
+  looking as if it worked (D117). Neither is the museum's placeholder image, which has no Media record. The rest of
+  the list goes ahead.
 - **The summary, before anything changes.** For each Media record: its Blob, kind, whether Serena serves it today,
   whether it's already taken down, and a thumbnail that opens to the full size (D129). Thumbnails and full-size views
   come only through the admin API, to signed-in admins, with `Cache-Control: no-store`, never through Serena's public
@@ -1064,7 +1065,7 @@ reachable only from campus networks.
   check, fetches and the takedown form's lookups and thumbnails); and run Logs Insights queries on its own log group
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Requests page (D110). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
-  delete takedowns (D119), read, put and delete audit entries (the takedown removals' entries, and the daily removal,
+  update and delete takedowns (D119), read, put and delete audit entries (the takedown removals' entries, and the daily removal,
   D98), read and put the servable lists in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
 - **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30
   days and encrypted with the KMS key, D110) and embedded metrics: requests, hits, misses, unserved
@@ -1104,7 +1105,8 @@ reachable only from campus networks.
   the AWS QA environment (decided October 10, 2026). The admin app runs on Vite's development server
   (http://localhost:5373/admin/), forwarding `/admin/v1` to the app. The simulator (`backend/fakecspace`) answers the three
   Media-service calls above with synthetic files (PNG images, a PDF and an X3D model, made in code) and HTTP Basic auth
-  with a synthetic account. Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a
+  with a synthetic account, and the takedown form's two lookups: `blobs/<csid>` and the search for the Media record
+  whose `blobCsid` is a given Blob CSID (D130). Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a
   record, remove its file, inject failures, and list the calls it received. It also answers `accounts/0/accountroles`
   for three synthetic admin accounts (`admin`, with the role in every museum; `pahma-admin`, in PAHMA only;
   `viewer`, in none; each password is its username), telling museums apart by host name (`pahma.fakecspace`, as each

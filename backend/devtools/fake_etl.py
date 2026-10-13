@@ -62,10 +62,10 @@ def tsv(listed: list[tuple[str, str, str, str]]) -> bytes:
 
 
 def add_to_simulator(cspace: httpx.Client, listed: list[tuple[str, str, str, str]]) -> None:
-    for _, media, kind, _ in listed:
+    for blob, media, kind, _ in listed:
         if not media:  # the placeholder image: served from an admin's upload, never fetched
             continue
-        cspace.post("/_fake/media", json={"csid": media, "kind": kind}).raise_for_status()
+        cspace.post("/_fake/media", json={"csid": media, "kind": kind, "blob": blob}).raise_for_status()
 
 
 def _call(response: httpx.Response) -> dict[str, Any]:

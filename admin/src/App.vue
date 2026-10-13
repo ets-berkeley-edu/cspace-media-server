@@ -37,6 +37,8 @@
         <v-list-item id="nav-refreshes" :to="{name: 'refreshes', params: {museum: current.museum}}" title="Refreshes" />
         <v-list-item id="nav-alerts" :to="{name: 'alerts', params: {museum: current.museum}}" title="Alerts" />
         <v-list-item id="nav-requests" :to="{name: 'requests', params: {museum: current.museum}}" title="Requests" />
+        <v-list-item id="nav-takedowns" :to="{name: 'takedowns', params: {museum: current.museum}}" title="Takedowns" />
+        <v-list-item id="nav-lookup" :to="{name: 'lookup', params: {museum: current.museum}}" title="Look up a file" />
         <v-list-item id="nav-settings" :to="{name: 'settings', params: {museum: current.museum}}" title="Settings" />
         <v-list-item id="nav-start-refresh" :to="{name: 'start-refresh', params: {museum: current.museum}}" title="Start a refresh" />
         <v-list-item id="nav-audit" :to="{name: 'audit', params: {museum: current.museum}}" title="Audit log" />

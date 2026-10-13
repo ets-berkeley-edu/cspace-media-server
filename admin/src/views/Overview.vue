@@ -11,7 +11,7 @@
     </p>
     <p v-else-if="status" class="mb-2">No refreshes yet.</p>
     <p class="mb-6">
-      Takedowns arrive in the next pull request. What Serena served and couldn't serve is on the Requests page.
+      What Serena served and couldn't serve is on the Requests page; "Look up a file" says why for any one file.
     </p>
     <v-btn
       id="sign-out-all"

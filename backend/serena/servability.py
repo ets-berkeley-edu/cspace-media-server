@@ -52,7 +52,7 @@ def decide(museum: Museum, request: BlobRequest, store: Store,
         return Decision(Reason.ORIGINAL_NOT_SERVED, record)
     if record.media_csid is not None:
         takedown = store.takedown(museum.key, record.media_csid)
-        if takedown is not None and takedown.active:
+        if takedown is not None:
             return Decision(Reason.TAKEN_DOWN, record)
     if request.blob_csid == museum.placeholder_blob_csid:
         # Served from the files an admin uploads (pull request 14 in the plan); none yet.

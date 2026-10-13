@@ -75,7 +75,7 @@ export interface Refresh extends RefreshSummary {
   file_name: string
   upload: {rows: number, bytes: number, sha256: string, uploaded_at: string} | null
   check: Check | null
-  update: {deleted: number, written: number, unchanged: number} | null
+  update: {deleted: number, written: number, unchanged: number, takedowns_removed?: number, takedowns_kept?: number} | null
   override: {at: string} | null // an admin overrode the delta threshold for this servable list (D83)
   actions: RefreshAction[]
 }
@@ -161,6 +161,72 @@ export interface RequestsReport {
   lines: RequestLine[]
 }
 
+/** A Media record a takedown would take down, and how Serena found it (D116). */
+export interface TakedownRecord {
+  media_csid: string
+  blob_csids: string[]
+  kind: string | null
+  served_today: boolean
+  taken_down: boolean
+  source: 'serena' | 'collectionspace'
+  entered: string[]
+}
+
+export interface TakedownSummary {
+  records: TakedownRecord[]
+  not_found: {csid: string, why: string, message: string}[]
+  taken_down?: string[]
+}
+
+export interface Takedown {
+  media_csid: string
+  blob_csids: string[]
+  by: string
+  at: string
+  reason: string
+  kept_by: string | null // the refresh that kept it: the same Blob is still public in CollectionSpace (D119)
+  kept_on: string | null
+}
+
+export interface EndedTakedown {
+  media_csid: string
+  at: string
+  by: string // an admin, or "refresh <refresh ID>"
+  action: 'takedown_removed' | 'takedown_release'
+  details: Record<string, unknown>
+}
+
+export interface TakedownsPage {
+  days: number
+  active: Takedown[]
+  ended: EndedTakedown[]
+  max_in_box: number
+  max_in_file: number
+}
+
+export interface LookupStep {
+  check: string
+  outcome: string
+  ok: boolean | null
+}
+
+export interface LookupItem {
+  blob_csid: string
+  media_csid: string | null
+  kind: string | null
+  access: string | null
+  steps: LookupStep[]
+  sizes: {size: string, served: boolean, reason: string | null, verdict: string,
+    stored: {fetched_at: string, size: number, content_type: string} | null}[]
+}
+
+export interface Lookup {
+  input: string
+  refused: string | null
+  refresh: {refresh_id: string, refresh_date: string} | null
+  items: LookupItem[]
+}
+
 /** A failed load's message, for the page to show. */
 export function problem(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Serena couldn\'t be reached. Reload the page to try again.'
@@ -176,6 +242,18 @@ export const api = {
   audit: (museum: string) => call<{days: number, entries: AuditEntry[]}>('GET', `/museums/${museum}/audit`),
   // Every entry the museum keeps, as CSV: a plain link, so the browser saves the file (D96).
   auditExportUrl: (museum: string) => `${PREFIX}/museums/${museum}/audit/export.csv`,
+  takedowns: (museum: string) => call<TakedownsPage>('GET', `/museums/${museum}/takedowns`),
+  takedownSummary: (museum: string, text: string) =>
+    call<TakedownSummary>('POST', `/museums/${museum}/takedowns/summary`, {text}),
+  takeDown: (museum: string, text: string, reason: string) =>
+    call<TakedownSummary>('POST', `/museums/${museum}/takedowns`, {text, reason}),
+  release: (museum: string, mediaCsid: string, reason: string) =>
+    call<{released: string}>('POST', `/museums/${museum}/takedowns/${encodeURIComponent(mediaCsid)}/release`, {reason}),
+  // A Media record's thumbnail or full-size view, through the admin API only, never cached (D129).
+  previewUrl: (museum: string, mediaCsid: string, size: 'thumbnail' | 'full' = 'thumbnail') =>
+    `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${size}`,
+  lookup: (museum: string, q: string) =>
+    call<Lookup>('GET', `/museums/${museum}/lookup?${new URLSearchParams({q})}`),
   requests: (museum: string, range: RequestRange) =>
     call<RequestsReport>('GET', `/museums/${museum}/requests?range=${range}`),
   // The lines matching the page's range and filters, as CSV: a plain link, so the browser saves the file (D113).

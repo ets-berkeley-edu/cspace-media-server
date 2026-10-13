@@ -6,9 +6,16 @@ Every call goes through the Media service, by the Media CSID from the servabilit
     GET /cspace-services/media/<media CSID>/blob/content                           the original file
     GET /cspace-services/media/<media CSID>/blob/derivatives/<derivative>/content   a derivative
 
+For the takedown form only (design: Takedowns, Taking down), to tell a Media CSID from a Blob CSID that Serena's
+servability table doesn't know, and to show a thumbnail of a file Serena hasn't stored:
+
+    GET /cspace-services/media/<csid>                                              a Media record, with its blobCsid
+    GET /cspace-services/blobs/<csid>                                              whether a Blob exists
+    GET /cspace-services/media?as=media_common:blobCsid="<csid>"                   the Media record of a Blob
+
 One pooled HTTP session per museum per task, HTTP Basic with the museum's read-only service account (its password
 read from Secrets Manager, never logged), timeouts, retries for transient failures only, and a cap on simultaneous
-calls per museum per task. A call never names a Blob CSID: the Media service returns the record's current file."""
+calls per museum per task. A fetch never names a Blob CSID: the Media service returns the record's current file."""
 from __future__ import annotations
 
 import logging
@@ -18,6 +25,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
+from urllib.parse import quote
 
 import httpx
 from defusedxml import ElementTree
@@ -114,6 +123,49 @@ class CSpaceClient:
             return MediaState.DELETED
         return MediaState.EXISTS
 
+    def media_blob(self, media_csid: str) -> tuple[MediaState, str | None]:
+        """For the takedown form: whether a Media record exists, and its Blob CSID (its blobCsid)."""
+        path = f"/media/{media_csid}"
+        with self.slots:
+            response = self._send(path, stream=False)
+        if response.status_code == 404:
+            return MediaState.GONE, None
+        if response.status_code != 200:
+            raise CSpaceError(f"GET {path} returned {response.status_code}", response.status_code)
+        root = _xml(response.content, path)
+        states = [el.text or "" for el in root.iter() if _local(el.tag) == "workflowState"]
+        blob = next((el.text.strip() for el in root.iter() if _local(el.tag) == "blobCsid" and el.text), None)
+        deleted = any("deleted" in state.lower() for state in states)
+        return (MediaState.DELETED if deleted else MediaState.EXISTS), blob or None
+
+    def blob_exists(self, blob_csid: str) -> bool:
+        path = f"/blobs/{blob_csid}"
+        with self.slots:
+            response = self._send(path, stream=False)
+        if response.status_code == 404:
+            return False
+        if response.status_code != 200:
+            raise CSpaceError(f"GET {path} returned {response.status_code}", response.status_code)
+        return True
+
+    def media_of_blob(self, blob_csid: str) -> str | None:
+        """The CSID of the Media record whose blobCsid is this Blob's, if any."""
+        query = quote(f'media_common:blobCsid="{blob_csid}"', safe="")
+        path = f"/media?as={query}&pgSz=2"
+        with self.slots:
+            response = self._send(path, stream=False)
+        if response.status_code != 200:
+            raise CSpaceError(f"GET /media (search by blobCsid) returned {response.status_code}",
+                              response.status_code)
+        root = _xml(response.content, "/media (search)")
+        for item in root.iter():
+            if _local(item.tag) == "list-item":
+                csid: str | None = next((el.text.strip() for el in item if _local(el.tag) == "csid" and el.text),
+                                        None)
+                if csid:
+                    return csid
+        return None
+
     @contextmanager
     def fetch(self, media_csid: str, derivative: str | None) -> Iterator[Fetched]:
         """The Media record's current file: the original (derivative None) or a derivative. Holds a slot while the
@@ -129,3 +181,14 @@ class CSpaceClient:
                               int(length) if length and length.isdigit() else None, response)
             finally:
                 response.close()
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _xml(content: bytes, path: str) -> Any:
+    try:
+        return ElementTree.fromstring(content)
+    except ElementTree.ParseError as error:
+        raise CSpaceError(f"GET {path}: the answer isn't XML") from error

@@ -61,9 +61,12 @@ def add_blob(store: Store, tenant: str, blob: str, media: str | None, kind: str 
     store.client.put_item(TableName=store.table(tables.SERVABILITY), Item=item)
 
 
-def take_down(store: Store, tenant: str, media: str, state: str = "taken_down") -> None:
-    store.client.put_item(TableName=store.table(tables.TAKEDOWNS),
-                          Item={"pk": {"S": f"{tenant}#{media}"}, "state": {"S": state}})
+def take_down(store: Store, tenant: str, media: str, blob: str = "") -> None:
+    """An admin's takedown, as the admin app records it (synthetic CSIDs)."""
+    from serena.store import Takedown
+
+    store.put_takedown(Takedown(tenant, media, (blob,) if blob else (), "admin", "2026-10-09T18:00:00+00:00",
+                                "a test"))
 
 
 @pytest.fixture

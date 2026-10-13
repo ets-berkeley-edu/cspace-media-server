@@ -78,7 +78,7 @@ def test_takedowns(client: TestClient, store: Store, recorder: MemoryRecorder) -
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
     take_down(store, "pahma", MEDIA)
     assert _reason(client, recorder, derivative("pahma")) == Reason.TAKEN_DOWN  # on the very next request
-    take_down(store, "pahma", MEDIA, state="unlocked")
+    store.delete_takedown("pahma", MEDIA)  # ended (by a refresh, or released)
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
 
 

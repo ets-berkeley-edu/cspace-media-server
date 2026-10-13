@@ -17,6 +17,7 @@ from . import (
     admin_refreshes,
     admin_requests,
     admin_settings,
+    admin_takedowns,
     etl_api,
     imageserver,
     logs,
@@ -106,13 +107,16 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     app.state.admin_refreshes = admin_refreshes.RefreshServices(
         Refreshes(store, clock) if clock else Refreshes(store), app_alerts, s3)
     app.state.requests_log = requests_log.Requests(log_reader or _log_reader(settings))
+    app.state.admin_takedowns = admin_takedowns.TakedownServices(
+        store, app.state.fetcher.clients, audit, app_alerts, Refreshes(store, clock) if clock else Refreshes(store),
+        app.state.museum_settings, s3, settings.buckets, *((clock,) if clock else ()))
     app.state.admin_settings = admin_settings.SettingsServices(
         app.state.museum_settings, store, app_alerts, audit, *((clock,) if clock else ()))
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
         Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), audit,
         cspace_http or _admin_http), routers=(admin_refreshes.create_router(), admin_settings.create_router(),
-                                            admin_requests.create_router()))
+                                            admin_requests.create_router(), admin_takedowns.create_router()))
     app.include_router(imageserver.router)
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})
