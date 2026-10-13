@@ -51,7 +51,10 @@
               <thead><tr><th>Path</th><th>Requests</th></tr></thead>
               <tbody>
                 <tr v-for="p in report.top_paths" :key="p.path">
-                  <td class="request-path">{{ p.path }}</td>
+                  <td class="request-path">
+                    <FileLink v-if="blobOfPath(p.path)" @open="openPath(p.path)">{{ p.path }}</FileLink>
+                    <template v-else>{{ p.path }}</template>
+                  </td>
                   <td>{{ p.requests }}</td>
                 </tr>
                 <tr v-if="!report.top_paths.length"><td colspan="2">No requests in this range.</td></tr>
@@ -111,10 +114,16 @@
       >
         <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
         <template #[`item.reason`]="{item}">{{ reasonOf(item.reason) }}</template>
-        <template #[`item.path`]="{item}"><span class="request-path">{{ item.path }}</span></template>
+        <template #[`item.path`]="{item}">
+          <span class="request-path">
+            <FileLink v-if="blobOfPath(item.path)" @open="openPath(item.path, item)">{{ item.path }}</FileLink>
+            <template v-else>{{ item.path }}</template>
+          </span>
+        </template>
         <template #[`item.signed`]="{item}">{{ item.signed ? 'yes' : '' }}</template>
       </v-data-table>
     </template>
+    <FileDialog :file="file" @close="file = null" />
   </v-container>
 </template>
 
@@ -124,8 +133,11 @@ import {useRoute} from 'vue-router'
 import {museumName} from '@/session'
 import type {RequestLine, RequestRange, RequestsReport} from '@/api'
 import {api, problem} from '@/api'
+import FileDialog from '@/components/FileDialog.vue'
+import type {ShownFile} from '@/components/FileDialog.vue'
+import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
-import {PAGE_SIZES, REQUEST_RANGES, reasonOf, when} from '@/words'
+import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, reasonOf, when} from '@/words'
 
 const OUTCOMES = [{value: '', title: 'All'}, {value: 'served', title: 'Served'}, {value: 'unserved', title: 'Unserved'}]
 
@@ -147,6 +159,23 @@ const reason = ref('')
 const report = ref<RequestsReport | null>(null)
 const loading = ref(false)
 const error = ref('')
+const file = ref<ShownFile | null>(null)
+
+// A path opens its file in a dialog, with "Media look up" and "Dismiss" (D145).
+function openPath(path: string, line?: RequestLine) {
+  const found = blobOfPath(path)
+  if (!found) {
+    return
+  }
+  const outcome = line ? (line.outcome === 'served' ? 'served' : `unserved, ${reasonOf(line.reason)}`) : ''
+  file.value = {
+    title: found.size === 'original' ? 'Original file' : found.size,
+    name: path,
+    url: api.blobPreviewUrl(museum.value, found.blob, found.size),
+    lookup: path,
+    note: line ? `This request, ${when(line.at)}: ${outcome}.` : undefined
+  }
+}
 
 const reasons = computed(() => {
   const found = new Set((report.value?.lines || []).filter(l => l.reason).map(l => l.reason))

@@ -1,22 +1,31 @@
-"""Media look up (design: Admin web app; decided October 12, 2026, D121 to D123): why Serena serves a file or not.
+"""Media look up (design: Admin web app; decided October 12, 2026, D121 to D123, and October 13, 2026, D139 to D143):
+why Serena serves a file or not.
 
 Given a file's URL or path, a Blob CSID or a Media CSID, it shows each step of the servability check and its outcome,
-whether a copy is stored, and the verdict for each size: the same decision a request gets (servability.decide), with
-no signed link. It never calls CollectionSpace. The admin's text may hold a PDF link suffix (a visitor's email
-address): only paths.log_path()'s version of it is shown, and nothing of it is logged."""
+and for each size the verdict a request gets (servability.decide, with no signed link), whether a copy is stored,
+when it was first stored and when it was last served (the cache index, to the day). Beside that, what CollectionSpace
+says now about the Media record (D139): whether it exists, its Blob, when it last changed and the museum's lookup
+fields (D140), with a sentence on what the next refresh will do (D141). Serena's verdict never depends on that call;
+when CollectionSpace can't be reached, the page says so. The admin's text may hold a PDF link suffix (a visitor's
+email address): only paths.log_path()'s version of it is shown, and nothing of it is logged."""
 from __future__ import annotations
 
+import logging
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlsplit
 
 from . import cache_index, paths
 from .csid import is_csid
+from .cspace.client import CSpaceClient, CSpaceError, MediaRecord, MediaState
 from .museum import SERVED_KINDS, Museum
 from .recalls import rows_of_media
-from .refreshes import Refreshes
+from .refreshes import Refresh, Refreshes
 from .servability import ORIGINAL_ONLY_KINDS, decide
 from .store import Store
 from .unserved import Reason
+
+log = logging.getLogger("serena.lookup")
 
 
 class LookupProblem(ValueError):
@@ -27,7 +36,8 @@ def _step(check: str, outcome: str, ok: bool | None) -> dict[str, Any]:
     return {"check": check, "outcome": outcome, "ok": ok}  # ok None: neither, it depends on the request
 
 
-def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes) -> dict[str, Any]:
+def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
+            cspace: CSpaceClient | None = None) -> dict[str, Any]:
     text = text.strip()
     if not text:
         raise LookupProblem("Give a file's URL or path, a Blob CSID or a Media CSID.")
@@ -41,8 +51,8 @@ def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes) -> di
             raise LookupProblem(f"Not one of {museum.name}'s file paths: they start with {prefix}")
         parsed = paths.parse(museum, path[len(prefix):])
         if isinstance(parsed, paths.Refused):
-            return {"input": shown, "refused": parsed.reason.value, "items": [], "refresh": _refresh(museum,
-                                                                                                     refreshes)}
+            return {"input": shown, "refused": parsed.reason.value, "items": [],
+                    "refresh": _refresh(refreshes.latest_updated(museum.key))}
         blobs = [parsed.blob_csid]
         sizes = [parsed.derivative]
     else:
@@ -52,13 +62,112 @@ def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes) -> di
             blobs = [text]
         else:
             blobs = [r.blob_csid for r in rows_of_media(store, museum.key, text)] or [text]
-    return {"input": shown, "refused": None, "refresh": _refresh(museum, refreshes),
-            "items": [_blob(museum, blob, sizes, store) for blob in blobs]}
-
-
-def _refresh(museum: Museum, refreshes: Refreshes) -> dict[str, str] | None:
     latest = refreshes.latest_updated(museum.key)
-    return {"refresh_id": latest.refresh_id, "refresh_date": latest.refresh_date} if latest else None
+    items = [_blob(museum, blob, sizes, store) for blob in blobs]
+    asked: dict[str, MediaRecord] = {}
+    for item in items:
+        item["cspace"] = _cspace(museum, item, store, cspace, latest, asked)
+    return {"input": shown, "refused": None, "refresh": _refresh(latest), "items": items}
+
+
+def _refresh(latest: Refresh | None) -> dict[str, str] | None:
+    return ({"refresh_id": latest.refresh_id, "refresh_date": latest.refresh_date, "started_at": latest.created_at}
+            if latest else None)
+
+
+def _ask(cspace: CSpaceClient, museum: Museum, media_csid: str, asked: dict[str, MediaRecord]) -> MediaRecord:
+    """One call per Media record per look up (two listed Blobs of one record share it)."""
+    if media_csid not in asked:
+        asked[media_csid] = cspace.media_record(media_csid, [(f.part, f.field, f.label) for f in museum.lookup_fields])
+    return asked[media_csid]
+
+
+def _cspace(museum: Museum, item: dict[str, Any], store: Store, cspace: CSpaceClient | None, latest: Refresh | None,
+            asked: dict[str, MediaRecord]) -> dict[str, Any]:
+    """What CollectionSpace says now about the item's Media record (D139), and what the next refresh will do (D141).
+    Adjusts the sizes a fetch would refuse because the record is deleted or gone."""
+    listed = item["kind"] is not None
+    if listed and item["media_csid"] is None:
+        return {"state": "no_media"}  # the placeholder image
+    if cspace is None:
+        return {"state": "unavailable"}
+    csid = item["media_csid"] if listed else item["blob_csid"]
+    try:
+        record = _ask(cspace, museum, csid, asked)
+        media = csid
+        if not listed and record.state is MediaState.GONE:
+            found = cspace.media_of_blob(csid)  # a Blob CSID: its Media record, if any
+            if found:
+                media, record = found, _ask(cspace, museum, found, asked)
+    except CSpaceError as error:
+        log.warning("Media look up: CollectionSpace not asked", extra={"museum": museum.key,
+                                                                         "error": type(error).__name__})
+        return {"state": "unavailable"}
+    if record.state is MediaState.GONE:
+        if listed:
+            _refuse_fetches(item, Reason.MEDIA_GONE)
+        return {"state": "gone", "next": "CollectionSpace has no such Media record now. The next refresh drops this "
+                "Blob." if listed else "CollectionSpace has no Blob or Media record with this CSID either."}
+    changed = _after(record.updated_at, latest.created_at if latest else None)
+    if record.state is MediaState.DELETED and listed:
+        _refuse_fetches(item, Reason.MEDIA_DELETED)
+    recall = store.recall(museum.key, media) if listed else None
+    return {"state": str(record.state), "media_csid": media, "blob_csid": record.blob_csid,
+            "updated_at": record.updated_at, "changed_since_refresh": changed,
+            "fields": [{"label": label, "value": value} for label, value in record.fields],
+            "next": _next(listed, item["blob_csid"], record, changed, recall.kept_by if recall else None,
+                          recall is not None)}
+
+
+def _refuse_fetches(item: dict[str, Any], reason: Reason) -> None:
+    """A size without a stored copy is fetched on its next request, and the fetch would refuse it (design: Image
+    fetch); stored sizes are still served."""
+    for size in item["sizes"]:
+        if size["served"] and not size["stored"]:
+            size.update(served=False, reason=reason.value, verdict="not served: a fetch would find the Media record "
+                        + ("soft-deleted" if reason is Reason.MEDIA_DELETED else "gone") + " in CollectionSpace")
+
+
+def _after(updated_at: str | None, started_at: str | None) -> bool:
+    if not updated_at or not started_at:
+        return False
+    try:
+        return datetime.fromisoformat(updated_at.replace("Z", "+00:00")) > datetime.fromisoformat(started_at)
+    except ValueError:
+        return False
+
+
+def _next(listed: bool, blob: str, record: MediaRecord, changed: bool, kept_by: str | None, recalled: bool) -> str:
+    """What the next refresh will do (D141): only what Serena can tell for any museum. The ETL's rules decide what's
+    public, so a change to the record says only that the next refresh will show the result."""
+    if not listed:
+        if changed:
+            return ("The Media record changed in CollectionSpace after the last refresh: the next refresh shows "
+                    "whether it's public now.")
+        return ("CollectionSpace has it, but the ETL's rules left it out of the servable list (for example, it isn't "
+                "published, or its Object is marked sensitive). Nothing changes at the next refresh unless the "
+                "record does.")
+    if record.state is MediaState.DELETED:
+        return ("The Media record is soft-deleted in CollectionSpace. The next refresh drops this Blob; until then, "
+                "only its stored sizes are served.")
+    if record.blob_csid and record.blob_csid != blob:
+        if changed:
+            return ("The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists "
+                    "the new Blob and drops this one; until then, a stored size is the old file, and any other size "
+                    "is fetched from the Media record, which returns the new one.")
+        return ("CollectionSpace's Media record has another Blob. The servable list still has this one, and a request "
+                "for it is answered with the Media record's current file.")
+    if changed:
+        return ("The Media record changed in CollectionSpace after the last refresh. The next refresh shows whether "
+                "it's still public" + (", and ends the recall if it isn't." if recalled else "."))
+    if kept_by:
+        return ("Nothing has changed in CollectionSpace since the last refresh: the next refresh lists it again and "
+                "keeps the recall, with another alert, unless staff change the record or an admin releases the "
+                "recall.")
+    if recalled:
+        return ("Nothing has changed in CollectionSpace since the last refresh: unless staff change the record, the "
+                "next refresh lists it, keeps the recall and alerts.")
+    return "Nothing has changed in CollectionSpace since the last refresh."
 
 
 def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store) -> dict[str, Any]:
@@ -105,7 +214,8 @@ def _size(museum: Museum, blob: str, size: str | None, store: Store) -> dict[str
     if reason is None and size in museum.watermark_sizes:
         reason = Reason.WATERMARK_NOT_BUILT
     entry = cache_index.lookup(store, museum.key, blob, size)
-    stored = {"fetched_at": entry.fetched_at, "size": entry.size, "content_type": entry.content_type} if entry else None
+    stored = ({"fetched_at": entry.fetched_at, "last_served": entry.last_served, "size": entry.size,
+               "content_type": entry.content_type} if entry else None)
     if reason is not None:
         verdict = "not served"
     elif stored:

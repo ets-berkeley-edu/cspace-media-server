@@ -237,6 +237,7 @@ def test_previews_from_the_stored_copy_or_collectionspace(client: TestClient, st
 @pytest.mark.usefixtures("listed")
 def test_look_up_a_file(client: TestClient, store: Store) -> None:
     lookup = "/admin/v1/museums/pahma/lookup"
+    fake.add(MEDIA, blob=BLOB)
     sign_in(client)
     body = client.get(lookup, params={"q": f"https://example.edu/pahma/imageserver/blobs/{BLOB}/derivatives/"
                                            "Medium/content?uid=1&sig=x"}).json()
@@ -257,3 +258,106 @@ def test_look_up_a_file(client: TestClient, store: Store) -> None:
     assert client.get(lookup, params={"q": UNKNOWN}).json()["items"][0]["sizes"][0]["reason"] == "not_listed"
     assert client.get(lookup, params={"q": "/bampfa/imageserver/blobs/x/content"}).status_code == 422
     assert client.get(lookup, params={"q": "not a csid"}).status_code == 422
+
+
+# --- Media look up beside CollectionSpace (D139 to D143)
+
+def stored(store: Store, blob: str, size: str | None, last_served: str | None = None) -> None:
+    cache_index.record(store, "pahma", blob, size, cache_index.Entry("b" * 64, "image/png", 9, "2026-10-01T10:00:00Z",
+                                                                     last_served))
+
+
+@pytest.mark.usefixtures("listed")
+def test_media_look_up_shows_collectionspace_beside_serena(client: TestClient, store: Store) -> None:
+    lookup = "/admin/v1/museums/pahma/lookup"
+    fake.add(MEDIA, blob=BLOB)
+    stored(store, BLOB, "Thumbnail", "2026-10-12T18:00:00Z")
+    sign_in(client)
+    (item,) = client.get(lookup, params={"q": MEDIA}).json()["items"]
+    cs = item["cspace"]
+    assert (cs["state"], cs["media_csid"], cs["blob_csid"]) == ("exists", MEDIA, BLOB)
+    assert cs["fields"] == [{"label": "Approved for web", "value": "Yes"}]  # PAHMA's lookup field (D140)
+    assert cs["next"] == "Nothing has changed in CollectionSpace since the last refresh."
+    thumbnail = next(s for s in item["sizes"] if s["size"] == "Thumbnail")
+    assert thumbnail["stored"]["fetched_at"] == "2026-10-01T10:00:00Z"
+    assert thumbnail["stored"]["last_served"] == "2026-10-12T18:00:00Z"
+
+    fake.media[MEDIA].state = "deleted"  # soft-deleted since: only stored sizes are served
+    (item,) = client.get(lookup, params={"q": MEDIA}).json()["items"]
+    assert item["cspace"]["state"] == "deleted" and "soft-deleted" in item["cspace"]["next"]
+    sizes = {s["size"]: (s["served"], s["reason"]) for s in item["sizes"]}
+    assert sizes["Thumbnail"] == (True, None) and sizes["Medium"] == (False, "media_deleted")
+
+    fake.media[MEDIA].state, fake.media[MEDIA].blob = "project", "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5f"  # replaced
+    (item,) = client.get(lookup, params={"q": BLOB}).json()["items"]
+    assert item["cspace"]["blob_csid"] != BLOB and "another Blob" in item["cspace"]["next"]
+
+    (item,) = client.get(lookup, params={"q": UNPUBLISHED_BLOB}).json()["items"]  # not listed: found by its Blob
+    assert item["cspace"]["media_csid"] == UNPUBLISHED_MEDIA and "left it out" in item["cspace"]["next"]
+    (item,) = client.get(lookup, params={"q": UNKNOWN}).json()["items"]
+    assert item["cspace"] == {"state": "gone", "next": "CollectionSpace has no Blob or Media record with this CSID "
+                                                       "either."}
+    placeholder = PAHMA.placeholder_blob_csid
+    assert placeholder is not None
+    add_blob(store, "pahma", placeholder, None)
+    (item,) = client.get(lookup, params={"q": placeholder}).json()["items"]
+    assert item["cspace"] == {"state": "no_media"}
+
+
+@pytest.mark.usefixtures("listed")
+def test_media_look_up_without_collectionspace(client: TestClient) -> None:
+    fake.add(MEDIA, blob=BLOB)
+    fake.fail("/media/", 503, times=10)
+    sign_in(client)
+    (item,) = client.get("/admin/v1/museums/pahma/lookup", params={"q": MEDIA}).json()["items"]
+    assert item["cspace"] == {"state": "unavailable"}
+    assert {s["reason"] for s in item["sizes"]} == {None}  # Serena's verdict doesn't depend on CollectionSpace
+
+
+def test_what_the_next_refresh_will_do() -> None:
+    from serena.cspace.client import MediaRecord, MediaState
+    from serena.lookup import _after, _next
+    record = MediaRecord(MediaState.EXISTS, BLOB, "2026-10-13T16:45:00.000Z")
+    assert _after(record.updated_at, "2026-10-12T10:01:00+00:00") is True
+    assert _after(record.updated_at, "2026-10-14T10:01:00+00:00") is False
+    assert _after(None, "2026-10-14T10:01:00+00:00") is False
+    assert "ends the recall if it isn't" in _next(True, BLOB, record, True, None, True)
+    assert "lists the new Blob" in _next(True, BLOB_2, record, True, None, False)
+    assert "keeps the recall, with another alert" in _next(True, BLOB, record, False, "pahma-2026-10-12-1", True)
+    assert "shows whether it's public now" in _next(False, BLOB, record, True, None, False)
+
+
+def test_last_served_is_recorded_at_most_once_a_day(store: Store) -> None:
+    stored(store, BLOB, "Medium", "2026-10-12T18:00:00Z")
+    entry = cache_index.lookup(store, "pahma", BLOB, "Medium")
+    assert entry is not None
+    cache_index.served(store, "pahma", BLOB, "Medium", entry, datetime(2026, 10, 13, 9, 0, tzinfo=UTC))
+    assert cache_index.lookup(store, "pahma", BLOB, "Medium").last_served == "2026-10-12T18:00:00Z"  # type: ignore[union-attr]
+    cache_index.served(store, "pahma", BLOB, "Medium", entry, datetime(2026, 10, 13, 18, 30, tzinfo=UTC))
+    assert cache_index.lookup(store, "pahma", BLOB, "Medium").last_served == "2026-10-13T18:30:00Z"  # type: ignore[union-attr]
+    stale = cache_index.Entry(entry.sha256, entry.content_type, entry.size, entry.fetched_at, None)
+    cache_index.served(store, "pahma", BLOB, "Medium", stale, datetime(2026, 10, 13, 19, 0, tzinfo=UTC))
+    assert cache_index.lookup(store, "pahma", BLOB, "Medium").last_served == "2026-10-13T18:30:00Z"  # type: ignore[union-attr]
+    cache_index.served(store, "pahma", "no-such-blob", "Medium", stale, datetime(2026, 10, 13, 19, 0, tzinfo=UTC))
+    assert cache_index.lookup(store, "pahma", "no-such-blob", "Medium") is None  # never creates an entry
+
+
+@pytest.mark.usefixtures("listed")
+def test_a_blobs_file_at_one_size(client: TestClient, store: Store, s3: Any) -> None:
+    preview = f"/admin/v1/museums/pahma/blobs/{BLOB}/preview"
+    assert client.get(preview).status_code == 401
+    sign_in(client)
+    fake.add(MEDIA, blob=BLOB)
+    answer = client.get(f"{preview}?size=Medium")  # not stored: from CollectionSpace by its Media record
+    assert answer.status_code == 200 and answer.headers["cache-control"] == "no-store"
+    assert cache_index.lookup(store, "pahma", BLOB, "Medium") is None  # never stored
+    s3.put_object(Bucket="b-pahma", Key="objects/" + "d" * 64, Body=b"stored", ContentType="image/jpeg")
+    cache_index.record(store, "pahma", BLOB, "Medium", cache_index.Entry("d" * 64, "image/jpeg", 6, "2026-10-12"))
+    assert client.get(f"{preview}?size=Medium").content == b"stored"
+    assert client.get(f"{preview}?size=full").status_code == 200  # the largest size: OriginalJpeg
+    assert client.get(f"{preview}?size=Huge").status_code == 422
+    assert client.get(f"/admin/v1/museums/pahma/media/{MEDIA}/preview?size=thumbnail&source=cspace").status_code == 200
+    unlisted = client.get(f"/admin/v1/museums/pahma/blobs/{UNPUBLISHED_BLOB}/preview?size=Thumbnail")
+    assert unlisted.status_code == 200  # not listed: its Media record found in CollectionSpace
+    assert client.get(f"/admin/v1/museums/pahma/blobs/{UNKNOWN}/preview").status_code == 404
+

@@ -75,6 +75,8 @@ def test_a_hit_redirects_to_a_signed_url(local: TestClient, store: Store) -> Non
     assert cache_control.startswith("private, max-age=")
     assert 0 < int(cache_control.split("=")[1]) <= 1800
     assert local.get(path()).headers["location"] == location  # the same URL within the window
+    entry = cache_index.lookup(store, "pahma", BLOB, "Medium")
+    assert entry is not None and entry.last_served is not None  # a hit records the day it was served (D142)
     served = local.get(location)
     assert served.status_code == 200
     assert served.content == BYTES

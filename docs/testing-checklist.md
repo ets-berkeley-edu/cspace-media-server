@@ -367,12 +367,12 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
 - [ ] In a terminal, run `./serena etl pahma`. Among the files it prints, copy the image's URL (it ends
   `/derivatives/Medium/content`) and open it in Chrome: expect a synthetic grey image.
 - [ ] In the admin app, open "Media look up" (in the menu, under Media records). Expect the title "PAHMA Media look up".
-  Paste the URL and click "Look up". Expect the refresh you just ran named as the last servability update, then the
-  Blob and its Media record, and the steps In the servable list, Kind (image), Access (public) and Recall (No
-  recall), each "Yes"; and one size, Medium: "served from the stored copy" (you opened it). Copy the Media CSID.
+  Paste the URL and click "Look up". Expect "Served", "Every check passes for the Medium size", and "Serena has a
+  stored copy" (you opened it); at the foot, the refresh you just ran named as the last servability update. Open "In
+  Serena" Details: expect the Blob, its Media record, and the checks In the servable list, Kind (image), Access
+  (public) and Recall (No recall). Copy the Media CSID.
 - [ ] Paste the Media CSID alone and look it up again: expect a row for the original and each of PAHMA's sizes
-  (Thumbnail, Small, Medium, FullHD, OriginalJpeg); Medium "served from the stored copy", the others "served: would be
-  fetched on the next request".
+  (Thumbnail, Small, Medium, FullHD, OriginalJpeg), each served "Yes"; Medium with a stored copy, the others "—".
 - [ ] Add a Media record to the simulator that isn't in PAHMA's servable list (a file not published yet; synthetic
   CSIDs):
   ```
@@ -393,7 +393,8 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
   bell's badge and the banner, "An admin recalled Media records"; click "Open alerts": expect the alert naming 2 and
   your reason.
 - [ ] Reload the image's URL in Chrome (a fresh tab, or after clearing the cache): expect the unavailable image.
-  Look it up again: expect Recall "No", with your name and reason, and Medium "not served", reason "recalled".
+  Look it up again: expect "Not served: recalled", with your name and reason, "Open Recalls", and every size served
+  "No", why not "recalled".
 - [ ] Open "Audit log": expect two "recall" entries, one per Media record, each with your reason.
 - [ ] Click "Recall…" again, paste your Media CSID and click "Show what would be recalled": expect it greyed, served
   today "already recalled", and no "Recall" button. Cancel.
@@ -431,4 +432,51 @@ after `./serena up --build` (or `./serena down` and `./serena up` if the stack w
 - [ ] On "Recalls", expect "Recall…", "Active recalls" and "Ended in the last 30 days", and nowhere the word
   "takedown". Recall one of the simulator's Media records (section 17's steps), then open "Past requests" after
   requesting its image: expect the reason `recalled`. Open "Audit log": expect the action `recall`.
+
+## 19. Media look up beside CollectionSpace, and the file dialogs, locally (20 minutes, before merging a pull request that changes them)
+
+What it checks: Media look up's layout from the UI review (October 13, 2026, D139 to D145): Serena's answer beside
+what CollectionSpace says now, last served and first stored, and the dialogs that open a file from Past requests and
+Recalls. The API's tests cover each CollectionSpace case; this checks the pages in Chrome. Start afresh from the pull
+request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ and sign in to PAHMA as `admin`
+(password `admin`). The simulator's synthetic records are changed with `curl` against http://localhost:8380.
+
+- [ ] Open the image's Medium URL that `./serena etl pahma` printed, in Chrome, twice. In the admin app, open "Media
+  look up" and look up that URL. Expect:
+  - "Served", with "Serena has a stored copy";
+  - under it, "Last served" and "First stored in Serena" with today's date, and in the sizes table the Medium row with
+    its stored copy (image/png), Last served and First stored;
+  - two panels on the left: "In Serena" with the stored Medium, and "In CollectionSpace now" with CollectionSpace's
+    file, "not stored"; each with a collapsed "Details". Open both: In Serena lists the Blob, Media record, kind,
+    access and the checks; In CollectionSpace now lists the Media record, State "Exists", the same Blob, "Approved for
+    web: Yes" and Last changed;
+  - "Serena and CollectionSpace": the Media record, Blob, Access and As of rows, none marked "differs", and "What
+    the next refresh will do: Nothing has changed in CollectionSpace since the last refresh."
+- [ ] Copy the page's address (it ends `?q=` and the URL) into a new tab: expect the same answer.
+- [ ] Take the record off the web in the simulator, with the Media CSID from the page (`<media>` below):
+  `curl -s -X POST http://localhost:8380/_fake/approve/<media> -H 'Content-Type: application/json' -d '{"approved": false}'`.
+  Look it up again: expect still "Served" (Serena's answer comes from the last refresh), "Approved for web: No", the As
+  of row marked "differs", and "The Media record changed in CollectionSpace after the last refresh. The next refresh
+  shows whether it's still public."
+- [ ] Replace its image: `curl -s -X POST http://localhost:8380/_fake/replace/<media>`. Look it up again: expect the
+  Blob row and the Blob in "In CollectionSpace now" marked "differs", a darker picture there than Serena's stored
+  copy, and "The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists the new
+  Blob and drops this one; …".
+- [ ] Soft-delete it: `curl -s -X POST http://localhost:8380/_fake/delete/<media>`. Look it up by its Media CSID:
+  expect "Served (stored sizes only)", Medium served "Yes", every other size "No", why not "media deleted", State
+  "Soft-deleted", and "The Media record is soft-deleted in CollectionSpace. The next refresh drops this Blob; …".
+- [ ] Look up `9f9f9f9f-0000-4000-8000-000000000000` (synthetic, unknown): expect "Not served: not in the servable
+  list", "Not in CollectionSpace", and "CollectionSpace has no Blob or Media record with this CSID either." Look up
+  PAHMA's placeholder image, `59a733dd-d641-4e1a-8552`: expect "Nothing to compare: this file has no Media record".
+- [ ] Stop the simulator (`docker compose stop fakecspace`) and look up the URL again: expect Serena's answer, the
+  notice "CollectionSpace can't be reached, so there's nothing to compare with", and "CollectionSpace can't be
+  reached" in the right-hand panel. Start it again (`docker compose start fakecspace`).
+- [ ] Open "Past requests" with "Last hour". Hover over a path: expect it underlined, as a link. Click your image's
+  Medium path: expect a dialog with the path, the picture, "This request, <time>: served.", "Media look up" and
+  "Dismiss". Click "Media look up": expect Media look up on that path. Back on Past requests, expect the path with a
+  bad CSID (if any) not to be a link.
+- [ ] On "Recalls", recall your image's Media record (with a reason). Hover over its Media CSID and its Blob CSID in
+  "Active recalls": each becomes a link. Click the Blob: expect the dialog with the picture (admins see a recalled
+  file), "Media look up" and "Dismiss"; click "Dismiss". Click the Media CSID, then "Media look up": expect "Not
+  served: recalled".
 

@@ -798,8 +798,8 @@ the plan, D127); until then, its requests are logged as `placeholder_not_uploade
   old Blob is still listed). Only for CSIDs the table doesn't know (a file not yet published, or one the ETL withholds)
   does Serena ask CollectionSpace, with the museum's read-only account: `GET media/<csid>` (a Media record, with its
   Blob CSID), then `GET blobs/<csid>` and a search for the Media record whose `blobCsid` is that CSID. A CSID neither
-  knows, or one the table doesn't know while CollectionSpace can't be reached, is listed as not found and isn't taken
-  down: Serena serves none of them today, and storing a Blob CSID as if it were a Media CSID would do nothing while
+  knows, or one the table doesn't know while CollectionSpace can't be reached, is listed as not found and isn't
+  recalled: Serena serves none of them today, and storing a Blob CSID as if it were a Media CSID would do nothing while
   looking as if it worked (D117). Neither is the museum's placeholder image, which has no Media record. The rest of
   the list goes ahead.
 - **The summary, before anything changes.** For each Media record: its Blob, kind, whether Serena serves it today,
@@ -863,8 +863,9 @@ staff must change CollectionSpace for that.
 
 Every active recall however old (Media CSID, Blob CSID, who, when, why, and, for one a refresh kept, "Still public in
 CollectionSpace" with a Release button), and the last 30 days' ended and released recalls (by which refresh or
-admin, and why), from the audit log. Sorted and paged like the other tables; a "Recall" button opens the form above
-(D120).
+admin, and why), from the audit log. Sorted and paged like the other tables; a "Recall…" button opens the form above
+(D120). Each Media and Blob CSID reads as text until hovered or focused, then as a link that opens the file in a dialog
+(the largest size the museum serves, through the admin API, never cached), with "Media look up" and "Dismiss" (D145).
 
 ### Placeholder image
 
@@ -948,7 +949,7 @@ Built in pull request 14b (decided October 12, 2026, D124 to D127):
 - **Keys.** `objects/<sha256>`, like Nuxeo's content-addressed store, so identical bytes are stored once. The object
   records its content type.
 - **Cache index.** `<tenant>#<blob CSID>#<derivative>` (`original` for the original file) → hash, content type,
-  size, fetched-at. Watermarked copies have
+  size, fetched-at, and last served, to the day (D142; see Admin web app, Media look up). Watermarked copies have
   their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID are
   indexed under the Media CSID and the Blob CSID listed for it in the servable list of the last servability update, so a replaced image is fetched
   again after the next daily update.
@@ -1029,12 +1030,35 @@ reachable only from campus networks.
     admin refresh, an audit export and the placeholder upload, each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
     A refresh ending a recall is in it too, with the refresh as its actor (D119).
-- **Media look up** (decided October 12, 2026, D121 to D123). An admin gives a file's URL or path (any shape Serena
-  serves), a Blob CSID or a Media CSID (which shows its Blob or Blobs). The page shows each step of the servability
-  check in order, with its outcome: in the servable list (and the refresh it came from), kind, access and signed access,
-  recall, derivative allowed, watermarked size; then whether a copy is stored (when fetched, size, content type) and
-  the verdict: served, or the reason it isn't. It never calls CollectionSpace: a file not stored yet says "would be
-  fetched on the next request". It isn't audited (a read, like the Past requests page).
+- **Media look up** (decided October 12, 2026, D121 to D123; redesigned October 13, 2026, D139 to D145, from the UI
+  review's layout C). An admin gives a file's URL or path (any shape Serena serves), a Blob CSID or a Media CSID (which
+  shows its Blob or Blobs, one at a time). The page's address carries what was looked up (`?q=`), so the file dialogs
+  can open it and an admin can share it. It isn't audited (a read, like the Past requests page).
+  - **Serena's answer.** The verdict first (served; served only on a signed link; or the one reason it isn't), what to
+    do next, then each size: served or why not, the stored copy (content type, size), when Serena last served it and
+    when it first stored it. Each step of the servability check, in order, is in the "In Serena" panel's Details: in
+    the servable list (and the refresh it came from), kind, access and signed access, recall, derivative allowed,
+    watermarked size.
+  - **First stored and last served** (D142, D143). First stored is the cache index's fetched-at. Last served is the
+    cache index's `last_served`, to the day: written when a copy is fetched, then on a request that finds it only if
+    the time recorded is more than a day old (a conditional update, so tasks don't race; a failure is logged and never
+    fails the request). A file requested months apart still shows when, without a write on every request.
+  - **Beside it, CollectionSpace now** (D139, reversing D122). One read of the Media record (for a Blob Serena doesn't
+    list, the Media search by Blob CSID first), through the same client and service account as a fetch, with its
+    timeouts and retries; nothing is stored. It shows whether the record exists or is soft-deleted, its Blob (marked
+    when it differs from Serena's), when it last changed, and the museum's lookup fields (D140: configured per museum,
+    `lookup_fields`; PAHMA shows "Approved for web", `media_pahma`'s `approvedforweb`, the field its ETL reads; a
+    vocabulary term shows by its display name, a boolean as Yes or No). Serena never decides from them:
+    the ETL's rules do, partly from the Object record, which isn't shown. A size without a stored copy of a record
+    that is soft-deleted or gone is shown as refused, since its fetch would be. If CollectionSpace can't be reached,
+    the page says so and Serena's answer stands.
+  - **What the next refresh will do** (D141). One sentence from what Serena can tell for any museum: the record is
+    deleted or gone (the next refresh drops the Blob); it has another Blob (replaced since the last refresh: the next
+    refresh lists the new one; otherwise the list still has both); it changed since the last refresh (the next refresh
+    shows whether it's still public, and ends a recall if it isn't); or nothing changed (with what happens to a recall).
+  - **Pictures** (D144). "In Serena" shows the largest stored copy; "In CollectionSpace now" the record's current
+    largest size, never stored. Both come through the admin API with `no-store`; admins see recalled and restricted
+    files too.
 - **The Past requests page** (decided October 12, 2026, D100 to D113). What Serena served and couldn't serve for the
   museum, from the app's log:
   - **Lines.** The app logs one line per request (D103): "served", with the path, the kind, the cache (`hit`, or
@@ -1044,7 +1068,9 @@ reachable only from campus networks.
     fetch lines: a failed fetch ends in an unserved request with its reason (D104).
   - **Layout** (D105). At the top, counts by day (served; unserved by reason) and the 20 most-requested paths; below,
     a table of lines, newest first, sorted by a column's name and paged like the other tables, filtered by outcome and
-    by reason. Times are UTC.
+    by reason. Times are UTC. A path (in the table and the most-requested list) reads as text until hovered or
+    focused, then as a link that opens that size of the file in a dialog, with the request's outcome, "Media look up"
+    (on that path) and "Dismiss"; a path whose CSID isn't one stays text (D145).
   - **Range** (D106). The last hour, 24 hours or 7 days; 24 hours to start.
   - **More than 10,000 lines** (D107). A Logs Insights query returns at most 10,000 rows: the table lists the newest
     10,000 and says so; the counts and the most-requested paths cover every request.
@@ -1077,10 +1103,11 @@ reachable only from campus networks.
   a time. The ALB accepts `/etl/` only from the ETL server and `/admin` only from campus networks.
 - **Infrastructure as code.** Terraform, in `deploy/`, with state in S3. No secrets in Terraform files or state.
 - **Least privilege.** The app's task role can read the servability table; read and write the recall and settings
-  tables (the admin app's recalls and settings are served by the app), the cache index, refreshes, alerts,
+  tables (the admin app's recalls and settings are served by the app), the cache index (its `last_served` too, D142),
+  refreshes, alerts,
   audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
   uploaded servable lists; use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
-  check, fetches and the recall form's lookups and thumbnails); and run Logs Insights queries on its own log group
+  check, fetches, the recall form's lookups and thumbnails, and Media look up's read of the Media record); and run Logs Insights queries on its own log group
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
   update and delete recalls (D119), read, put and delete audit entries (the entries for ended recalls, and the daily removal,

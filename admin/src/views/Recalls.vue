@@ -28,7 +28,13 @@
       no-data-text="No active recalls."
       class="mb-6"
     >
-      <template #[`item.blob_csids`]="{item}">{{ item.blob_csids.join(', ') }}</template>
+      <template #[`item.media_csid`]="{item}">
+        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media record')">{{ item.media_csid }}</FileLink>
+      </template>
+      <template #[`item.blob_csids`]="{item}">
+        <span v-for="(blob, i) in item.blob_csids" :key="blob"><template v-if="i">, </template>
+          <FileLink class="recall-csid" @open="openCsid(blob, 'Blob')">{{ blob }}</FileLink></span>
+      </template>
       <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
       <template #[`item.kept_by`]="{item}">
         <template v-if="item.kept_by">
@@ -62,8 +68,12 @@
       <template #[`item.action`]="{item}">
         {{ item.action === 'recall_release' ? 'Released' : 'Ended by a refresh' }}
       </template>
+      <template #[`item.media_csid`]="{item}">
+        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media record')">{{ item.media_csid }}</FileLink>
+      </template>
       <template #[`item.details`]="{item}">{{ item.details.reason || item.details.why || '' }}</template>
     </v-data-table>
+    <FileDialog :file="shownFile" @close="shownFile = null" />
 
     <v-dialog v-model="form" max-width="1100" scrollable>
       <v-card>
@@ -72,8 +82,8 @@
           <template v-if="!summary">
             <p class="mb-3">
               Give up to {{ page?.max_in_box || 12 }} Media or Blob CSIDs, separated by new lines, commas or spaces, or a
-              text file of up to {{ (page?.max_in_file || 1000).toLocaleString('en-US') }}, one per line. Nothing is taken
-              down until you confirm.
+              text file of up to {{ (page?.max_in_file || 1000).toLocaleString('en-US') }}, one per line. Nothing is recalled
+              until you confirm.
             </p>
             <v-textarea
               id="recall-csids"
@@ -250,6 +260,9 @@ import {useRoute} from 'vue-router'
 import {museumName} from '@/session'
 import type {Recall, RecallRecord, RecallSummary, RecallsPage} from '@/api'
 import {api, problem} from '@/api'
+import FileDialog from '@/components/FileDialog.vue'
+import type {ShownFile} from '@/components/FileDialog.vue'
+import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
 import {PAGE_SIZES, when} from '@/words'
 
@@ -271,6 +284,17 @@ const endedHeaders = [
 
 const route = useRoute()
 const museum = computed(() => String(route.params.museum))
+const shownFile = ref<ShownFile | null>(null)
+
+// A Media record's or Blob's CSID opens its file, the largest size the museum serves, in a dialog (D145).
+function openCsid(csid: string, what: 'Media record' | 'Blob') {
+  shownFile.value = {
+    title: what,
+    name: csid,
+    url: what === 'Blob' ? api.blobPreviewUrl(museum.value, csid, 'full') : api.previewUrl(museum.value, csid, 'full'),
+    lookup: csid
+  }
+}
 const page = ref<RecallsPage | null>(null)
 const loading = ref(false)
 const error = ref('')

@@ -216,14 +216,33 @@ export interface LookupItem {
   kind: string | null
   access: string | null
   steps: LookupStep[]
-  sizes: {size: string, served: boolean, reason: string | null, verdict: string,
-    stored: {fetched_at: string, size: number, content_type: string} | null}[]
+  sizes: LookupSize[]
+  cspace: LookupCSpace
+}
+
+export interface LookupSize {
+  size: string
+  served: boolean
+  reason: string | null
+  verdict: string
+  stored: {fetched_at: string, last_served: string | null, size: number, content_type: string} | null
+}
+
+/** What CollectionSpace says now about the item's Media record (D139 to D141). */
+export interface LookupCSpace {
+  state: 'exists' | 'deleted' | 'gone' | 'unavailable' | 'no_media'
+  media_csid?: string
+  blob_csid?: string | null
+  updated_at?: string | null
+  changed_since_refresh?: boolean
+  fields?: {label: string, value: string}[]
+  next?: string
 }
 
 export interface Lookup {
   input: string
   refused: string | null
-  refresh: {refresh_id: string, refresh_date: string} | null
+  refresh: {refresh_id: string, refresh_date: string, started_at: string} | null
   items: LookupItem[]
 }
 
@@ -250,8 +269,12 @@ export const api = {
   release: (museum: string, mediaCsid: string, reason: string) =>
     call<{released: string}>('POST', `/museums/${museum}/recalls/${encodeURIComponent(mediaCsid)}/release`, {reason}),
   // A Media record's thumbnail or full-size view, through the admin API only, never cached (D129).
-  previewUrl: (museum: string, mediaCsid: string, size: 'thumbnail' | 'full' = 'thumbnail') =>
-    `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${size}`,
+  previewUrl: (museum: string, mediaCsid: string, size: 'thumbnail' | 'full' = 'thumbnail', source: 'any' | 'cspace' = 'any') =>
+    `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${size}` +
+    (source === 'cspace' ? '&source=cspace' : ''),
+  /** A Blob's file at one size (a derivative, "original", or "full": the largest the museum serves), D144. */
+  blobPreviewUrl: (museum: string, blobCsid: string, size = 'full') =>
+    `${PREFIX}/museums/${museum}/blobs/${encodeURIComponent(blobCsid)}/preview?size=${encodeURIComponent(size)}`,
   lookup: (museum: string, q: string) =>
     call<Lookup>('GET', `/museums/${museum}/lookup?${new URLSearchParams({q})}`),
   requests: (museum: string, range: RequestRange) =>

@@ -64,6 +64,18 @@ class StartingSettings(BaseModel):
         return days
 
 
+class LookupField(BaseModel):
+    """A Media record field Media look up shows beside Serena's records (decided October 13, 2026, D140): the
+    record's part (for example media_common) and the field's element name in it. Serena shows the value; it never
+    decides anything from it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    part: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    label: str = Field(min_length=1, max_length=60)
+
+
 class Museum(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -84,6 +96,8 @@ class Museum(BaseModel):
     # The CollectionSpace role (its display name) that marks a Serena admin in this museum (design: Admin web app).
     # It carries no permissions in CollectionSpace; the museum's administrators give it to the team.
     admin_role: str = Field(default="Serena_Admin", pattern=r"^[A-Za-z0-9_ ]{1,64}$")
+    # The Media record fields Media look up shows from CollectionSpace (D140); none if empty.
+    lookup_fields: tuple[LookupField, ...] = ()
     settings: StartingSettings
 
     @field_validator("derivatives")

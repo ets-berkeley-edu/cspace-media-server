@@ -21,8 +21,8 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 - Fetch a file from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
 - Add a watermark for the museums that want one.
-- Give admins a web app to follow daily refreshes and alerts, see what Serena served and couldn't serve and why, take
-  files down and change settings.
+- Give admins a web app to follow daily refreshes and alerts, see what Serena served and couldn't serve and why, recall
+  files and change settings.
 
 ## Layout
 
@@ -49,7 +49,7 @@ a few files to open in your browser, at http://localhost:8300. The admin app is 
 sign in as `admin`, password `admin` (the simulator's synthetic account). The stack uses a CollectionSpace simulator and
 moto in place of AWS, so it needs no accounts or keys. `docs/testing-checklist.md` walks through the admin app's
 pages locally (the Past requests page reads a log file inside the app's container, in place of CloudWatch; the recall
-form's lookups and thumbnails come from the CollectionSpace simulator). In the admin app, the bell at the top right
+form's lookups and thumbnails, and Media look up's view of CollectionSpace, come from the CollectionSpace simulator). In the admin app, the bell at the top right
 opens the alerts and the gear opens the museum's settings. `./serena help` lists the rest.
 
 ## License

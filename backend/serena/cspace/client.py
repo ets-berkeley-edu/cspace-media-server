@@ -13,15 +13,19 @@ servability table doesn't know, and to show a thumbnail of a file Serena hasn't 
     GET /cspace-services/blobs/<csid>                                              whether a Blob exists
     GET /cspace-services/media?as=media_common:blobCsid="<csid>"                   the Media record of a Blob
 
+Media look up (design: Admin web app, Media look up; D139) reads the same Media record for what CollectionSpace says
+now: whether it exists, its Blob, when it last changed and the museum's lookup fields.
+
 One pooled HTTP session per museum per task, HTTP Basic with the museum's read-only service account (its password
 read from Secrets Manager, never logged), timeouts, retries for transient failures only, and a cap on simultaneous
 calls per museum per task. A fetch never names a Blob CSID: the Media service returns the record's current file."""
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -67,6 +71,16 @@ class Fetched:
 
     def chunks(self) -> Iterator[bytes]:
         yield from self.response.iter_bytes(CHUNK)
+
+
+@dataclass(frozen=True)
+class MediaRecord:
+    """What Media look up shows of a Media record (D139, D140)."""
+
+    state: MediaState
+    blob_csid: str | None = None
+    updated_at: str | None = None
+    fields: tuple[tuple[str, str], ...] = ()  # (label, value), in the museum's order; "" when the field is empty
 
 
 Credentials = Callable[[], tuple[str, str]]
@@ -138,6 +152,29 @@ class CSpaceClient:
         deleted = any("deleted" in state.lower() for state in states)
         return (MediaState.DELETED if deleted else MediaState.EXISTS), blob or None
 
+    def media_record(self, media_csid: str, fields: Iterable[tuple[str, str, str]] = ()) -> MediaRecord:
+        """For Media look up: the Media record's state, Blob, last change and the given fields, each (part, field,
+        label). A field with several values (a repeating field) shows them joined; a vocabulary term shows its
+        display name."""
+        path = f"/media/{media_csid}"
+        with self.slots:
+            response = self._send(path, stream=False)
+        if response.status_code == 404:
+            return MediaRecord(MediaState.GONE)
+        if response.status_code != 200:
+            raise CSpaceError(f"GET {path} returned {response.status_code}", response.status_code)
+        root = _xml(response.content, path)
+        states = [el.text or "" for el in root.iter() if _local(el.tag) == "workflowState"]
+        blob = next((el.text.strip() for el in root.iter() if _local(el.tag) == "blobCsid" and el.text), None)
+        updated = next((el.text.strip() for el in root.iter() if _local(el.tag) == "updatedAt" and el.text), None)
+        shown = []
+        for part, name, label in fields:
+            values = [_display(el.text) for section in root if _local(section.tag) == part
+                      for el in section.iter() if _local(el.tag) == name and el.text and el.text.strip()]
+            shown.append((label, ", ".join(values)))
+        deleted = any("deleted" in state.lower() for state in states)
+        return MediaRecord(MediaState.DELETED if deleted else MediaState.EXISTS, blob or None, updated, tuple(shown))
+
     def blob_exists(self, blob_csid: str) -> bool:
         path = f"/blobs/{blob_csid}"
         with self.slots:
@@ -185,6 +222,19 @@ class CSpaceClient:
 
 def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
+
+
+_TERM = re.compile(r"^urn:cspace:.*'(.*)'$", re.DOTALL)
+
+
+def _display(text: str) -> str:
+    """A field's value as people read it: a vocabulary term's refName shows as its display name, a boolean as Yes or
+    No."""
+    text = text.strip()
+    found = _TERM.match(text)
+    if found:
+        return found.group(1)
+    return {"true": "Yes", "false": "No"}.get(text.lower(), text)
 
 
 def _xml(content: bytes, path: str) -> Any:

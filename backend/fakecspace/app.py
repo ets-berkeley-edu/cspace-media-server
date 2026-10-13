@@ -14,8 +14,10 @@ Development hooks:
   POST /_fake/media                 {"csid", "kind": image|pdf|3D, "state"?, "blob"?}: a Media record with sample
                                     files, and its Blob's CSID
   POST /_fake/delete/<csid>         soft-delete it (the Media service still returns it, as CollectionSpace does)
-  POST /_fake/replace/<csid>        replace its image (CollectionSpace makes a new Blob; the Media service then
-                                    returns the new file)
+  POST /_fake/replace/<csid>        replace its image (CollectionSpace makes a new Blob, so a record with a Blob
+                                    gets a new Blob CSID; the Media service then returns the new file)
+  POST /_fake/approve/<csid>        {"approved": false}: change its "Approved for web" (PAHMA's media_pahma
+                                    approvedforweb), as staff do to take it off the web
   POST /_fake/remove-file/<csid>    leave the record with no file
   POST /_fake/fail                  {"match", "status", "times"}: answer requests whose path contains match with status
   GET  /_fake/calls                 the paths called, in order
@@ -26,7 +28,9 @@ import base64
 import re
 import secrets
 import threading
+import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, Query, Request
@@ -51,6 +55,13 @@ class Media:
     state: str = "project"  # CollectionSpace's workflow state; "deleted" when soft-deleted
     files: dict[str, tuple[bytes, str]] = field(default_factory=dict)  # "content" or a derivative -> (bytes, type)
     blob: str | None = None  # its Blob's CSID (blobCsid)
+    publish_to: str = "All"  # media_common's publishTo, a vocabulary term (core CollectionSpace)
+    approved_for_web: bool = True  # media_pahma's approvedforweb: what PAHMA's ETL reads (for Media look up)
+    updated_at: str = field(default_factory=lambda: _now())  # collectionspace_core's updatedAt
+
+
+def _now() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 @dataclass
@@ -142,8 +153,14 @@ def _gate(request: Request) -> Response | None:
 def _media_xml(media: Media) -> bytes:
     return (f'<?xml version="1.0" encoding="UTF-8"?><document name="media">'
             f'<ns2:media_common xmlns:ns2="http://collectionspace.org/services/media"><csid>{media.csid}</csid>'
-            f'{f"<blobCsid>{media.blob}</blobCsid>" if media.blob else ""}</ns2:media_common><ns2:collectionspace_core xmlns:ns2="http://collectionspace.org/collectionspace_core/">'
-            f"<workflowState>{media.state}</workflowState></ns2:collectionspace_core></document>").encode()
+            f'{f"<blobCsid>{media.blob}</blobCsid>" if media.blob else ""}<publishToList><publishTo>'
+            f"urn:cspace:pahma.cspace.berkeley.edu:vocabularies:name(publishto):item:name({media.publish_to.lower()})"
+            f"'{media.publish_to}'</publishTo></publishToList></ns2:media_common>"
+            f'<ns2:media_pahma xmlns:ns2="http://collectionspace.org/services/media/local/pahma">'
+            f"<approvedforweb>{str(media.approved_for_web).lower()}</approvedforweb></ns2:media_pahma>"
+            f'<ns2:collectionspace_core xmlns:ns2="http://collectionspace.org/collectionspace_core/">'
+            f"<workflowState>{media.state}</workflowState><updatedAt>{media.updated_at}</updatedAt>"
+            f"</ns2:collectionspace_core></document>").encode()
 
 
 @app.get("/cspace-services/media/{csid}")
@@ -246,14 +263,29 @@ async def add_media(request: Request) -> JSONResponse:
 @app.post("/_fake/delete/{csid}")
 def soft_delete(csid: str) -> dict[str, str]:
     store.media[csid].state = "deleted"
+    store.media[csid].updated_at = _now()
     return {"csid": csid, "state": "deleted"}
 
 
 @app.post("/_fake/replace/{csid}")
 def replace(csid: str) -> dict[str, str]:
     image = samples.png(shade=32)  # a different image
-    store.media[csid].files = {"content": (image, "image/png"), **{n: (image, "image/png") for n in DERIVATIVES}}
-    return {"csid": csid, "replaced": "yes"}
+    media = store.media[csid]
+    media.files = {"content": (image, "image/png"), **{n: (image, "image/png") for n in DERIVATIVES}}
+    if media.blob:
+        media.blob = str(uuid.uuid4())  # CollectionSpace makes a new Blob for the new file
+    media.updated_at = _now()
+    return {"csid": csid, "replaced": "yes", "blob": media.blob or ""}
+
+
+@app.post("/_fake/approve/{csid}")
+async def approve(request: Request, csid: str) -> dict[str, Any]:
+    """Set the Media record's "Approved for web", as PAHMA's staff do to take it off the web."""
+    body: dict[str, Any] = await request.json()
+    media = store.media[csid]
+    media.approved_for_web = bool(body["approved"])
+    media.updated_at = _now()
+    return {"csid": csid, "approved": media.approved_for_web}
 
 
 @app.post("/_fake/remove-file/{csid}")
