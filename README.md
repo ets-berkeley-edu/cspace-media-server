@@ -21,8 +21,8 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 - Fetch a file from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
 - Add a watermark for the museums that want one.
-- Give admins a web app to follow daily refreshes and alerts, see what Serena served and couldn't serve and why, take
-  files down and change settings.
+- Give admins a web app to follow daily refreshes and alerts, see what Serena served and couldn't serve and why, recall
+  files and change settings.
 
 ## Layout
 

@@ -798,8 +798,8 @@ the plan, D127); until then, its requests are logged as `placeholder_not_uploade
   old Blob is still listed). Only for CSIDs the table doesn't know (a file not yet published, or one the ETL withholds)
   does Serena ask CollectionSpace, with the museum's read-only account: `GET media/<csid>` (a Media record, with its
   Blob CSID), then `GET blobs/<csid>` and a search for the Media record whose `blobCsid` is that CSID. A CSID neither
-  knows, or one the table doesn't know while CollectionSpace can't be reached, is listed as not found and isn't taken
-  down: Serena serves none of them today, and storing a Blob CSID as if it were a Media CSID would do nothing while
+  knows, or one the table doesn't know while CollectionSpace can't be reached, is listed as not found and isn't
+  recalled: Serena serves none of them today, and storing a Blob CSID as if it were a Media CSID would do nothing while
   looking as if it worked (D117). Neither is the museum's placeholder image, which has no Media record. The rest of
   the list goes ahead.
 - **The summary, before anything changes.** For each Media record: its Blob, kind, whether Serena serves it today,

@@ -72,8 +72,8 @@
           <template v-if="!summary">
             <p class="mb-3">
               Give up to {{ page?.max_in_box || 12 }} Media or Blob CSIDs, separated by new lines, commas or spaces, or a
-              text file of up to {{ (page?.max_in_file || 1000).toLocaleString('en-US') }}, one per line. Nothing is taken
-              down until you confirm.
+              text file of up to {{ (page?.max_in_file || 1000).toLocaleString('en-US') }}, one per line. Nothing is recalled
+              until you confirm.
             </p>
             <v-textarea
               id="recall-csids"
