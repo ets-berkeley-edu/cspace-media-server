@@ -7,8 +7,9 @@ Every few seconds it reads each museum's newest refresh (a museum has at most on
 A refresh in `checking` or `updating` is claimed with a conditional write that sets an owner and a heartbeat, renewed
 while the step runs; a step whose heartbeat has gone stale was interrupted and is started again, so a restart never
 loses a step (decided October 9, 2026, D33). Both steps are safe to repeat. A passed check goes straight on to the
-servability update, under the same claim (decided October 12, 2026, D80). Once a day it also removes audit entries
-older than each museum's audit retention (D98)."""
+servability update, under the same claim (decided October 12, 2026, D80), and a successful servability update
+ends the recalls CollectionSpace has caught up with (D119). Once a day it also removes audit entries older than each
+museum's audit retention (D98)."""
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from . import recalls
 from . import servability_update as updating
 from . import servable_list_check as checking
 from .audit import Audit
@@ -221,8 +223,22 @@ class Worker:
                     self._alert(refresh)
                     return
                 self.sleep(2 ** attempt)
-        self.s.refreshes.transition(refresh, State.UPDATED, results={"update": vars(counts)}, release=True)
-        log.info("updated", extra={"museum": refresh.tenant, "refresh_id": refresh.refresh_id, **vars(counts)})
+        results = {**vars(counts), **self._end_recalls(refresh)}
+        self.s.refreshes.transition(refresh, State.UPDATED, results={"update": results}, release=True)
+        log.info("updated", extra={"museum": refresh.tenant, "refresh_id": refresh.refresh_id, **results})
+
+    def _end_recalls(self, refresh: Refresh) -> dict[str, int]:
+        """After a successful servability update, the ends the recalls CollectionSpace has caught up with end (D119). A
+        failure here leaves every recall in place, which is safe; the next refresh looks again."""
+        try:
+            alerts = self.s.watchdog.alerts if self.s.watchdog is not None else None
+            ended = recalls.after_update(self.s.museums[refresh.tenant], refresh.refresh_id, refresh.refresh_date,
+                                           self.s.store, Audit(self.s.store), alerts)
+        except Exception:
+            log.exception("recalls not looked at after the servability update",
+                          extra={"refresh_id": refresh.refresh_id})
+            return {}
+        return {"recalls_ended": ended.ended, "recalls_kept": ended.kept}
 
 
 def build_services(settings: Settings | None = None) -> WorkerServices:

@@ -41,9 +41,9 @@ def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_ki
     """302 to a signed URL for the stored object (design: Signed URLs, Responses). The URL is never logged. A restricted
     file served on a portal's signed link gets Cache-Control: no-store, so the browser asks again next time.
 
-    The "served" line is what the admin app's Requests page reads (D103): the path (from paths.log_path(), so without
-    the PDF link suffix or a query string), the kind, the cache (hit, or miss when it was just fetched) and whether a
-    signed link was used."""
+    The "served" line is what the admin app's Past requests page reads (D103): the path (from paths.log_path(), so
+    without the PDF link suffix or a query string), the kind, the cache (hit, or miss when it was just fetched) and
+    whether a signed link was used."""
     signer: signing.Signer | None = request.app.state.signer
     if signer is None:
         log.error("no signer configured: set SERENA_CDN_BASE_URL and SERENA_CLOUDFRONT_KEY_SECRET_ID")
@@ -104,6 +104,9 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
             cache = "miss"
         if entry is None:
             return _unavailable(request, tenant, Reason.INTERNAL_ERROR)
+        if cache == "hit":
+            cache_index.served(request.app.state.store, tenant, parsed.blob_csid, parsed.derivative, entry,
+                               datetime.now(UTC))
         kind = decision.record.kind if decision.record is not None else None
         return _redirect(request, tenant, entry, decision.signed_kid, kind, cache)
     except signed_links.SigningKeysUnavailable:

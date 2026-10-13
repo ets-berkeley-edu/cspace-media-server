@@ -18,7 +18,7 @@ export const RETENTION_LABELS: Record<number, string> = {
 /** The page sizes the Refreshes, Alerts and Audit log tables offer; 25 to start (D92). */
 export const PAGE_SIZES = [10, 25, 50, 100].map(n => ({value: n, title: String(n)}))
 
-/** The Requests page's ranges (D106). */
+/** The Past requests page's ranges (D106). */
 export const REQUEST_RANGES = [
   {value: '1h', title: 'Last hour'},
   {value: '24h', title: 'Last 24 hours'},
@@ -78,4 +78,13 @@ export function targetOf(action: string, target: string): string {
   const what = kind.replace(/_/g, ' ')
   return [what.charAt(0).toUpperCase() + what.slice(1), refreshDate, subject !== refreshDate ? subject : '']
     .filter(Boolean).join(' · ')
+}
+
+const PATH = /^\/([a-z]+)\/imageserver\/blobs\/([A-Za-z0-9-]{1,64})\/(?:derivatives\/([A-Za-z]+)\/)?content$/
+const CSID = /^[0-9a-f]{8}(-[0-9a-f]{4}){2,3}(-[0-9a-f]{12})?$/i
+
+/** A logged path's Blob CSID and size, or null for a path with no CSID to look up (a bad CSID): D145. */
+export function blobOfPath(path: string): {blob: string, size: string} | null {
+  const found = PATH.exec(path)
+  return found && CSID.test(found[2]) ? {blob: found[2], size: found[3] || 'original'} : null
 }

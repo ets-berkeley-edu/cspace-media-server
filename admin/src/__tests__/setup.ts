@@ -5,7 +5,7 @@
 import {config} from '@vue/test-utils'
 import {afterEach, beforeEach, vi} from 'vitest'
 import vuetify from '@/plugins/vuetify'
-import {session} from '@/session'
+import {session, waiting} from '@/session'
 
 config.global.plugins = [vuetify]
 
@@ -14,6 +14,8 @@ beforeEach(() => {
   session.build = ''
   session.signedIn = []
   session.loaded = false
+  waiting.museum = ''
+  waiting.alerts = []
 })
 
 afterEach(() => {

@@ -1,5 +1,5 @@
 import pytest
-from conftest import add_blob, take_down
+from conftest import add_blob, recall
 from fastapi.testclient import TestClient
 
 from serena.app import create_app
@@ -9,7 +9,7 @@ from serena.unserved import MemoryRecorder, Reason
 
 BLOB = "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b"  # synthetic
 MEDIA = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
-RESTRICTED_IMAGE = "59a733dd-d641-4e1a-8552"  # PAHMA's, from its configuration
+PLACEHOLDER = "59a733dd-d641-4e1a-8552"  # PAHMA's, from its configuration
 
 
 @pytest.fixture
@@ -72,21 +72,21 @@ def test_not_listed(client: TestClient, store: Store, recorder: MemoryRecorder) 
     assert _reason(client, recorder, derivative("pahma")) == Reason.NOT_LISTED
 
 
-def test_takedowns(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+def test_recalls(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     add_blob(store, "pahma", BLOB, MEDIA)
-    take_down(store, "ucjeps", MEDIA)  # another museum's takedown changes nothing here
+    recall(store, "ucjeps", MEDIA)  # another museum's recall changes nothing here
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
-    take_down(store, "pahma", MEDIA)
-    assert _reason(client, recorder, derivative("pahma")) == Reason.TAKEN_DOWN  # on the very next request
-    take_down(store, "pahma", MEDIA, state="unlocked")
+    recall(store, "pahma", MEDIA)
+    assert _reason(client, recorder, derivative("pahma")) == Reason.RECALLED  # on the very next request
+    store.delete_recall("pahma", MEDIA)  # ended (by a refresh, or released)
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
 
 
-def test_restricted_image_blob(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
-    path = derivative("pahma", "Thumbnail", RESTRICTED_IMAGE)
+def test_placeholder_image(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+    path = derivative("pahma", "Thumbnail", PLACEHOLDER)
     assert _reason(client, recorder, path) == Reason.NOT_LISTED  # it must be in the daily file like any other
-    add_blob(store, "pahma", RESTRICTED_IMAGE, None)  # listed with no Media CSID
-    assert _reason(client, recorder, path) == Reason.RESTRICTED_IMAGE_NOT_UPLOADED
+    add_blob(store, "pahma", PLACEHOLDER, None)  # listed with no Media CSID
+    assert _reason(client, recorder, path) == Reason.PLACEHOLDER_NOT_UPLOADED
 
 
 def test_a_failing_table_fails_closed(client: TestClient, store: Store, recorder: MemoryRecorder,
@@ -96,7 +96,7 @@ def test_a_failing_table_fails_closed(client: TestClient, store: Store, recorder
     def unreachable(*args: object) -> None:
         raise ConnectionError("DynamoDB unreachable")
 
-    monkeypatch.setattr(store, "takedown", unreachable)
+    monkeypatch.setattr(store, "recall", unreachable)
     response = client.get(derivative("pahma"))
     assert response.headers["location"] == "/unavailable/pahma.svg"
     assert recorder.recent[-1].reason == Reason.INTERNAL_ERROR

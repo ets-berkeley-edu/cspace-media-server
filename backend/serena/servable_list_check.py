@@ -2,7 +2,7 @@
 and servability update).
 
 Fails on any malformed line, a value outside the rules, a Blob listed twice, or more change than the museum's
-threshold allows; warns on a missing restricted-image Blob and on a Media CSID listed for several Blobs. The result
+threshold allows; warns on a missing placeholder image and on a Media CSID listed for several Blobs. The result
 names line numbers and fields only, never the values (decided October 9, 2026, D38)."""
 from __future__ import annotations
 
@@ -88,8 +88,8 @@ def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, thres
             problems.add(number, "blob_csid", "isn't a CSID")
         if media and not is_csid(media):
             problems.add(number, "media_csid", "isn't a CSID")
-        if not media and blob != museum.restricted_image_blob_csid:
-            problems.add(number, "media_csid", "is empty (allowed only for the museum's restricted-image Blob)")
+        if not media and blob != museum.placeholder_blob_csid:
+            problems.add(number, "media_csid", "is empty (allowed only for the museum's placeholder image)")
         if kind not in KINDS:
             problems.add(number, "kind", "isn't image, card, audio, video, 3D or pdf")
         if access not in ACCESS:
@@ -103,8 +103,8 @@ def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, thres
 
     result = Result(passed=False, rows=len(rows), threshold_percent=threshold_percent,
                     error_count=problems.count, errors=problems.listed)
-    if museum.restricted_image_blob_csid and museum.restricted_image_blob_csid not in rows:
-        result.warnings.append("the museum's restricted-image Blob isn't listed")
+    if museum.placeholder_blob_csid and museum.placeholder_blob_csid not in rows:
+        result.warnings.append("the museum's placeholder image isn't listed")
     shared = sum(1 for media, n in Counter(r.media_csid for r in rows.values() if r.media_csid).items() if n > 1)
     if shared:
         result.warnings.append(f"{shared} Media CSID{'s are' if shared > 1 else ' is'} listed for several Blobs")

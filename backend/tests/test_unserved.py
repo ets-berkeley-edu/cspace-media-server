@@ -1,4 +1,4 @@
-"""Unserved requests are logged, for the Requests page (D102: no Unserved requests table)."""
+"""Unserved requests are logged, for the Past requests page (D102: no Unserved requests table)."""
 import logging
 
 import pytest

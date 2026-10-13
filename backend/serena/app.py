@@ -14,6 +14,7 @@ from fastapi.responses import PlainTextResponse
 
 from . import (
     admin_api,
+    admin_recalls,
     admin_refreshes,
     admin_requests,
     admin_settings,
@@ -106,13 +107,16 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     app.state.admin_refreshes = admin_refreshes.RefreshServices(
         Refreshes(store, clock) if clock else Refreshes(store), app_alerts, s3)
     app.state.requests_log = requests_log.Requests(log_reader or _log_reader(settings))
+    app.state.admin_recalls = admin_recalls.RecallServices(
+        store, app.state.fetcher.clients, audit, app_alerts, Refreshes(store, clock) if clock else Refreshes(store),
+        app.state.museum_settings, s3, settings.buckets, *((clock,) if clock else ()))
     app.state.admin_settings = admin_settings.SettingsServices(
         app.state.museum_settings, store, app_alerts, audit, *((clock,) if clock else ()))
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
         Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), audit,
         cspace_http or _admin_http), routers=(admin_refreshes.create_router(), admin_settings.create_router(),
-                                            admin_requests.create_router()))
+                                            admin_requests.create_router(), admin_recalls.create_router()))
     app.include_router(imageserver.router)
 
     log.info("Serena started", extra={"museums": sorted(museums), "environment": settings.env_label})
@@ -120,7 +124,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
 
 
 def _log_reader(settings: Settings) -> requests_log.Reader | None:
-    """Where the Requests page reads the log (D109): CloudWatch Logs Insights in AWS, the local log file otherwise."""
+    """Where the Past requests page reads the log (D109): CloudWatch Logs Insights in AWS, the local log file
+    otherwise."""
     if settings.log_group:
         return requests_log.CloudWatchReader(boto3.client("logs", region_name=settings.aws_region),
                                              settings.log_group)

@@ -23,14 +23,15 @@ class Action(StrEnum):
     SIGN_IN = "sign_in"
     SIGN_OUT = "sign_out"
     SIGN_OUT_ALL = "sign_out_all"
-    TAKEDOWN = "takedown"
-    UNLOCK = "unlock"
+    RECALL = "recall"
+    RECALL_RELEASE = "recall_release"  # an admin's release of a recall a refresh kept (D119)
+    RECALL_ENDED = "recall_ended"  # a servability update ended a recall; the refresh is the actor (D119)
     SETTINGS_CHANGE = "settings_change"
     AUDIT_EXPORT = "audit_export"
     UPDATE_RETRY = "update_retry"
     THRESHOLD_OVERRIDE = "threshold_override"
     ADMIN_REFRESH = "admin_refresh"
-    RESTRICTED_IMAGE_UPLOAD = "restricted_image_upload"
+    PLACEHOLDER_UPLOAD = "placeholder_upload"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
 
 

@@ -1,4 +1,4 @@
-"""The Requests page: what Serena served and couldn't serve, from its log (decided October 12, 2026, D100 to D113).
+"""The Past requests page: what Serena served and couldn't serve, from its log (decided October 12, 2026, D100 to D113).
 Every CSID, path and museum here is synthetic."""
 import csv
 import io
@@ -161,7 +161,7 @@ class FakeLogs:
             rows = [cells(time="2026-10-12T17:00:00.000+00:00", message="served", kind="image", cache="hit",
                           signed="1", path="/pahma/imageserver/blobs/b1/content", **{"@ptr": "opaque"})]
         elif "by datefloor(@timestamp, 1d) as day, reason" in text:
-            rows = [cells(day="2026-10-12 00:00:00.000", reason="taken_down", requests="4")]
+            rows = [cells(day="2026-10-12 00:00:00.000", reason="recalled", requests="4")]
         elif "by datefloor" in text:
             rows = [cells(day="2026-10-12 00:00:00.000", requests="7")]
         else:
@@ -188,7 +188,7 @@ def test_cloudwatch_runs_the_four_queries_on_the_app_log_group() -> None:
     assert len(client.started) == 4
     assert [(ln.outcome, ln.path, ln.signed) for ln in report.lines] == [
         ("served", "/pahma/imageserver/blobs/b1/content", True)]
-    assert [(d.day, d.served, d.unserved) for d in report.days] == [("2026-10-12", 7, {"taken_down": 4})]
+    assert [(d.day, d.served, d.unserved) for d in report.days] == [("2026-10-12", 7, {"recalled": 4})]
     assert report.top_paths == [("/pahma/imageserver/blobs/b1/content", 7)]
 
 

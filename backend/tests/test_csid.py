@@ -7,7 +7,7 @@ from serena.csid import is_csid
     "value",
     [
         "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b",  # the usual UUID form (synthetic)
-        "59a733dd-d641-4e1a-8552",  # PAHMA's restricted-image Blob: a real CSID that isn't a UUID
+        "59a733dd-d641-4e1a-8552",  # PAHMA's placeholder image: a real CSID that isn't a UUID
         "a",
         "A" * 64,
     ],

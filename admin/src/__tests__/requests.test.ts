@@ -30,7 +30,7 @@ async function open() {
   return mount(Requests as never, {global: {plugins: [router]}, attachTo: document.body})
 }
 
-describe('the Requests page', () => {
+describe('the Past requests page', () => {
   it('shows a spinner while it reads the log, then the counts and the newest lines', async () => {
     const calls = fakeApi({
       'GET /museums/pahma/requests?range=24h': {body: REPORT},
@@ -40,7 +40,7 @@ describe('the Requests page', () => {
     expect(wrapper.find('#requests-loading').exists()).toBe(true) // D108
     await flushPromises()
     expect(wrapper.find('#requests-loading').exists()).toBe(false)
-    expect(wrapper.find('#page-title').text()).toBe('PAHMA Requests')
+    expect(wrapper.find('#page-title').text()).toBe('PAHMA Past requests')
     expect(wrapper.find('#requests-by-day').text()).toContain('not listed 1, too large 1')
     expect(wrapper.find('#requests-top-paths').text()).toContain('/pahma/imageserver/blobs/b1/content')
     const times = () => wrapper.findAll('#requests-table tbody tr').map(row => row.find('td').text())
@@ -81,6 +81,25 @@ describe('the Requests page', () => {
     const wrapper = await open()
     await flushPromises()
     expect(wrapper.text()).toContain('Choose a shorter range')
+    wrapper.unmount()
+  })
+
+  it('opens a path\'s file in a dialog, and a bad CSID stays text (D145)', async () => {
+    const blob = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b'
+    const good = {...line('2026-10-12T17:04:00.000+00:00', 'served'), path: `/pahma/imageserver/blobs/${blob}/derivatives/Medium/content`}
+    const bad = {...line('2026-10-12T17:05:00.000+00:00', 'unserved', 'bad_csid'), path: '/pahma/imageserver/blobs/not-a-csid/content'}
+    fakeApi({'GET /museums/pahma/requests?range=24h': {body: {...REPORT, lines: [good, bad]}}})
+    const wrapper = await open()
+    await flushPromises()
+    const links = wrapper.findAll('#requests-table .file-link')
+    expect(links.map(l => l.text())).toEqual([good.path])
+    await links[0].trigger('click')
+    await flushPromises()
+    const dialog = document.querySelector('#file-dialog')
+    expect(dialog?.querySelector('img')?.getAttribute('src')).toBe(`/admin/v1/museums/pahma/blobs/${blob}/preview?size=Medium`)
+    expect(dialog?.textContent).toContain('This request, 2026-10-12 17:04:00 UTC: served.')
+    ;(document.querySelector('#file-dialog-dismiss') as HTMLElement).click()
+    await flushPromises()
     wrapper.unmount()
   })
 })

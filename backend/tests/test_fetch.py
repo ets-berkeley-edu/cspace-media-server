@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import TENANTS, add_blob, take_down
+from conftest import TENANTS, add_blob, recall
 from fastapi.testclient import TestClient
 
 from fakecspace import samples
@@ -124,7 +124,7 @@ def test_a_miss_is_fetched_stored_and_served(client: TestClient, store: Store, s
 
 def test_the_served_line_says_miss_then_hit(client: TestClient, store: Store,
                                             caplog: pytest.LogCaptureFixture) -> None:
-    """What the Requests page shows (D103)."""
+    """What the Past requests page shows (D103)."""
     caplog.set_level(logging.INFO, logger="serena.imageserver")
     add_blob(store, "pahma", BLOB, MEDIA)
     fake.add(MEDIA)
@@ -358,11 +358,11 @@ def test_a_failure_is_remembered_for_ten_minutes(app: Any, client: TestClient, s
     assert client.get(path()).headers["location"].startswith("/local-cdn/")
 
 
-def test_a_takedown_still_comes_first(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+def test_a_recall_still_comes_first(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     add_blob(store, "pahma", BLOB, MEDIA)
     assert unavailable(client, recorder, path()) == Reason.MEDIA_GONE
-    take_down(store, "pahma", MEDIA)
-    assert unavailable(client, recorder, path()) == Reason.TAKEN_DOWN
+    recall(store, "pahma", MEDIA)
+    assert unavailable(client, recorder, path()) == Reason.RECALLED
 
 
 # --- simultaneous requests

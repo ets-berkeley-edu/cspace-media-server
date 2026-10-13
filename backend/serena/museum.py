@@ -64,6 +64,18 @@ class StartingSettings(BaseModel):
         return days
 
 
+class LookupField(BaseModel):
+    """A Media record field Media look up shows beside Serena's records (decided October 13, 2026, D140): the
+    record's part (for example media_common) and the field's element name in it. Serena shows the value; it never
+    decides anything from it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    part: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    label: str = Field(min_length=1, max_length=60)
+
+
 class Museum(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -72,9 +84,9 @@ class Museum(BaseModel):
     derivatives: tuple[str, ...]
     # Whether the original file (…/blobs/<CSID>/content) is served for images and cards.
     original: bool
-    # The Blob the ETL lists in place of a non-public image (design: Restricted-image Blob). Only museums whose ETL
+    # The Blob the ETL lists in place of a non-public image (design: Placeholder image). Only museums whose ETL
     # uses one have it.
-    restricted_image_blob_csid: str | None = None
+    placeholder_blob_csid: str | None = None
     # The sizes the museum watermarks (design: Watermarks). Until watermarking is built, they get the unavailable
     # image: Serena never serves an unwatermarked copy of a size the museum watermarks.
     watermark_sizes: tuple[str, ...] = ()
@@ -84,6 +96,8 @@ class Museum(BaseModel):
     # The CollectionSpace role (its display name) that marks a Serena admin in this museum (design: Admin web app).
     # It carries no permissions in CollectionSpace; the museum's administrators give it to the team.
     admin_role: str = Field(default="Serena_Admin", pattern=r"^[A-Za-z0-9_ ]{1,64}$")
+    # The Media record fields Media look up shows from CollectionSpace (D140); none if empty.
+    lookup_fields: tuple[LookupField, ...] = ()
     settings: StartingSettings
 
     @field_validator("derivatives")
@@ -98,11 +112,11 @@ class Museum(BaseModel):
             raise ValueError("a derivative is listed twice")
         return names
 
-    @field_validator("restricted_image_blob_csid")
+    @field_validator("placeholder_blob_csid")
     @classmethod
     def _csid(cls, value: str | None) -> str | None:
         if value is not None and not is_csid(value):
-            raise ValueError("restricted_image_blob_csid isn't a CSID")
+            raise ValueError("placeholder_blob_csid isn't a CSID")
         return value
 
     @model_validator(mode="after")

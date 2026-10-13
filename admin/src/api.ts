@@ -75,7 +75,7 @@ export interface Refresh extends RefreshSummary {
   file_name: string
   upload: {rows: number, bytes: number, sha256: string, uploaded_at: string} | null
   check: Check | null
-  update: {deleted: number, written: number, unchanged: number} | null
+  update: {deleted: number, written: number, unchanged: number, recalls_ended?: number, recalls_kept?: number} | null
   override: {at: string} | null // an admin overrode the delta threshold for this servable list (D83)
   actions: RefreshAction[]
 }
@@ -161,6 +161,91 @@ export interface RequestsReport {
   lines: RequestLine[]
 }
 
+/** A Media record a recall would recall, and how Serena found it (D116). */
+export interface RecallRecord {
+  media_csid: string
+  blob_csids: string[]
+  kind: string | null
+  served_today: boolean
+  recalled: boolean
+  source: 'serena' | 'collectionspace'
+  entered: string[]
+}
+
+export interface RecallSummary {
+  records: RecallRecord[]
+  not_found: {csid: string, why: string, message: string}[]
+  recalled?: string[]
+}
+
+export interface Recall {
+  media_csid: string
+  blob_csids: string[]
+  by: string
+  at: string
+  reason: string
+  kept_by: string | null // the refresh that kept it: the same Blob is still public in CollectionSpace (D119)
+  kept_on: string | null
+}
+
+export interface EndedRecall {
+  media_csid: string
+  at: string
+  by: string // an admin, or "refresh <refresh ID>"
+  action: 'recall_ended' | 'recall_release'
+  details: Record<string, unknown>
+}
+
+export interface RecallsPage {
+  days: number
+  active: Recall[]
+  ended: EndedRecall[]
+  max_in_box: number
+  max_in_file: number
+}
+
+export interface LookupStep {
+  check: string
+  outcome: string
+  ok: boolean | null
+}
+
+export interface LookupItem {
+  blob_csid: string
+  media_csid: string | null
+  kind: string | null
+  access: string | null
+  steps: LookupStep[]
+  sizes: LookupSize[]
+  cspace: LookupCSpace
+}
+
+export interface LookupSize {
+  size: string
+  served: boolean
+  reason: string | null
+  verdict: string
+  stored: {fetched_at: string, last_served: string | null, size: number, content_type: string} | null
+}
+
+/** What CollectionSpace says now about the item's Media record (D139 to D141). */
+export interface LookupCSpace {
+  state: 'exists' | 'deleted' | 'gone' | 'unavailable' | 'no_media'
+  media_csid?: string
+  blob_csid?: string | null
+  updated_at?: string | null
+  changed_since_refresh?: boolean
+  fields?: {label: string, value: string}[]
+  next?: string
+}
+
+export interface Lookup {
+  input: string
+  refused: string | null
+  refresh: {refresh_id: string, refresh_date: string, started_at: string} | null
+  items: LookupItem[]
+}
+
 /** A failed load's message, for the page to show. */
 export function problem(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Serena couldn\'t be reached. Reload the page to try again.'
@@ -176,6 +261,22 @@ export const api = {
   audit: (museum: string) => call<{days: number, entries: AuditEntry[]}>('GET', `/museums/${museum}/audit`),
   // Every entry the museum keeps, as CSV: a plain link, so the browser saves the file (D96).
   auditExportUrl: (museum: string) => `${PREFIX}/museums/${museum}/audit/export.csv`,
+  recalls: (museum: string) => call<RecallsPage>('GET', `/museums/${museum}/recalls`),
+  recallSummary: (museum: string, text: string) =>
+    call<RecallSummary>('POST', `/museums/${museum}/recalls/summary`, {text}),
+  recall: (museum: string, text: string, reason: string) =>
+    call<RecallSummary>('POST', `/museums/${museum}/recalls`, {text, reason}),
+  release: (museum: string, mediaCsid: string, reason: string) =>
+    call<{released: string}>('POST', `/museums/${museum}/recalls/${encodeURIComponent(mediaCsid)}/release`, {reason}),
+  // A Media record's thumbnail or full-size view, through the admin API only, never cached (D129).
+  previewUrl: (museum: string, mediaCsid: string, size: 'thumbnail' | 'full' = 'thumbnail', source: 'any' | 'cspace' = 'any') =>
+    `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${size}` +
+    (source === 'cspace' ? '&source=cspace' : ''),
+  /** A Blob's file at one size (a derivative, "original", or "full": the largest the museum serves), D144. */
+  blobPreviewUrl: (museum: string, blobCsid: string, size = 'full') =>
+    `${PREFIX}/museums/${museum}/blobs/${encodeURIComponent(blobCsid)}/preview?size=${encodeURIComponent(size)}`,
+  lookup: (museum: string, q: string) =>
+    call<Lookup>('GET', `/museums/${museum}/lookup?${new URLSearchParams({q})}`),
   requests: (museum: string, range: RequestRange) =>
     call<RequestsReport>('GET', `/museums/${museum}/requests?range=${range}`),
   // The lines matching the page's range and filters, as CSV: a plain link, so the browser saves the file (D113).

@@ -1,9 +1,9 @@
 """Requests answered with the unavailable image (design: Requests Serena doesn't serve).
 
 Each one is logged with the museum, its reason and the path (with the PDF link suffix removed): never an IP address,
-a header or an email address. The admin app's Requests page reads these lines from the log (requests_log.py; decided
-October 12, 2026, D102, which replaced the Unserved requests table). Tests may pass a recorder (MemoryRecorder) to
-see each one as it happens."""
+a header or an email address. The admin app's Past requests page reads these lines from the log (requests_log.py;
+decided October 12, 2026, D102, which replaced the Unserved requests table). Tests may pass a recorder
+(MemoryRecorder) to see each one as it happens."""
 from __future__ import annotations
 
 import logging
@@ -28,10 +28,10 @@ class Reason(StrEnum):
     RESTRICTED = "restricted"  # access restricted, without a signed link or of a kind without signed access
     SIGNATURE_INVALID = "signature_invalid"  # a signed link that is malformed, has an unknown key ID or doesn't match
     SIGNATURE_EXPIRED = "signature_expired"  # a signed link that has expired, or expires too far ahead
-    TAKEN_DOWN = "taken_down"
+    RECALLED = "recalled"
     NO_DERIVATIVES_FOR_KIND = "no_derivatives_for_kind"  # a derivative of a 3D or PDF Blob
     ORIGINAL_NOT_SERVED = "original_not_served"  # an image's original where the museum doesn't serve it
-    RESTRICTED_IMAGE_NOT_UPLOADED = "restricted_image_not_uploaded"
+    PLACEHOLDER_NOT_UPLOADED = "placeholder_not_uploaded"
     # Temporary: a size the museum watermarks, until watermarking is built (pull request 16 in the plan).
     WATERMARK_NOT_BUILT = "watermark_not_built"
     # A miss (design: Image fetch): the light check, then the fetch and its checks

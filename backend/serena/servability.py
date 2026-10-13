@@ -2,7 +2,7 @@
 
 A Blob is servable when the servable list of the last servability update includes it, its kind is one Serena serves,
 its access is public (or restricted, with a valid signed link, for a kind the museum allows signed access to), and its
-Media record has no active takedown. Then the request must fit the kind: a 3D file or PDF only as its original file,
+Media record has no active recall. Then the request must fit the kind: a 3D file or PDF only as its original file,
 and an image's original only where the museum serves originals."""
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class Decision:
 def decide(museum: Museum, request: BlobRequest, store: Store,
            vouch: Callable[[], Verdict] | None = None) -> Decision:
     """`vouch` checks the request's signed link (design: Signed links); it's called only for a restricted Blob of a
-    kind the museum allows signed access to. A valid link lets the rest of the checks run, so a takedown still wins."""
+    kind the museum allows signed access to. A valid link lets the rest of the checks run, so a recall still wins."""
     record = store.servability(museum.key, request.blob_csid)
     if record is None:
         return Decision(Reason.NOT_LISTED)
@@ -51,10 +51,10 @@ def decide(museum: Museum, request: BlobRequest, store: Store,
     if request.derivative is None and record.kind not in ORIGINAL_ONLY_KINDS and not museum.original:
         return Decision(Reason.ORIGINAL_NOT_SERVED, record)
     if record.media_csid is not None:
-        takedown = store.takedown(museum.key, record.media_csid)
-        if takedown is not None and takedown.active:
-            return Decision(Reason.TAKEN_DOWN, record)
-    if request.blob_csid == museum.restricted_image_blob_csid:
+        recall = store.recall(museum.key, record.media_csid)
+        if recall is not None:
+            return Decision(Reason.RECALLED, record)
+    if request.blob_csid == museum.placeholder_blob_csid:
         # Served from the files an admin uploads (pull request 14 in the plan); none yet.
-        return Decision(Reason.RESTRICTED_IMAGE_NOT_UPLOADED, record)
+        return Decision(Reason.PLACEHOLDER_NOT_UPLOADED, record)
     return Decision(None, record, signed_kid)

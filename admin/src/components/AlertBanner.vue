@@ -1,63 +1,39 @@
 <template>
-  <div v-if="unacknowledged.length" id="alert-banner" class="pa-3">
-    <v-alert
-      v-for="alert in unacknowledged.slice(0, 5)"
-      :key="alert.key"
-      type="warning"
-      density="compact"
-      class="mb-2"
+  <div v-if="unacknowledged.length" id="alert-banner" class="alert-banner d-flex align-center px-4 py-2">
+    <span class="text-truncate"><strong>{{ unacknowledged.length }} alert{{ unacknowledged.length === 1 ? '' : 's' }}:</strong> <span id="alert-banner-title">{{ unacknowledged[0].title }}</span></span>
+    <v-spacer />
+    <v-btn
+      id="open-alerts"
+      size="small"
+      variant="outlined"
+      :to="{name: 'alerts', params: {museum}}"
     >
-      <strong>{{ alert.title }}</strong> · {{ alert.refresh_date }}<template v-if="alert.subject !== alert.refresh_date"> · {{ alert.subject }}</template>
-      <div class="text-body-2">{{ alert.message }}</div>
-      <template #append>
-        <v-btn
-          class="acknowledge"
-          size="small"
-          variant="outlined"
-          :loading="busy === alert.key"
-          @click="acknowledge(alert.key)"
-        >
-          Acknowledge
-        </v-btn>
-      </template>
-    </v-alert>
-    <router-link v-if="unacknowledged.length > 5" :to="{name: 'alerts', params: {museum}}">
-      and {{ unacknowledged.length - 5 }} more
-    </router-link>
+      Open alerts
+    </v-btn>
   </div>
 </template>
 
 <script setup lang="ts">
-import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {computed, onBeforeUnmount, onMounted, watch} from 'vue'
 import {useRoute} from 'vue-router'
-import type {AlertItem} from '@/api'
 import {api} from '@/api'
-import {alertsChanged} from '@/session'
+import {alertsChanged, waiting} from '@/session'
 
+// One line, only while an alert waits to be acknowledged: how many, the newest one's title, and a way to the Alerts
+// page, where they're acknowledged. The app bar's bell shows the same count (D137).
 const route = useRoute()
 const museum = computed(() => String(route.params.museum || ''))
-const alerts = ref<AlertItem[]>([])
-const busy = ref('')
-const unacknowledged = computed(() => alerts.value.filter(a => !a.acknowledged_at))
+const unacknowledged = computed(() => waiting.museum === museum.value ? waiting.alerts : [])
 
 async function load() {
+  const asked = museum.value
   try {
-    alerts.value = museum.value ? (await api.alerts(museum.value, true)).alerts : []
+    const alerts = asked ? (await api.alerts(asked, true)).alerts : []
+    waiting.alerts = alerts.filter(a => !a.acknowledged_at).sort((a, b) => b.created_at.localeCompare(a.created_at))
   } catch {
-    alerts.value = [] // the page itself reports a problem reaching Serena; the banner stays out of the way
+    waiting.alerts = [] // the page itself reports a problem reaching Serena; the banner stays out of the way
   }
-}
-
-async function acknowledge(key: string) {
-  busy.value = key
-  try {
-    await api.acknowledge(museum.value, key)
-    alertsChanged.value++
-  } catch {
-    void load() // already acknowledged in another tab, or Serena unreachable: show what's there now
-  } finally {
-    busy.value = ''
-  }
+  waiting.museum = asked
 }
 
 // Alerts the watchdog raises in the background show up without a refresh: on every page change, and every minute
@@ -81,3 +57,11 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', whenVisible)
 })
 </script>
+
+<style scoped>
+.alert-banner {
+  background: rgb(var(--v-theme-warning), 0.12);
+  border-bottom: 1px solid rgb(var(--v-theme-warning), 0.4);
+  gap: 4px;
+}
+</style>
