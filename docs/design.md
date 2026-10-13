@@ -1005,6 +1005,10 @@ reachable only from campus networks.
   bell and the banner share one request, made on every page change and every minute while the tab is visible. The
   gear, labelled "<museum> settings", opens Settings. Page paths stay short (`/refreshes`, `/requests`, `/lookup`,
   `/recalls`).
+- **CSID labels** (Richard, October 13, 2026): a CSID shown next to a label is labelled "Media CSID" or "Blob CSID",
+  never "Media record" or "Blob" alone; where both are listed, the Media CSID comes first (a Media record holds its
+  Blob). This covers both Details panes on Media look up, its comparison rows, the Recalls tables and the file dialogs'
+  titles.
 - **First-release features:**
   - alerts: the bell, the banner, the Alerts page and acknowledging there (see Watchdog and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;

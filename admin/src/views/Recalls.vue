@@ -29,11 +29,11 @@
       class="mb-6"
     >
       <template #[`item.media_csid`]="{item}">
-        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media record')">{{ item.media_csid }}</FileLink>
+        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
       </template>
       <template #[`item.blob_csids`]="{item}">
         <span v-for="(blob, i) in item.blob_csids" :key="blob"><template v-if="i">, </template>
-          <FileLink class="recall-csid" @open="openCsid(blob, 'Blob')">{{ blob }}</FileLink></span>
+          <FileLink class="recall-csid" @open="openCsid(blob, 'Blob CSID')">{{ blob }}</FileLink></span>
       </template>
       <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
       <template #[`item.kept_by`]="{item}">
@@ -69,7 +69,7 @@
         {{ item.action === 'recall_release' ? 'Released' : 'Ended by a refresh' }}
       </template>
       <template #[`item.media_csid`]="{item}">
-        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media record')">{{ item.media_csid }}</FileLink>
+        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
       </template>
       <template #[`item.details`]="{item}">{{ item.details.reason || item.details.why || '' }}</template>
     </v-data-table>
@@ -115,7 +115,7 @@
             </p>
             <v-table id="recall-summary" density="compact" class="mb-4">
               <thead>
-                <tr><th /><th>Media CSID</th><th>Blob</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr>
+                <tr><th /><th>Media CSID</th><th>Blob CSID</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr>
               </thead>
               <tbody>
                 <tr v-for="r in summary.records" :key="r.media_csid" :class="{'text-disabled': r.recalled}">
@@ -268,7 +268,7 @@ import {PAGE_SIZES, when} from '@/words'
 
 const activeHeaders = [
   {title: 'Media CSID', key: 'media_csid'},
-  {title: 'Blob', key: 'blob_csids', sortable: false},
+  {title: 'Blob CSID', key: 'blob_csids', sortable: false},
   {title: 'Recalled by', key: 'by'},
   {title: 'When (UTC)', key: 'at'},
   {title: 'Reason', key: 'reason'},
@@ -286,12 +286,13 @@ const route = useRoute()
 const museum = computed(() => String(route.params.museum))
 const shownFile = ref<ShownFile | null>(null)
 
-// A Media record's or Blob's CSID opens its file, the largest size the museum serves, in a dialog (D145).
-function openCsid(csid: string, what: 'Media record' | 'Blob') {
+// A Media record's or Blob's CSID opens its file, the largest size the museum serves, in a dialog (D145), titled
+// "Media CSID" or "Blob CSID" above the CSID: a CSID shown next to a label is always called that.
+function openCsid(csid: string, what: 'Media CSID' | 'Blob CSID') {
   shownFile.value = {
     title: what,
     name: csid,
-    url: what === 'Blob' ? api.blobPreviewUrl(museum.value, csid, 'full') : api.previewUrl(museum.value, csid, 'full'),
+    url: what === 'Blob CSID' ? api.blobPreviewUrl(museum.value, csid, 'full') : api.previewUrl(museum.value, csid, 'full'),
     lookup: csid
   }
 }

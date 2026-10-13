@@ -798,10 +798,10 @@
       : down ? `<span class="cap">CollectionSpace can't be reached</span>`
       : cs.state === "gone" ? `<span class="cap">Not in CollectionSpace</span>`
       : `${pic(seedOf(cs.blob))}<span class="cap">CollectionSpace's ${b.kind === "pdf" ? "file" : "Medium"}${cs.state === "deleted" ? " (soft-deleted)" : ""}, not stored</span>`;
-    const csFacts = cs && cs.state === "gone" && !down ? [["State", "No Blob or Media record with this CSID"]] : cs && !down ? [["Media record", csidHtml(cs.media)], ["State", {exists: "Exists", deleted: '<span class="pill t-warning">Soft-deleted</span>', gone: "Not found"}[cs.state]],
-      ["Blob", csidHtml(cs.blob) + (cs.blob !== b.blob ? ' <span class="pill t-warning">differs</span>' : "")],
+    const csFacts = cs && cs.state === "gone" && !down ? [["State", "No Blob or Media record with this CSID"]] : cs && !down ? [["Media CSID", csidHtml(cs.media)], ["State", {exists: "Exists", deleted: '<span class="pill t-warning">Soft-deleted</span>', gone: "Not found"}[cs.state]],
+      ["Blob CSID", csidHtml(cs.blob) + (cs.blob !== b.blob ? ' <span class="pill t-warning">differs</span>' : "")],
       ...cs.fields.map(([k, val]) => [esc(k), esc(val)]), ["Last changed", when(cs.updated)]] : [];
-    const facts = [["Blob", csidHtml(b.blob)], ["Media record", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'],
+    const facts = [["Media CSID", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'], ["Blob CSID", csidHtml(b.blob)],
       ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>'],
       ["First stored", earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : '<span class="muted">never</span>'],
       ["Last served", latest(b, "lastServed") ? when(latest(b, "lastServed")) : '<span class="muted">not in the last 30 days</span>']];
@@ -844,8 +844,8 @@
     const csState = {exists: "Exists", deleted: "Soft-deleted", gone: "Not found"}[cs.state];
     const csMedia = cs.media || b.media;
     const rows = [
-      ["Media record", b.media ? `<span class="mono">${esc(short(b.media))}</span>` : "—", `${csState}${csMedia && csMedia !== b.media ? ` · <span class="mono">${esc(short(csMedia))}</span>` : ""}`, cs.state !== "exists" || (csMedia !== b.media && b.media)],
-      ["Blob", b.media ? `<span class="mono">${esc(short(b.blob))}</span>` : `<span class="muted">not listed</span>`, `<span class="mono">${esc(short(cs.blob))}</span>`, !!b.media && cs.blob !== b.blob],
+      ["Media CSID", b.media ? `<span class="mono">${esc(short(b.media))}</span>` : "—", `${csState}${csMedia && csMedia !== b.media ? ` · <span class="mono">${esc(short(csMedia))}</span>` : ""}`, cs.state !== "exists" || (csMedia !== b.media && b.media)],
+      ["Blob CSID", b.media ? `<span class="mono">${esc(short(b.blob))}</span>` : `<span class="muted">not listed</span>`, `<span class="mono">${esc(short(cs.blob))}</span>`, !!b.media && cs.blob !== b.blob],
       ["Access", b.access ? esc(b.access) : "not listed", cs.fields.map(([k, v]) => `${esc(k)}: <strong>${esc(v)}</strong>`).join("<br>"), !!cs.fieldsChanged],
       ["As of", `Refresh ${lastRefresh()} (list made ${when(LIST_MADE)})`, `Last changed ${when(cs.updated)}`, ms(cs.updated) > ms(LIST_MADE)],
     ];
@@ -882,13 +882,13 @@
     return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there. Click a column's name to sort by it.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
       <h3>Active</h3>${table("active", [
         {key: "thumb", title: "", sortable: false, html: t => `<button class="thumb" data-full="${imageSeed(S.museum, t.blobs[0])}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, t.blobs[0]), "image")}</button>`},
-        {key: "media", title: "Media record", html: t => `${csidLink(t.media, "Media record")}<div class="muted">Blob ${csidLink(t.blobs[0], "Blob", short(t.blobs[0]))}</div>`},
+        {key: "media", title: "Media CSID", html: t => `${csidLink(t.media, "Media CSID")}<div class="muted">Blob CSID ${csidLink(t.blobs[0], "Blob CSID", short(t.blobs[0]))}</div>`},
         {key: "at", title: "Recalled", html: t => when(t.at)},
         {key: "by", title: "By"},
         {key: "reason", title: "Reason"},
         {key: "state", title: "State", val: t => t.kept ? "0" : "1", html: (t, i) => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${esc(t.kept.refresh)}</div><button type="button" data-release="${i}" style="margin-top:4px">Release…</button>` : `<span class="pill t-info">Waiting for a later refresh</span>`}], active, {key: "at", dir: "desc"})}
       <h3>Ended in the last 30 days</h3>${table("ended", [
-        {key: "media", title: "Media record", html: e => `${csidLink(e.media, "Media record")}<div class="muted">Blob ${csidLink(e.blob, "Blob", short(e.blob))}</div>`},
+        {key: "media", title: "Media CSID", html: e => `${csidLink(e.media, "Media CSID")}<div class="muted">Blob CSID ${csidLink(e.blob, "Blob CSID", short(e.blob))}</div>`},
         {key: "at", title: "Ended", html: e => when(e.at)},
         {key: "how", title: "How"},
         {key: "by", title: "By"},
@@ -928,7 +928,7 @@
     S.pendingRecall = rows.filter(x => !x.done).map(x => x.r);
     const todo = S.pendingRecall.length, what = `${todo} Media record${todo === 1 ? "" : "s"}`;
     dialog("Recall Media records", `<p style="margin-top:0">${what} to recall. Click a thumbnail for the full size.</p>
-      <div class="tw"><table><thead><tr><th></th><th>Media record</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
+      <div class="tw"><table><thead><tr><th></th><th>Media CSID</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
       ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td class="mono">${esc(short(x.media))}<div class="muted">Blob ${esc(short(x.blob))}</div></td><td>${x.kind}</td><td>${esc(x.served)}</td><td>${x.found}</td><td class="mono">${esc(short(x.gave))}</td></tr>`).join("")}</tbody></table></div>
       ${skipped.length ? `<p style="margin:12px 0 4px"><strong>Not recalled</strong></p><ul style="margin:0 0 12px">${skipped.map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>` : ""}
       <label class="field">Reason (required) <textarea id="tdReason" rows="2"></textarea></label>`,

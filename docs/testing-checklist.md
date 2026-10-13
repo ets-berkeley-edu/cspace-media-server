@@ -369,8 +369,8 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
 - [ ] In the admin app, open "Media look up" (in the menu, under Media records). Expect the title "PAHMA Media look up".
   Paste the URL and click "Look up". Expect "Served", "Every check passes for the Medium size", and "Serena has a
   stored copy" (you opened it); at the foot, the refresh you just ran named as the last servability update. Open "In
-  Serena" Details: expect the Blob, its Media record, and the checks In the servable list, Kind (image), Access
-  (public) and Recall (No recall). Copy the Media CSID.
+  Serena" Details: expect "Media CSID" then "Blob CSID" (in that order, as in the "In CollectionSpace now" Details),
+  and the checks In the servable list, Kind (image), Access (public) and Recall (No recall). Copy the Media CSID.
 - [ ] Paste the Media CSID alone and look it up again: expect a row for the original and each of PAHMA's sizes
   (Thumbnail, Small, Medium, FullHD, OriginalJpeg), each served "Yes"; Medium with a stored copy, the others "—".
 - [ ] Add a Media record to the simulator that isn't in PAHMA's servable list (a file not published yet; synthetic
