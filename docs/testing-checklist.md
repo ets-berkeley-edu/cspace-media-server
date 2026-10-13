@@ -380,13 +380,15 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
     -d '{"csid": "1a2b3c4d-0000-4000-8000-000000000001", "blob": "0f1e2d3c-0000-4000-8000-000000000001"}'
   ```
 - [ ] Open "Recalls". Expect the title "PAHMA Recalls", no active recalls, and nothing ended. Click "Recall…".
-  In the box, paste the image's Blob CSID (from its URL), its Media CSID, `0f1e2d3c-0000-4000-8000-000000000001` and
-  `not-a/csid`, one per line. Click "Show what would be recalled". Expect two Media records:
+  In the box, paste four lines: your image's Blob CSID (from the URL in the first step), your image's Media CSID (you
+  copied it in the second step), `0f1e2d3c-0000-4000-8000-000000000001` (the Blob of the Media record you just added)
+  and `not-a/csid`. Click "Show what would be recalled". Expect two Media records:
   - yours, with both CSIDs under "You gave" (they're the same record), kind image, served today "yes", found in Serena;
   - `1a2b3c4d-0000-4000-8000-000000000001`, kind "not known", served today "no", found in "CollectionSpace (not served
     today)";
 
-  each with a thumbnail. Below them, "Not recalled: not-a/csid: Not a CSID."
+  each with a thumbnail. Below them, "Not recalled: not-a/csid: Not a CSID." (The slash makes it one. Any 1 to 64
+  letters, digits and hyphens have a CSID's shape and are looked up, so a word such as `cow` is "Not found" instead.)
 - [ ] Click your record's thumbnail: expect the full-size image in a window. Close it.
 - [ ] Expect "Recall 2 Media records" greyed out until you type a reason. Type one and click it. Expect both in
   "Active recalls", by `admin`, with your reason, and "Waiting for a later refresh". Within a minute, expect the
