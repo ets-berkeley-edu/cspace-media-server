@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Serena admin app: UI mockup (sample data only). Hosted copy: https://claude.ai/artifact/UG1bpSE6TCXNxzHGhJ4xao
+     Keep the two in step: a change to a page's layout or functions in the admin app goes here too. -->
+<title>Serena admin mockup</title>
+<style>
+  [hidden] { display: none !important; }
+  img { max-width: 100%; }
+  /* Layout: the BMU mockup's frame (status pill, Mockup settings, the app, Notes for reviewers), with the Serena
+     admin app inside it: a top bar, a menu down the left, one page at a time. Tokens follow the BMU mockup's. */
+  :root {
+    --border: #d8d8d3; --border-strong: #b8b8b0;
+    --surface-0: #f6f5f1; --surface-1: #efeee8; --surface-2: #ffffff;
+    --text-primary: #2c2c2a; --text-secondary: #5f5e5a; --text-muted: #888780;
+    --bg-accent: #e6f1fb; --text-accent: #0c447c;
+    --bg-success: #eaf3de; --text-success: #27500a;
+    --bg-warning: #faeeda; --text-warning: #854f0b;
+    --bg-danger: #fbe7e5; --text-danger: #8a1f14;
+    --bg-neutral: #ecebe5; --text-neutral: #4a4945;
+    --topbar: #23324a; --topbar-text: #f2f4f8;
+    --badge: #d93025; --badge-text: #ffffff;  /* the bell's count: the same red in both themes, on the dark app bar */
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --border: #3a3a37; --border-strong: #55554f; --surface-0: #1b1b19; --surface-1: #252523; --surface-2: #2d2d2a;
+      --text-primary: #ecebe6; --text-secondary: #b9b8b1; --text-muted: #8d8c85;
+      --bg-accent: #16324d; --text-accent: #a9cdf2; --bg-success: #22361a; --text-success: #b7d99a;
+      --bg-warning: #3d2e13; --text-warning: #f0c983; --bg-danger: #43201c; --text-danger: #f3b0a8;
+      --bg-neutral: #34342f; --text-neutral: #d6d5cf; --topbar: #121a27; --topbar-text: #e8ecf3;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --border: #3a3a37; --border-strong: #55554f; --surface-0: #1b1b19; --surface-1: #252523; --surface-2: #2d2d2a;
+    --text-primary: #ecebe6; --text-secondary: #b9b8b1; --text-muted: #8d8c85;
+    --bg-accent: #16324d; --text-accent: #a9cdf2; --bg-success: #22361a; --text-success: #b7d99a;
+    --bg-warning: #3d2e13; --text-warning: #f0c983; --bg-danger: #43201c; --text-danger: #f3b0a8;
+    --bg-neutral: #34342f; --text-neutral: #d6d5cf; --topbar: #121a27; --topbar-text: #e8ecf3;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font-body); background: var(--surface-0); color: var(--text-primary); margin: 0;
+    padding-block: 2rem 4rem; padding-inline: max(16px, 1.5rem); line-height: 1.5; font-size: 14px; }
+  .page { max-width: 1240px; margin: 0 auto; }
+  .status-pill { display: inline-block; background: var(--bg-warning); color: var(--text-warning); font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 10px; }
+  h1.mock-title { font-size: 22px; font-weight: 600; margin: 0 0 4px; text-wrap: balance; }
+  .subtitle { font-size: 14px; color: var(--text-secondary); margin: 0 0 16px; max-width: 75ch; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; height: 32px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-2); font-size: 13px; }
+  button:hover:not(:disabled) { background: var(--surface-1); }
+  button:disabled { cursor: not-allowed; opacity: 0.45; }
+  button.primary { background: var(--text-accent); border-color: var(--text-accent); color: var(--surface-2); font-weight: 600; }
+  button.danger { background: var(--text-danger); border-color: var(--text-danger); color: var(--surface-2); font-weight: 600; }
+  button.link { border: 0; background: none; padding: 0; height: auto; color: var(--text-accent); text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--text-accent); outline-offset: 2px; }
+  input[type=text], input[type=search], select, textarea { border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-2); padding: 6px 8px; min-height: 34px; }
+  .mono { font-family: var(--font-mono); font-size: 12.5px; }
+  .muted { color: var(--text-muted); }
+  .secondary { color: var(--text-secondary); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Mockup settings */
+  .mock-settings { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 1rem; font-size: 13px; }
+  .mock-settings summary { cursor: pointer; font-weight: 600; }
+  .mock-settings .row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 10px; }
+  .mock-settings label { display: inline-flex; gap: 6px; align-items: center; }
+
+  /* The app */
+  .app { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem; }
+  .topbar { background: var(--topbar); color: var(--topbar-text); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 14px; min-height: 52px; }
+  .topbar .brand { font-weight: 700; font-size: 16px; letter-spacing: 0.01em; }
+  .topbar .env { font-size: 12px; opacity: 0.85; }
+  .topbar .spacer { flex: 1; }
+  .topbar button { background: transparent; color: var(--topbar-text); border-color: rgba(255,255,255,0.35); }
+  .topbar button:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+  .menu-wrap { position: relative; }
+  .topbar .icon-btn { width: 34px; height: 32px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; }
+  .topbar .icon-btn svg { width: 20px; height: 20px; }
+  .topbar .icon-btn.bell { position: relative; }
+  .topbar .badge { position: absolute; top: -3px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-text); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--topbar); }
+  .topbar .icon-btn[aria-current="page"] { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); }
+  .menu { position: absolute; right: 0; top: 38px; background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); min-width: 230px; z-index: 5; padding: 4px; }
+  .menu button { display: block; width: 100%; text-align: left; border: 0; background: none; color: var(--text-primary); height: 34px; }
+  .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+  .banner { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--bg-danger); color: var(--text-danger); padding: 8px 14px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .banner .spacer { flex: 1; }
+  .shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 560px; }
+  nav.side { border-right: 1px solid var(--border); background: var(--surface-1); padding: 10px 6px; }
+  nav.side button { display: block; width: 100%; text-align: left; border: 0; background: none; height: 34px; border-radius: 6px; color: var(--text-secondary); }
+  nav.side button[aria-current="page"] { background: var(--bg-accent); color: var(--text-accent); font-weight: 600; }
+  nav.side .group { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-primary); padding: 12px 12px 6px; margin-top: 8px; border-top: 1px solid var(--border-strong); }
+  nav.side .group:first-child { margin-top: 0; border-top: 0; padding-top: 4px; }
+  nav.side button { padding-left: 20px; }
+  main { padding: 18px 22px 28px; min-width: 0; }
+  main h2 { font-size: 20px; font-weight: 600; margin: 0 0 6px; text-wrap: balance; }
+  main .lead { color: var(--text-secondary); margin: 0 0 16px; max-width: 80ch; }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  @media (max-width: 760px) {
+    .shell { grid-template-columns: 1fr; }
+    nav.side { border-right: 0; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 2px; }
+    nav.side button { width: auto; padding: 0 10px; }
+    nav.side .group { display: none; }
+    main { padding: 14px; }
+  }
+
+  /* Pieces */
+  .tw { border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--text-secondary); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface-1); white-space: nowrap; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  button.path-link { border: 0; background: none; height: auto; padding: 0; text-align: left; color: inherit; cursor: pointer; overflow-wrap: anywhere; }
+  button.path-link:hover, button.path-link:focus-visible { color: var(--text-accent); text-decoration: underline; }
+  th button.sort { border: 0; background: none; height: auto; padding: 0; font: inherit; font-weight: 600; color: inherit; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+  th button.sort .arrow { font-size: 10px; opacity: 0; }
+  th button.sort:hover .arrow, th button.sort:focus-visible .arrow { opacity: 0.45; }
+  th button.sort.on { color: var(--text-primary); }
+  th button.sort.on .arrow { opacity: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+  .t-success { background: var(--bg-success); color: var(--text-success); }
+  .t-warning { background: var(--bg-warning); color: var(--text-warning); }
+  .t-danger { background: var(--bg-danger); color: var(--text-danger); }
+  .t-info { background: var(--bg-accent); color: var(--text-accent); }
+  .t-neutral { background: var(--bg-neutral); color: var(--text-neutral); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); min-width: 0; }
+  .card .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+  .card .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar .spacer { flex: 1; }
+  .pager { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; justify-content: flex-end; font-size: 12px; color: var(--text-secondary); padding: 6px 10px; border-top: 1px solid var(--border); }
+  .pager label { display: inline-flex; align-items: center; gap: 6px; }
+  .pager select { min-height: 0; height: 26px; padding: 0 4px; font-size: 12px; border-color: var(--border); }
+  .pager .range { font-variant-numeric: tabular-nums; min-width: 7ch; text-align: right; }
+  .pager .nav { display: inline-flex; gap: 2px; }
+  .pager .nav button { height: 26px; min-width: 26px; padding: 0 6px; border-color: transparent; background: none; font-size: 14px; line-height: 1; }
+  .copy { height: 24px; padding: 0 7px; font-size: 11px; margin-left: 4px; }
+  .notes { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem; }
+  .notes h2 { font-size: 15px; margin: 0 0 8px; }
+  .notes li { margin-bottom: 6px; max-width: 110ch; }
+  dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text-primary); padding: 0; width: min(760px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(0,0,0,0.35); }
+  dialog .d-head { padding: 14px 18px 6px; font-size: 16px; font-weight: 600; }
+  dialog .d-body { padding: 4px 18px 10px; max-height: 70vh; overflow: auto; }
+  dialog .d-foot { padding: 10px 18px 14px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
+  .field input, .field textarea, .field select { font-weight: 400; }
+  .err { background: var(--bg-danger); color: var(--text-danger); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; }
+  .thumb { width: 56px; height: 56px; border-radius: 6px; border: 1px solid var(--border); display: grid; place-items: center; font-size: 11px; color: var(--text-muted); background: var(--surface-1); overflow: hidden; }
+  .thumb svg { width: 100%; height: 100%; display: block; }
+  button.thumb { padding: 0; cursor: zoom-in; }
+
+  /* Sign-in */
+  .login { max-width: 420px; margin: 3rem auto; border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; background: var(--surface-2); }
+  .login h2 { margin: 0 0 4px; font-size: 20px; }
+  .login button.primary { width: 100%; height: 36px; }
+
+  /* Media look up */
+  .lookup-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; margin-bottom: 6px; }
+  .lookup-form input { flex: 1 1 320px; min-width: 0; height: 38px; font-size: 14px; }
+  .lookup-form button { height: 38px; }
+  .examples { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 18px; }
+  .examples button { height: 26px; font-size: 12px; border-radius: 20px; padding: 0 10px; }
+  .verdict { border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin-bottom: 14px; }
+  .verdict .mark { grid-row: span 3; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; font-weight: 700; background: var(--surface-2); }
+  .verdict .head { font-size: 17px; font-weight: 700; }
+  .verdict .why { font-size: 14px; }
+  .verdict .next { font-size: 13px; opacity: 0.95; }
+  .verdict.served { background: var(--bg-success); color: var(--text-success); }
+  .verdict.not { background: var(--bg-danger); color: var(--text-danger); }
+  .verdict.depends { background: var(--bg-warning); color: var(--text-warning); }
+  .ident { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; padding: 10px 2px 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .ident .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); display: block; }
+  .checks { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+  .checks li { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 8px; }
+  .checks .ic { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; grid-row: span 2; margin-top: 1px; }
+  .checks .ok .ic { background: var(--bg-success); color: var(--text-success); }
+  .checks .no { border-color: var(--text-danger); }
+  .checks .no .ic { background: var(--bg-danger); color: var(--text-danger); }
+  .checks .maybe .ic { background: var(--bg-warning); color: var(--text-warning); }
+  .checks .skip { opacity: 0.55; }
+  .checks .skip .ic { background: var(--bg-neutral); color: var(--text-neutral); }
+  .checks .t { font-weight: 600; font-size: 13px; }
+  .checks .d { font-size: 13px; color: var(--text-secondary); }
+  .sizes { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; }
+  .size { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font-size: 13px; min-width: 0; }
+  .size .n { font-weight: 600; display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+  .size .s { color: var(--text-secondary); font-size: 12px; margin-top: 3px; }
+  .meta-line { font-size: 12px; color: var(--text-muted); margin-top: 16px; }
+  .layout-switch { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border: 1px dashed var(--text-warning); background: var(--bg-warning); color: var(--text-warning); border-radius: 10px; padding: 6px 10px; margin: 0 0 16px; font-size: 12px; }
+  .layout-switch button { height: 26px; font-size: 12px; border-radius: 20px; }
+  .layout-switch button[aria-pressed="true"] { background: var(--text-warning); color: var(--surface-2); border-color: var(--text-warning); font-weight: 600; }
+  /* B. Decision path */
+  .path-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 12px; }
+  .path-head .pill { font-size: 14px; padding: 4px 12px; }
+  .path { list-style: none; margin: 0 0 6px; padding: 0; position: relative; }
+  .path li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 0 0 16px; position: relative; }
+  .path li:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 26px; bottom: 0; width: 2px; background: var(--border-strong); }
+  .path .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--bg-success); color: var(--text-success); }
+  .path .no .dot { background: var(--bg-danger); color: var(--text-danger); }
+  .path .maybe .dot { background: var(--bg-warning); color: var(--text-warning); }
+  .path .skip { opacity: 0.5; }
+  .path .skip .dot { background: var(--bg-neutral); color: var(--text-neutral); }
+  .path .t { font-weight: 600; }
+  .path .d { color: var(--text-secondary); font-size: 13px; }
+  .callout { margin-top: 8px; border-radius: 8px; padding: 10px 12px; font-size: 13px; max-width: 70ch; }
+  .callout.not { background: var(--bg-danger); color: var(--text-danger); }
+  .callout.depends { background: var(--bg-warning); color: var(--text-warning); }
+  .callout .secondary { color: inherit; opacity: 0.9; }
+  /* C. Inspector */
+  .inspector { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .inspector { grid-template-columns: 1fr; } }
+  .inspect-side { display: grid; gap: 12px; min-width: 0; }
+  .facts { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface-1); min-width: 0; }
+  .facts .panel-title { margin: 0 0 8px; color: var(--text-primary); }
+  .facts details.more { margin-top: 10px; }
+  .facts details.more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-accent); width: fit-content; }
+  .facts details.more[open] summary { margin-bottom: 4px; }
+  .facts .preview { aspect-ratio: 4 / 3; max-width: 100%; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; position: relative; display: grid; place-items: center; }
+  .facts .preview svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .facts .preview .cap { position: relative; font-size: 12px; background: var(--surface-2); color: var(--text-secondary); padding: 2px 8px; border-radius: 10px; align-self: end; margin-bottom: 8px; }
+  .facts dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; margin: 12px 0; font-size: 13px; }
+  .facts dt { color: var(--text-secondary); }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  .facts h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 12px 0 6px; }
+  .mini-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+  .mini-checks li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 6px; }
+  .mini-checks .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--bg-success); color: var(--text-success); margin-top: 1px; }
+  .mini-checks .no .dot { background: var(--bg-danger); color: var(--text-danger); }
+  .mini-checks .maybe .dot { background: var(--bg-warning); color: var(--text-warning); }
+  .mini-checks .skip { opacity: 0.5; }
+  .mini-checks .skip .dot { background: var(--bg-neutral); color: var(--text-neutral); }
+  .answer { min-width: 0; }
+  tr.asked td { background: var(--surface-2); }
+  .stamps { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 14px; font-size: 13px; }
+  .stamps .k { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px; }
+  table.compare th[scope=row] { background: none; color: var(--text-primary); width: 150px; white-space: normal; }
+  table.compare tr.diff td, table.compare tr.diff th { background: var(--bg-warning); }
+  .cs-down { border: 1px dashed var(--border-strong); border-radius: 8px; padding: 10px 12px; color: var(--text-secondary); font-size: 13px; }
+  .answer-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; border-radius: 10px; padding: 12px 14px; }
+  .answer-head.served { background: var(--bg-success); color: var(--text-success); }
+  .answer-head.not { background: var(--bg-danger); color: var(--text-danger); }
+  .answer-head.depends { background: var(--bg-warning); color: var(--text-warning); }
+  .answer-head .mark { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--surface-2); }
+  .answer-head .head { font-size: 16px; font-weight: 700; }
+  .blob-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .blob-tabs button[aria-pressed="true"] { background: var(--bg-accent); color: var(--text-accent); border-color: var(--text-accent); }
+</style>
+
+</head>
+<body>
+<div class="page">
+  <span class="status-pill">UI mockup · sample data only</span>
+  <h1 class="mock-title">Serena admin app</h1>
+  <p class="subtitle">Every page of Serena's admin app, with made-up refreshes, alerts, requests and recalls, for reviewing layout and wording. Nothing here talks to Serena, CollectionSpace or AWS. Start with <strong>Media look up</strong>, the page being redesigned.</p>
+
+  <details class="mock-settings" id="mockSettings" open>
+    <summary>Mockup settings</summary>
+    <div class="row">
+      <label>Theme <select id="mockTheme"><option value="">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <label>Unacknowledged alerts <select id="mockAlerts"><option value="0">None</option><option value="1" selected>1</option><option value="3">3</option></select></label>
+      <label><input type="checkbox" id="mockCspaceDown"> CollectionSpace unreachable</label>
+      <button type="button" id="mockSignOut">Back to sign-in</button>
+    </div>
+  </details>
+
+  <div class="app" id="app"></div>
+
+  <div class="notes">
+    <h2>Notes for reviewers</h2>
+    <ul>
+      <li><strong>Last served and First stored (layout C):</strong> under the verdict, when Serena last served the file (any size) and when it first stored it in its S3 bucket; the sizes table has both for each size, and "In Serena" Details has them too. In the app, "first stored" is the cache index's fetched-at time, which Serena already keeps. "Last served" would come from Serena's log (the "served" lines Past requests reads), so it reaches back 30 days, the log's retention; a time kept per size in Serena's tables instead would mean a write on every request, which Serena avoids.</li>
+      <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's stored copy; CollectionSpace's Medium, not stored) and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
+      <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no stored copy, the preview is CollectionSpace's thumbnail, not stored. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (taken off the web since: "Approved for web" No) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
+      <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the stored copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
+      <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
+      <li><strong>Sample data:</strong> one consistent set. "Now" is Oct 13, 2026, 10:00 AM PDT; the last refresh is pahma-2026-10-12-1. Every page draws on the same Media records, and each Past requests line's outcome comes from Serena's rules at its time, so a path, a CSID on Recalls, an example button or a typed CSID all land on the same answer in Media look up. Older lines can differ from today's answer when something changed since (a recall, a deletion). Recalling, releasing and acknowledging update Recalls, Alerts, the Audit log and Media look up together.</li>
+      <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image, a recall a refresh kept, a file not in the servable list, files replaced or deleted in CollectionSpace today, a Media record with two Blobs, the placeholder image, a recall a refresh ended, and a path Serena refuses; Cinefiles' restricted PDF is under Cinefiles (Sign in to another museum). Typed CSIDs work too: an unknown one, the replaced image's new Blob (61f0e9d8-c7b6-4a59-8e4d-3c2b1a0f9e8d) or the unlisted file's Media record (7c1d9e20-3b4a-4f5e-8a6b-9c0d1e2f3a4b).</li>
+      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
+      <li><strong>Recalls:</strong> "Recall…" opens the form; "Show what would be recalled" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
+      <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, a "Media look up" button (opens Media look up on that path) and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
+      <li><strong>Recalls:</strong> the Media record and Blob CSIDs work like Past requests' paths: plain text until hovered, then a link that opens the file in a dialog, with "Media look up" and Dismiss.</li>
+      <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
+    </ul>
+  </div>
+</div>
+
+<dialog id="dlg"><div class="d-head" id="dlgHead"></div><div class="d-body" id="dlgBody"></div><div class="d-foot" id="dlgFoot"></div></dialog>
+
+<script>
+(() => {
+  const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
+  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: ""};
+  const $ = s => document.querySelector(s);
+  const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
+  // many places.
+  const clean = v => String(v ?? "").replace(/[&<>"'`]/g, "");
+  const typed = el => clean(el.value);
+  const name = () => MUSEUMS[S.museum];
+
+  // Pacific time, in words; UTC in the tooltip.
+  function when(iso) {
+    const d = new Date(iso);
+    const text = d.toLocaleString("en-US", {timeZone: "America/Los_Angeles", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"});
+    return `<span title="${esc(iso.replace("T", " ").replace(/(\.\d+)?(\+00:00|Z)$/, "") + " UTC")}">${esc(text)}</span>`;
+  }
+  const short = csid => csid.length > 20 ? csid.slice(0, 8) + "…" + csid.slice(-4) : csid;
+  const csidHtml = csid => `<span class="mono" title="${esc(csid)}">${esc(csid)}</span><button type="button" class="copy" data-copy="${esc(csid)}">Copy</button>`;
+
+  function thumbSvg(seed, kind) {
+    if (kind === "pdf") return `<svg viewBox="0 0 56 56" aria-hidden="true"><rect width="56" height="56" fill="var(--surface-1)"/><rect x="14" y="8" width="28" height="38" rx="2" fill="var(--surface-2)" stroke="var(--border-strong)"/><text x="28" y="31" text-anchor="middle" font-size="9" font-weight="700" fill="var(--text-danger)">PDF</text></svg>`;
+    if (kind === "3D") return `<svg viewBox="0 0 56 56" aria-hidden="true"><rect width="56" height="56" fill="var(--surface-1)"/><path d="M28 12 44 21v18L28 48 12 39V21z" fill="none" stroke="var(--text-secondary)" stroke-width="2"/><path d="M12 21l16 9 16-9M28 30v18" stroke="var(--text-secondary)" stroke-width="2" fill="none"/></svg>`;
+    const hue = (seed * 47) % 360;
+    return `<svg viewBox="0 0 56 56" aria-hidden="true"><rect width="56" height="56" fill="hsl(${hue} 25% 70%)"/><circle cx="${18 + seed % 20}" cy="20" r="7" fill="hsl(${hue} 30% 88%)"/><path d="M0 46 18 30l12 10 10-8 16 14v10H0z" fill="hsl(${hue} 25% 42%)"/></svg>`;
+  }
+
+  // ---- sample data: one consistent set; every page draws on it. "Now" is Oct 13, 2026, 10:00 AM PDT. The last
+  // refresh is <museum>-2026-10-12-1: its servable list was made Oct 12, 3:01 AM PDT, and Serena updated at 3:41 AM.
+  const NOW = "2026-10-13T17:00:00Z", LIST_MADE = "2026-10-12T10:01:00Z", DAY = 864e5;
+  const ms = iso => Date.parse(iso);
+  const lastRefresh = () => `${S.museum}-2026-10-12-1`;
+  const SIZES = ["original", "Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg"];
+  const COPY = {original: ["TIFF", "61 MB"], Thumbnail: ["JPEG", "9 KB"], Small: ["JPEG", "38 KB"], Medium: ["JPEG", "180 KB"], FullHD: ["JPEG", "1.1 MB"], OriginalJpeg: ["JPEG", "4.2 MB"]};
+  const CSID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){2,3}(-[0-9a-f]{12})?$/i;
+  const seedOf = csid => [...csid].reduce((a, c) => a + c.charCodeAt(0), 0) % 23;
+  const PLACEHOLDER = "59a733dd-d641-4e1a-8552";
+  const B1 = "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", BR = "855049af-600c-5140-b50a-b429566c8278", BK = "b3d1f0c2-7e44-4b9a-8d21-5a6c0e9f7b12",
+    BN = "3e9a1b77-52d0-4c8f-a1e6-9f0b2d4c6e81", BX = "5e4d3c2b-1a09-4f8e-9d7c-6b5a4f3e2d1c", BD = "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091",
+    BT = "aa11bb22-cc33-4d44-9e55-ff6677889900", BO = "aa11bb22-cc33-4d44-9e55-ff6677880001", BE = "c4d5e6f7-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
+    BL = "d9e8f7a6-5b4c-4d3e-8f2a-1b0c9d8e7f6a", BF = "f0e1d2c3-b4a5-4968-8776-655443322110", BP = "7d4c2a10-9b8e-4f6d-a3c2-1e0f9d8c7b6a";
+  const BLOB = BR, MEDIA = "20349bfa-cad6-5f47-9acd-dcd34e3f0b98";
+
+  // The Media records. `blobs`: the Blobs the servable list has for the record (`until`: when a refresh dropped it).
+  // `cs`: CollectionSpace's Media record now: its Blob, its "Approved for web" (PAHMA's media_pahma approvedforweb, the field its ETL reads; publish "None" means not approved), when it
+  // last changed, and whether it's soft-deleted. `stored`: copies Serena stored before the log's sample lines (the
+  // lines store the rest, on a miss). `recall`: the record's recall, active or ended. `ex`: an example button.
+  const RECORDS = [
+    {ex: "A served image", input: `/pahma/imageserver/blobs/${B1}/derivatives/Medium/content`, museum: "pahma", media: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      blobs: [{blob: B1, kind: "image", access: "public"}], cs: {blob: B1, publish: "All", updated: "2026-09-30T17:12:00Z"},
+      stored: {[B1]: {Thumbnail: "2026-09-30T18:20:00Z"}}},
+    {ex: "The recalled image", input: MEDIA, museum: "pahma", media: MEDIA,
+      blobs: [{blob: BR, kind: "image", access: "public"}], cs: {blob: BR, publish: "None", updated: "2026-10-13T06:20:00Z"},
+      recall: {by: "admin", at: "2026-10-13T06:02:15Z", reason: "Testing"}},
+    {ex: "A recall a refresh kept", input: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", museum: "pahma", media: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3",
+      blobs: [{blob: BK, kind: "image", access: "public"}], cs: {blob: BK, publish: "All", updated: "2026-08-14T19:30:00Z"},
+      stored: {[BK]: {Thumbnail: "2026-09-20T16:45:00Z"}},
+      recall: {by: "pahma-admin", at: "2026-10-09T21:14:03Z", reason: "Request from the community: culturally sensitive", kept: {refresh: "pahma-2026-10-12-1", on: "2026-10-12"}}},
+    {ex: "Not in the servable list", input: BN, museum: "pahma", media: "7c1d9e20-3b4a-4f5e-8a6b-9c0d1e2f3a4b", blobs: [],
+      cs: {blob: BN, publish: "None", updated: "2026-08-02T21:40:00Z"}},
+    {ex: "Replaced in CollectionSpace today", input: BX, museum: "pahma", media: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      blobs: [{blob: BX, kind: "image", access: "public"}], cs: {blob: "61f0e9d8-c7b6-4a59-8e4d-3c2b1a0f9e8d", publish: "All", updated: "2026-10-13T16:45:00Z"}},
+    {ex: "Deleted in CollectionSpace today", input: BD, museum: "pahma", media: "8091a2b3-c4d5-4e6f-8a7b-9c0d1e2f3a4b",
+      blobs: [{blob: BD, kind: "image", access: "public"}], cs: {blob: BD, publish: "All", updated: "2026-10-13T15:02:00Z", deleted: true},
+      stored: {[BD]: {Thumbnail: "2026-10-03T16:20:00Z"}}},
+    {ex: "A Media record with two Blobs", input: "8f7e6d5c-4b3a-4291-8f7e-6d5c4b3a2910", museum: "pahma", media: "8f7e6d5c-4b3a-4291-8f7e-6d5c4b3a2910",
+      blobs: [{blob: BT, kind: "image", access: "public", label: "Current image"}, {blob: BO, kind: "image", access: "public", label: "Old image (still listed)"}],
+      cs: {blob: BT, publish: "All", updated: "2026-10-01T20:05:00Z"}},
+    {ex: "The placeholder image", input: PLACEHOLDER, museum: "pahma", media: null, blobs: [{blob: PLACEHOLDER, kind: "image", access: "public"}], cs: null},
+    {ex: "A recall a refresh ended", input: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", museum: "pahma", media: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f",
+      blobs: [{blob: BE, kind: "image", access: "public", until: "2026-10-11T10:39:52Z"}], cs: {blob: BE, publish: "None", updated: "2026-10-10T17:20:00Z"},
+      recall: {by: "admin", at: "2026-10-10T16:05:00Z", reason: "Wrong image on the record",
+        ended: {at: "2026-10-11T10:39:52Z", by: "refresh pahma-2026-10-11-1", how: "Ended by a refresh", why: "No longer listed as public"}}},
+    {museum: "pahma", media: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", blobs: [{blob: BL, kind: "image", access: "public"}],
+      cs: {blob: BL, publish: "All", updated: "2026-07-21T18:00:00Z"},
+      recall: {by: "admin", at: "2026-10-02T18:30:00Z", reason: "Complaint about the caption", kept: {refresh: "pahma-2026-10-05-1", on: "2026-10-05"},
+        ended: {at: "2026-10-06T17:30:00Z", by: "admin", how: "Released", why: "Complaint withdrawn; CollectionSpace is right"}}},
+    {museum: "pahma", media: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", blobs: [{blob: BF, kind: "image", access: "public"}],
+      cs: {blob: BF, publish: "All", updated: "2026-09-12T17:00:00Z"}},
+    {ex: "A restricted PDF", input: `/cinefiles/imageserver/blobs/${BP}/content`, museum: "cinefiles", media: "c2b1a0f9-8e7d-4c6b-9a5f-4e3d2c1b0a99",
+      blobs: [{blob: BP, kind: "pdf", access: "restricted"}],
+      cs: {blob: BP, fields: [["Access code override (document)", "Glimmer readers only"]], updated: "2026-10-01T16:00:00Z"}},
+  ];
+  const EXAMPLES = [...RECORDS.filter(r => r.ex).map(r => ({label: r.ex, input: r.input, museum: r.museum})),
+    {label: "A path Serena refuses", input: `/pahma/imageserver/blobs/${B1}/derivatives/Huge/content`, museum: "pahma"}];
+
+  // The log's sample lines, the last 7 days: [time, museum, Blob CSID, size, on a signed link]. Each line's outcome
+  // comes from Serena's rules (decide, below) at its time, so the lines, the counts, Most requested, Last served and
+  // the stored copies agree with each other and with Media look up.
+  const EVENTS = [
+    ["2026-10-07T17:00:00Z", "pahma", B1, "Thumbnail"], ["2026-10-08T19:00:00Z", "pahma", BE, "Medium"], ["2026-10-08T20:00:00Z", "pahma", BK, "Thumbnail"],
+    ["2026-10-09T16:04:00Z", "cinefiles", BP, "original", true], ["2026-10-10T17:00:00Z", "pahma", BE, "Medium"], ["2026-10-10T18:00:00Z", "pahma", B1, "Thumbnail"],
+    ["2026-10-10T21:15:00Z", "pahma", BX, "Medium"], ["2026-10-11T22:12:00Z", "pahma", B1, "Medium"], ["2026-10-12T15:30:00Z", "pahma", BT, "Thumbnail"],
+    ["2026-10-12T18:00:00Z", "pahma", BK, "Thumbnail"], ["2026-10-12T18:30:00Z", "pahma", BE, "Medium"], ["2026-10-12T19:05:00Z", "pahma", B1, "Thumbnail"],
+    ["2026-10-12T22:10:00Z", "pahma", B1, "Thumbnail"], ["2026-10-13T05:48:00Z", "pahma", BR, "Medium"], ["2026-10-13T05:59:30Z", "pahma", BR, "Medium"],
+    ["2026-10-13T05:59:31Z", "pahma", "not-a-csid", "original"], ["2026-10-13T06:01:57Z", "pahma", BT, "Small"], ["2026-10-13T06:03:11Z", "pahma", BN, "original"],
+    ["2026-10-13T06:05:02Z", "pahma", BR, "Medium"], ["2026-10-13T06:05:03Z", "pahma", BR, "Thumbnail"], ["2026-10-13T09:30:00Z", "pahma", B1, "Thumbnail"],
+    ["2026-10-13T11:00:00Z", "pahma", B1, "Huge"], ["2026-10-13T12:00:00Z", "pahma", PLACEHOLDER, "original"], ["2026-10-13T13:00:00Z", "pahma", BL, "Thumbnail"],
+    ["2026-10-13T14:20:00Z", "pahma", BN, "original"], ["2026-10-13T14:30:00Z", "cinefiles", BP, "original", true], ["2026-10-13T15:00:00Z", "cinefiles", BP, "original"],
+    ["2026-10-13T15:12:44Z", "pahma", B1, "Thumbnail"], ["2026-10-13T15:58:00Z", "pahma", B1, "Medium"], ["2026-10-13T16:02:00Z", "pahma", BT, "Thumbnail"],
+    ["2026-10-13T16:30:00Z", "pahma", BR, "Medium"], ["2026-10-13T16:40:03Z", "pahma", B1, "Thumbnail"], ["2026-10-13T16:40:30Z", "pahma", BX, "Medium"],
+    ["2026-10-13T16:52:10Z", "pahma", B1, "Thumbnail"], ["2026-10-13T16:55:00Z", "pahma", BD, "Thumbnail"], ["2026-10-13T16:56:00Z", "pahma", BD, "Medium"],
+  ];
+
+  // ---- Serena's rules, as servability.decide and the fetch apply them
+  const REASON = {not_listed: "not listed", restricted: "restricted", no_derivatives: "no derivatives for a PDF", recalled: "recalled",
+    placeholder: "placeholder not uploaded", media_deleted: "media deleted", bad_csid: "bad CSID", unknown_size: "not a size served"};
+  const STORE = {};  // Blob CSID → size → {at, type, bytes}: Serena's stored copies (the cache index)
+  RECORDS.forEach(r => Object.entries(r.stored || {}).forEach(([blob, sizes]) => Object.entries(sizes).forEach(([size, at]) => {
+    (STORE[blob] ||= {})[size] = {at, type: COPY[size][0], bytes: COPY[size][1]};
+  })));
+  const findBlob = (museum, csid) => { for (const r of RECORDS) if (r.museum === museum) for (const b of r.blobs) if (b.blob === csid) return [r, b]; return [null, null]; };
+  // Any record CollectionSpace or Serena knows by this CSID: a Blob (listed, once listed, or in CollectionSpace) or a Media record.
+  const findRecord = (museum, csid) => RECORDS.find(r => r.museum === museum && (r.media === csid || r.blobs.some(b => b.blob === csid) || (r.cs && r.cs.blob === csid)));
+  const listedAt = (b, t) => !b.until || ms(t) < ms(b.until);
+  const recallAt = (r, t) => r && r.recall && ms(r.recall.at) <= ms(t) && (!r.recall.ended || ms(t) < ms(r.recall.ended.at)) ? r.recall : null;
+  const storedAt = (blob, size, t) => { const c = (STORE[blob] || {})[size]; return c && ms(c.at) <= ms(t) ? c : null; };
+
+  function decide(museum, csid, size, t, signed) {
+    if (!CSID_RE.test(csid)) return {reason: "bad_csid"};
+    if (!SIZES.includes(size)) return {reason: "unknown_size"};
+    const [r, b] = findBlob(museum, csid);
+    if (!b || !listedAt(b, t)) return {reason: "not_listed"};
+    if (b.access !== "public" && !signed) return {reason: "restricted", r, b};
+    if (size !== "original" && b.kind === "pdf") return {reason: "no_derivatives", r, b};
+    if (recallAt(r, t)) return {reason: "recalled", r, b};
+    if (csid === PLACEHOLDER) return {reason: "placeholder", r, b};
+    if (storedAt(csid, size, t)) return {r, b, cache: "hit"};
+    if (r.cs && r.cs.deleted && ms(r.cs.updated) <= ms(t)) return {reason: "media_deleted", r, b};
+    return {r, b, cache: "miss"};
+  }
+
+  const pathOf = (museum, csid, size) => `/${museum}/imageserver/blobs/${csid}/${size === "original" ? "" : `derivatives/${size}/`}content`;
+  const LOG = EVENTS.slice().sort((x, y) => ms(x[0]) - ms(y[0])).map(([at, museum, csid, size, signed]) => {
+    const d = decide(museum, csid, size, at, signed);
+    if (!d.reason && d.cache === "miss") (STORE[csid] ||= {})[size] = {at, type: d.b.kind === "pdf" ? "PDF" : COPY[size][0], bytes: d.b.kind === "pdf" ? "2.4 MB" : COPY[size][1]};
+    return {at, museum, csid, size, signed: !!signed, path: pathOf(museum, csid, size), outcome: d.reason ? "unserved" : "served",
+      reason: d.reason ? REASON[d.reason] : "", kind: d.b ? d.b.kind : "", cache: d.cache || ""};
+  });
+  const lastServed = (museum, csid, size) => {
+    const l = [...LOG].reverse().find(l => l.museum === museum && l.csid === csid && l.size === size && l.outcome === "served" && ms(l.at) > ms(NOW) - 30 * DAY);
+    return l ? l.at : null;
+  };
+  // What a request for this file shows: Serena's stored copy, else CollectionSpace's current image.
+  const imageSeed = (museum, csid, size) => {
+    if (storedAt(csid, size || "Medium", NOW)) return seedOf(csid);
+    const r = findRecord(museum, csid);
+    return r && r.cs ? seedOf(r.cs.blob) : seedOf(csid);
+  };
+  const kindOf = (museum, csid) => { const r = findRecord(museum, csid); return r && r.blobs[0] ? r.blobs[0].kind : "image"; };
+
+  // ---- Media look up: Serena's answer for one input, now
+  function lookupFor(input) {
+    const q = input.trim();
+    const m = /^(?:https?:\/\/[^/]+)?\/([a-z]+)\/imageserver\/blobs\/([^/]+)\/(?:derivatives\/([^/]+)\/)?content\/?$/.exec(q);
+    let csid = q, size = null;
+    if (m) {
+      if (m[1] !== S.museum) return {input: q, refused: {head: "Not looked up: another museum's path", why: `This path is ${esc(MUSEUMS[m[1]] || m[1])}'s.`, next: "Switch museums in the menu at the top right to look it up."}};
+      csid = m[2]; size = m[3] || "original";
+      if (!CSID_RE.test(csid)) return {input: q, refused: {head: "Not served: not a CSID", why: `“${esc(csid)}” isn't a CSID.`, next: "No CSID was looked up."}};
+      if (!SIZES.includes(size)) return {input: q, refused: {head: `Not served: not a size ${esc(name())} serves`, why: `“${esc(size)}” isn't one of ${esc(name())}'s sizes: Thumbnail, Small, Medium, FullHD and OriginalJpeg, and the original.`, next: "No CSID was looked up."}};
+    } else if (!CSID_RE.test(q)) {
+      return {input: q, refused: {head: "Not looked up", why: "That isn't a file's URL or path, a Blob CSID or a Media CSID.", next: "Paste one of those."}};
+    }
+    const r = findRecord(S.museum, csid);
+    const listed = r ? r.blobs.filter(b => listedAt(b, NOW)) : [];
+    if (listed.length && (r.media === csid || listed.some(b => b.blob === csid))) {
+      return {input: q, index: Math.max(0, listed.findIndex(b => b.blob === csid)), blobs: listed.map(b => explain(r, b, size))};
+    }
+    const blob = !r || r.media !== csid ? csid : r.cs.blob;
+    return {input: q, index: 0, blobs: [explain(r, {blob, unlisted: true}, size)]};
+  }
+
+  const plain = iso => new Date(iso).toLocaleString("en-US", {timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"});
+  const fieldsOf = r => r.cs.fields || [["Approved for web", r.cs.publish === "None" ? "No" : "Yes"]];
+
+  function explain(r, b, size) {
+    const rc = r && r.recall, now = recallAt(r, NOW);
+    const ended = rc && rc.ended ? `${rc.ended.how === "Released" ? "Released" : "Ended"} ${plain(rc.ended.at)}` : "";
+    const sizes = (b.kind === "pdf" ? ["original"] : SIZES).map(sz => {
+      const d = b.unlisted ? {reason: "not_listed"} : decide(S.museum, b.blob, sz, NOW, false);
+      const copy = (STORE[b.blob] || {})[sz];
+      return {size: sz, served: !d.reason, reason: d.reason === "restricted" ? "restricted (without a signed link)" : d.reason ? REASON[d.reason] : "",
+        stored: copy ? `${copy.type} · ${copy.bytes}` : null, firstStored: copy ? copy.at : null, lastServed: lastServed(S.museum, b.blob, sz), asked: sz === size};
+    });
+    const checks = b.unlisted
+      ? [["no", "In the servable list", "Not listed"], ["skip", "Kind", "Not known"], ["skip", "Access", "Not known"], ["skip", "Recall", ended || "Not checked"]]
+      : [["ok", "In the servable list", `Refresh ${lastRefresh()}`], ["ok", "Kind", b.kind],
+        b.access === "public" ? ["ok", "Access", "public"] : ["maybe", "Access", "restricted: signed link needed"],
+        !r.media ? ["ok", "Recall", "No Media record"] : now ? ["no", "Recall", `Recalled by ${now.by}, ${plain(now.at)}`] : ["ok", "Recall", ended ? `None (${ended.toLowerCase()})` : "None"],
+        ...(b.blob === PLACEHOLDER ? [["no", "Placeholder image", "No files uploaded"]] : [])];
+    const focus = size ? sizes.filter(s => s.size === size) : sizes;
+    const served = focus.filter(s => s.served).length;
+    const sizeName = size === "original" ? "original" : size;
+    let v;
+    if (b.unlisted) {
+      v = {tone: "not", head: "Not served: not in the servable list", why: `Refresh ${lastRefresh()}'s servable list doesn't have this CSID, as a Blob or a Media record.`,
+        next: !r ? "CollectionSpace has no Blob or Media record with this CSID either: check the CSID." : !r.cs.publish || r.cs.publish === "None"
+          ? "In CollectionSpace, its Media record isn't approved for web. A change there shows here after the next refresh."
+          : "In CollectionSpace, it's on a Media record approved for web and changed after the last refresh, so the next refresh lists it."};
+      if (rc && rc.ended) v.next += ` Its recall ended ${plain(rc.ended.at)} (${rc.ended.by}: ${rc.ended.why.toLowerCase()}).`;
+    } else if (b.access !== "public") {
+      v = {tone: "depends", head: "Served only on a signed link", why: "This PDF is restricted: Serena serves it only to Glimmer readers, through a portal's valid signed link.",
+        next: "A plain link (like this one, without a signature) gets the unavailable image."};
+    } else if (now) {
+      v = {tone: "not", head: "Not served: recalled", why: `Recalled in Serena by ${esc(now.by)} on ${plain(now.at)}. Reason: “${esc(now.reason)}.”`, link: "recalls",
+        next: now.kept ? `Refresh ${now.kept.refresh} still lists the Media record as public, so Serena kept the recall and alerted. Change the record in CollectionSpace; or, if the recall was a mistake, release it on the Recalls page.`
+          : "It stays recalled until a refresh on a later day no longer lists the Media record as public. If that refresh still lists it, Serena alerts, and an admin can then release it."};
+    } else if (b.blob === PLACEHOLDER) {
+      v = {tone: "not", head: "Not served: the placeholder image isn't uploaded", why: `This is ${esc(name())}'s placeholder image, shown in place of restricted images. Serena serves it from files an admin uploads, never from CollectionSpace.`,
+        next: "Upload its files (coming in pull request 14b)."};
+    } else if (served === focus.length) {
+      v = {tone: "served", head: "Served", why: size ? `Every check passes for the ${sizeName} size.` : "Every check passes for every size.",
+        next: size ? (focus[0].stored ? "Serena has a stored copy, so it's served without asking CollectionSpace." : "Serena has no copy yet: the next request fetches it from CollectionSpace and stores it.")
+          : "A size with a stored copy is served from it; any other size is fetched from CollectionSpace on its first request, then stored."};
+    } else if (served) {
+      v = {tone: "served", head: "Served (stored sizes only)", why: "Serena still lists it, so its stored sizes are served. A size without a stored copy is refused: the Media record is deleted in CollectionSpace.",
+        next: "The next refresh drops it. To stop serving it now, recall it.", link: "recalls"};
+    } else {
+      v = {tone: "not", head: "Not served: the Media record is deleted in CollectionSpace", why: `Serena has no stored ${esc(sizeName)} copy, and a fetch finds the Media record soft-deleted in CollectionSpace.`,
+        next: "The next refresh drops it. To stop serving its stored sizes now, recall it.", link: "recalls"};
+    }
+    let cs = null;
+    if (r && r.cs) {
+      const after = ms(r.cs.updated) > ms(LIST_MADE);
+      const pub = !r.cs.publish || r.cs.publish !== "None";
+      cs = {state: r.cs.deleted ? "deleted" : "exists", blob: r.cs.blob, media: r.media, updated: r.cs.updated, fields: fieldsOf(r),
+        fieldsChanged: after && !!b.unlisted === pub, next: nextRefresh(r, b, after, pub, now)};
+    } else if (!r) cs = {state: "gone"};
+    return {blob: b.blob, media: b.unlisted ? null : r.media, kind: b.unlisted ? null : b.kind, access: b.unlisted ? null : b.access, label: b.label,
+      verdict: v, checks, sizes, cs, note: b.kind === "pdf" ? "Derivatives of a PDF are never served." : ""};
+  }
+
+  function nextRefresh(r, b, after, pub, recall) {
+    const c = r.cs, t = plain(c.updated);
+    if (b.unlisted) return !pub ? "CollectionSpace has this Blob on a Media record that isn't approved for web, which is why it's not in the servable list. Nothing changes at the next refresh unless staff approve it."
+      : after ? `Staff changed the Media record ${t}, after the last refresh: the next refresh lists ${c.blob === b.blob ? "this Blob" : "its Blob"}.` : "The ETL's rules leave it out (its Object record, for example); the next refresh will too, unless that changes.";
+    if (c.deleted) return `Staff deleted the Media record ${t}. The next refresh drops this Blob.`;
+    if (c.blob !== b.blob) return after ? `Staff replaced the image ${t}. The next refresh lists the new Blob and drops this one; until then, a stored size is the old image, and any other size is fetched from the Media record, which now returns the new image.`
+      : `CollectionSpace's Media record has the other Blob, ${short(c.blob)}. The servable list still has this one too, and requests for it are answered with the Media record's current image.`;
+    if (!pub) return `Staff cleared the Media record's "Approved for web" ${t}, after the last refresh. The next refresh (on a later day) leaves the file out${recall ? ", which ends the recall" : ""}.`;
+    if (recall && recall.kept) return "It's still public in CollectionSpace: the next refresh lists it again and keeps the recall, with another alert, unless staff change the record or an admin releases the recall.";
+    if (recall) return "It's still public in CollectionSpace: unless staff change the record, the next refresh lists it, keeps the recall and alerts.";
+    return "Nothing has changed in CollectionSpace since the last refresh.";
+  }
+
+  // ---- refreshes, alerts and the audit log, matching the records above
+  const REFRESHES = [
+    {id: "2026-10-12-1", date: "2026-10-12", state: "Updated", tone: "success", rows: 187402, at: "2026-10-12T10:41:12Z"},
+    {id: "2026-10-11-1", date: "2026-10-11", state: "Updated", tone: "success", rows: 187390, at: "2026-10-11T10:39:50Z"},
+    {id: "2026-10-10-1", date: "2026-10-10", state: "Servable list check failed", tone: "danger", rows: 152003, at: "2026-10-10T10:36:02Z"},
+    {id: "2026-10-09-1", date: "2026-10-09", state: "Updated", tone: "success", rows: 187377, at: "2026-10-09T10:40:31Z"},
+    {id: "2026-10-08-2", date: "2026-10-08", state: "Updated", tone: "success", rows: 187370, at: "2026-10-08T18:02:44Z", admin: true},
+    {id: "2026-10-08-1", date: "2026-10-08", state: "Abandoned", tone: "neutral", rows: null, at: "2026-10-08T18:01:10Z"},
+    {id: "2026-10-07-1", date: "2026-10-07", state: "Updated", tone: "success", rows: 187361, at: "2026-10-07T10:38:20Z"},
+    {id: "2026-10-06-1", date: "2026-10-06", state: "Updated", tone: "success", rows: 187355, at: "2026-10-06T10:41:05Z"},
+    {id: "2026-10-05-1", date: "2026-10-05", state: "Updated", tone: "success", rows: 187350, at: "2026-10-05T10:39:44Z"},
+    {id: "2026-10-04-1", date: "2026-10-04", state: "Updated", tone: "success", rows: 187349, at: "2026-10-04T10:40:12Z"},
+    {id: "2026-10-03-1", date: "2026-10-03", state: "Updated", tone: "success", rows: 187341, at: "2026-10-03T10:39:01Z"},
+  ];
+  const stillPublic = (at, date, refresh, media, blob, ack) => ({at, date, title: "Recalled in Serena, but still public in CollectionSpace", about: media,
+    msg: `Refresh ${refresh} still lists Media record ${media} of PAHMA as public (Blob ${blob}), so its recall in Serena stays. Change the record in CollectionSpace, or, if the recall was a mistake, release it in the admin app.`, ack});
+  const recalledAlert = (at, date, media, reason, by, ack) => ({at, date, title: "An admin recalled Media records", about: media, msg: `${by} recalled 1 Media record for PAHMA. Reason: ${reason}.`, ack});
+  const ALERTS = [
+    recalledAlert("2026-10-13T06:02:16Z", "2026-10-12", MEDIA, "Testing", "admin", null),
+    stillPublic("2026-10-12T10:41:13Z", "2026-10-12", "pahma-2026-10-12-1", "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", BK, {by: "admin", at: "2026-10-12T16:00:00Z"}),
+    stillPublic("2026-10-11T10:39:53Z", "2026-10-11", "pahma-2026-10-11-1", "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", BK, {by: "pahma-admin", at: "2026-10-11T15:00:00Z"}),
+    {at: "2026-10-11T10:39:53Z", date: "2026-10-11", title: "A refresh ended recalls", about: "pahma-2026-10-11-1", msg: "Refresh pahma-2026-10-11-1 ended 1 recall: the servable list no longer lists its Media record as public.", ack: {by: "pahma-admin", at: "2026-10-11T15:00:30Z"}},
+    recalledAlert("2026-10-10T16:05:01Z", "2026-10-10", "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", "Wrong image on the record", "admin", {by: "admin", at: "2026-10-10T16:10:00Z"}),
+    {at: "2026-10-10T10:36:05Z", date: "2026-10-10", title: "A servable list check failed", about: "pahma-2026-10-10-1", msg: "Refresh pahma-2026-10-10-1: 35,387 rows removed, 18.9% of the last servability update's rows, more than the 5% delta threshold.", ack: {by: "admin", at: "2026-10-10T15:20:00Z"}},
+    recalledAlert("2026-10-09T21:14:04Z", "2026-10-09", "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", "Request from the community: culturally sensitive", "pahma-admin", {by: "pahma-admin", at: "2026-10-09T21:20:00Z"}),
+    {at: "2026-10-06T17:30:01Z", date: "2026-10-06", title: "An admin released a recall", about: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", msg: "admin released the recall of Media record 4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21, which refresh pahma-2026-10-05-1 kept. Reason: Complaint withdrawn; CollectionSpace is right.", ack: {by: "admin", at: "2026-10-06T17:31:00Z"}},
+    ...["05", "04", "03"].map(d => stillPublic(`2026-10-${d}T10:40:30Z`, `2026-10-${d}`, `pahma-2026-10-${d}-1`, "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", BL, {by: "admin", at: `2026-10-${d}T16:00:00Z`})),
+    recalledAlert("2026-10-02T18:30:01Z", "2026-10-02", "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", "Complaint about the caption", "admin", {by: "admin", at: "2026-10-02T18:35:00Z"}),
+  ];
+  const AUDIT = [
+    {at: "2026-10-13T06:02:15Z", admin: "admin", action: "recall", target: MEDIA, details: `Blob ${BR} · Reason: Testing`},
+    {at: "2026-10-13T05:47:30Z", admin: "admin", action: "sign in", target: "pahma", details: ""},
+    {at: "2026-10-12T22:15:02Z", admin: "admin", action: "settings change", target: "etl_step_timeout_seconds", details: "Before: 1800 · After: 900 · Reason: Slower ETL server this week"},
+    {at: "2026-10-12T16:00:00Z", admin: "admin", action: "alert acknowledge", target: "Still public · 2026-10-12", details: ""},
+    {at: "2026-10-11T15:00:30Z", admin: "pahma-admin", action: "alert acknowledge", target: "Recalls ended · 2026-10-11", details: ""},
+    {at: "2026-10-11T15:00:00Z", admin: "pahma-admin", action: "alert acknowledge", target: "Still public · 2026-10-11", details: ""},
+    {at: "2026-10-11T10:39:52Z", admin: "refresh pahma-2026-10-11-1", action: "recall ended", target: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", details: `Blob ${BE} · No longer listed as public · Recalled by admin, Oct 10`},
+    {at: "2026-10-10T16:05:00Z", admin: "admin", action: "recall", target: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", details: `Blob ${BE} · Reason: Wrong image on the record`},
+    {at: "2026-10-10T15:20:00Z", admin: "admin", action: "alert acknowledge", target: "Check failed · 2026-10-10", details: ""},
+    {at: "2026-10-09T21:14:03Z", admin: "pahma-admin", action: "recall", target: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", details: `Blob ${BK} · Reason: Request from the community: culturally sensitive`},
+    {at: "2026-10-08T18:01:30Z", admin: "admin", action: "refresh start", target: "pahma-2026-10-08-2", details: "Admin refresh · Reason: The ETL's list was fine; Serena's refresh timed out"},
+    {at: "2026-10-06T17:30:00Z", admin: "admin", action: "recall release", target: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", details: "Kept by pahma-2026-10-05-1 · Reason: Complaint withdrawn; CollectionSpace is right"},
+    {at: "2026-10-02T18:30:00Z", admin: "admin", action: "recall", target: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", details: `Blob ${BL} · Reason: Complaint about the caption`},
+  ];
+  const earliest = (b, key) => b.sizes.map(sz => sz[key]).filter(Boolean).sort((x, y) => ms(x) - ms(y))[0];
+  const latest = (b, key) => b.sizes.map(sz => sz[key]).filter(Boolean).sort((x, y) => ms(y) - ms(x))[0];
+
+  const RANGES = {"1h": 3600e3, "24h": DAY, "7d": 7 * DAY};
+  const inRange = () => LOG.filter(l => l.museum === S.museum && ms(l.at) > ms(NOW) - RANGES[S.range] && ms(l.at) <= ms(NOW));
+  const here24 = () => LOG.filter(l => l.museum === S.museum && ms(l.at) > ms(NOW) - DAY && ms(l.at) <= ms(NOW));
+  const here = list => S.museum === "pahma" ? list : [];
+  // ---- rendering
+  function render() {
+    document.documentElement.toggleAttribute("data-theme", !!$("#mockTheme").value);
+    if ($("#mockTheme").value) document.documentElement.setAttribute("data-theme", $("#mockTheme").value);
+    $("#app").innerHTML = S.signedIn ? frame() : signIn();
+    bind();
+  }
+
+  function signIn() {
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup @ 1b67acf</span></div>
+    <form class="login" id="loginForm">
+      <h2>Sign in</h2><p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
+      <div id="loginErr"></div>
+      <label class="field">Museum <select id="loginMuseum">${Object.entries(MUSEUMS).map(([k, v]) => `<option value="${k}" ${k === S.museum ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+      <label class="field">Username <input type="text" id="loginUser" value="admin" autocomplete="username"></label>
+      <label class="field">Password <input type="text" id="loginPass" value="" placeholder="any; “wrong” is refused" autocomplete="off"></label>
+      <button class="primary" type="submit" id="loginBtn">Sign in</button>
+    </form>`;
+  }
+
+  const NAV = [["Daily refresh", [["overview", "Overview"], ["start", "Start a refresh"], ["refreshes", "Past refreshes"]]],
+    ["Media records", [["requests", "Past requests"], ["lookup", "Media look up"], ["recalls", "Recalls"]]],
+    ["Admin", [["audit", "Audit log"], ["api", "API documentation"]]]];
+
+  function frame() {
+    const open = here(ALERTS).filter(a => !a.ack).length;
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup @ 1b67acf</span><span class="spacer"></span>
+      <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
+      <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
+      <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
+      ${S.menu ? `<div class="menu" role="menu">${Object.entries(MUSEUMS).filter(([k]) => k !== S.museum).slice(0, 2).map(([k, v]) => `<button role="menuitem" data-museum="${k}">Switch to ${v}</button>`).join("")}<button role="menuitem" data-museum-other>Sign in to another museum</button><hr><button role="menuitem" id="signOutAll">Sign everyone out of ${esc(name())}</button><button role="menuitem" id="signOut">Sign out of ${esc(name())}</button></div>` : ""}</div></div>
+      ${open ? `<div class="banner" id="alertBanner"><strong>${open} alert${open > 1 ? "s" : ""}:</strong> ${esc(here(ALERTS).find(a => !a.ack).title)}<span class="spacer"></span><button type="button" data-go="alerts">Open alerts</button></div>` : ""}
+      <div class="shell"><nav class="side" aria-label="Pages">${NAV.map(([g, items]) => `<div class="group">${g}</div>` + items.map(([k, v]) => `<button type="button" data-go="${k}" ${S.page === k ? 'aria-current="page"' : ""}>${v}</button>`).join("")).join("")}</nav>
+      <main id="main">${(PAGES[S.page] || PAGES.overview)()}</main></div>`;
+  }
+
+  const title = t => `<h2 id="page-title">${t}</h2>`;
+
+  // A sortable table, as the app's v-data-table with must-sort: clicking a column's name sorts by it, ascending;
+  // clicking it again reverses; a table is always sorted one way or the other. Rows keep their index in `rows`, for
+  // the buttons in them. The pager is a stand-in (25 rows a page, as in the app).
+  function table(id, cols, rows, initial) {
+    const sort = S.sort[id] || (S.sort[id] = {...initial});
+    const col = cols.find(c => c.key === sort.key) || cols[0];
+    const value = r => col.val ? col.val(r) : r[col.key];
+    const order = rows.map((r, i) => [r, i]).sort(([a], [b]) => {
+      const x = value(a) ?? "", y = value(b) ?? "";
+      const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "en", {numeric: true});
+      return sort.dir === "asc" ? c : -c;
+    });
+    const head = cols.map(c => {
+      if (c.sortable === false) return `<th>${esc(c.title)}</th>`;
+      const on = c.key === sort.key;
+      return `<th aria-sort="${on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${id}:${c.key}">${esc(c.title)}<span class="arrow" aria-hidden="true">${on ? (sort.dir === "asc" ? "▲" : "▼") : "▲"}</span></button></th>`;
+    }).join("");
+    const pg = S.pages[id] || (S.pages[id] = {size: 25, page: 1});
+    const pages = Math.max(1, Math.ceil(order.length / pg.size));
+    pg.page = Math.min(pg.page, pages);
+    const from = (pg.page - 1) * pg.size;
+    const shown = order.slice(from, from + pg.size);
+    const go = (to, label, off, aria) => `<button type="button" data-pagego="${id}:${to}" aria-label="${aria}" ${off ? "disabled" : ""}>${label}</button>`;
+    const pager = `<div class="pager"><label>Rows per page <select data-pagesize="${id}">${[10, 25, 50, 100].map(n => `<option ${n === pg.size ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <span class="range">${order.length ? `${from + 1}–${from + shown.length} of ${order.length}` : "0 of 0"}</span>
+      <span class="nav">${go(1, "«", pg.page === 1, "First page")}${go(pg.page - 1, "‹", pg.page === 1, "Previous page")}${go(pg.page + 1, "›", pg.page === pages, "Next page")}${go(pages, "»", pg.page === pages, "Last page")}</span></div>`;
+    const body = shown.map(([r, i]) => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`).join("");
+    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted">None.</td></tr>`}</tbody></table>
+      ${pager}</div>`;
+  }
+  const PAGES = {
+    overview: () => {
+      const day = here24();
+      const last = REFRESHES[0], active = recallRows(), kept = active.filter(t => t.kept).length;
+      return `${title(`${esc(name())} overview`)}<p class="lead">The last refresh, the alerts waiting, and what Serena served in the last 24 hours.</p>
+      <div class="cards"><div class="card"><div class="label">Last refresh</div><div class="value"><span class="pill t-${last.tone}">${last.state}</span></div><div class="secondary">${S.museum}-${last.id} · ${last.rows.toLocaleString("en-US")} rows · ${when(last.at)}</div></div>
+      <div class="card"><div class="label">Alerts waiting</div><div class="value num">${here(ALERTS).filter(a => !a.ack).length}</div><button class="link" data-go="alerts">Open alerts</button></div>
+      <div class="card"><div class="label">Last 24 hours</div><div class="value num">${day.filter(l => l.outcome === "served").length} served</div><div class="secondary num">${day.filter(l => l.outcome !== "served").length} unserved · <button class="link" data-go="requests">Past requests</button></div></div>
+      <div class="card"><div class="label">Active recalls</div><div class="value num">${active.length}</div><div class="secondary">${kept} still public in CollectionSpace · <button class="link" data-go="recalls">Recalls</button></div></div></div>
+      <p class="secondary">What Serena served and couldn't serve is on the Past requests page; "Media look up" says why for any one file.</p>`;
+    },
+
+    refreshes: () => `${title(`${esc(name())} Past refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it; click again to reverse.</p>
+      ${table("refreshes", [
+        {key: "id", title: "Refresh", html: r => `<button class="link mono">${S.museum}-${r.id}</button>`},
+        {key: "date", title: "Refresh date", html: r => `${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}`},
+        {key: "state", title: "State", html: r => `<span class="pill t-${r.tone}">${r.state}</span>`},
+        {key: "rows", title: "Rows", num: true, html: r => r.rows ? r.rows.toLocaleString("en-US") : "—"},
+        {key: "at", title: "Last change", html: r => when(r.at)}], REFRESHES, {key: "at", dir: "desc"})}`,
+
+    start: () => `${title(`${esc(name())}: Start a refresh`)}<p class="lead">An admin refresh: use when the ETL made the servable list but Serena's refresh failed. The list must come from the live public core.</p>
+      <label class="field" style="max-width:420px">Servable list (.tsv or .tsv.gz) <input type="file" id="startFile"></label>
+      <label class="field" style="max-width:220px">Refresh date <input type="text" value="2026-10-12"></label>
+      <label style="display:flex;gap:8px;margin-bottom:12px"><input type="checkbox"> I confirm this list was made from the live public core.</label>
+      <label class="field" style="max-width:560px">Reason (required) <textarea rows="2"></textarea></label><button class="primary" disabled>Start the refresh</button>`,
+
+    alerts: () => `${title(`${esc(name())} Alerts`)}<p class="lead">The last 30 days' alerts, newest first. Each is emailed to the team once; acknowledge it here when it's handled. Click a column's name to sort by it.</p>
+      ${table("alerts", [
+        {key: "at", title: "Raised", html: a => when(a.at)},
+        {key: "date", title: "Refresh date"},
+        {key: "title", title: "Alert", html: a => `<strong>${esc(a.title)}</strong><div class="secondary">${esc(a.msg)}</div>`},
+        {key: "about", title: "About", html: a => `<span class="mono">${esc(a.about)}</span>`},
+        {key: "ack", title: "Acknowledged", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}], here(ALERTS), {key: "at", dir: "desc"})}`,
+
+    requests: () => {
+      const lines = inRange(), served = lines.filter(l => l.outcome === "served").length;
+      const reasons = Object.entries(lines.filter(l => l.outcome !== "served").reduce((o, l) => ({...o, [l.reason]: (o[l.reason] || 0) + 1}), {})).sort((x, y) => y[1] - x[1]);
+      const top = Object.values(lines.reduce((o, l) => { (o[l.path] ||= {path: l.path, n: 0}).n++; return o; }, {})).sort((x, y) => y.n - x.n).slice(0, 10);
+      const shown = lines.filter(l => (!S.outcome || l.outcome === S.outcome) && (!S.reason || l.reason === S.reason));
+      return `${title(`${esc(name())} Past requests`)}<div class="toolbar"><span class="lead" style="margin:0">What Serena served and couldn't serve, from its log. Times are Pacific. Click a column's name to sort by it.</span><span class="spacer"></span>
+      <div role="group" aria-label="Range">${[["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"]].map(([k, v]) => `<button type="button" data-range="${k}" class="${S.range === k ? "primary" : ""}" aria-pressed="${S.range === k}">${v}</button>`).join(" ")}</div></div>
+      <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
+      <h3>Most requested</h3>${table("top", [
+        {key: "path", title: "Path", html: r => pathCell(r)},
+        {key: "n", title: "Requests", num: true, html: r => r.n.toLocaleString("en-US")}], top, {key: "n", dir: "desc"})}
+      <h3>Requests</h3><div class="toolbar"><select id="reqOutcome" aria-label="Outcome"><option value="">All outcomes</option>${["served", "unserved"].map(o => `<option ${S.outcome === o ? "selected" : ""}>${o}</option>`).join("")}</select>
+        <select id="reqReason" aria-label="Reason"><option value="">Any reason</option>${reasons.map(([k]) => `<option ${S.reason === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select><span class="spacer"></span><button>Export CSV</button></div>
+      ${table("lines", [
+        {key: "at", title: "Time", html: r => when(r.at)},
+        {key: "outcome", title: "Outcome", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
+        {key: "reason", title: "Reason"},
+        {key: "path", title: "Path", html: r => pathCell(r)},
+        {key: "kind", title: "Kind", html: r => esc(r.kind) + (r.signed ? ' <span class="muted">· signed link</span>' : "")},
+        {key: "cache", title: "Cache"}], shown, {key: "at", dir: "desc"})}`;
+    },
+
+    lookup: lookupPage,
+    recalls: recallsPage,
+
+    settings: () => `${title(`${esc(name())} Settings`)}<p class="lead">Each setting starts at its default value. A change needs a reason and is in the audit log; changes to the delta threshold and the audit retention also raise an alert.</p>
+      <div class="cards">${[["Watchdog", [["Deadline for today's refresh", "08:00 Pacific", false]]], ["The ETL job", [["Poll interval", "15 seconds", false], ["Step timeout", "900 seconds", true]]], ["Servable list check", [["Delta threshold", "5%", false]]], ["Audit log", [["Kept for", "90 days", false]]]].map(([g, rows]) => `<div class="card"><div class="label">${g}</div>${rows.map(([k, v, c]) => `<div style="margin-top:8px"><strong>${k}</strong><div class="num">${v} <span class="muted">${c ? "· changed; default value 1800" : "· default value"}</span></div><div style="display:flex;gap:6px;margin-top:4px"><button>Change</button>${c ? "<button>Use default</button>" : ""}</div></div>`).join("")}</div>`).join("")}</div>`,
+
+    audit: () => `${title(`${esc(name())} Audit log`)}<div class="toolbar"><span class="lead" style="margin:0">Every admin action of the last 30 days, newest first. Click a column's name to sort by it (Details doesn't sort).</span><span class="spacer"></span><button>Export CSV</button></div>
+      ${table("audit", [
+        {key: "at", title: "When", html: e => when(e.at)},
+        {key: "admin", title: "Admin"},
+        {key: "action", title: "Action"},
+        {key: "target", title: "Target", html: e => `<span class="mono">${esc(e.target)}</span>`},
+        {key: "details", title: "Details", sortable: false}], here(AUDIT), {key: "at", dir: "desc"})}`,
+
+    api: () => `${title(`${esc(name())} ETL API documentation`)}<p class="lead">The ETL API's description, generated from the code, read-only (Swagger UI in the app; not shown in the mockup).</p>`,
+  };
+
+  // ---- Media look up
+  function lookupPage() {
+    const r = S.lookup;
+    const ex = EXAMPLES.map((v, i) => [i, v]).filter(([, v]) => v.museum === S.museum);
+    let out = `${title(`${esc(name())} Media look up`)}
+      <p class="lead">Why Serena serves a file or not. Paste a file's URL or path, a Blob CSID or a Media CSID. Serena's answer comes from its own records; below it, layout C also shows what CollectionSpace says now, for comparison.</p>
+      <form class="lookup-form" id="lookupForm" role="search"><input type="search" id="lookupInput" placeholder="URL, path, Blob CSID or Media CSID" value="${esc(r ? r.input : "")}" aria-label="URL, path, Blob CSID or Media CSID"><button class="primary" type="submit">Look up</button></form>
+      <div class="examples">${ex.length ? "Examples: " : `No examples for ${esc(name())}; switch to PAHMA or Cinefiles in the menu at the top right. `}${ex.map(([k, v]) => `<button type="button" data-example="${k}">${esc(v.label)}</button>`).join("")}${S.museum !== "cinefiles" ? '<span>(the restricted PDF is under Cinefiles)</span>' : ""}</div>`;
+    out += `<div class="layout-switch" role="group" aria-label="Mockup only: layout to review"><span>Mockup only, layout to review:</span>${Object.entries(LAYOUTS).map(([k, v]) => `<button type="button" data-layout="${k}" aria-pressed="${S.layout === k}">${k}. ${v}</button>`).join("")}</div>`;
+    if (!r) return out + `<p class="muted">No file looked up yet.</p>`;
+    if (r.refused) {
+      return out + verdictHtml({tone: "not", ...r.refused}) + `<p class="meta-line">Looked up ${esc(r.input)}</p>`;
+    }
+    if (r.blobs.length > 1) {
+      out += `<p class="secondary" style="margin:0 0 8px">This Media record has ${r.blobs.length} Blobs in the servable list:</p><div class="blob-tabs" role="group" aria-label="Blobs">${r.blobs.map((b, i) => `<button type="button" data-blob="${i}" aria-pressed="${i === S.blobIndex}">${esc(b.label || short(b.blob))}</button>`).join("")}</div>`;
+    }
+    const b = r.blobs[Math.min(S.blobIndex, r.blobs.length - 1)];
+    const meta = `<p class="meta-line">Looked up ${esc(r.input)} · last servability update: refresh ${lastRefresh()} (refresh date 2026-10-12)</p>`;
+    if (S.layout === "B") return out + layoutPath(b) + meta;
+    if (S.layout === "C") return out + layoutInspector(b) + meta;
+    out += verdictHtml(b.verdict);
+    out += `<div class="ident"><div><span class="k">Blob</span>${csidHtml(b.blob)}</div>${b.media ? `<div><span class="k">Media record</span>${csidHtml(b.media)}</div>` : ""}
+      ${b.kind ? `<div><span class="k">Kind</span><span class="pill t-neutral">${esc(b.kind)}</span></div>` : ""}${b.access ? `<div><span class="k">Access</span><span class="pill ${b.access === "public" ? "t-success" : "t-warning"}">${esc(b.access)}</span></div>` : ""}</div>`;
+    out += `<h3 style="margin-top:0">Checks, in the order Serena makes them</h3><ol class="checks">${b.checks.map(([st, t, d]) => `<li class="${st}"><span class="ic" aria-hidden="true">${{ok: "✓", no: "✕", maybe: "!", skip: "–"}[st]}</span><span class="t">${esc(t)} <span class="visually-hidden">${{ok: "passes", no: "fails", maybe: "depends", skip: "not reached"}[st]}</span></span><span class="d">${esc(d)}</span></li>`).join("")}</ol>`;
+    out += sizesHtml(b);
+    out += meta;
+    return out;
+  }
+
+  const LAYOUTS = {A: "Verdict first", B: "Decision path", C: "Inspector"};
+  const MARK = {ok: "✓", no: "✕", maybe: "!", skip: "–"};
+  const SAY = {ok: "passes", no: "fails", maybe: "depends", skip: "not reached"};
+
+  // B. Decision path: the checks as the path a request takes, top to bottom; the path stops where the verdict is
+  // decided, with the explanation right there; the sizes are one compact table.
+  function layoutPath(b) {
+    const v = b.verdict;
+    let out = `<div class="path-head ${v.tone}"><span class="pill ${v.tone === "served" ? "t-success" : v.tone === "depends" ? "t-warning" : "t-danger"}">${esc(v.head)}</span>
+      <span class="secondary">Blob ${csidHtml(b.blob)}${b.media ? ` · Media record ${csidHtml(b.media)}` : ""}</span></div>
+      <ol class="path">`;
+    const stop = b.checks.findIndex(([st]) => st === "no" || st === "maybe");
+    b.checks.forEach(([st, t, d], i) => {
+      out += `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><div><div class="t">${esc(t)}<span class="visually-hidden"> ${SAY[st]}</span></div><div class="d">${esc(d)}</div>
+        ${i === stop ? `<div class="callout ${v.tone}"><div>${v.why}</div><div class="secondary" style="margin-top:4px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</div></div>` : ""}</div></li>`;
+    });
+    if (stop < 0) out += `<li class="end"><span class="dot" aria-hidden="true">✓</span><div><div class="t">Served</div><div class="d">${esc(v.why)} ${esc(v.next)}</div></div></li>`;
+    out += `</ol>`;
+    out += `<h3>Sizes</h3><div class="tw"><table><thead><tr><th>Size</th><th>Result</th><th>Stored copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">not served</span> <span class="secondary">${esc(s.reason)}</span>`}</td><td class="secondary">${s.stored ? esc(s.stored) : (s.served ? "none yet: fetched on its first request" : "none")}</td></tr>`).join("")}</tbody></table></div>`;
+    if (b.note) out += `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>`;
+    return out;
+  }
+
+  // C. Inspector: the file's facts in a side panel (with its stored copy, if any), and the answer and the sizes beside
+  // them, as in a property sheet.
+  function layoutInspector(b) {
+    const v = b.verdict;
+    const stored = b.sizes.find(s => s.stored);
+    const cs = b.cs, down = S.cspaceDown;
+    const pic = seed => thumbSvg(seed, b.kind || "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"');
+    // Serena's stored copy is the image it fetched; CollectionSpace's is the Media record's Blob now (a replaced image differs).
+    const biggest = [...b.sizes].reverse().find(s => s.stored);
+    const serenaPreview = biggest ? `${pic(seedOf(b.blob))}<span class="cap">Serena's stored ${esc(biggest.size)}</span>`
+      : `<span class="cap">No copy stored in Serena</span>`;
+    const csPreview = !cs ? `<span class="cap">No Media record</span>`
+      : down ? `<span class="cap">CollectionSpace can't be reached</span>`
+      : cs.state === "gone" ? `<span class="cap">Not in CollectionSpace</span>`
+      : `${pic(seedOf(cs.blob))}<span class="cap">CollectionSpace's ${b.kind === "pdf" ? "file" : "Medium"}${cs.state === "deleted" ? " (soft-deleted)" : ""}, not stored</span>`;
+    const csFacts = cs && cs.state === "gone" && !down ? [["State", "No Blob or Media record with this CSID"]] : cs && !down ? [["Media record", csidHtml(cs.media)], ["State", {exists: "Exists", deleted: '<span class="pill t-warning">Soft-deleted</span>', gone: "Not found"}[cs.state]],
+      ["Blob", csidHtml(cs.blob) + (cs.blob !== b.blob ? ' <span class="pill t-warning">differs</span>' : "")],
+      ...cs.fields.map(([k, val]) => [esc(k), esc(val)]), ["Last changed", when(cs.updated)]] : [];
+    const facts = [["Blob", csidHtml(b.blob)], ["Media record", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'],
+      ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>'],
+      ["First stored", earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : '<span class="muted">never</span>'],
+      ["Last served", latest(b, "lastServed") ? when(latest(b, "lastServed")) : '<span class="muted">not in the last 30 days</span>']];
+    const checks = b.checks.map(([st, t, d]) => `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><span><strong>${esc(t)}</strong><span class="visually-hidden"> ${SAY[st]}</span><br><span class="secondary">${esc(d)}</span></span></li>`).join("");
+    return `<div class="inspector">
+      <aside class="inspect-side" aria-label="The file in Serena and in CollectionSpace">
+        <section class="facts" aria-label="In Serena">
+          <h4 class="panel-title">In Serena</h4>
+          <div class="preview">${serenaPreview}</div>
+          <details class="more" data-details="serena" ${S.open.serena ? "open" : ""}><summary>Details</summary>
+            <dl>${facts.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl>
+            <h4>Checks</h4><ul class="mini-checks">${checks}</ul>
+          </details>
+        </section>
+        <section class="facts" aria-label="In CollectionSpace now">
+          <h4 class="panel-title">In CollectionSpace now</h4>
+          <div class="preview">${csPreview}</div>
+          ${csFacts.length ? `<details class="more" data-details="cs" ${S.open.cs ? "open" : ""}><summary>Details</summary>
+            <dl>${csFacts.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl></details>` : ""}
+        </section>
+      </aside>
+      <div class="answer">
+        <div class="answer-head ${v.tone}"><span class="mark" aria-hidden="true">${{served: "✓", not: "✕", depends: "!"}[v.tone]}</span><div><div class="head">${esc(v.head)}</div><div>${v.why}</div></div></div>
+        <p class="secondary" style="margin:6px 0 6px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
+        <p class="stamps"><span><span class="k">Last served</span> ${latest(b, "lastServed") ? when(latest(b, "lastServed")) : "not in the last 30 days"}</span><span><span class="k">First stored in Serena</span> ${earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : "never"}</span></p>
+        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy</th><th>Last served</th><th>First stored</th></tr></thead><tbody>${b.sizes.map(s => `<tr${s.asked ? ' class="asked"' : ""}><td>${esc(s.size)}${s.asked ? ' <span class="pill t-info">this path</span>' : ""}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? when(s.lastServed) : "—"}</td><td class="secondary">${s.firstStored ? when(s.firstStored) : "—"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="muted" style="margin:6px 0 0;font-size:12px">Last served: Serena's last answer with the file (from its log; "—" if not in the last 30 days). First stored: when Serena fetched that size and stored it in its S3 bucket.</p>
+        ${b.note ? `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>` : ""}
+        ${compareHtml(b)}
+      </div></div>`;
+  }
+
+  // Serena's records beside what CollectionSpace says now, for the Inspector.
+  function compareHtml(b) {
+    let out = `<h3>Serena and CollectionSpace</h3>`;
+    if (!b.cs) return out + `<p class="secondary">Nothing to compare: this file has no Media record (the museum's placeholder image is served from uploaded files).</p>`;
+    if (S.cspaceDown) return out + `<div class="cs-down">CollectionSpace can't be reached, so there's nothing to compare with. Serena's answer above doesn't depend on it.</div>`;
+    const cs = b.cs;
+    if (cs.state === "gone") return out + `<p class="secondary">CollectionSpace has no Blob or Media record with this CSID either.</p>`;
+    const csState = {exists: "Exists", deleted: "Soft-deleted", gone: "Not found"}[cs.state];
+    const csMedia = cs.media || b.media;
+    const rows = [
+      ["Media record", b.media ? `<span class="mono">${esc(short(b.media))}</span>` : "—", `${csState}${csMedia && csMedia !== b.media ? ` · <span class="mono">${esc(short(csMedia))}</span>` : ""}`, cs.state !== "exists" || (csMedia !== b.media && b.media)],
+      ["Blob", b.media ? `<span class="mono">${esc(short(b.blob))}</span>` : `<span class="muted">not listed</span>`, `<span class="mono">${esc(short(cs.blob))}</span>`, !!b.media && cs.blob !== b.blob],
+      ["Access", b.access ? esc(b.access) : "not listed", cs.fields.map(([k, v]) => `${esc(k)}: <strong>${esc(v)}</strong>`).join("<br>"), !!cs.fieldsChanged],
+      ["As of", `Refresh ${lastRefresh()} (list made ${when(LIST_MADE)})`, `Last changed ${when(cs.updated)}`, ms(cs.updated) > ms(LIST_MADE)],
+    ];
+    out += `<div class="tw"><table class="compare"><thead><tr><th></th><th>Serena (the last refresh)</th><th>CollectionSpace now</th></tr></thead><tbody>
+      ${rows.map(([k, a, c, diff]) => `<tr class="${diff ? "diff" : ""}"><th scope="row">${k}${diff ? ' <span class="pill t-warning">differs</span>' : ""}</th><td>${a}</td><td>${c}</td></tr>`).join("")}</tbody></table></div>
+      <p class="secondary" style="margin:8px 0 0"><strong>What the next refresh will do:</strong> ${esc(cs.next)}</p>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">The ETL decides what's public from its own rules, partly from the Object record (a sensitive Object, for example), which isn't shown here. These are the Media record's fields only.</p>`;
+    return out;
+  }
+
+  function verdictHtml(v) {
+    const mark = {served: "✓", not: "✕", depends: "!"}[v.tone];
+    return `<section class="verdict ${v.tone}" aria-live="polite"><span class="mark" aria-hidden="true">${mark}</span><div class="head">${esc(v.head)}</div><div class="why">${v.why}</div><div class="next">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}" style="color:inherit">Open Recalls</button>` : ""}</div></section>`;
+  }
+
+  function sizesHtml(b) {
+    const same = b.sizes.length > 1 && b.sizes.every(s => s.served === b.sizes[0].served && s.reason === b.sizes[0].reason);
+    let out = `<h3>Sizes</h3>`;
+    if (same) out += `<p class="secondary" style="margin:0 0 8px">All ${b.sizes.length} sizes: ${b.sizes[0].served ? "served" : `not served (${esc(b.sizes[0].reason)})`}.</p>`;
+    out += `<div class="sizes">${b.sizes.map(s => `<div class="size"><div class="n"><span>${esc(s.size)}</span>${same ? "" : `<span class="pill ${s.served ? "t-success" : "t-danger"}">${s.served ? "served" : "not served"}</span>`}</div>
+      ${!same && !s.served ? `<div class="s">${esc(s.reason)}</div>` : ""}<div class="s">${s.stored ? `Stored: ${esc(s.stored)}` : (s.served ? "Not stored yet: fetched on its first request" : "No stored copy")}</div></div>`).join("")}</div>`;
+    if (b.note) out += `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>`;
+    return out;
+  }
+
+  // ---- Recalls
+  const recallRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && !r.recall.ended)
+    .map(r => ({r, media: r.media, blobs: r.blobs.map(b => b.blob), by: r.recall.by, at: r.recall.at, reason: r.recall.reason, kept: r.recall.kept}));
+  const endedRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && r.recall.ended && ms(r.recall.ended.at) > ms(NOW) - 30 * DAY)
+    .map(r => ({r, media: r.media, blob: r.blobs[0].blob, ...r.recall.ended}));
+
+  function recallsPage() {
+    const active = recallRows();
+    return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there. Click a column's name to sort by it.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
+      <h3>Active</h3>${table("active", [
+        {key: "thumb", title: "", sortable: false, html: t => `<button class="thumb" data-full="${imageSeed(S.museum, t.blobs[0])}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, t.blobs[0]), "image")}</button>`},
+        {key: "media", title: "Media record", html: t => `${csidLink(t.media, "Media record")}<div class="muted">Blob ${csidLink(t.blobs[0], "Blob", short(t.blobs[0]))}</div>`},
+        {key: "at", title: "Recalled", html: t => when(t.at)},
+        {key: "by", title: "By"},
+        {key: "reason", title: "Reason"},
+        {key: "state", title: "State", val: t => t.kept ? "0" : "1", html: (t, i) => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${esc(t.kept.refresh)}</div><button type="button" data-release="${i}" style="margin-top:4px">Release…</button>` : `<span class="pill t-info">Waiting for a later refresh</span>`}], active, {key: "at", dir: "desc"})}
+      <h3>Ended in the last 30 days</h3>${table("ended", [
+        {key: "media", title: "Media record", html: e => `${csidLink(e.media, "Media record")}<div class="muted">Blob ${csidLink(e.blob, "Blob", short(e.blob))}</div>`},
+        {key: "at", title: "Ended", html: e => when(e.at)},
+        {key: "how", title: "How"},
+        {key: "by", title: "By"},
+        {key: "why", title: "Why"}], endedRows(), {key: "at", dir: "desc"})}`;
+  }
+
+  function dialog(head, body, foot) {
+    $("#dlgHead").innerHTML = head; $("#dlgBody").innerHTML = body; $("#dlgFoot").innerHTML = foot;
+    const d = $("#dlg"); if (!d.open) d.showModal();
+  }
+  const close = () => $("#dlg").close();
+
+  function recallForm() {
+    dialog("Recall Media records", `<p class="secondary" style="margin-top:0">Up to 12 Media or Blob CSIDs, separated by new lines, commas or spaces, or a text file of up to 1,000. Nothing is recalled until you confirm.</p>
+      <div id="tdErr"></div><label class="field">Media or Blob CSIDs <textarea id="tdBox" rows="4">${S.museum === "pahma" ? `${BLOB}\n6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d\ne7d6c5b4-a392-4817-9e0d-c1b2a3948576\nnot-a/csid` : ""}</textarea></label>
+      <label class="field">Or a text file of CSIDs <input type="file" id="tdFile" accept=".txt"></label>`,
+      `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="tdSummary">Show what would be recalled</button>`);
+  }
+
+  // What the form's CSIDs would recall: each found in Serena's servable list first, else in CollectionSpace.
+  function recallSummary(tokens) {
+    const rows = [], skipped = [], seen = new Set();
+    for (const tok of tokens) {
+      if (!CSID_RE.test(tok)) { skipped.push([tok, "Not a CSID."]); continue; }
+      const [lr] = findBlob(S.museum, tok);
+      const listed = lr || RECORDS.find(r => r.museum === S.museum && r.media === tok && r.blobs.some(b => listedAt(b, NOW)));
+      const r = listed || (S.cspaceDown ? null : findRecord(S.museum, tok));
+      if (!r) { skipped.push([tok, S.cspaceDown ? "Not known to Serena, and CollectionSpace can't be reached: not served today. Try again later." : "Neither Serena nor CollectionSpace has this CSID: not served."]); continue; }
+      if (!r.media) { skipped.push([tok, "The placeholder image has no Media record: it can't be recalled."]); continue; }
+      if (seen.has(r.media)) continue;
+      seen.add(r.media);
+      const blob = r.blobs.length ? r.blobs[0].blob : r.cs.blob;
+      const d = decide(S.museum, blob, "Medium", NOW, false);
+      rows.push({r, media: r.media, blob, kind: r.blobs.length ? r.blobs[0].kind : "image", found: listed ? "Serena" : "CollectionSpace", gave: tok,
+        served: recallAt(r, NOW) ? "already recalled" : d.reason ? `no (${REASON[d.reason]})` : "yes", done: !!recallAt(r, NOW)});
+    }
+    S.pendingRecall = rows.filter(x => !x.done).map(x => x.r);
+    const todo = S.pendingRecall.length, what = `${todo} Media record${todo === 1 ? "" : "s"}`;
+    dialog("Recall Media records", `<p style="margin-top:0">${what} to recall. Click a thumbnail for the full size.</p>
+      <div class="tw"><table><thead><tr><th></th><th>Media record</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
+      ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td class="mono">${esc(short(x.media))}<div class="muted">Blob ${esc(short(x.blob))}</div></td><td>${x.kind}</td><td>${esc(x.served)}</td><td>${x.found}</td><td class="mono">${esc(short(x.gave))}</td></tr>`).join("")}</tbody></table></div>
+      ${skipped.length ? `<p style="margin:12px 0 4px"><strong>Not recalled</strong></p><ul style="margin:0 0 12px">${skipped.map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>` : ""}
+      <label class="field">Reason (required) <textarea id="tdReason" rows="2"></textarea></label>`,
+      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Back</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${what}</button>`);
+  }
+
+  // Opens Media look up on an input (a path, a URL or a CSID).
+  function openLookup(input) {
+    S.lookup = lookupFor(input); S.blobIndex = S.lookup.index || 0; S.page = "lookup"; render();
+  }
+
+  // ---- events
+  function bind() {
+    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); S.menu = false; render(); });
+    const lf = $("#loginForm");
+    if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.museum = clean($("#loginMuseum").value); S.user = typed($("#loginUser")) || "admin"; S.lookup = null; render(); };
+    const mb = $("#museumBtn"); if (mb) mb.onclick = () => { S.menu = !S.menu; render(); };
+    document.querySelectorAll("[data-museum]").forEach(b => b.onclick = () => { S.museum = clean(b.dataset.museum); S.menu = false; S.lookup = null; S.reason = ""; render(); });
+    const so = $("#signOut"); if (so) so.onclick = () => { S.signedIn = false; S.menu = false; render(); };
+    const other = document.querySelector("[data-museum-other]"); if (other) other.onclick = () => { S.signedIn = false; S.menu = false; render(); };
+    document.querySelectorAll("[data-sort]").forEach(b => b.onclick = () => {
+      const [id, key] = clean(b.dataset.sort).split(":");
+      const now = S.sort[id];
+      S.sort[id] = now.key === key ? {key, dir: now.dir === "asc" ? "desc" : "asc"} : {key, dir: "asc"};
+      render();
+      const again = document.querySelector(`[data-sort="${id}:${key}"]`); if (again) again.focus();
+    });
+    document.querySelectorAll("[data-pagesize]").forEach(el => el.onchange = () => { S.pages[clean(el.dataset.pagesize)] = {size: +el.value, page: 1}; render(); });
+    document.querySelectorAll("[data-pagego]").forEach(b => b.onclick = () => { const [id, to] = clean(b.dataset.pagego).split(":"); S.pages[id].page = +to; render(); });
+    document.querySelectorAll("[data-ack]").forEach(b => b.onclick = () => {
+      const a = here(ALERTS)[+clean(b.dataset.ack)]; a.ack = {by: S.user, at: NOW};
+      AUDIT.unshift({at: NOW, admin: S.user, action: "alert acknowledge", target: `${a.title} · ${a.date}`, details: ""}); render();
+    });
+    document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { S.range = clean(b.dataset.range); S.reason = ""; render(); });
+    const ro = $("#reqOutcome"); if (ro) ro.onchange = () => { S.outcome = clean(ro.value); render(); };
+    const rr = $("#reqReason"); if (rr) rr.onchange = () => { S.reason = clean(rr.value); render(); };
+    document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => openLookup(EXAMPLES[+clean(b.dataset.example)].input));
+    document.querySelectorAll("details[data-details]").forEach(d => d.ontoggle = () => { S.open[clean(d.dataset.details)] = d.open; });
+    document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = clean(b.dataset.layout); render(); });
+    document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +clean(b.dataset.blob); render(); });
+    const lk = $("#lookupForm");
+    if (lk) lk.onsubmit = e => { e.preventDefault(); const q = typed($("#lookupInput")).trim(); if (q) openLookup(q); };
+    document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = clean(b.dataset.copy); Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { b.textContent = "Copied"; }, () => { b.textContent = "Select it"; }); });
+    const tb = $("#recallBtn"); if (tb) tb.onclick = () => { recallForm(); bindDialog(); };
+    document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {
+      const t = recallRows()[+clean(b.dataset.release)];
+      dialog("Release a recall", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the recall only if CollectionSpace is right and the file should be served again.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
+        `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="relConfirm" disabled>Release</button>`);
+      bindDialog(() => {
+        const why = typed($("#relReason")).trim();
+        t.r.recall.ended = {at: NOW, by: S.user, how: "Released", why};
+        AUDIT.unshift({at: NOW, admin: S.user, action: "recall release", target: t.media, details: `Kept by ${t.kept.refresh} · Reason: ${why}`});
+        ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin released a recall", about: t.media, msg: `${S.user} released the recall of Media record ${t.media}, which refresh ${t.kept.refresh} kept. Reason: ${why}.`, ack: null});
+      });
+    });
+    document.querySelectorAll("[data-csid]").forEach(b => b.onclick = () => showCsid(clean(b.dataset.csid), clean(b.dataset.what)));
+    document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => showPath(clean(b.dataset.view)));
+    document.querySelectorAll("main [data-full]").forEach(b => b.onclick = () => showFull(+clean(b.dataset.full)));
+  }
+
+  // A path on Past requests: plain text until hovered, then a link that opens the file in a dialog (through the admin
+  // API, as the recall form's previews: admins only, never cached). The path shows with its CSID shortened; a path
+  // with no CSID Serena could look up (a bad CSID) stays plain text.
+  function pathCell(r) {
+    const m = /\/blobs\/([^/]+)\//.exec(r.path);
+    const text = m ? r.path.replace(m[1], short(m[1])) : r.path;
+    if (!m || !CSID_RE.test(m[1])) return `<span class="mono" title="${esc(r.path)}">${esc(text)}</span>`;
+    return `<button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">${esc(text)}</button>`;
+  }
+
+  // A CSID on the Recalls page: plain text until hovered, then a link that opens the file in the same dialog.
+  function csidLink(csid, what, label) {
+    return `<button type="button" class="path-link mono" data-csid="${esc(csid)}" data-what="${esc(what)}" title="View this file">${esc(label || csid)}</button>`;
+  }
+
+  const bigPicture = (seed, kind) => `<div style="aspect-ratio:4/3;max-width:100%;border-radius:8px;overflow:hidden;border:1px solid var(--border)">${thumbSvg(seed, kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block"')}</div>`;
+  const foot = `<button type="button" id="viewLookup">Media look up</button><button type="button" class="primary" data-close>Dismiss</button>`;
+
+  function showCsid(csid, what) {
+    const r = findRecord(S.museum, csid), recalled = recallAt(r, NOW);
+    const blob = r && r.media === csid ? (r.blobs[0] || {blob: r.cs.blob}).blob : csid;
+    dialog(`${esc(what)} <span class="mono" style="font-weight:400;font-size:13px">${esc(csid)}</span>`,
+      `${bigPicture(imageSeed(S.museum, blob, "FullHD"), kindOf(S.museum, blob))}
+      <p class="secondary" style="margin-bottom:0">The largest size the museum serves, shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored).${recalled ? " The public isn't served it while it's recalled." : ""} Never cached.</p>`, foot);
+    bindDialog();
+    $("#viewLookup").onclick = () => { close(); openLookup(csid); };
+  }
+
+  function showPath(path) {
+    const l = LOG.find(x => x.path === path && x.museum === S.museum);
+    const csid = (/\/blobs\/([^/]+)\//.exec(path) || [])[1], size = (/\/derivatives\/([^/]+)\//.exec(path) || [, "original"])[1];
+    const last = [...LOG].reverse().find(x => x.path === path && x.museum === S.museum);
+    const result = last ? (last.outcome === "served" ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">unserved</span> ${esc(last.reason)}`) : "";
+    dialog(esc(size === "original" ? "Original file" : size), `<p class="mono" style="margin-top:0;overflow-wrap:anywhere">${esc(path)}</p>
+      ${bigPicture(imageSeed(S.museum, csid, size), kindOf(S.museum, csid))}
+      <p class="secondary" style="margin-bottom:0">${result ? `The last request for it (${when(last.at)}): ${result}. ` : ""}Shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored), whether or not the public is served it. Never cached.</p>`, foot);
+    bindDialog();
+    $("#viewLookup").onclick = () => { close(); openLookup(path); };
+    return l;
+  }
+
+  function showFull(seed, kind) {
+    dialog("Full size", `<div style="aspect-ratio:4/3;max-width:100%">${thumbSvg(seed, kind || "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%"')}</div><p class="muted">From Serena's stored copy, or CollectionSpace's (not stored). Never cached by the browser.</p>`, `<button type="button" data-close>Close</button>`);
+    bindDialog();
+  }
+
+  function bindDialog(onConfirm) {
+    document.querySelectorAll("#dlg [data-close]").forEach(b => b.onclick = close);
+    const s = $("#tdSummary"); if (s) s.onclick = () => {
+      const tokens = typed($("#tdBox")).split(/[\s,]+/).filter(Boolean);
+      if (tokens.length > 12) { $("#tdErr").innerHTML = '<div class="err">More than 12 CSIDs: use a text file instead.</div>'; return; }
+      S.recallText = typed($("#tdBox")); recallSummary(tokens); bindDialog();
+    };
+    const back = $("#tdBack"); if (back) back.onclick = () => { recallForm(); if (S.recallText !== undefined) $("#tdBox").value = S.recallText; bindDialog(); };
+    const reason = $("#tdReason"), confirm = $("#tdConfirm");
+    if (reason) reason.oninput = () => { confirm.disabled = !reason.value.trim() || !S.pendingRecall.length; };
+    if (confirm) confirm.onclick = () => {
+      const why = typed(reason).trim();
+      S.pendingRecall.forEach(r => {
+        r.recall = {by: S.user, at: NOW, reason: why};
+        AUDIT.unshift({at: NOW, admin: S.user, action: "recall", target: r.media, details: `Blob ${r.blobs.length ? r.blobs[0].blob : r.cs.blob} · Reason: ${why}`});
+      });
+      const n = S.pendingRecall.length;
+      ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin recalled Media records", about: n === 1 ? S.pendingRecall[0].media : `${n} Media records`, msg: `${S.user} recalled ${n} Media record${n === 1 ? "" : "s"} for ${name()}. Reason: ${why}.`, ack: null});
+      S.pendingRecall = []; S.recallText = undefined; close(); render();
+    };
+    const rr = $("#relReason"), rc = $("#relConfirm");
+    if (rr) rr.oninput = () => { rc.disabled = !rr.value.trim(); };
+    if (rc) rc.onclick = () => { onConfirm && onConfirm(); close(); render(); };
+    document.querySelectorAll("#dlg [data-full]").forEach(b => b.onclick = () => showFull(+clean(b.dataset.full)));
+  }
+
+  $("#dlg").addEventListener("click", e => { if (e.target === $("#dlg")) close(); });
+  $("#mockTheme").onchange = render;
+  // Mockup settings: how many sample alerts wait to be acknowledged. 3 adds today's missed deadline and leaves the
+  // Oct 12 "still public" alert unacknowledged.
+  const DEADLINE = {at: "2026-10-13T15:00:04Z", date: "2026-10-13", title: "Today's refresh isn't finished by the deadline", about: "2026-10-13", msg: "PAHMA's refresh for 2026-10-13 isn't updated or abandoned by its deadline, 08:00 Pacific.", ack: null};
+  const SAMPLE_ACK = new Map(ALERTS.map(a => [a, a.ack]));
+  $("#mockAlerts").onchange = e => {
+    const n = +e.target.value;
+    ALERTS.splice(0, ALERTS.length, ...ALERTS.filter(a => a !== DEADLINE));
+    SAMPLE_ACK.forEach((ack, a) => { a.ack = ack; });
+    const recall = ALERTS.find(a => a.at === "2026-10-13T06:02:16Z"), kept = ALERTS.find(a => a.at === "2026-10-12T10:41:13Z");
+    if (n === 0) recall.ack = {by: "admin", at: "2026-10-13T06:10:00Z"};
+    if (n === 3) { kept.ack = null; DEADLINE.ack = null; ALERTS.unshift(DEADLINE); }
+    render();
+  };
+  $("#mockCspaceDown").onchange = e => { S.cspaceDown = e.target.checked; if (S.page === "lookup") render(); };
+  $("#mockSignOut").onclick = () => { S.signedIn = false; render(); };
+  // Open on the page under review, signed in, with the screenshot's file looked up.
+  S.signedIn = true; S.lookup = lookupFor(MEDIA);
+  render();
+})();
+</script>
+<style>.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }</style>
+
+</body>
+</html>
