@@ -114,7 +114,11 @@
   th { text-align: left; color: var(--text-secondary); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface-1); white-space: nowrap; }
   td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   tr:last-child td { border-bottom: 0; }
-  th.sortable { cursor: pointer; }
+  th button.sort { border: 0; background: none; height: auto; padding: 0; font: inherit; font-weight: 600; color: inherit; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+  th button.sort .arrow { font-size: 10px; opacity: 0; }
+  th button.sort:hover .arrow, th button.sort:focus-visible .arrow { opacity: 0.45; }
+  th button.sort.on { color: var(--text-primary); }
+  th button.sort.on .arrow { opacity: 1; }
   .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
   .t-success { background: var(--bg-success); color: var(--text-success); }
   .t-warning { background: var(--bg-warning); color: var(--text-warning); }
@@ -263,6 +267,19 @@
     {media: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", at: "2026-10-11T10:39:52Z", by: "refresh pahma-2026-10-11-1", how: "Ended by a refresh", why: "No longer listed as public"},
     {media: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", at: "2026-10-06T17:30:00Z", by: "admin", how: "Released", why: "Complaint withdrawn; CollectionSpace is right"},
   ];
+  const TOP_PATHS = [
+    {path: "/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/derivatives/Thumbnail/content", n: 1204},
+    {path: "/pahma/imageserver/blobs/855049af-600c-5140-b50a-b429566c8278/derivatives/Medium/content", n: 212},
+    {path: "/pahma/imageserver/blobs/3e9a1b77-52d0-4c8f-a1e6-9f0b2d4c6e81/content", n: 96},
+    {path: "/pahma/imageserver/blobs/aa11bb22-cc33-4d44-9e55-ff6677889900/derivatives/Small/content", n: 431},
+  ];
+  const LINES = [
+    {at: "2026-10-13T06:05:02Z", outcome: "unserved", reason: "recalled", path: "/pahma/imageserver/blobs/855049af…8278/derivatives/Medium/content", kind: "", cache: ""},
+    {at: "2026-10-13T06:04:40Z", outcome: "served", reason: "", path: "/pahma/imageserver/blobs/0f1e2d3c…4a5b/derivatives/Thumbnail/content", kind: "image", cache: "hit"},
+    {at: "2026-10-13T06:03:11Z", outcome: "unserved", reason: "not listed", path: "/pahma/imageserver/blobs/3e9a1b77…6e81/content", kind: "", cache: ""},
+    {at: "2026-10-13T06:01:57Z", outcome: "served", reason: "", path: "/pahma/imageserver/blobs/aa11bb22…9900/derivatives/Small/content", kind: "image", cache: "miss"},
+    {at: "2026-10-13T05:59:30Z", outcome: "unserved", reason: "bad CSID", path: "/pahma/imageserver/blobs/not-a-csid/content", kind: "", cache: ""},
+  ];
   const AUDIT = [
     {at: "2026-10-13T06:02:15Z", admin: "admin", action: "recall", target: "20349bfa-cad6-5f47-9acd-dcd34e3f0b98", details: "Reason: Testing"},
     {at: "2026-10-13T05:47:30Z", admin: "admin", action: "sign in", target: "pahma", details: ""},
@@ -350,6 +367,28 @@
   }
 
   const title = t => `<h2 id="page-title">${t}</h2>`;
+
+  // A sortable table, as the app's v-data-table with must-sort: clicking a column's name sorts by it, ascending;
+  // clicking it again reverses; a table is always sorted one way or the other. Rows keep their index in `rows`, for
+  // the buttons in them. The pager is a stand-in (25 rows a page, as in the app).
+  function table(id, cols, rows, initial) {
+    const sort = S.sort[id] || (S.sort[id] = {...initial});
+    const col = cols.find(c => c.key === sort.key) || cols[0];
+    const value = r => col.val ? col.val(r) : r[col.key];
+    const order = rows.map((r, i) => [r, i]).sort(([a], [b]) => {
+      const x = value(a) ?? "", y = value(b) ?? "";
+      const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "en", {numeric: true});
+      return sort.dir === "asc" ? c : -c;
+    });
+    const head = cols.map(c => {
+      if (c.sortable === false) return `<th>${esc(c.title)}</th>`;
+      const on = c.key === sort.key;
+      return `<th aria-sort="${on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${id}:${c.key}">${esc(c.title)}<span class="arrow" aria-hidden="true">${on ? (sort.dir === "asc" ? "▲" : "▼") : "▲"}</span></button></th>`;
+    }).join("");
+    const body = order.map(([r, i]) => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`).join("");
+    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted">None.</td></tr>`}</tbody></table>
+      <div class="pager">Items per page <select aria-label="Items per page"><option>10</option><option selected>25</option><option>50</option><option>100</option></select> 1–${rows.length} of ${rows.length}</div></div>`;
+  }
   const PAGES = {
     overview: () => `${title(`${esc(name())} overview`)}<p class="lead">Today's refresh, the alerts waiting, and what Serena served in the last 24 hours.</p>
       <div class="cards"><div class="card"><div class="label">Today's refresh</div><div class="value"><span class="pill t-success">Updated</span></div><div class="secondary">pahma-2026-10-12-1 · 187,402 rows · ${when("2026-10-12T10:41:12Z")}</div></div>
@@ -358,10 +397,13 @@
       <div class="card"><div class="label">Active recalls</div><div class="value num">${RECALLS.length}</div><div class="secondary">1 still public in CollectionSpace · <button class="link" data-go="recalls">Recalls</button></div></div></div>
       <p class="secondary">What Serena served and couldn't serve is on the Past requests page; "Media look up" says why for any one file.</p>`,
 
-    refreshes: () => `${title(`${esc(name())} Past refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it.</p>
-      <div class="tw"><table><thead><tr><th>Refresh</th><th>Refresh date</th><th>State</th><th>Rows</th><th>Last change ▾</th></tr></thead><tbody>
-      ${REFRESHES.map(r => `<tr><td><button class="link mono">${r.id}</button></td><td>${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}</td><td><span class="pill t-${r.tone}">${r.state}</span></td><td class="num">${r.rows ? r.rows.toLocaleString("en-US") : "—"}</td><td>${when(r.at)}</td></tr>`).join("")}
-      </tbody></table><div class="pager">Items per page <select><option>25</option></select> 1–6 of 6</div></div>`,
+    refreshes: () => `${title(`${esc(name())} Past refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it; click again to reverse.</p>
+      ${table("refreshes", [
+        {key: "id", title: "Refresh", html: r => `<button class="link mono">${r.id}</button>`},
+        {key: "date", title: "Refresh date", html: r => `${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}`},
+        {key: "state", title: "State", html: r => `<span class="pill t-${r.tone}">${r.state}</span>`},
+        {key: "rows", title: "Rows", num: true, html: r => r.rows ? r.rows.toLocaleString("en-US") : "—"},
+        {key: "at", title: "Last change", html: r => when(r.at)}], REFRESHES, {key: "at", dir: "desc"})}`,
 
     start: () => `${title(`${esc(name())}: Start a refresh`)}<p class="lead">An admin refresh: use when the ETL made the servable list but Serena's refresh failed. The list must come from the live public core.</p>
       <label class="field" style="max-width:420px">Servable list (.tsv or .tsv.gz) <input type="file" id="startFile"></label>
@@ -369,21 +411,28 @@
       <label style="display:flex;gap:8px;margin-bottom:12px"><input type="checkbox"> I confirm this list was made from the live public core.</label>
       <label class="field" style="max-width:560px">Reason (required) <textarea rows="2"></textarea></label><button class="primary" disabled>Start the refresh</button>`,
 
-    alerts: () => `${title(`${esc(name())} Alerts`)}<p class="lead">The last 30 days' alerts, newest first. Each is emailed to the team once; acknowledge it here when it's handled.</p>
-      <div class="tw"><table><thead><tr><th>Raised ▾</th><th>Refresh date</th><th>Alert</th><th>About</th><th>Acknowledged</th></tr></thead><tbody>
-      ${ALERTS.map((a, i) => `<tr><td>${when(a.at)}</td><td>${a.date}</td><td><strong>${esc(a.title)}</strong><div class="secondary">${esc(a.msg)}</div></td><td class="mono">${esc(a.about)}</td><td>${a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}</td></tr>`).join("")}
-      </tbody></table></div>`,
+    alerts: () => `${title(`${esc(name())} Alerts`)}<p class="lead">The last 30 days' alerts, newest first. Each is emailed to the team once; acknowledge it here when it's handled. Click a column's name to sort by it.</p>
+      ${table("alerts", [
+        {key: "at", title: "Raised", html: a => when(a.at)},
+        {key: "date", title: "Refresh date"},
+        {key: "title", title: "Alert", html: a => `<strong>${esc(a.title)}</strong><div class="secondary">${esc(a.msg)}</div>`},
+        {key: "about", title: "About", html: a => `<span class="mono">${esc(a.about)}</span>`},
+        {key: "ack", title: "Acknowledged", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}], ALERTS, {key: "at", dir: "desc"})}`,
 
-    requests: () => `${title(`${esc(name())} Past requests`)}<div class="toolbar"><span class="lead" style="margin:0">What Serena served and couldn't serve, from its log. Times are Pacific.</span><span class="spacer"></span>
+    requests: () => `${title(`${esc(name())} Past requests`)}<div class="toolbar"><span class="lead" style="margin:0">What Serena served and couldn't serve, from its log. Times are Pacific. Click a column's name to sort by it.</span><span class="spacer"></span>
       <div role="group" aria-label="Range"><button>Last hour</button> <button class="primary">Last 24 hours</button> <button>Last 7 days</button></div></div>
       <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">48,210</div></div><div class="card"><div class="label">Unserved</div><div class="value num">1,904</div><div class="secondary">not listed 1,640 · recalled 212 · bad CSID 52</div></div></div>
-      <h3>Most requested</h3><div class="tw"><table><thead><tr><th>Path</th><th>Requests</th></tr></thead><tbody>
-      <tr><td class="mono">/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/derivatives/Thumbnail/content</td><td class="num">1,204</td></tr>
-      <tr><td class="mono">/pahma/imageserver/blobs/855049af-600c-5140-b50a-b429566c8278/derivatives/Medium/content</td><td class="num">212</td></tr></tbody></table></div>
+      <h3>Most requested</h3>${table("top", [
+        {key: "path", title: "Path", html: r => `<span class="mono">${esc(r.path)}</span>`},
+        {key: "n", title: "Requests", num: true, html: r => r.n.toLocaleString("en-US")}], TOP_PATHS, {key: "n", dir: "desc"})}
       <h3>Requests</h3><div class="toolbar"><select><option>All outcomes</option></select><select><option>Any reason</option></select><span class="spacer"></span><button>Export CSV</button></div>
-      <div class="tw"><table><thead><tr><th>Time ▾</th><th>Outcome</th><th>Reason</th><th>Path</th><th>Kind</th><th>Cache</th></tr></thead><tbody>
-      <tr><td>${when("2026-10-13T06:05:02Z")}</td><td><span class="pill t-danger">unserved</span></td><td>recalled</td><td class="mono">/pahma/imageserver/blobs/855049af…8278/derivatives/Medium/content</td><td></td><td></td></tr>
-      <tr><td>${when("2026-10-13T06:04:40Z")}</td><td><span class="pill t-success">served</span></td><td></td><td class="mono">/pahma/imageserver/blobs/0f1e2d3c…4a5b/derivatives/Thumbnail/content</td><td>image</td><td>hit</td></tr></tbody></table></div>`,
+      ${table("lines", [
+        {key: "at", title: "Time", html: r => when(r.at)},
+        {key: "outcome", title: "Outcome", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
+        {key: "reason", title: "Reason"},
+        {key: "path", title: "Path", html: r => `<span class="mono">${esc(r.path)}</span>`},
+        {key: "kind", title: "Kind"},
+        {key: "cache", title: "Cache"}], LINES, {key: "at", dir: "desc"})}`,
 
     lookup: lookupPage,
     recalls: recallsPage,
@@ -391,9 +440,13 @@
     settings: () => `${title(`${esc(name())} Settings`)}<p class="lead">Each setting starts at its default value. A change needs a reason and is in the audit log; changes to the delta threshold and the audit retention also raise an alert.</p>
       <div class="cards">${[["Watchdog", [["Deadline for today's refresh", "08:00 Pacific", false]]], ["The ETL job", [["Poll interval", "15 seconds", false], ["Step timeout", "900 seconds", true]]], ["Servable list check", [["Delta threshold", "5%", false]]], ["Audit log", [["Kept for", "90 days", false]]]].map(([g, rows]) => `<div class="card"><div class="label">${g}</div>${rows.map(([k, v, c]) => `<div style="margin-top:8px"><strong>${k}</strong><div class="num">${v} <span class="muted">${c ? "· changed; default value 1800" : "· default value"}</span></div><div style="display:flex;gap:6px;margin-top:4px"><button>Change</button>${c ? "<button>Use default</button>" : ""}</div></div>`).join("")}</div>`).join("")}</div>`,
 
-    audit: () => `${title(`${esc(name())} Audit log`)}<div class="toolbar"><span class="lead" style="margin:0">Every admin action of the last 30 days, newest first.</span><span class="spacer"></span><button>Export CSV</button></div>
-      <div class="tw"><table><thead><tr><th>When ▾</th><th>Admin</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody>
-      ${AUDIT.map(e => `<tr><td>${when(e.at)}</td><td>${esc(e.admin)}</td><td>${esc(e.action)}</td><td class="mono">${esc(e.target)}</td><td>${esc(e.details)}</td></tr>`).join("")}</tbody></table></div>`,
+    audit: () => `${title(`${esc(name())} Audit log`)}<div class="toolbar"><span class="lead" style="margin:0">Every admin action of the last 30 days, newest first. Click a column's name to sort by it (Details doesn't sort).</span><span class="spacer"></span><button>Export CSV</button></div>
+      ${table("audit", [
+        {key: "at", title: "When", html: e => when(e.at)},
+        {key: "admin", title: "Admin"},
+        {key: "action", title: "Action"},
+        {key: "target", title: "Target", html: e => `<span class="mono">${esc(e.target)}</span>`},
+        {key: "details", title: "Details", sortable: false}], AUDIT, {key: "at", dir: "desc"})}`,
 
     api: () => `${title(`${esc(name())} ETL API documentation`)}<p class="lead">The ETL API's description, generated from the code, read-only (Swagger UI in the app; not shown in the mockup).</p>`,
   };
@@ -440,13 +493,20 @@
 
   // ---- Recalls
   function recallsPage() {
-    return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
-      <h3>Active</h3><div class="tw"><table><thead><tr><th></th><th>Media record</th><th>Recalled ▾</th><th>By</th><th>Reason</th><th>State</th></tr></thead><tbody>
-      ${RECALLS.map((t, i) => `<tr><td><button class="thumb" data-full="${i}" aria-label="Full size">${thumbSvg(i + 3, "image")}</button></td><td class="mono">${esc(t.media)}<div class="muted">Blob ${esc(short(t.blobs[0]))}</div></td><td>${when(t.at)}</td><td>${esc(t.by)}</td><td>${esc(t.reason)}</td>
-        <td>${t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${esc(t.kept.refresh)}</div><button type="button" data-release="${i}" style="margin-top:4px">Release…</button>` : `<span class="pill t-info">Waiting for a later refresh</span>`}</td></tr>`).join("")}
-      </tbody></table></div>
-      <h3>Ended in the last 30 days</h3><div class="tw"><table><thead><tr><th>Media record</th><th>Ended ▾</th><th>How</th><th>By</th><th>Why</th></tr></thead><tbody>
-      ${ENDED.map(e => `<tr><td class="mono">${esc(e.media)}</td><td>${when(e.at)}</td><td>${esc(e.how)}</td><td>${esc(e.by)}</td><td>${esc(e.why)}</td></tr>`).join("")}</tbody></table></div>`;
+    return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there. Click a column's name to sort by it.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
+      <h3>Active</h3>${table("active", [
+        {key: "thumb", title: "", sortable: false, html: (t, i) => `<button class="thumb" data-full="${i}" aria-label="Full size">${thumbSvg(i + 3, "image")}</button>`},
+        {key: "media", title: "Media record", html: t => `<span class="mono">${esc(t.media)}</span><div class="muted">Blob ${esc(short(t.blobs[0]))}</div>`},
+        {key: "at", title: "Recalled", html: t => when(t.at)},
+        {key: "by", title: "By"},
+        {key: "reason", title: "Reason"},
+        {key: "state", title: "State", val: t => t.kept ? "0" : "1", html: (t, i) => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${esc(t.kept.refresh)}</div><button type="button" data-release="${i}" style="margin-top:4px">Release…</button>` : `<span class="pill t-info">Waiting for a later refresh</span>`}], RECALLS, {key: "at", dir: "desc"})}
+      <h3>Ended in the last 30 days</h3>${table("ended", [
+        {key: "media", title: "Media record", html: e => `<span class="mono">${esc(e.media)}</span>`},
+        {key: "at", title: "Ended", html: e => when(e.at)},
+        {key: "how", title: "How"},
+        {key: "by", title: "By"},
+        {key: "why", title: "Why"}], ENDED, {key: "at", dir: "desc"})}`;
   }
 
   function dialog(head, body, foot) {
@@ -484,6 +544,13 @@
     document.querySelectorAll("[data-museum]").forEach(b => b.onclick = () => { S.museum = b.dataset.museum; S.menu = false; S.lookup = null; render(); });
     const so = $("#signOut"); if (so) so.onclick = () => { S.signedIn = false; S.menu = false; render(); };
     const other = document.querySelector("[data-museum-other]"); if (other) other.onclick = () => { S.signedIn = false; S.menu = false; render(); };
+    document.querySelectorAll("[data-sort]").forEach(b => b.onclick = () => {
+      const [id, key] = b.dataset.sort.split(":");
+      const now = S.sort[id];
+      S.sort[id] = now.key === key ? {key, dir: now.dir === "asc" ? "desc" : "asc"} : {key, dir: "asc"};
+      render();
+      const again = document.querySelector(`[data-sort="${id}:${key}"]`); if (again) again.focus();
+    });
     document.querySelectorAll("[data-ack]").forEach(b => b.onclick = () => { ALERTS[+b.dataset.ack].ack = {by: S.user, at: new Date().toISOString()}; render(); });
     document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => { S.lookup = LOOKUPS[b.dataset.example]; S.blobIndex = 0; render(); });
     document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +b.dataset.blob; render(); });
