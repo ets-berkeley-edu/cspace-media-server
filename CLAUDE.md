@@ -27,7 +27,7 @@ at a time, following the plan; the design is `docs/design.md`. `README.md` descr
 - **Serena keeps serving the legacy URLs its clients use**
   (`…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content`, `…/blobs/<blob CSID>/content`, and
   Cinefiles' PDF links with a `linked_pdf:` or `inline_pdf:` suffix). Anything Serena won't serve gets the museum's
-  unavailable image (not to be confused with the restricted-image Blob, a real Blob that Serena serves).
+  unavailable image (not to be confused with the placeholder image, a real Blob that Serena serves).
 - **The light check on a cache miss.** GET the Media record (its Media CSID comes from the ETL's file) and fetch only
   if it exists and isn't soft-deleted; then fetch through the Media service, which returns the record's current file.
   Never compare the record's `blobCsid` with the Blob asked for.
@@ -88,7 +88,8 @@ dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `n
 `npm test`, `npm run build`; CI's `admin` job runs all four, and `npm audit` runs on every pull request
 (security.yml) and weekly. Its API is `backend/serena/admin_api.py` (sign-in, the audit log and its export),
 `backend/serena/admin_settings.py` (settings), `backend/serena/admin_refreshes.py` (refreshes, overrides, admin
-refreshes, alerts) and `backend/serena/admin_requests.py` (the Requests page, which reads the log through
+refreshes, alerts), `backend/serena/admin_takedowns.py` (takedowns, their thumbnails, and Look up a file, with
+`takedowns.py` and `lookup.py`) and `backend/serena/admin_requests.py` (the Requests page, which reads the log through
 `backend/serena/requests_log.py`: CloudWatch Logs Insights in AWS, a local log file otherwise). The Selenium tests are in `serenade/` (`./serena ui`, against the local stack only).
 
 CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`

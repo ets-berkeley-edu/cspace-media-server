@@ -16,7 +16,7 @@ ACCESS = frozenset({"public", "restricted"})
 
 @dataclass(frozen=True)
 class Row:
-    media_csid: str  # "" only for the museum's restricted-image Blob
+    media_csid: str  # "" only for the museum's placeholder image
     kind: str
     access: str
 

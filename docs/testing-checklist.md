@@ -189,7 +189,7 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 - [ ] `./serena etl bampfa --failed`. Expect a note that Serena wasn't called, and no new BAMPFA refresh in Serena.
 - [ ] `./serena smoke`, after the refreshes above. Expect "Smoke test passed".
 - [ ] `./serena etl pahma --rows 3`. Expect `check_failed`, with the threshold explained: 17 of PAHMA's 21 rows (its 20
-  plus the restricted-image Blob) would be removed, 80.95%, more than its 5% threshold. This is the servable list check protecting the servability table, not a fault.
+  plus the placeholder image) would be removed, 80.95%, more than its 5% threshold. This is the servable list check protecting the servability table, not a fault.
 - [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
 - [ ] Note the digest of each base image under this item, so a later pull request can pin them by digest too:
 
@@ -250,7 +250,7 @@ acknowledged.
 
 - [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-1: updated`, one servable list check warning
   (PAHMA's first servability update, so the delta threshold doesn't apply), and the counts: `servable list: 21 rows`
-  (the 20 synthetic rows plus PAHMA's restricted-image Blob) and `servability update: 21 written, 0 deleted, 0
+  (the 20 synthetic rows plus PAHMA's placeholder image) and `servability update: 21 written, 0 deleted, 0
   unchanged`. In the app, open "Refreshes": expect that refresh, `Updated`, with 21 in the Rows column.
 - [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed` and `servable list: 4 rows; 0 added, 17
   removed, 0 changed (80.95% of the last servability update's 21 rows)`. In the app, open "Refreshes", then the
@@ -267,7 +267,7 @@ acknowledged.
   page with your name and the time.
 - [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-3: check_failed` and `servable list: 21 rows; 17 added,
   0 removed, 0 changed (425.0% of the last servability update's 4 rows)`: after the override, Serena serves the
-  3-row list (4 rows with the restricted-image Blob), so the default 20 rows are far over the delta threshold. This is
+  3-row list (4 rows with the placeholder image), so the default 20 rows are far over the delta threshold. This is
   on purpose: leave the refresh `check_failed` (open), and the admin refresh below repairs it.
 - [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv` (the stand-in for running
   the servable list script on the ETL server). In the app, open "Start a refresh". Choose the file (in the Mac
@@ -351,6 +351,58 @@ Start afresh from the pull request's branch (see the top of this file).
 - [ ] With Outcome "Unserved", click "Export CSV". Expect a file `serena-requests-pahma-<today>.csv` with the columns
   time (UTC), outcome, reason, path, kind, cache and signed link, and the two unserved lines only.
 - [ ] Click "Last hour", then "Last 7 days": each shows the spinner, then the same counts (everything happened today).
-- [ ] Open "Overview": expect "What Serena served and couldn't serve is on the Requests page."
+- [ ] Open "Overview": expect "What Serena served and couldn't serve is on the Requests page; "Look up a file" says
+  why for any one file."
 - [ ] Sign in to BAMPFA as well (the menu at the top, "Sign in to another museum") and open its "Requests": expect "No
   requests in this range." in both cards and "No requests match." in the table; PAHMA's requests never appear.
+
+## 17. Takedowns and Look up a file, locally (25 minutes, before merging a pull request that changes them)
+
+The API's tests cover how Serena finds each CSID, CollectionSpace being unreachable, the summary, the takedown, every
+case of how a takedown ends (too early, no longer listed, a new Blob, restricted, still public), Release, the
+thumbnails and the lookup. This checks the pages in Chrome. Start afresh from the pull request's branch (see the top of
+this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
+
+- [ ] In a terminal, run `./serena etl pahma`. Among the files it prints, copy the image's URL (it ends
+  `/derivatives/Medium/content`) and open it in Chrome: expect a synthetic grey image.
+- [ ] In the admin app, open "Look up a file" (in the menu, after "Takedowns"). Expect the title "PAHMA: Look up a file".
+  Paste the URL and click "Look up". Expect the refresh you just ran named as the last servability update, then the
+  Blob and its Media record, and the steps In the servable list, Kind (image), Access (public) and Takedown (No
+  takedown), each "Yes"; and one size, Medium: "served from the stored copy" (you opened it). Copy the Media CSID.
+- [ ] Paste the Media CSID alone and look it up again: expect a row for the original and each of PAHMA's sizes
+  (Thumbnail, Small, Medium, FullHD, OriginalJpeg); Medium "served from the stored copy", the others "served: would be
+  fetched on the next request".
+- [ ] Add a Media record to the simulator that isn't in PAHMA's servable list (a file not published yet; synthetic
+  CSIDs):
+  ```
+  curl -s -X POST http://localhost:8380/_fake/media -H 'Content-Type: application/json' \
+    -d '{"csid": "1a2b3c4d-0000-4000-8000-000000000001", "blob": "0f1e2d3c-0000-4000-8000-000000000001"}'
+  ```
+- [ ] Open "Takedowns". Expect the title "PAHMA Takedowns", no active takedowns, and nothing ended. Click "Take down".
+  In the box, paste the image's Blob CSID (from its URL), its Media CSID, `0f1e2d3c-0000-4000-8000-000000000001` and
+  `not-a/csid`, one per line. Click "Show what would be taken down". Expect two Media records:
+  - yours, with both CSIDs under "You gave" (they're the same record), kind image, served today "yes", found in Serena;
+  - `1a2b3c4d-0000-4000-8000-000000000001`, kind "not known", served today "no", found in "CollectionSpace (not served
+    today)";
+
+  each with a thumbnail. Below them, "Not taken down: not-a/csid: Not a CSID."
+- [ ] Click your record's thumbnail: expect the full-size image in a window. Close it.
+- [ ] Expect "Take down 2 Media records" greyed out until you type a reason. Type one and click it. Expect both in
+  "Active takedowns", by `admin`, with your reason, and "Waiting for a later refresh". Within a minute, expect the
+  banner: "An admin took down Media records", naming 2 and your reason.
+- [ ] Reload the image's URL in Chrome (a fresh tab, or after clearing the cache): expect the unavailable image.
+  Look it up again: expect Takedown "No", with your name and reason, and Medium "not served", reason "taken down".
+- [ ] Open "Audit log": expect two "takedown" entries, one per Media record, each with your reason.
+- [ ] Click "Take down" again, paste your Media CSID and click "Show what would be taken down": expect it greyed, served
+  today "already taken down", and no "Take down" button. Cancel.
+- [ ] In the box, paste 13 CSIDs (any text, one per line) and click "Show what would be taken down": expect "More than
+  12 CSIDs: use a text file instead." Save the same 13 lines as a `.txt` file, clear the box, choose the file and
+  click again: expect the summary, every line "Not found" or "Not a CSID". Cancel.
+- [ ] Run `./serena etl pahma` again. It's the same refresh date as your takedowns (today, Pacific), so the refresh
+  doesn't look at them (a list made before staff could change CollectionSpace): expect both still active, and no new
+  alert. (Ending a takedown needs a refresh on a later day; the tests cover every case. If you leave the stack running
+  until tomorrow, run `./serena etl pahma` then: expect your image's takedown kept, "Still public in CollectionSpace"
+  with a Release button, the alert "Taken down in Serena, but still public in CollectionSpace", and the other
+  takedown removed, under "Ended", "Removed by a refresh". Release yours with a reason and expect the image served
+  again.)
+

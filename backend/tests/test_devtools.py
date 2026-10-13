@@ -82,8 +82,8 @@ def test_a_whole_day_then_a_file_is_fetched_and_served(stack: Any) -> None:
                              wait=lambda seconds: worker.tick())
     assert summary["state"] == "updated"
     assert summary["check"]["result"] == "passed"
-    assert summary["update"]["written"] == 7  # and PAHMA's restricted-image Blob
-    assert not any("restricted-image" in warning for warning in summary["check"]["warnings"])
+    assert summary["update"]["written"] == 7  # and PAHMA's placeholder image
+    assert not any("placeholder" in warning for warning in summary["check"]["warnings"])
     response = serena.get(summary["samples"]["image"])
     assert response.status_code == 302 and response.headers["location"].startswith("/local-cdn/pahma/objects/")
     assert serena.get(response.headers["location"]).status_code == 200
@@ -129,10 +129,10 @@ def test_the_counts_are_printed(stack: Any) -> None:
     assert fake_etl.count_lines({"refresh_id": None, "state": None, "check": None, "update": None}) == []
 
 
-def test_the_restricted_image_blob_is_listed_without_a_media_csid() -> None:
+def test_the_placeholder_image_is_listed_without_a_media_csid() -> None:
     listed = fake_etl.rows("pahma", 2)
     assert listed[-1][0] == "59a733dd-d641-4e1a-8552" and listed[-1][1] == ""
-    assert all(row[1] for row in fake_etl.rows("bampfa", 2))  # no restricted-image Blob there
+    assert all(row[1] for row in fake_etl.rows("bampfa", 2))  # no placeholder image there
 
 
 

@@ -47,13 +47,13 @@ def csid(tenant: str, what: str, n: int) -> str:
 
 
 def rows(tenant: str, count: int) -> list[tuple[str, str, str, str]]:
-    """The servable list's rows. A museum with a restricted-image Blob gets it too, with no Media CSID, as the real
-    ETL lists it (design: Restricted-image Blob)."""
+    """The servable list's rows. A museum with a placeholder image gets it too, with no Media CSID, as the real
+    ETL lists it (design: Placeholder image)."""
     mix = MIX.get(tenant, [("image", "public")])
     listed = [(csid(tenant, "blob", n), csid(tenant, "media", n), *mix[n % len(mix)]) for n in range(count)]
-    restricted_image = load(tenant).restricted_image_blob_csid
-    if restricted_image:
-        listed.append((restricted_image, "", "image", "public"))
+    placeholder = load(tenant).placeholder_blob_csid
+    if placeholder:
+        listed.append((placeholder, "", "image", "public"))
     return listed
 
 
@@ -62,10 +62,10 @@ def tsv(listed: list[tuple[str, str, str, str]]) -> bytes:
 
 
 def add_to_simulator(cspace: httpx.Client, listed: list[tuple[str, str, str, str]]) -> None:
-    for _, media, kind, _ in listed:
-        if not media:  # the restricted-image Blob: served from an admin's upload, never fetched
+    for blob, media, kind, _ in listed:
+        if not media:  # the placeholder image: served from an admin's upload, never fetched
             continue
-        cspace.post("/_fake/media", json={"csid": media, "kind": kind}).raise_for_status()
+        cspace.post("/_fake/media", json={"csid": media, "kind": kind, "blob": blob}).raise_for_status()
 
 
 def _call(response: httpx.Response) -> dict[str, Any]:

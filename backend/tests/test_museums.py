@@ -29,8 +29,8 @@ def test_derivatives_match_the_design(key: str, derivatives: tuple[str, ...], or
     assert config.original is original
 
 
-def test_only_pahma_has_a_restricted_image_blob() -> None:
-    blobs = {key: museum.load(key).restricted_image_blob_csid for key in museum.available()}
+def test_only_pahma_has_a_placeholder_image() -> None:
+    blobs = {key: museum.load(key).placeholder_blob_csid for key in museum.available()}
     assert blobs == {"bampfa": None, "botgarden": None, "cinefiles": None, "pahma": "59a733dd-d641-4e1a-8552",
                      "ucjeps": None}
 
@@ -70,7 +70,7 @@ def _config(**changes: Any) -> dict[str, Any]:
         ({"derivatives": ["Huge"]}, "unknown derivatives"),
         ({"derivatives": []}, "at least one"),
         ({"derivatives": ["Thumbnail", "Thumbnail"]}, "twice"),
-        ({"restricted_image_blob_csid": "not/a/csid"}, "isn't a CSID"),
+        ({"placeholder_blob_csid": "not/a/csid"}, "isn't a CSID"),
         ({"key": "PAHMA"}, "lower-case"),
         ({"surprise": 1}, "Extra inputs"),
     ],

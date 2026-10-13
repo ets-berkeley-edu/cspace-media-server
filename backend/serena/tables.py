@@ -21,7 +21,8 @@ class Table:
 # pk <tenant>#<blob CSID>; indexed by <tenant>#<media CSID> (requests by Media CSID) and by museum (the servability
 # update)
 SERVABILITY = Table("servability", indexes={"by_media": "media_key", "by_tenant": "tenant"})
-TAKEDOWNS = Table("takedowns")  # pk <tenant>#<media CSID>
+# pk <tenant>#<media CSID>; indexed by museum (the Takedowns page, and the servability update's look at takedowns)
+TAKEDOWNS = Table("takedowns", indexes={"by_tenant": "tenant"})
 REFRESHES = Table("refreshes", sort_key="sk")  # pk <tenant>, sk <refresh ID>
 SETTINGS = Table("settings")  # pk <tenant>
 ALERTS = Table("alerts", sort_key="sk")  # pk <tenant>, sk <time>
