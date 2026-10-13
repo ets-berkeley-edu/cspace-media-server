@@ -114,6 +114,8 @@
   th { text-align: left; color: var(--text-secondary); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface-1); white-space: nowrap; }
   td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   tr:last-child td { border-bottom: 0; }
+  button.path-link { border: 0; background: none; height: auto; padding: 0; text-align: left; color: inherit; cursor: pointer; overflow-wrap: anywhere; }
+  button.path-link:hover, button.path-link:focus-visible { color: var(--text-accent); text-decoration: underline; }
   th button.sort { border: 0; background: none; height: auto; padding: 0; font: inherit; font-weight: 600; color: inherit; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
   th button.sort .arrow { font-size: 10px; opacity: 0; }
   th button.sort:hover .arrow, th button.sort:focus-visible .arrow { opacity: 0.45; }
@@ -276,6 +278,7 @@
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
       <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
       <li><strong>Recalls:</strong> "Recall…" opens the form; "Show what would be recalled" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
+      <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
     </ul>
   </div>
@@ -525,14 +528,14 @@
       <div role="group" aria-label="Range"><button>Last hour</button> <button class="primary">Last 24 hours</button> <button>Last 7 days</button></div></div>
       <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">48,210</div></div><div class="card"><div class="label">Unserved</div><div class="value num">1,904</div><div class="secondary">not listed 1,640 · recalled 212 · bad CSID 52</div></div></div>
       <h3>Most requested</h3>${table("top", [
-        {key: "path", title: "Path", html: r => `<span class="mono">${esc(r.path)}</span>`},
+        {key: "path", title: "Path", html: r => pathCell(r)},
         {key: "n", title: "Requests", num: true, html: r => r.n.toLocaleString("en-US")}], TOP_PATHS, {key: "n", dir: "desc"})}
       <h3>Requests</h3><div class="toolbar"><select><option>All outcomes</option></select><select><option>Any reason</option></select><span class="spacer"></span><button>Export CSV</button></div>
       ${table("lines", [
         {key: "at", title: "Time", html: r => when(r.at)},
         {key: "outcome", title: "Outcome", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
         {key: "reason", title: "Reason"},
-        {key: "path", title: "Path", html: r => `<span class="mono">${esc(r.path)}</span>`},
+        {key: "path", title: "Path", html: r => pathCell(r)},
         {key: "kind", title: "Kind"},
         {key: "cache", title: "Cache"}], LINES, {key: "at", dir: "desc"})}`,
 
@@ -768,7 +771,27 @@
         `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="relConfirm" disabled>Release</button>`);
       bindDialog(() => { ENDED.unshift({media: t.media, at: new Date().toISOString(), by: S.user, how: "Released", why: $("#relReason").value}); RECALLS.splice(RECALLS.indexOf(t), 1); });
     });
+    document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => showPath(b.dataset.view, b.dataset.size, b.dataset.outcome, b.dataset.reason));
     document.querySelectorAll("main [data-full]").forEach(b => b.onclick = () => showFull(+b.dataset.full + 3));
+  }
+
+  // A path on Past requests: plain text until hovered, then a link that opens the file in a dialog (through the admin
+  // API, as the recall form's previews: admins only, never cached). A path without a CSID Serena could look up stays
+  // plain text.
+  function pathCell(r) {
+    const m = /\/blobs\/([A-Za-z0-9-…]+)\/(derivatives\/([A-Za-z]+)\/)?content/.exec(r.path);
+    if (!m || m[1] === "not-a-csid") return `<span class="mono">${esc(r.path)}</span>`;
+    return `<button type="button" class="path-link mono" data-view="${esc(r.path)}" data-size="${esc(m[3] || "original")}" data-outcome="${esc(r.outcome || "")}" data-reason="${esc(r.reason || "")}" title="View this file">${esc(r.path)}</button>`;
+  }
+
+  function showPath(path, size, outcome, reason) {
+    const seed = [...path].reduce((a, c) => a + c.charCodeAt(0), 0) % 23;
+    const result = outcome === "served" ? '<span class="pill t-success">served</span>' : outcome === "unserved" ? `<span class="pill t-danger">unserved</span> ${esc(reason)}` : "";
+    dialog(`${esc(size === "original" ? "Original file" : size)}`, `<p class="mono" style="margin-top:0;overflow-wrap:anywhere">${esc(path)}</p>
+      <div style="aspect-ratio:4/3;max-width:100%;border-radius:8px;overflow:hidden;border:1px solid var(--border)">${thumbSvg(seed, "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block"')}</div>
+      <p class="secondary" style="margin-bottom:0">${result ? `This request: ${result}. ` : ""}Shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored), whether or not the public is served it. Never cached.</p>`,
+      `<button type="button" class="primary" data-close>Dismiss</button>`);
+    bindDialog();
   }
 
   function showFull(seed, kind) {
