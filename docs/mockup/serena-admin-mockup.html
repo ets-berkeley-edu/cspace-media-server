@@ -282,6 +282,7 @@
       <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
       <li><strong>Recalls:</strong> "Recall…" opens the form; "Show what would be recalled" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
       <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, a "Media look up" button (opens Media look up on that path) and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
+      <li><strong>Recalls:</strong> the Media record and Blob CSIDs work like Past requests' paths: plain text until hovered, then a link that opens the file in a dialog, with "Media look up" and Dismiss.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
     </ul>
   </div>
@@ -722,13 +723,13 @@
     return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there. Click a column's name to sort by it.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
       <h3>Active</h3>${table("active", [
         {key: "thumb", title: "", sortable: false, html: (t, i) => `<button class="thumb" data-full="${i}" aria-label="Full size">${thumbSvg(i + 3, "image")}</button>`},
-        {key: "media", title: "Media record", html: t => `<span class="mono">${esc(t.media)}</span><div class="muted">Blob ${esc(short(t.blobs[0]))}</div>`},
+        {key: "media", title: "Media record", html: t => `${csidLink(t.media, "Media record")}<div class="muted">Blob ${csidLink(t.blobs[0], "Blob", short(t.blobs[0]))}</div>`},
         {key: "at", title: "Recalled", html: t => when(t.at)},
         {key: "by", title: "By"},
         {key: "reason", title: "Reason"},
         {key: "state", title: "State", val: t => t.kept ? "0" : "1", html: (t, i) => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${esc(t.kept.refresh)}</div><button type="button" data-release="${i}" style="margin-top:4px">Release…</button>` : `<span class="pill t-info">Waiting for a later refresh</span>`}], RECALLS, {key: "at", dir: "desc"})}
       <h3>Ended in the last 30 days</h3>${table("ended", [
-        {key: "media", title: "Media record", html: e => `<span class="mono">${esc(e.media)}</span>`},
+        {key: "media", title: "Media record", html: e => csidLink(e.media, "Media record")},
         {key: "at", title: "Ended", html: e => when(e.at)},
         {key: "how", title: "How"},
         {key: "by", title: "By"},
@@ -796,6 +797,7 @@
         `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="relConfirm" disabled>Release</button>`);
       bindDialog(() => { ENDED.unshift({media: t.media, at: new Date().toISOString(), by: S.user, how: "Released", why: $("#relReason").value}); RECALLS.splice(RECALLS.indexOf(t), 1); });
     });
+    document.querySelectorAll("[data-csid]").forEach(b => b.onclick = () => showCsid(b.dataset.csid, b.dataset.what));
     document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => showPath(b.dataset.view, b.dataset.size, b.dataset.outcome, b.dataset.reason));
     document.querySelectorAll("main [data-full]").forEach(b => b.onclick = () => showFull(+b.dataset.full + 3));
   }
@@ -807,6 +809,30 @@
     const m = /\/blobs\/([A-Za-z0-9-…]+)\/(derivatives\/([A-Za-z]+)\/)?content/.exec(r.path);
     if (!m || m[1] === "not-a-csid") return `<span class="mono">${esc(r.path)}</span>`;
     return `<button type="button" class="path-link mono" data-view="${esc(r.path)}" data-size="${esc(m[3] || "original")}" data-outcome="${esc(r.outcome || "")}" data-reason="${esc(r.reason || "")}" title="View this file">${esc(r.path)}</button>`;
+  }
+
+  // A CSID on the Recalls page: plain text until hovered, then a link that opens the file in the same dialog.
+  function csidLink(csid, what, label) {
+    return `<button type="button" class="path-link mono" data-csid="${esc(csid)}" data-what="${esc(what)}" title="View this file">${esc(label || csid)}</button>`;
+  }
+
+  function showCsid(csid, what) {
+    const seed = [...csid].reduce((a, c) => a + c.charCodeAt(0), 0) % 23;
+    dialog(`${esc(what)} <span class="mono" style="font-weight:400;font-size:13px">${esc(csid)}</span>`,
+      `<div style="aspect-ratio:4/3;max-width:100%;border-radius:8px;overflow:hidden;border:1px solid var(--border)">${thumbSvg(seed, "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block"')}</div>
+      <p class="secondary" style="margin-bottom:0">The largest size the museum serves, shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored). The public isn't served it while it's recalled. Never cached.</p>`,
+      `<button type="button" id="viewLookup">Media look up</button><button type="button" class="primary" data-close>Dismiss</button>`);
+    bindDialog();
+    $("#viewLookup").onclick = () => { close(); lookUpCsid(csid); };
+  }
+
+  function lookUpCsid(csid) {
+    const matches = b => b.blob === csid || b.media === csid;
+    const hit = Object.values(LOOKUPS).find(v => (v.blobs || []).some(matches));
+    S.lookup = hit ? {...hit, input: csid} : {...LOOKUPS.notlisted, input: csid, blobs: LOOKUPS.notlisted.blobs.map(b => ({...b, blob: csid}))};
+    S.blobIndex = hit ? Math.max(0, hit.blobs.findIndex(matches)) : 0;
+    S.page = "lookup";
+    render();
   }
 
   function showPath(path, size, outcome, reason) {
