@@ -188,7 +188,7 @@
 <div class="page">
   <span class="status-pill">UI mockup · sample data only</span>
   <h1 class="mock-title">Serena admin app</h1>
-  <p class="subtitle">Every page of Serena's admin app, with made-up refreshes, alerts, requests and takedowns, for reviewing layout and wording. Nothing here talks to Serena, CollectionSpace or AWS. Start with <strong>Media look up</strong>, the page being redesigned.</p>
+  <p class="subtitle">Every page of Serena's admin app, with made-up refreshes, alerts, requests and recalls, for reviewing layout and wording. Nothing here talks to Serena, CollectionSpace or AWS. Start with <strong>Media look up</strong>, the page being redesigned.</p>
 
   <details class="mock-settings" id="mockSettings" open>
     <summary>Mockup settings</summary>
@@ -206,9 +206,9 @@
     <h2>Notes for reviewers</h2>
     <ul>
       <li><strong>Media look up (redesigned):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
-      <li><strong>Try:</strong> the example buttons under the search box: a served image, the taken-down image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
-      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Requests, Media look up, Takedowns), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
-      <li><strong>Takedowns:</strong> "Take down" opens the form; "Show what would be taken down" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a takedown a refresh kept.</li>
+      <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
+      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Requests, Media look up, Recalls), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
+      <li><strong>Recalls:</strong> "Recall…" opens the form; "Show what would be recalled" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
     </ul>
   </div>
@@ -250,19 +250,19 @@
     {id: "pahma-2026-10-08-1", date: "2026-10-08", state: "Abandoned", tone: "neutral", rows: null, at: "2026-10-08T18:01:10Z"},
   ];
   const ALERTS = [
-    {at: "2026-10-13T06:02:16Z", date: "2026-10-12", title: "An admin took down Media records", about: "takedown", msg: "An admin took down 1 Media record for PAHMA. Reason: Testing.", ack: null},
+    {at: "2026-10-13T06:02:16Z", date: "2026-10-12", title: "An admin recalled Media records", about: "recall", msg: "An admin recalled 1 Media record for PAHMA. Reason: Testing.", ack: null},
     {at: "2026-10-10T10:36:05Z", date: "2026-10-10", title: "A servable list check failed", about: "pahma-2026-10-10-1", msg: "Refresh pahma-2026-10-10-1: 35,387 rows removed, 18.9% of the last servability update's rows, more than the 5% delta threshold.", ack: {by: "admin", at: "2026-10-10T15:20:00Z"}},
   ];
-  const TAKEDOWNS = [
+  const RECALLS = [
     {media: "20349bfa-cad6-5f47-9acd-dcd34e3f0b98", blobs: ["855049af-600c-5140-b50a-b429566c8278"], by: "admin", at: "2026-10-13T06:02:15Z", reason: "Testing", kept: null},
     {media: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", blobs: ["b3d1f0c2-7e44-4b9a-8d21-5a6c0e9f7b12"], by: "pahma-admin", at: "2026-10-09T21:14:03Z", reason: "Request from the community: culturally sensitive", kept: {refresh: "pahma-2026-10-12-1", on: "2026-10-12"}},
   ];
   const ENDED = [
-    {media: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", at: "2026-10-11T10:39:52Z", by: "refresh pahma-2026-10-11-1", how: "Removed by a refresh", why: "No longer listed as public"},
+    {media: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", at: "2026-10-11T10:39:52Z", by: "refresh pahma-2026-10-11-1", how: "Ended by a refresh", why: "No longer listed as public"},
     {media: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", at: "2026-10-06T17:30:00Z", by: "admin", how: "Released", why: "Complaint withdrawn; CollectionSpace is right"},
   ];
   const AUDIT = [
-    {at: "2026-10-13T06:02:15Z", admin: "admin", action: "takedown", target: "20349bfa-cad6-5f47-9acd-dcd34e3f0b98", details: "Reason: Testing"},
+    {at: "2026-10-13T06:02:15Z", admin: "admin", action: "recall", target: "20349bfa-cad6-5f47-9acd-dcd34e3f0b98", details: "Reason: Testing"},
     {at: "2026-10-13T05:47:30Z", admin: "admin", action: "sign in", target: "pahma", details: ""},
     {at: "2026-10-12T22:15:02Z", admin: "admin", action: "settings change", target: "etl_step_timeout_seconds", details: "Before: 1800 · After: 900 · Reason: Slower ETL server this week"},
     {at: "2026-10-10T15:20:00Z", admin: "admin", action: "alert acknowledge", target: "Check failed · 2026-10-10", details: ""},
@@ -275,37 +275,37 @@
     served: {label: "A served image", input: `/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/derivatives/Medium/content`,
       blobs: [{blob: "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", media: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", kind: "image", access: "public",
         verdict: {tone: "served", head: "Served", why: "Every check passes for the Medium size.", next: "Serena already has a copy, so it's served without asking CollectionSpace."},
-        checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Takedown", "None"]],
+        checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Recall", "None"]],
         sizes: [{size: "Medium", served: true, stored: "PNG · 412 KB · fetched Oct 11, 3:12 PM PDT"}]}]},
-    takendown: {label: "The taken-down image", input: MEDIA,
+    recalled: {label: "The recalled image", input: MEDIA,
       blobs: [{blob: BLOB, media: MEDIA, kind: "image", access: "public",
-        verdict: {tone: "not", head: "Not served: taken down", why: `Taken down in Serena by admin on ${"Oct 12, 2026, 11:02 PM PDT"}. Reason: “Testing.”`, next: "It stays down until a refresh on a later day no longer lists the file as public. If that refresh still lists it, Serena alerts, and an admin can then release it.", link: "takedowns"},
-        checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["no", "Takedown", "Taken down by admin, Oct 12, 11:02 PM PDT"]],
-        sizes: SIZES_PAHMA.map(s => ({size: s, served: false, reason: "taken down", stored: s === "Medium" ? "PNG · 71 bytes · fetched Oct 12, 10:48 PM PDT" : null}))}]},
+        verdict: {tone: "not", head: "Not served: recalled", why: `Recalled in Serena by admin on ${"Oct 12, 2026, 11:02 PM PDT"}. Reason: “Testing.”`, next: "It stays recalled until a refresh on a later day no longer lists the file as public. If that refresh still lists it, Serena alerts, and an admin can then release it.", link: "recalls"},
+        checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["no", "Recall", "Recalled by admin, Oct 12, 11:02 PM PDT"]],
+        sizes: SIZES_PAHMA.map(s => ({size: s, served: false, reason: "recalled", stored: s === "Medium" ? "PNG · 71 bytes · fetched Oct 12, 10:48 PM PDT" : null}))}]},
     notlisted: {label: "Not in the servable list", input: "3e9a1b77-52d0-4c8f-a1e6-9f0b2d4c6e81",
       blobs: [{blob: "3e9a1b77-52d0-4c8f-a1e6-9f0b2d4c6e81", media: null, kind: null, access: null,
         verdict: {tone: "not", head: "Not served: not in the servable list", why: "Refresh pahma-2026-10-12-1's servable list doesn't have this CSID, as a Blob or a Media record.", next: "Check the record in CollectionSpace: unpublished, its Object marked sensitive, or not public yet. A change there shows here after the next refresh."},
-        checks: [["no", "In the servable list", "Not listed"], ["skip", "Kind", "Not known"], ["skip", "Access", "Not known"], ["skip", "Takedown", "Not checked"]],
+        checks: [["no", "In the servable list", "Not listed"], ["skip", "Kind", "Not known"], ["skip", "Access", "Not known"], ["skip", "Recall", "Not checked"]],
         sizes: SIZES_PAHMA.map(s => ({size: s, served: false, reason: "not listed", stored: null}))}]},
     restricted: {label: "A restricted PDF (Cinefiles)", museum: "cinefiles", input: "/cinefiles/imageserver/blobs/7d4c2a10-9b8e-4f6d-a3c2-1e0f9d8c7b6a/content",
       blobs: [{blob: "7d4c2a10-9b8e-4f6d-a3c2-1e0f9d8c7b6a", media: "c2b1a0f9-8e7d-4c6b-9a5f-4e3d2c1b0a99", kind: "pdf", access: "restricted",
         verdict: {tone: "depends", head: "Served only on a signed link", why: "This PDF is restricted: Serena serves it only to Glimmer readers, through a portal's valid signed link.", next: "A plain link (like this one, without a signature) gets the unavailable image."},
-        checks: [["ok", "In the servable list", "Refresh cinefiles-2026-10-12-1"], ["ok", "Kind", "pdf"], ["maybe", "Access", "restricted: signed link needed"], ["ok", "Takedown", "None"]],
+        checks: [["ok", "In the servable list", "Refresh cinefiles-2026-10-12-1"], ["ok", "Kind", "pdf"], ["maybe", "Access", "restricted: signed link needed"], ["ok", "Recall", "None"]],
         sizes: [{size: "original", served: false, reason: "restricted (without a signed link)", stored: "PDF · 2.4 MB · fetched Oct 9, 9:04 AM PDT"}], note: "Derivatives of a PDF are never served."}]},
     placeholder: {label: "The placeholder image", input: "59a733dd-d641-4e1a-8552",
       blobs: [{blob: "59a733dd-d641-4e1a-8552", media: null, kind: "image", access: "public",
         verdict: {tone: "not", head: "Not served: the placeholder image isn't uploaded", why: "This is PAHMA's placeholder image, shown in place of restricted images. Serena serves it from files an admin uploads, never from CollectionSpace.", next: "Upload its files (coming in pull request 14b)."},
-        checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Takedown", "No Media record"], ["no", "Placeholder image", "No files uploaded"]],
+        checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Recall", "No Media record"], ["no", "Placeholder image", "No files uploaded"]],
         sizes: SIZES_PAHMA.map(s => ({size: s, served: false, reason: "placeholder not uploaded", stored: null}))}]},
     twoblobs: {label: "A replaced image (two Blobs)", input: "8f7e6d5c-4b3a-4291-8f7e-6d5c4b3a2910",
       blobs: [
         {blob: "aa11bb22-cc33-4d44-9e55-ff6677889900", media: "8f7e6d5c-4b3a-4291-8f7e-6d5c4b3a2910", kind: "image", access: "public", label: "Current image",
           verdict: {tone: "served", head: "Served", why: "Every check passes for every size.", next: "Sizes without a stored copy are fetched on their first request."},
-          checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Takedown", "None"]],
+          checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Recall", "None"]],
           sizes: SIZES_PAHMA.map(s => ({size: s, served: true, stored: s === "Thumbnail" ? "JPEG · 9 KB · fetched Oct 12, 8:30 AM PDT" : null}))},
         {blob: "aa11bb22-cc33-4d44-9e55-ff6677880001", media: "8f7e6d5c-4b3a-4291-8f7e-6d5c4b3a2910", kind: "image", access: "public", label: "Old image (still listed)",
           verdict: {tone: "served", head: "Served", why: "The old Blob is still in the servable list, so its requests are answered with the Media record's current image.", next: "It drops out at the next refresh."},
-          checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Takedown", "None"]],
+          checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["ok", "Recall", "None"]],
           sizes: SIZES_PAHMA.map(s => ({size: s, served: true, stored: null}))}]},
     refused: {label: "A path Serena refuses", input: "/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/derivatives/Huge/content",
       refused: {head: "Not served: not a size PAHMA serves", why: "“Huge” isn't one of PAHMA's sizes: Thumbnail, Small, Medium, FullHD and OriginalJpeg.", next: "No CSID was looked up."}},
@@ -332,7 +332,7 @@
   }
 
   const NAV = [["Daily refresh", [["overview", "Overview"], ["start", "Start a refresh"], ["refreshes", "Past refreshes"]]],
-    ["Media records", [["requests", "Requests"], ["lookup", "Media look up"], ["takedowns", "Takedowns"]]],
+    ["Media records", [["requests", "Requests"], ["lookup", "Media look up"], ["recalls", "Recalls"]]],
     ["Admin", [["audit", "Audit log"], ["api", "API documentation"]]]];
 
   function frame() {
@@ -353,7 +353,7 @@
       <div class="cards"><div class="card"><div class="label">Today's refresh</div><div class="value"><span class="pill t-success">Updated</span></div><div class="secondary">pahma-2026-10-12-1 · 187,402 rows · ${when("2026-10-12T10:41:12Z")}</div></div>
       <div class="card"><div class="label">Alerts waiting</div><div class="value num">${ALERTS.filter(a => !a.ack).length}</div><button class="link" data-go="alerts">Open alerts</button></div>
       <div class="card"><div class="label">Last 24 hours</div><div class="value num">48,210 served</div><div class="secondary num">1,904 unserved · <button class="link" data-go="requests">Requests</button></div></div>
-      <div class="card"><div class="label">Active takedowns</div><div class="value num">${TAKEDOWNS.length}</div><div class="secondary">1 still public in CollectionSpace · <button class="link" data-go="takedowns">Takedowns</button></div></div></div>
+      <div class="card"><div class="label">Active recalls</div><div class="value num">${RECALLS.length}</div><div class="secondary">1 still public in CollectionSpace · <button class="link" data-go="recalls">Recalls</button></div></div></div>
       <p class="secondary">What Serena served and couldn't serve is on the Requests page; "Media look up" says why for any one file.</p>`,
 
     refreshes: () => `${title(`${esc(name())} Past refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it.</p>
@@ -374,17 +374,17 @@
 
     requests: () => `${title(`${esc(name())} Requests`)}<div class="toolbar"><span class="lead" style="margin:0">What Serena served and couldn't serve, from its log. Times are Pacific.</span><span class="spacer"></span>
       <div role="group" aria-label="Range"><button>Last hour</button> <button class="primary">Last 24 hours</button> <button>Last 7 days</button></div></div>
-      <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">48,210</div></div><div class="card"><div class="label">Unserved</div><div class="value num">1,904</div><div class="secondary">not listed 1,640 · taken down 212 · bad CSID 52</div></div></div>
+      <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">48,210</div></div><div class="card"><div class="label">Unserved</div><div class="value num">1,904</div><div class="secondary">not listed 1,640 · recalled 212 · bad CSID 52</div></div></div>
       <h3>Most requested</h3><div class="tw"><table><thead><tr><th>Path</th><th>Requests</th></tr></thead><tbody>
       <tr><td class="mono">/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/derivatives/Thumbnail/content</td><td class="num">1,204</td></tr>
       <tr><td class="mono">/pahma/imageserver/blobs/855049af-600c-5140-b50a-b429566c8278/derivatives/Medium/content</td><td class="num">212</td></tr></tbody></table></div>
       <h3>Requests</h3><div class="toolbar"><select><option>All outcomes</option></select><select><option>Any reason</option></select><span class="spacer"></span><button>Export CSV</button></div>
       <div class="tw"><table><thead><tr><th>Time ▾</th><th>Outcome</th><th>Reason</th><th>Path</th><th>Kind</th><th>Cache</th></tr></thead><tbody>
-      <tr><td>${when("2026-10-13T06:05:02Z")}</td><td><span class="pill t-danger">unserved</span></td><td>taken down</td><td class="mono">/pahma/imageserver/blobs/855049af…8278/derivatives/Medium/content</td><td></td><td></td></tr>
+      <tr><td>${when("2026-10-13T06:05:02Z")}</td><td><span class="pill t-danger">unserved</span></td><td>recalled</td><td class="mono">/pahma/imageserver/blobs/855049af…8278/derivatives/Medium/content</td><td></td><td></td></tr>
       <tr><td>${when("2026-10-13T06:04:40Z")}</td><td><span class="pill t-success">served</span></td><td></td><td class="mono">/pahma/imageserver/blobs/0f1e2d3c…4a5b/derivatives/Thumbnail/content</td><td>image</td><td>hit</td></tr></tbody></table></div>`,
 
     lookup: lookupPage,
-    takedowns: takedownsPage,
+    recalls: recallsPage,
 
     settings: () => `${title(`${esc(name())} Settings`)}<p class="lead">Each setting starts at its default value. A change needs a reason and is in the audit log; changes to the delta threshold and the audit retention also raise an alert.</p>
       <div class="cards">${[["Watchdog", [["Deadline for today's refresh", "08:00 Pacific", false]]], ["The ETL job", [["Poll interval", "15 seconds", false], ["Step timeout", "900 seconds", true]]], ["Servable list check", [["Delta threshold", "5%", false]]], ["Audit log", [["Kept for", "90 days", false]]]].map(([g, rows]) => `<div class="card"><div class="label">${g}</div>${rows.map(([k, v, c]) => `<div style="margin-top:8px"><strong>${k}</strong><div class="num">${v} <span class="muted">${c ? "· changed; default value 1800" : "· default value"}</span></div><div style="display:flex;gap:6px;margin-top:4px"><button>Change</button>${c ? "<button>Use default</button>" : ""}</div></div>`).join("")}</div>`).join("")}</div>`,
@@ -423,7 +423,7 @@
 
   function verdictHtml(v) {
     const mark = {served: "✓", not: "✕", depends: "!"}[v.tone];
-    return `<section class="verdict ${v.tone}" aria-live="polite"><span class="mark" aria-hidden="true">${mark}</span><div class="head">${esc(v.head)}</div><div class="why">${v.why}</div><div class="next">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}" style="color:inherit">Open Takedowns</button>` : ""}</div></section>`;
+    return `<section class="verdict ${v.tone}" aria-live="polite"><span class="mark" aria-hidden="true">${mark}</span><div class="head">${esc(v.head)}</div><div class="why">${v.why}</div><div class="next">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}" style="color:inherit">Open Recalls</button>` : ""}</div></section>`;
   }
 
   function sizesHtml(b) {
@@ -436,11 +436,11 @@
     return out;
   }
 
-  // ---- Takedowns
-  function takedownsPage() {
-    return `${title(`${esc(name())} Takedowns`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A takedown stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day removes the takedown once the file is no longer public there.</span><button class="danger" type="button" id="takeDownBtn">Take down…</button></div>
-      <h3>Active</h3><div class="tw"><table><thead><tr><th></th><th>Media record</th><th>Taken down ▾</th><th>By</th><th>Reason</th><th>State</th></tr></thead><tbody>
-      ${TAKEDOWNS.map((t, i) => `<tr><td><button class="thumb" data-full="${i}" aria-label="Full size">${thumbSvg(i + 3, "image")}</button></td><td class="mono">${esc(t.media)}<div class="muted">Blob ${esc(short(t.blobs[0]))}</div></td><td>${when(t.at)}</td><td>${esc(t.by)}</td><td>${esc(t.reason)}</td>
+  // ---- Recalls
+  function recallsPage() {
+    return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
+      <h3>Active</h3><div class="tw"><table><thead><tr><th></th><th>Media record</th><th>Recalled ▾</th><th>By</th><th>Reason</th><th>State</th></tr></thead><tbody>
+      ${RECALLS.map((t, i) => `<tr><td><button class="thumb" data-full="${i}" aria-label="Full size">${thumbSvg(i + 3, "image")}</button></td><td class="mono">${esc(t.media)}<div class="muted">Blob ${esc(short(t.blobs[0]))}</div></td><td>${when(t.at)}</td><td>${esc(t.by)}</td><td>${esc(t.reason)}</td>
         <td>${t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${esc(t.kept.refresh)}</div><button type="button" data-release="${i}" style="margin-top:4px">Release…</button>` : `<span class="pill t-info">Waiting for a later refresh</span>`}</td></tr>`).join("")}
       </tbody></table></div>
       <h3>Ended in the last 30 days</h3><div class="tw"><table><thead><tr><th>Media record</th><th>Ended ▾</th><th>How</th><th>By</th><th>Why</th></tr></thead><tbody>
@@ -453,24 +453,24 @@
   }
   const close = () => $("#dlg").close();
 
-  function takeDownForm() {
-    dialog("Take down Media records", `<p class="secondary" style="margin-top:0">Up to 12 Media or Blob CSIDs, separated by new lines, commas or spaces, or a text file of up to 1,000. Nothing is taken down until you confirm.</p>
+  function recallForm() {
+    dialog("Recall Media records", `<p class="secondary" style="margin-top:0">Up to 12 Media or Blob CSIDs, separated by new lines, commas or spaces, or a text file of up to 1,000. Nothing is recalled until you confirm.</p>
       <div id="tdErr"></div><label class="field">Media or Blob CSIDs <textarea id="tdBox" rows="4">${BLOB}\n6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d\nnot-a/csid</textarea></label>
       <label class="field">Or a text file of CSIDs <input type="file" id="tdFile" accept=".txt"></label>`,
-      `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="tdSummary">Show what would be taken down</button>`);
+      `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="tdSummary">Show what would be recalled</button>`);
   }
 
-  function takeDownSummary() {
-    const rows = [{media: MEDIA, blob: BLOB, kind: "image", served: "already taken down", found: "Serena", gave: BLOB, done: true},
+  function recallSummary() {
+    const rows = [{media: MEDIA, blob: BLOB, kind: "image", served: "already recalled", found: "Serena", gave: BLOB, done: true},
       {media: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", blob: "f0e1d2c3-b4a5-4968-8776-655443322110", kind: "image", served: "yes", found: "Serena", gave: "6a7b8c9d…8c9d"}];
     const unknown = S.cspaceDown ? [["e7d6c5b4-a392-4817-9e0d-c1b2a3948576", "Not known to Serena, and CollectionSpace can't be reached: not served today. Try again later."]] : [];
     const todo = rows.filter(r => !r.done).length;
-    dialog("Take down Media records", `<p style="margin-top:0">${todo} Media record to take down. Click a thumbnail for the full size.</p>
+    dialog("Recall Media records", `<p style="margin-top:0">${todo} Media record to recall. Click a thumbnail for the full size.</p>
       <div class="tw"><table><thead><tr><th></th><th>Media record</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
       ${rows.map((r, i) => `<tr style="${r.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${i}" aria-label="Full size">${thumbSvg(i + 1, r.kind)}</button></td><td class="mono">${esc(short(r.media))}<div class="muted">Blob ${esc(short(r.blob))}</div></td><td>${r.kind}</td><td>${r.served}</td><td>${r.found}</td><td class="mono">${esc(short(r.gave))}</td></tr>`).join("")}</tbody></table></div>
-      <p style="margin:12px 0 4px"><strong>Not taken down</strong></p><ul style="margin:0 0 12px">${[["not-a/csid", "Not a CSID."], ...unknown].map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>
+      <p style="margin:12px 0 4px"><strong>Not recalled</strong></p><ul style="margin:0 0 12px">${[["not-a/csid", "Not a CSID."], ...unknown].map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>
       <label class="field">Reason (required) <textarea id="tdReason" rows="2"></textarea></label>`,
-      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Back</button><button type="button" class="danger" id="tdConfirm" disabled>Take down ${todo} Media record</button>`);
+      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Back</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${todo} Media record</button>`);
   }
 
   // ---- events
@@ -490,12 +490,12 @@
       const hit = Object.values(LOOKUPS).find(v => v.input === q || (v.blobs || []).some(b => b.blob === q || b.media === q));
       S.lookup = hit || {...LOOKUPS.notlisted, input: q, blobs: LOOKUPS.notlisted.blobs.map(b => ({...b, blob: q}))}; S.blobIndex = 0; render(); };
     document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = b.dataset.copy; Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { b.textContent = "Copied"; }, () => { b.textContent = "Select it"; }); });
-    const tb = $("#takeDownBtn"); if (tb) tb.onclick = () => { takeDownForm(); bindDialog(); };
+    const tb = $("#recallBtn"); if (tb) tb.onclick = () => { recallForm(); bindDialog(); };
     document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {
-      const t = TAKEDOWNS[+b.dataset.release];
-      dialog("Release a takedown", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the takedown only if CollectionSpace is right and the file should be served again.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
+      const t = RECALLS[+b.dataset.release];
+      dialog("Release a recall", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the recall only if CollectionSpace is right and the file should be served again.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
         `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="relConfirm" disabled>Release</button>`);
-      bindDialog(() => { ENDED.unshift({media: t.media, at: new Date().toISOString(), by: S.user, how: "Released", why: $("#relReason").value}); TAKEDOWNS.splice(TAKEDOWNS.indexOf(t), 1); });
+      bindDialog(() => { ENDED.unshift({media: t.media, at: new Date().toISOString(), by: S.user, how: "Released", why: $("#relReason").value}); RECALLS.splice(RECALLS.indexOf(t), 1); });
     });
     document.querySelectorAll("main [data-full]").forEach(b => b.onclick = () => showFull(+b.dataset.full + 3));
   }
@@ -507,11 +507,11 @@
 
   function bindDialog(onConfirm) {
     document.querySelectorAll("#dlg [data-close]").forEach(b => b.onclick = close);
-    const s = $("#tdSummary"); if (s) s.onclick = () => { const n = $("#tdBox").value.split(/[\s,]+/).filter(Boolean).length; if (n > 12) { $("#tdErr").innerHTML = '<div class="err">More than 12 CSIDs: use a text file instead.</div>'; return; } takeDownSummary(); bindDialog(); };
-    const back = $("#tdBack"); if (back) back.onclick = () => { takeDownForm(); bindDialog(); };
+    const s = $("#tdSummary"); if (s) s.onclick = () => { const n = $("#tdBox").value.split(/[\s,]+/).filter(Boolean).length; if (n > 12) { $("#tdErr").innerHTML = '<div class="err">More than 12 CSIDs: use a text file instead.</div>'; return; } recallSummary(); bindDialog(); };
+    const back = $("#tdBack"); if (back) back.onclick = () => { recallForm(); bindDialog(); };
     const reason = $("#tdReason"), confirm = $("#tdConfirm");
     if (reason) reason.oninput = () => { confirm.disabled = !reason.value.trim(); };
-    if (confirm) confirm.onclick = () => { TAKEDOWNS.unshift({media: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", blobs: ["f0e1d2c3-b4a5-4968-8776-655443322110"], by: S.user, at: new Date().toISOString(), reason: reason.value, kept: null}); close(); render(); };
+    if (confirm) confirm.onclick = () => { RECALLS.unshift({media: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", blobs: ["f0e1d2c3-b4a5-4968-8776-655443322110"], by: S.user, at: new Date().toISOString(), reason: reason.value, kept: null}); close(); render(); };
     const rr = $("#relReason"), rc = $("#relConfirm");
     if (rr) rr.oninput = () => { rc.disabled = !rr.value.trim(); };
     if (rc) rc.onclick = () => { onConfirm && onConfirm(); close(); render(); };
@@ -523,7 +523,7 @@
   // Mockup settings: how many sample alerts wait to be acknowledged.
   const EXTRA = [
     {at: "2026-10-13T15:00:04Z", date: "2026-10-13", title: "Today's refresh isn't finished by the deadline", about: "2026-10-13", msg: "PAHMA's refresh for 2026-10-13 isn't updated or abandoned by its deadline, 08:00 Pacific.", ack: null},
-    {at: "2026-10-13T10:40:12Z", date: "2026-10-13", title: "Taken down in Serena, but still public in CollectionSpace", about: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", msg: "Refresh pahma-2026-10-12-1 still lists Media record 6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3 as public, so its takedown in Serena stays.", ack: null}];
+    {at: "2026-10-13T10:40:12Z", date: "2026-10-13", title: "Recalled in Serena, but still public in CollectionSpace", about: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", msg: "Refresh pahma-2026-10-12-1 still lists Media record 6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3 as public, so its recall in Serena stays.", ack: null}];
   $("#mockAlerts").onchange = e => {
     const n = +e.target.value;
     ALERTS.splice(0, ALERTS.length, ...ALERTS.filter(a => !EXTRA.includes(a)));
@@ -534,7 +534,7 @@
   $("#mockCspaceDown").onchange = e => { S.cspaceDown = e.target.checked; };
   $("#mockSignOut").onclick = () => { S.signedIn = false; render(); };
   // Open on the page under review, signed in, with the screenshot's file looked up.
-  S.signedIn = true; S.lookup = LOOKUPS.takendown;
+  S.signedIn = true; S.lookup = LOOKUPS.recalled;
   render();
 })();
 </script>
