@@ -15,7 +15,7 @@ from .config import Settings
 class ServabilityRecord:
     tenant: str
     blob_csid: str
-    media_csid: str | None  # None only for the museum's restricted-image Blob
+    media_csid: str | None  # None only for the museum's placeholder image
     kind: str
     access: str
 

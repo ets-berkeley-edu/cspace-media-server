@@ -72,9 +72,9 @@ class Museum(BaseModel):
     derivatives: tuple[str, ...]
     # Whether the original file (…/blobs/<CSID>/content) is served for images and cards.
     original: bool
-    # The Blob the ETL lists in place of a non-public image (design: Restricted-image Blob). Only museums whose ETL
+    # The Blob the ETL lists in place of a non-public image (design: Placeholder image). Only museums whose ETL
     # uses one have it.
-    restricted_image_blob_csid: str | None = None
+    placeholder_blob_csid: str | None = None
     # The sizes the museum watermarks (design: Watermarks). Until watermarking is built, they get the unavailable
     # image: Serena never serves an unwatermarked copy of a size the museum watermarks.
     watermark_sizes: tuple[str, ...] = ()
@@ -98,11 +98,11 @@ class Museum(BaseModel):
             raise ValueError("a derivative is listed twice")
         return names
 
-    @field_validator("restricted_image_blob_csid")
+    @field_validator("placeholder_blob_csid")
     @classmethod
     def _csid(cls, value: str | None) -> str | None:
         if value is not None and not is_csid(value):
-            raise ValueError("restricted_image_blob_csid isn't a CSID")
+            raise ValueError("placeholder_blob_csid isn't a CSID")
         return value
 
     @model_validator(mode="after")

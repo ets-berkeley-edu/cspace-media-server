@@ -30,7 +30,7 @@ class Action(StrEnum):
     UPDATE_RETRY = "update_retry"
     THRESHOLD_OVERRIDE = "threshold_override"
     ADMIN_REFRESH = "admin_refresh"
-    RESTRICTED_IMAGE_UPLOAD = "restricted_image_upload"
+    PLACEHOLDER_UPLOAD = "placeholder_upload"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
 
 

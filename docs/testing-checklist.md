@@ -189,7 +189,7 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 - [ ] `./serena etl bampfa --failed`. Expect a note that Serena wasn't called, and no new BAMPFA refresh in Serena.
 - [ ] `./serena smoke`, after the refreshes above. Expect "Smoke test passed".
 - [ ] `./serena etl pahma --rows 3`. Expect `check_failed`, with the threshold explained: 17 of PAHMA's 21 rows (its 20
-  plus the restricted-image Blob) would be removed, 80.95%, more than its 5% threshold. This is the servable list check protecting the servability table, not a fault.
+  plus the placeholder image) would be removed, 80.95%, more than its 5% threshold. This is the servable list check protecting the servability table, not a fault.
 - [ ] `./serena down`, then `./serena up` and `./serena etl pahma` again: everything starts afresh.
 - [ ] Note the digest of each base image under this item, so a later pull request can pin them by digest too:
 
@@ -250,7 +250,7 @@ acknowledged.
 
 - [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-1: updated`, one servable list check warning
   (PAHMA's first servability update, so the delta threshold doesn't apply), and the counts: `servable list: 21 rows`
-  (the 20 synthetic rows plus PAHMA's restricted-image Blob) and `servability update: 21 written, 0 deleted, 0
+  (the 20 synthetic rows plus PAHMA's placeholder image) and `servability update: 21 written, 0 deleted, 0
   unchanged`. In the app, open "Refreshes": expect that refresh, `Updated`, with 21 in the Rows column.
 - [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed` and `servable list: 4 rows; 0 added, 17
   removed, 0 changed (80.95% of the last servability update's 21 rows)`. In the app, open "Refreshes", then the
@@ -267,7 +267,7 @@ acknowledged.
   page with your name and the time.
 - [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-3: check_failed` and `servable list: 21 rows; 17 added,
   0 removed, 0 changed (425.0% of the last servability update's 4 rows)`: after the override, Serena serves the
-  3-row list (4 rows with the restricted-image Blob), so the default 20 rows are far over the delta threshold. This is
+  3-row list (4 rows with the placeholder image), so the default 20 rows are far over the delta threshold. This is
   on purpose: leave the refresh `check_failed` (open), and the admin refresh below repairs it.
 - [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv` (the stand-in for running
   the servable list script on the ETL server). In the app, open "Start a refresh". Choose the file (in the Mac

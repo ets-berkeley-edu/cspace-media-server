@@ -31,7 +31,7 @@ class Reason(StrEnum):
     TAKEN_DOWN = "taken_down"
     NO_DERIVATIVES_FOR_KIND = "no_derivatives_for_kind"  # a derivative of a 3D or PDF Blob
     ORIGINAL_NOT_SERVED = "original_not_served"  # an image's original where the museum doesn't serve it
-    RESTRICTED_IMAGE_NOT_UPLOADED = "restricted_image_not_uploaded"
+    PLACEHOLDER_NOT_UPLOADED = "placeholder_not_uploaded"
     # Temporary: a size the museum watermarks, until watermarking is built (pull request 16 in the plan).
     WATERMARK_NOT_BUILT = "watermark_not_built"
     # A miss (design: Image fetch): the light check, then the fetch and its checks

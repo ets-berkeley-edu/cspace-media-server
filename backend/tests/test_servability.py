@@ -9,7 +9,7 @@ from serena.unserved import MemoryRecorder, Reason
 
 BLOB = "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b"  # synthetic
 MEDIA = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
-RESTRICTED_IMAGE = "59a733dd-d641-4e1a-8552"  # PAHMA's, from its configuration
+PLACEHOLDER = "59a733dd-d641-4e1a-8552"  # PAHMA's, from its configuration
 
 
 @pytest.fixture
@@ -82,11 +82,11 @@ def test_takedowns(client: TestClient, store: Store, recorder: MemoryRecorder) -
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
 
 
-def test_restricted_image_blob(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
-    path = derivative("pahma", "Thumbnail", RESTRICTED_IMAGE)
+def test_placeholder_image(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+    path = derivative("pahma", "Thumbnail", PLACEHOLDER)
     assert _reason(client, recorder, path) == Reason.NOT_LISTED  # it must be in the daily file like any other
-    add_blob(store, "pahma", RESTRICTED_IMAGE, None)  # listed with no Media CSID
-    assert _reason(client, recorder, path) == Reason.RESTRICTED_IMAGE_NOT_UPLOADED
+    add_blob(store, "pahma", PLACEHOLDER, None)  # listed with no Media CSID
+    assert _reason(client, recorder, path) == Reason.PLACEHOLDER_NOT_UPLOADED
 
 
 def test_a_failing_table_fails_closed(client: TestClient, store: Store, recorder: MemoryRecorder,

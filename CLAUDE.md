@@ -27,7 +27,7 @@ at a time, following the plan; the design is `docs/design.md`. `README.md` descr
 - **Serena keeps serving the legacy URLs its clients use**
   (`…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content`, `…/blobs/<blob CSID>/content`, and
   Cinefiles' PDF links with a `linked_pdf:` or `inline_pdf:` suffix). Anything Serena won't serve gets the museum's
-  unavailable image (not to be confused with the restricted-image Blob, a real Blob that Serena serves).
+  unavailable image (not to be confused with the placeholder image, a real Blob that Serena serves).
 - **The light check on a cache miss.** GET the Media record (its Media CSID comes from the ETL's file) and fetch only
   if it exists and isn't soft-deleted; then fetch through the Media service, which returns the record's current file.
   Never compare the record's `blobCsid` with the Blob asked for.

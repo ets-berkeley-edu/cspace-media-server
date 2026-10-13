@@ -34,7 +34,7 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 | `backend/` | The Python 3.11 app (`serena/`), its tests and its pinned requirements |
 | `backend/serena/static/` | The unavailable image (`unavailable.svg`, the legacy imageserver's `404.svg`) |
 | `backend/fakecspace/` | A CollectionSpace simulator for tests and local development, with synthetic files |
-| `backend/serena/museums/` | Each museum's configuration: derivatives served, restricted-image Blob, kinds with signed access, starting settings |
+| `backend/serena/museums/` | Each museum's configuration: derivatives served, placeholder image, kinds with signed access, starting settings |
 | `admin/` | The admin web app: Vue, TypeScript and Vuetify, served under `/admin`, its API under `/admin/v1` |
 | `serenade/` | The admin app's Selenium tests (`./serena ui`) |
 | `backend/devtools/` | Local-only tools: seeding the AWS stand-in, and a fake ETL |

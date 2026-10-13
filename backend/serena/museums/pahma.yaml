@@ -1,4 +1,4 @@
-# PAHMA: Serena's configuration (design: URLs, Restricted-image Blob, Records). The settings are starting values;
+# PAHMA: Serena's configuration (design: URLs, Placeholder image, Records). The settings are starting values;
 # an admin's value in the admin app overrides them.
 key: pahma
 name: PAHMA
@@ -7,7 +7,7 @@ derivatives: [Thumbnail, Small, Medium, FullHD, OriginalJpeg]
 # Whether the original file (…/blobs/<CSID>/content) is served for images and catalog cards
 original: true
 # The Blob the ETL lists in place of a non-public image (its "Image restricted" picture). Its CSID isn't a UUID.
-restricted_image_blob_csid: 59a733dd-d641-4e1a-8552
+placeholder_blob_csid: 59a733dd-d641-4e1a-8552
 # The CollectionSpace role that marks a Serena admin (design: Admin web app)
 admin_role: Serena_Admin
 settings:

@@ -7,8 +7,8 @@ from serena import museum
 from serena import servable_list_check as checking
 from serena.servable_list import HEADER, Row
 
-PAHMA = museum.load("pahma")  # its restricted-image Blob: 59a733dd-d641-4e1a-8552
-UCJEPS = museum.load("ucjeps")  # no restricted-image Blob
+PAHMA = museum.load("pahma")  # its placeholder image: 59a733dd-d641-4e1a-8552
+UCJEPS = museum.load("ucjeps")  # no placeholder image
 
 
 def gz(text: str | bytes) -> io.BytesIO:
@@ -75,18 +75,18 @@ def test_restricted_and_audio_rows_are_allowed() -> None:
     assert checking.check(UCJEPS, gz(body), None, 5).passed
 
 
-def test_the_restricted_image_blob_may_have_no_media_csid() -> None:
+def test_the_placeholder_image_may_have_no_media_csid() -> None:
     body = HEADER + "\n59a733dd-d641-4e1a-8552\t\timage\tpublic\n" + rows(1)
     result = checking.check(PAHMA, gz(body), None, 5)
     assert result.passed
-    assert not any("restricted-image" in w for w in result.warnings)
+    assert not any("placeholder" in w for w in result.warnings)
 
 
 def test_warnings() -> None:
     body = HEADER + "\nb1\tshared\timage\tpublic\nb2\tshared\timage\tpublic\n"
     result = checking.check(PAHMA, gz(body), None, 5)
     assert result.passed  # warnings don't fail it
-    assert "the museum's restricted-image Blob isn't listed" in result.warnings
+    assert "the museum's placeholder image isn't listed" in result.warnings
     assert "1 Media CSID is listed for several Blobs" in result.warnings
 
 
