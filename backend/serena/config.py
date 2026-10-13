@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     create_tables: bool = False
     # How long each task keeps a museum's settings before reading the Settings table again
     settings_cache_seconds: float = 60.0
-    # The admin app's Requests page reads what Serena served and couldn't serve from its log (design: The Requests
+    # The admin app's Past requests page reads what Serena served and couldn't serve from its log (design: The Requests
     # page). In AWS: the app's CloudWatch log group, queried with Logs Insights. Local development only: a file the
     # app also writes its JSON log lines to, read in place of CloudWatch. Neither: the page says the log isn't
     # available here.

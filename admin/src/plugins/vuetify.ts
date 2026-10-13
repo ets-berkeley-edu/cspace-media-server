@@ -4,6 +4,7 @@ import {createVuetify} from 'vuetify'
 import {VAlert} from 'vuetify/components/VAlert'
 import {VApp} from 'vuetify/components/VApp'
 import {VAppBar, VAppBarTitle} from 'vuetify/components/VAppBar'
+import {VBadge} from 'vuetify/components/VBadge'
 import {VBtn} from 'vuetify/components/VBtn'
 import {VBtnToggle} from 'vuetify/components/VBtnToggle'
 import {VCard, VCardActions, VCardText, VCardTitle} from 'vuetify/components/VCard'
@@ -14,7 +15,8 @@ import {VFileInput} from 'vuetify/components/VFileInput'
 import {VForm} from 'vuetify/components/VForm'
 import {VDataTable} from 'vuetify/components/VDataTable'
 import {VContainer, VSpacer} from 'vuetify/components/VGrid'
-import {VList, VListItem, VListItemTitle} from 'vuetify/components/VList'
+import {VIcon} from 'vuetify/components/VIcon'
+import {VList, VListItem, VListItemTitle, VListSubheader} from 'vuetify/components/VList'
 import {VMain} from 'vuetify/components/VMain'
 import {VMenu} from 'vuetify/components/VMenu'
 import {VNavigationDrawer} from 'vuetify/components/VNavigationDrawer'
@@ -31,8 +33,8 @@ import {VTextarea} from 'vuetify/components/VTextarea'
  */
 export default createVuetify({
   components: {
-    VAlert, VApp, VAppBar, VAppBarTitle, VBtn, VBtnToggle, VCard, VCardActions, VCardText, VCardTitle, VCheckbox, VChip,
-    VContainer, VDataTable, VDialog, VFileInput, VForm, VList, VListItem, VListItemTitle, VMain, VMenu, VNavigationDrawer,
+    VAlert, VApp, VAppBar, VAppBarTitle, VBadge, VBtn, VBtnToggle, VCard, VCardActions, VCardText, VCardTitle, VCheckbox, VChip,
+    VContainer, VDataTable, VDialog, VFileInput, VForm, VIcon, VList, VListItem, VListItemTitle, VListSubheader, VMain, VMenu, VNavigationDrawer,
     VProgressCircular, VSelect, VSpacer, VTable, VTextField, VTextarea
   },
   icons: {defaultSet: 'mdi', aliases, sets: {mdi}},

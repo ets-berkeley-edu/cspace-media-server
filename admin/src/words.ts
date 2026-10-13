@@ -18,7 +18,7 @@ export const RETENTION_LABELS: Record<number, string> = {
 /** The page sizes the Refreshes, Alerts and Audit log tables offer; 25 to start (D92). */
 export const PAGE_SIZES = [10, 25, 50, 100].map(n => ({value: n, title: String(n)}))
 
-/** The Requests page's ranges (D106). */
+/** The Past requests page's ranges (D106). */
 export const REQUEST_RANGES = [
   {value: '1h', title: 'Last hour'},
   {value: '24h', title: 'Last 24 hours'},

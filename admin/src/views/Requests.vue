@@ -1,7 +1,7 @@
 <template>
   <v-container fluid>
     <div class="d-flex align-center flex-wrap ga-4 mb-4">
-      <h1 id="page-title" class="text-h5">{{ museumName(museum) }} Requests</h1>
+      <h1 id="page-title" class="text-h5">{{ museumName(museum) }} Past requests</h1>
       <v-spacer />
       <v-btn-toggle
         id="request-range"

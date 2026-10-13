@@ -82,9 +82,9 @@
       <template v-if="refresh.update">
         <h2 class="text-h6 mb-2">The servability update</h2>
         <p class="mb-4">{{ refresh.update.deleted }} deleted, {{ refresh.update.written }} written, {{ refresh.update.unchanged }} unchanged.</p>
-        <p v-if="refresh.update.takedowns_removed || refresh.update.takedowns_kept" id="update-takedowns" class="mb-4">
-          Takedowns: {{ refresh.update.takedowns_removed || 0 }} removed (no longer public in CollectionSpace),
-          {{ refresh.update.takedowns_kept || 0 }} kept (still public in CollectionSpace).
+        <p v-if="refresh.update.recalls_ended || refresh.update.recalls_kept" id="update-recalls" class="mb-4">
+          Recalls: {{ refresh.update.recalls_ended || 0 }} ended (no longer public in CollectionSpace),
+          {{ refresh.update.recalls_kept || 0 }} kept (still public in CollectionSpace).
         </p>
       </template>
     </template>

@@ -1,4 +1,4 @@
-"""The admin API for takedowns and Look up a file (design: Takedowns, Admin web app; decided October 12, 2026, D116
+"""The admin API for recalls and Media look up (design: Recalls, Admin web app; decided October 12, 2026, D116
 to D123, D128 to D131)."""
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import cache_index, takedowns
+from . import cache_index, recalls
 from .admin_api import SignedIn, changes, services
 from .alerts import Alerts
 from .audit import Action, Audit
@@ -23,18 +23,18 @@ from .lookup import LookupProblem, explain
 from .museum import Museum
 from .museum_settings import MuseumSettings
 from .refreshes import Refreshes
-from .store import Store, Takedown
+from .store import Recall, Store
 
-log = logging.getLogger("serena.admin_takedowns")
+log = logging.getLogger("serena.admin_recalls")
 
-DAYS_SHOWN = 30  # the Takedowns page lists the last 30 days' ended takedowns (D120)
+DAYS_SHOWN = 30  # the Recalls page lists the last 30 days' ended recalls (D120)
 PREVIEW_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"})
 # A thumbnail or full-size view comes only through the admin API, to signed-in admins, never cached (D129).
 PREVIEW_HEADERS = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"}
 
 
 @dataclass
-class TakedownServices:
+class RecallServices:
     store: Store
     cspace: CSpaceClients | None
     audit: Audit
@@ -46,12 +46,12 @@ class TakedownServices:
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
 
-def takedown_services(request: Request) -> TakedownServices:
-    found: TakedownServices = request.app.state.admin_takedowns
+def recall_services(request: Request) -> RecallServices:
+    found: RecallServices = request.app.state.admin_recalls
     return found
 
 
-Takedowns_ = Annotated[TakedownServices, Depends(takedown_services)]
+Recalls_ = Annotated[RecallServices, Depends(recall_services)]
 MediaCsid = Annotated[str, Path(pattern=r"^[A-Za-z0-9-]{1,64}$")]
 
 
@@ -59,7 +59,7 @@ class Csids(BaseModel):
     text: str = Field(max_length=80_000)  # up to 1,000 CSIDs of up to 64 characters, with separators
 
 
-class TakeDown(Csids):
+class RecallBody(Csids):
     reason: str = Field(min_length=1, max_length=500)
 
 
@@ -73,7 +73,7 @@ def _clean(reason: str) -> str:
 
 def _parse(text: str) -> list[str]:
     try:
-        csids = takedowns.parse(text)
+        csids = recalls.parse(text)
     except ValueError as error:
         raise HTTPException(422, f"{str(error)[0].upper()}{str(error)[1:]}: send the rest separately.") from error
     if not csids:
@@ -81,7 +81,7 @@ def _parse(text: str) -> list[str]:
     return csids
 
 
-def _takedown_json(t: Takedown) -> dict[str, Any]:
+def _recall_json(t: Recall) -> dict[str, Any]:
     return {"media_csid": t.media_csid, "blob_csids": list(t.blob_csids), "by": t.by, "at": t.at, "reason": t.reason,
             "kept_by": t.kept_by, "kept_on": t.kept_on}
 
@@ -93,52 +93,52 @@ def create_router() -> APIRouter:
         museum: Museum = services(request).museums[tenant]
         return museum
 
-    @router.get("/takedowns")
-    def list_takedowns(request: Request, session: SignedIn, t: Takedowns_) -> dict[str, Any]:
-        """Every active takedown, and the last 30 days' ended ones, from the audit log (D120)."""
+    @router.get("/recalls")
+    def list_recalls(request: Request, session: SignedIn, t: Recalls_) -> dict[str, Any]:
+        """Every active recall, and the last 30 days' ended ones, from the audit log (D120)."""
         ended = [{"media_csid": e.target, "at": e.at, "by": e.admin, "action": e.action, "details": e.details}
                  for e in t.audit.since(session.tenant, t.clock() - timedelta(days=DAYS_SHOWN))
-                 if e.action in (Action.TAKEDOWN_REMOVED, Action.TAKEDOWN_RELEASE)]
-        return {"days": DAYS_SHOWN, "active": [_takedown_json(x) for x in t.store.takedowns(session.tenant)],
-                "ended": ended, "max_in_box": takedowns.MAX_IN_BOX, "max_in_file": takedowns.MAX_IN_FILE}
+                 if e.action in (Action.RECALL_ENDED, Action.RECALL_RELEASE)]
+        return {"days": DAYS_SHOWN, "active": [_recall_json(x) for x in t.store.recalls(session.tenant)],
+                "ended": ended, "max_in_box": recalls.MAX_IN_BOX, "max_in_file": recalls.MAX_IN_FILE}
 
-    @router.post("/takedowns/summary", dependencies=[Depends(changes)])
-    def summary(request: Request, session: SignedIn, t: Takedowns_, body: Csids) -> dict[str, Any]:
-        """What a takedown of these CSIDs would take down; nothing changes (D116, D117)."""
+    @router.post("/recalls/summary", dependencies=[Depends(changes)])
+    def summary(request: Request, session: SignedIn, t: Recalls_, body: Csids) -> dict[str, Any]:
+        """What a recall of these CSIDs would recall; nothing changes (D116, D117)."""
         museum = museum_of(request, session.tenant)
-        return takedowns.identify(museum, _parse(body.text), t.store, t.cspace).json()
+        return recalls.identify(museum, _parse(body.text), t.store, t.cspace).json()
 
-    @router.post("/takedowns", dependencies=[Depends(changes)])
-    def take_down(request: Request, session: SignedIn, t: Takedowns_, body: TakeDown) -> dict[str, Any]:
+    @router.post("/recalls", dependencies=[Depends(changes)])
+    def recall(request: Request, session: SignedIn, t: Recalls_, body: RecallBody) -> dict[str, Any]:
         """Takes down the Media records the CSIDs name, finding them again rather than trusting the page (D118)."""
         museum = museum_of(request, session.tenant)
-        found = takedowns.identify(museum, _parse(body.text), t.store, t.cspace)
-        done = takedowns.take_down(museum, found, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
+        found = recalls.identify(museum, _parse(body.text), t.store, t.cspace)
+        done = recalls.recall(museum, found, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
                                    t.clock)
-        return {**found.json(), "taken_down": done}
+        return {**found.json(), "recalled": done}
 
-    @router.post("/takedowns/{media_csid}/release", dependencies=[Depends(changes)])
-    def release(request: Request, session: SignedIn, t: Takedowns_, media_csid: MediaCsid,
+    @router.post("/recalls/{media_csid}/release", dependencies=[Depends(changes)])
+    def release(request: Request, session: SignedIn, t: Recalls_, media_csid: MediaCsid,
                 body: Reason) -> dict[str, Any]:
-        """The one admin action that ends a takedown, and only one a refresh kept (D119)."""
+        """The one admin action that ends a recall, and only one a refresh kept (D119)."""
         museum = museum_of(request, session.tenant)
         try:
-            takedowns.release(museum, media_csid, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
+            recalls.release(museum, media_csid, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
                               t.clock)
-        except takedowns.NotKept as error:
-            raise HTTPException(409, "Only a takedown a refresh kept, because CollectionSpace still has the file as "
+        except recalls.NotKept as error:
+            raise HTTPException(409, "Only a recall a refresh kept, because CollectionSpace still has the file as "
                                      "public, can be released.") from error
         return {"released": media_csid}
 
     @router.get("/media/{media_csid}/preview")
-    def preview(request: Request, session: SignedIn, t: Takedowns_, media_csid: MediaCsid,
+    def preview(request: Request, session: SignedIn, t: Recalls_, media_csid: MediaCsid,
                 size: Annotated[str, Query(pattern="^(thumbnail|full)$")] = "thumbnail") -> Response:
-        """A Media record's thumbnail or full-size view, for the takedown form (D129): Serena's stored copy if it has
+        """A Media record's thumbnail or full-size view, for the recall form (D129): Serena's stored copy if it has
         one, otherwise CollectionSpace's, not stored. Never cached."""
         museum = museum_of(request, session.tenant)
         if not is_csid(media_csid):
             raise HTTPException(404, "No such Media record.")
-        rows = takedowns.rows_of_media(t.store, museum.key, media_csid)
+        rows = recalls.rows_of_media(t.store, museum.key, media_csid)
         kind = rows[0].kind if rows else None
         if kind == "3D":
             raise HTTPException(404, "A 3D file has no preview.")
@@ -155,7 +155,7 @@ def create_router() -> APIRouter:
         return _from_collectionspace(t, museum.key, media_csid, derivative, limit)
 
     @router.get("/lookup")
-    def lookup(request: Request, session: SignedIn, t: Takedowns_,
+    def lookup(request: Request, session: SignedIn, t: Recalls_,
                q: Annotated[str, Query(min_length=1, max_length=2000)]) -> dict[str, Any]:
         """Why a file is or isn't served (D121, D122). Never calls CollectionSpace; not audited (D123)."""
         museum = museum_of(request, session.tenant)
@@ -167,7 +167,7 @@ def create_router() -> APIRouter:
     return router
 
 
-def _from_collectionspace(t: TakedownServices, tenant: str, media_csid: str, derivative: str | None,
+def _from_collectionspace(t: RecallServices, tenant: str, media_csid: str, derivative: str | None,
                           limit: int) -> Response:
     if t.cspace is None:
         raise HTTPException(404, "No stored copy, and CollectionSpace isn't configured here.")

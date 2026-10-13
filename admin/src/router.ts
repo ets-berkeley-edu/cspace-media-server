@@ -11,7 +11,7 @@ import Requests from '@/views/Requests.vue'
 import Settings from '@/views/Settings.vue'
 import SignIn from '@/views/SignIn.vue'
 import StartRefresh from '@/views/StartRefresh.vue'
-import Takedowns from '@/views/Takedowns.vue'
+import Recalls from '@/views/Recalls.vue'
 
 export const routes = [
   {path: '/', name: 'home', component: SignIn, meta: {public: true}},
@@ -22,7 +22,7 @@ export const routes = [
   {path: '/:museum/start-refresh', name: 'start-refresh', component: StartRefresh},
   {path: '/:museum/alerts', name: 'alerts', component: Alerts},
   {path: '/:museum/requests', name: 'requests', component: Requests},
-  {path: '/:museum/takedowns', name: 'takedowns', component: Takedowns},
+  {path: '/:museum/recalls', name: 'recalls', component: Recalls},
   {path: '/:museum/lookup', name: 'lookup', component: LookUp},
   {path: '/:museum/settings', name: 'settings', component: Settings},
   {path: '/:museum/audit', name: 'audit', component: AuditLog},

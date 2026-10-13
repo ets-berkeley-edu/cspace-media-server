@@ -30,7 +30,7 @@ async function open() {
   return mount(Requests as never, {global: {plugins: [router]}, attachTo: document.body})
 }
 
-describe('the Requests page', () => {
+describe('the Past requests page', () => {
   it('shows a spinner while it reads the log, then the counts and the newest lines', async () => {
     const calls = fakeApi({
       'GET /museums/pahma/requests?range=24h': {body: REPORT},
@@ -40,7 +40,7 @@ describe('the Requests page', () => {
     expect(wrapper.find('#requests-loading').exists()).toBe(true) // D108
     await flushPromises()
     expect(wrapper.find('#requests-loading').exists()).toBe(false)
-    expect(wrapper.find('#page-title').text()).toBe('PAHMA Requests')
+    expect(wrapper.find('#page-title').text()).toBe('PAHMA Past requests')
     expect(wrapper.find('#requests-by-day').text()).toContain('not listed 1, too large 1')
     expect(wrapper.find('#requests-top-paths').text()).toContain('/pahma/imageserver/blobs/b1/content')
     const times = () => wrapper.findAll('#requests-table tbody tr').map(row => row.find('td').text())

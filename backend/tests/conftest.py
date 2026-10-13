@@ -61,11 +61,11 @@ def add_blob(store: Store, tenant: str, blob: str, media: str | None, kind: str 
     store.client.put_item(TableName=store.table(tables.SERVABILITY), Item=item)
 
 
-def take_down(store: Store, tenant: str, media: str, blob: str = "") -> None:
-    """An admin's takedown, as the admin app records it (synthetic CSIDs)."""
-    from serena.store import Takedown
+def recall(store: Store, tenant: str, media: str, blob: str = "") -> None:
+    """An admin's recall, as the admin app records it (synthetic CSIDs)."""
+    from serena.store import Recall
 
-    store.put_takedown(Takedown(tenant, media, (blob,) if blob else (), "admin", "2026-10-09T18:00:00+00:00",
+    store.put_recall(Recall(tenant, media, (blob,) if blob else (), "admin", "2026-10-09T18:00:00+00:00",
                                 "a test"))
 
 

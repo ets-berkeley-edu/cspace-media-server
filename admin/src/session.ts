@@ -2,7 +2,7 @@
  * Which museums this browser is signed in to (one session per museum: design, decided October 10, 2026).
  */
 import {reactive, ref} from 'vue'
-import type {SignedIn} from '@/api'
+import type {AlertItem, SignedIn} from '@/api'
 import {api} from '@/api'
 
 export const session = reactive({
@@ -31,3 +31,6 @@ export function signedInTo(museum: string): SignedIn | undefined {
 
 /** Bumped when an alert is acknowledged or raised by an admin's action, so the banner and pages reload. */
 export const alertsChanged = ref(0)
+
+/** The current museum's unacknowledged alerts, as the banner last loaded them; the app bar's bell counts them (D137). */
+export const waiting = reactive({museum: '', alerts: [] as AlertItem[]})

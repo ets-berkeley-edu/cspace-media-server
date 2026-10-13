@@ -1,4 +1,4 @@
-"""Look up a file (design: Admin web app; decided October 12, 2026, D121 to D123): why Serena serves a file or not.
+"""Media look up (design: Admin web app; decided October 12, 2026, D121 to D123): why Serena serves a file or not.
 
 Given a file's URL or path, a Blob CSID or a Media CSID, it shows each step of the servability check and its outcome,
 whether a copy is stored, and the verdict for each size: the same decision a request gets (servability.decide), with
@@ -12,10 +12,10 @@ from urllib.parse import urlsplit
 from . import cache_index, paths
 from .csid import is_csid
 from .museum import SERVED_KINDS, Museum
+from .recalls import rows_of_media
 from .refreshes import Refreshes
 from .servability import ORIGINAL_ONLY_KINDS, decide
 from .store import Store
-from .takedowns import rows_of_media
 from .unserved import Reason
 
 
@@ -79,15 +79,15 @@ def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store) -> d
         else:
             steps.append(_step("Access", f"{record.access}: not served", False))
         if record.media_csid is None:
-            steps.append(_step("Takedown", "No Media record (the museum's placeholder image).", True))
+            steps.append(_step("Recall", "No Media record (the museum's placeholder image).", True))
         else:
-            takedown = store.takedown(museum.key, record.media_csid)
-            if takedown is None:
-                steps.append(_step("Takedown", "No takedown.", True))
+            recall = store.recall(museum.key, record.media_csid)
+            if recall is None:
+                steps.append(_step("Recall", "No recall.", True))
             else:
-                kept = (f" Refresh {takedown.kept_by} kept it: the file is still public in CollectionSpace."
-                        if takedown.kept_by else "")
-                steps.append(_step("Takedown", f"Taken down by {takedown.by} at {takedown.at}: {takedown.reason}."
+                kept = (f" Refresh {recall.kept_by} kept it: the file is still public in CollectionSpace."
+                        if recall.kept_by else "")
+                steps.append(_step("Recall", f"Recalled by {recall.by} at {recall.at}: {recall.reason}."
                                    + kept, False))
         if blob == museum.placeholder_blob_csid:
             steps.append(_step("Placeholder image", "The museum's placeholder image: served from files an admin "

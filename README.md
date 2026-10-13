@@ -16,7 +16,7 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
   ([Glimmer](https://github.com/cspace-deployment/glimmer)) and other clients link to, at the same addresses the
   legacy imageserver uses, so they keep working unchanged.
 - Serve only what the daily Solr ETL ([cspace-solr-ucb](https://github.com/cspace-deployment/cspace-solr-ucb))
-  lists as public, unless it has been taken down in Serena. Anything else gets the museum's unavailable image.
+  lists as public, unless it has been recalled in Serena. Anything else gets the museum's unavailable image.
 - Take in each daily servable list through its ETL API, in step with the public Solr core's refresh.
 - Fetch a file from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
@@ -48,8 +48,9 @@ With Docker installed: `./serena up`, then `./serena etl pahma` to run a daily r
 a few files to open in your browser, at http://localhost:8300. The admin app is at http://localhost:5373/admin/:
 sign in as `admin`, password `admin` (the simulator's synthetic account). The stack uses a CollectionSpace simulator and
 moto in place of AWS, so it needs no accounts or keys. `docs/testing-checklist.md` walks through the admin app's
-pages locally (the Requests page reads a log file inside the app's container, in place of CloudWatch; the takedown
-form's lookups and thumbnails come from the CollectionSpace simulator). `./serena help` lists the rest.
+pages locally (the Past requests page reads a log file inside the app's container, in place of CloudWatch; the recall
+form's lookups and thumbnails come from the CollectionSpace simulator). In the admin app, the bell at the top right
+opens the alerts and the gear opens the museum's settings. `./serena help` lists the rest.
 
 ## License
 

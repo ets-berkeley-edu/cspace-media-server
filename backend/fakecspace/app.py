@@ -1,8 +1,8 @@
 """A small simulated CollectionSpace Media service, for development and tests.
 
-It implements only what Serena calls (design: Image fetch, Takedowns): GET media/<csid> (the light check, with its
+It implements only what Serena calls (design: Image fetch, Recalls): GET media/<csid> (the light check, with its
 workflow state and its blobCsid), the Media record's current file, media/<csid>/blob/content and
-media/<csid>/blob/derivatives/<name>/content, and, for the takedown form, GET blobs/<csid> and the search for the Media
+media/<csid>/blob/derivatives/<name>/content, and, for the recall form, GET blobs/<csid> and the search for the Media
 record with a given blobCsid, GET media?as=media_common:blobCsid="<csid>".
 State is in memory. It is not CollectionSpace: behaviour against the real server is confirmed on a test tenant
 (docs/testing-checklist.md).

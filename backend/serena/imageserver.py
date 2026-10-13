@@ -41,9 +41,9 @@ def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_ki
     """302 to a signed URL for the stored object (design: Signed URLs, Responses). The URL is never logged. A restricted
     file served on a portal's signed link gets Cache-Control: no-store, so the browser asks again next time.
 
-    The "served" line is what the admin app's Requests page reads (D103): the path (from paths.log_path(), so without
-    the PDF link suffix or a query string), the kind, the cache (hit, or miss when it was just fetched) and whether a
-    signed link was used."""
+    The "served" line is what the admin app's Past requests page reads (D103): the path (from paths.log_path(), so
+    without the PDF link suffix or a query string), the kind, the cache (hit, or miss when it was just fetched) and
+    whether a signed link was used."""
     signer: signing.Signer | None = request.app.state.signer
     if signer is None:
         log.error("no signer configured: set SERENA_CDN_BASE_URL and SERENA_CLOUDFRONT_KEY_SECRET_ID")

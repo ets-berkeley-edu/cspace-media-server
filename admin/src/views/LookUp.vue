@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }}: Look up a file</h1>
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Media look up</h1>
     <p class="mb-4">
       Why Serena serves a file or not. Give a file's URL or path, a Blob CSID or a Media CSID. This asks only Serena, never
       CollectionSpace, and shows the decision a request would get without a signed link.

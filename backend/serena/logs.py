@@ -95,7 +95,7 @@ LOG_FILE_BYTES = 20 * 1024 * 1024  # local development: the log file and one rot
 def configure(level: str = "INFO", log_file: str | None = None) -> None:
     """Send every log, uvicorn's included, through one JSON handler on stderr. Call it when the app or worker starts
     (after uvicorn has set up its own logging, which this replaces). Locally, `log_file` (SERENA_LOG_FILE) also gets
-    every line, for the Requests page's stand-in for CloudWatch (requests_log.FileReader)."""
+    every line, for the Past requests page's stand-in for CloudWatch (requests_log.FileReader)."""
     handler: logging.Handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(JsonFormatter())
     handlers = [handler]

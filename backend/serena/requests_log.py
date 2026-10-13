@@ -1,5 +1,5 @@
-"""What Serena served and couldn't serve, read from its log, for the admin app's Requests page (design: The Requests
-page; decided October 12, 2026, D100 to D113).
+"""What Serena served and couldn't serve, read from its log, for the admin app's Past requests page (design: The
+Past requests page; decided October 12, 2026, D100 to D113).
 
 The app logs one line per request: "served" (with the path, kind, cache hit or miss and whether a signed link was
 used) or "unserved" (with the reason and the path). Paths never carry the PDF link suffix or a query string, and no

@@ -75,7 +75,7 @@ export interface Refresh extends RefreshSummary {
   file_name: string
   upload: {rows: number, bytes: number, sha256: string, uploaded_at: string} | null
   check: Check | null
-  update: {deleted: number, written: number, unchanged: number, takedowns_removed?: number, takedowns_kept?: number} | null
+  update: {deleted: number, written: number, unchanged: number, recalls_ended?: number, recalls_kept?: number} | null
   override: {at: string} | null // an admin overrode the delta threshold for this servable list (D83)
   actions: RefreshAction[]
 }
@@ -161,24 +161,24 @@ export interface RequestsReport {
   lines: RequestLine[]
 }
 
-/** A Media record a takedown would take down, and how Serena found it (D116). */
-export interface TakedownRecord {
+/** A Media record a recall would recall, and how Serena found it (D116). */
+export interface RecallRecord {
   media_csid: string
   blob_csids: string[]
   kind: string | null
   served_today: boolean
-  taken_down: boolean
+  recalled: boolean
   source: 'serena' | 'collectionspace'
   entered: string[]
 }
 
-export interface TakedownSummary {
-  records: TakedownRecord[]
+export interface RecallSummary {
+  records: RecallRecord[]
   not_found: {csid: string, why: string, message: string}[]
-  taken_down?: string[]
+  recalled?: string[]
 }
 
-export interface Takedown {
+export interface Recall {
   media_csid: string
   blob_csids: string[]
   by: string
@@ -188,18 +188,18 @@ export interface Takedown {
   kept_on: string | null
 }
 
-export interface EndedTakedown {
+export interface EndedRecall {
   media_csid: string
   at: string
   by: string // an admin, or "refresh <refresh ID>"
-  action: 'takedown_removed' | 'takedown_release'
+  action: 'recall_ended' | 'recall_release'
   details: Record<string, unknown>
 }
 
-export interface TakedownsPage {
+export interface RecallsPage {
   days: number
-  active: Takedown[]
-  ended: EndedTakedown[]
+  active: Recall[]
+  ended: EndedRecall[]
   max_in_box: number
   max_in_file: number
 }
@@ -242,13 +242,13 @@ export const api = {
   audit: (museum: string) => call<{days: number, entries: AuditEntry[]}>('GET', `/museums/${museum}/audit`),
   // Every entry the museum keeps, as CSV: a plain link, so the browser saves the file (D96).
   auditExportUrl: (museum: string) => `${PREFIX}/museums/${museum}/audit/export.csv`,
-  takedowns: (museum: string) => call<TakedownsPage>('GET', `/museums/${museum}/takedowns`),
-  takedownSummary: (museum: string, text: string) =>
-    call<TakedownSummary>('POST', `/museums/${museum}/takedowns/summary`, {text}),
-  takeDown: (museum: string, text: string, reason: string) =>
-    call<TakedownSummary>('POST', `/museums/${museum}/takedowns`, {text, reason}),
+  recalls: (museum: string) => call<RecallsPage>('GET', `/museums/${museum}/recalls`),
+  recallSummary: (museum: string, text: string) =>
+    call<RecallSummary>('POST', `/museums/${museum}/recalls/summary`, {text}),
+  recall: (museum: string, text: string, reason: string) =>
+    call<RecallSummary>('POST', `/museums/${museum}/recalls`, {text, reason}),
   release: (museum: string, mediaCsid: string, reason: string) =>
-    call<{released: string}>('POST', `/museums/${museum}/takedowns/${encodeURIComponent(mediaCsid)}/release`, {reason}),
+    call<{released: string}>('POST', `/museums/${museum}/recalls/${encodeURIComponent(mediaCsid)}/release`, {reason}),
   // A Media record's thumbnail or full-size view, through the admin API only, never cached (D129).
   previewUrl: (museum: string, mediaCsid: string, size: 'thumbnail' | 'full' = 'thumbnail') =>
     `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${size}`,

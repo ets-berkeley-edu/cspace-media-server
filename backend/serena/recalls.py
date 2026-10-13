@@ -1,13 +1,13 @@
-"""Takedowns (design: Takedowns; decided October 12, 2026, D116 to D120, D128 to D131).
+"""Recalls (design: Recalls; decided October 12, 2026, D116 to D120, D128 to D131).
 
-An admin takes down Media records at once, given as Media or Blob CSIDs, until CollectionSpace and a later refresh
+An admin recalls Media records at once, given as Media or Blob CSIDs, until CollectionSpace and a later refresh
 catch up. Serena finds each CSID in its servability table first and asks CollectionSpace only about the CSIDs the
-table doesn't know. A takedown is stored by Media CSID, with the Blob (or Blobs) it had.
+table doesn't know. A recall is stored by Media CSID, with the Blob (or Blobs) it had.
 
-Only a successful servability update ends a takedown (D119): one whose refresh date is after the day the takedown was
-made (Pacific), when its servable list no longer has any of the takedown's Blobs as public. If it still has one as
-public, the takedown stays, the refresh is noted on it, and Serena raises an alert. The one admin action that ends a
-takedown is Release, and only on a takedown a refresh kept."""
+Only a successful servability update ends a recall (D119): one whose refresh date is after the day the recall was
+made (Pacific), when its servable list no longer has any of the recall's Blobs as public. If it still has one as
+public, the recall stays, the refresh is noted on it, and Serena raises an alert. The one admin action that ends a
+recall is Release, and only on a recall a refresh kept."""
 from __future__ import annotations
 
 import logging
@@ -26,9 +26,9 @@ from .cspace.client import CSpaceError, MediaState
 from .cspace.clients import CSpaceClients
 from .museum import SERVED_KINDS, Museum
 from .refreshes import PACIFIC
-from .store import ServabilityRecord, Store, Takedown
+from .store import Recall, ServabilityRecord, Store
 
-log = logging.getLogger("serena.takedowns")
+log = logging.getLogger("serena.recalls")
 
 MAX_IN_BOX = 12  # the form's box (D116); more come as a file
 MAX_IN_FILE = 1000  # D128
@@ -49,12 +49,12 @@ def parse(text: str) -> list[str]:
 
 @dataclass
 class Found:
-    """A Media record to take down, and how it was found."""
+    """A Media record to recall, and how it was found."""
     media_csid: str
     blob_csids: list[str] = field(default_factory=list)
     kind: str | None = None
     served_today: bool = False
-    taken_down: bool = False
+    recalled: bool = False
     source: str = "serena"  # "serena": its servability table; "collectionspace": a file Serena doesn't serve today
     entered: list[str] = field(default_factory=list)  # the CSIDs the admin gave for it
 
@@ -70,7 +70,7 @@ WHY = {
     "not_found": "Not found: neither Serena nor CollectionSpace knows it as a Media record or a Blob.",
     "collectionspace_unreachable": "Not known to Serena, and CollectionSpace can't be reached: not served today. "
                                    "Try again later.",
-    "placeholder": "The museum's placeholder image: it has no Media record to take down.",
+    "placeholder": "The museum's placeholder image: it has no Media record to recall.",
 }
 
 
@@ -103,7 +103,7 @@ def rows_of_media(store: Store, tenant: str, media_csid: str) -> list[Servabilit
 
 
 def identify(museum: Museum, csids: list[str], store: Store, cspace: CSpaceClients | None) -> Summary:
-    """Each CSID as a Media record to take down (D116, D117): Serena's table first, CollectionSpace for the rest."""
+    """Each CSID as a Media record to recall (D116, D117): Serena's table first, CollectionSpace for the rest."""
     tenant = museum.key
     records: dict[str, Found] = {}
     not_found: list[NotFound] = []
@@ -148,8 +148,8 @@ def identify(museum: Museum, csids: list[str], store: Store, cspace: CSpaceClien
         if not rows and found.source == "serena":
             rows = rows_of_media(store, tenant, found.media_csid)
         found.kind = rows[0].kind if rows else None
-        found.taken_down = store.takedown(tenant, found.media_csid) is not None
-        found.served_today = not found.taken_down and any(_servable(museum, r) for r in rows)
+        found.recalled = store.recall(tenant, found.media_csid) is not None
+        found.served_today = not found.recalled and any(_servable(museum, r) for r in rows)
     return Summary(list(records.values()), not_found)
 
 
@@ -186,78 +186,78 @@ def _today(clock: Callable[[], datetime]) -> str:
     return clock().astimezone(PACIFIC).date().isoformat()
 
 
-def take_down(museum: Museum, summary: Summary, reason: str, admin: str, store: Store, audit: Audit,
+def recall(museum: Museum, summary: Summary, reason: str, admin: str, store: Store, audit: Audit,
               alerts: Alerts, clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> list[str]:
-    """Takes down the summary's Media records not already taken down (D118). Returns their Media CSIDs."""
+    """Takes down the summary's Media records not already recalled (D118). Returns their Media CSIDs."""
     at = clock().astimezone(UTC).isoformat(timespec="seconds")
     done: list[str] = []
     for found in summary.records:
-        if found.taken_down:
+        if found.recalled:
             continue
-        if store.put_takedown(Takedown(museum.key, found.media_csid, tuple(found.blob_csids), admin, at, reason)):
-            audit.record(museum.key, admin, Action.TAKEDOWN, found.media_csid,
+        if store.put_recall(Recall(museum.key, found.media_csid, tuple(found.blob_csids), admin, at, reason)):
+            audit.record(museum.key, admin, Action.RECALL, found.media_csid,
                          {"blob_csids": found.blob_csids, "reason": reason, "found_in": found.source})
             done.append(found.media_csid)
     if done:
         what = "1 Media record" if len(done) == 1 else f"{len(done)} Media records"
-        alerts.raise_(Alert(museum.key, _today(clock), Kind.TAKEDOWN, "takedown",
-                            f"An admin took down {what} for {museum.name}. Reason: {reason}", instance=at))
-        log.info("takedown", extra={"museum": museum.key, "media_records": len(done)})
+        alerts.raise_(Alert(museum.key, _today(clock), Kind.RECALL, "recall",
+                            f"An admin recalled {what} for {museum.name}. Reason: {reason}", instance=at))
+        log.info("recall", extra={"museum": museum.key, "media_records": len(done)})
     return done
 
 
 class NotKept(Exception):
-    """Only a takedown a refresh kept can be released (D119)."""
+    """Only a recall a refresh kept can be released (D119)."""
 
 
 def release(museum: Museum, media_csid: str, reason: str, admin: str, store: Store, audit: Audit, alerts: Alerts,
             clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
-    takedown = store.takedown(museum.key, media_csid)
-    if takedown is None or not takedown.kept_by or not store.delete_takedown(museum.key, media_csid, kept_only=True):
+    recall = store.recall(museum.key, media_csid)
+    if recall is None or not recall.kept_by or not store.delete_recall(museum.key, media_csid, kept_only=True):
         raise NotKept(media_csid)
-    audit.record(museum.key, admin, Action.TAKEDOWN_RELEASE, media_csid,
-                 {"blob_csids": list(takedown.blob_csids), "kept_by": takedown.kept_by, "reason": reason})
+    audit.record(museum.key, admin, Action.RECALL_RELEASE, media_csid,
+                 {"blob_csids": list(recall.blob_csids), "kept_by": recall.kept_by, "reason": reason})
     at = clock().astimezone(UTC).isoformat(timespec="seconds")
-    alerts.raise_(Alert(museum.key, _today(clock), Kind.TAKEDOWN_RELEASED, media_csid,
-                        f"An admin released the takedown of Media record {media_csid} for {museum.name}, which "
-                        f"refresh {takedown.kept_by} kept. Reason: {reason}", instance=at))
+    alerts.raise_(Alert(museum.key, _today(clock), Kind.RECALL_RELEASED, media_csid,
+                        f"An admin released the recall of Media record {media_csid} for {museum.name}, which "
+                        f"refresh {recall.kept_by} kept. Reason: {reason}", instance=at))
 
 
 @dataclass
 class AfterUpdate:
-    removed: int = 0
+    ended: int = 0
     kept: int = 0
 
 
 def after_update(museum: Museum, refresh_id: str, refresh_date: str, store: Store, audit: Audit,
                  alerts: Alerts | None) -> AfterUpdate:
-    """After a successful servability update: end the takedowns CollectionSpace has caught up with (D119)."""
+    """After a successful servability update: end the recalls CollectionSpace has caught up with (D119)."""
     counts = AfterUpdate()
-    for takedown in store.takedowns(museum.key):
-        made_on = datetime.fromisoformat(takedown.at).astimezone(PACIFIC).date().isoformat() if takedown.at else ""
+    for recall in store.recalls(museum.key):
+        made_on = datetime.fromisoformat(recall.at).astimezone(PACIFIC).date().isoformat() if recall.at else ""
         if refresh_date <= made_on:
             continue  # too early: this refresh's list may predate the change in CollectionSpace
-        public = [blob for blob in takedown.blob_csids
+        public = [blob for blob in recall.blob_csids
                   if (row := store.servability(museum.key, blob)) is not None and row.access == "public"]
         if public:
-            store.keep_takedown(takedown, refresh_id, refresh_date)
+            store.keep_recall(recall, refresh_id, refresh_date)
             counts.kept += 1
             if alerts is not None:
                 alerts.raise_(Alert(
-                    museum.key, refresh_date, Kind.STILL_PUBLIC, takedown.media_csid,
-                    f"Refresh {refresh_id} still lists Media record {takedown.media_csid} of {museum.name} as public "
-                    f"(Blob {public[0]}), so its takedown in Serena stays. Change the record in CollectionSpace, or, "
-                    "if the takedown was a mistake, release it in the admin app."))
+                    museum.key, refresh_date, Kind.STILL_PUBLIC, recall.media_csid,
+                    f"Refresh {refresh_id} still lists Media record {recall.media_csid} of {museum.name} as public "
+                    f"(Blob {public[0]}), so its recall in Serena stays. Change the record in CollectionSpace, or, "
+                    "if the recall was a mistake, release it in the admin app."))
             continue
-        if store.delete_takedown(museum.key, takedown.media_csid):
-            counts.removed += 1
-            audit.record(museum.key, f"refresh {refresh_id}", Action.TAKEDOWN_REMOVED, takedown.media_csid,
-                         {"blob_csids": list(takedown.blob_csids), "refresh_id": refresh_id,
-                          "why": "no longer listed as public", "taken_down_by": takedown.by,
-                          "taken_down_at": takedown.at})
-    if counts.removed and alerts is not None:
-        what = "1 takedown" if counts.removed == 1 else f"{counts.removed} takedowns"
-        alerts.raise_(Alert(museum.key, refresh_date, Kind.TAKEDOWNS_REMOVED, refresh_id,
-                            f"Refresh {refresh_id} removed {what} for {museum.name}: its servable list no longer has "
+        if store.delete_recall(museum.key, recall.media_csid):
+            counts.ended += 1
+            audit.record(museum.key, f"refresh {refresh_id}", Action.RECALL_ENDED, recall.media_csid,
+                         {"blob_csids": list(recall.blob_csids), "refresh_id": refresh_id,
+                          "why": "no longer listed as public", "recalled_by": recall.by,
+                          "recalled_at": recall.at})
+    if counts.ended and alerts is not None:
+        what = "1 recall" if counts.ended == 1 else f"{counts.ended} recalls"
+        alerts.raise_(Alert(museum.key, refresh_date, Kind.RECALLS_ENDED, refresh_id,
+                            f"Refresh {refresh_id} ended {what} for {museum.name}: its servable list no longer has "
                             "their files as public."))
     return counts

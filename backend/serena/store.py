@@ -21,8 +21,8 @@ class ServabilityRecord:
 
 
 @dataclass(frozen=True)
-class Takedown:
-    """An admin's takedown of a Media record (design: Takedowns). It exists until a servability update ends it, or an
+class Recall:
+    """An admin's recall of a Media record (design: Recalls). It exists until a servability update ends it, or an
     admin releases it (D119): there is no inactive state."""
     tenant: str
     media_csid: str
@@ -44,7 +44,7 @@ class Takedown:
         return found
 
     @classmethod
-    def of(cls, item: dict[str, Any]) -> Takedown:
+    def of(cls, item: dict[str, Any]) -> Recall:
         tenant, _, media = item["pk"]["S"].partition("#")
         return cls(tenant, media, tuple(b["S"] for b in item.get("blob_csids", {}).get("L", [])),
                    item.get("by", {}).get("S", ""), item.get("at", {}).get("S", ""),
@@ -72,52 +72,52 @@ class Store:
         media = item.get("media_csid", {}).get("S") or None
         return ServabilityRecord(tenant, blob_csid, media, item["kind"]["S"], item["access"]["S"])
 
-    def takedown(self, tenant: str, media_csid: str) -> Takedown | None:
-        # Strongly consistent: a takedown takes effect on the next request (design: Takedowns).
-        item = self.client.get_item(TableName=self.table(tables.TAKEDOWNS), ConsistentRead=True,
+    def recall(self, tenant: str, media_csid: str) -> Recall | None:
+        # Strongly consistent: a recall takes effect on the next request (design: Recalls).
+        item = self.client.get_item(TableName=self.table(tables.RECALLS), ConsistentRead=True,
                                     Key={"pk": {"S": f"{tenant}#{media_csid}"}}).get("Item")
         if item is None:
             return None
-        return Takedown.of(item)
+        return Recall.of(item)
 
-    def put_takedown(self, takedown: Takedown) -> bool:
-        """Records a takedown, unless the Media record is already taken down. Returns False if it was."""
+    def put_recall(self, recall: Recall) -> bool:
+        """Records a recall, unless the Media record is already recalled. Returns False if it was."""
         try:
-            self.client.put_item(TableName=self.table(tables.TAKEDOWNS), Item=takedown.item(),
+            self.client.put_item(TableName=self.table(tables.RECALLS), Item=recall.item(),
                                  ConditionExpression="attribute_not_exists(pk)")
         except self.client.exceptions.ConditionalCheckFailedException:
             return False
         return True
 
-    def takedowns(self, tenant: str) -> list[Takedown]:
-        """The museum's takedowns, oldest first."""
-        found: list[Takedown] = []
+    def recalls(self, tenant: str) -> list[Recall]:
+        """The museum's recalls, oldest first."""
+        found: list[Recall] = []
         start: dict[str, Any] | None = None
         while True:
             options: dict[str, Any] = {"ExclusiveStartKey": start} if start else {}
-            page = self.client.query(TableName=self.table(tables.TAKEDOWNS), IndexName="by_tenant",
+            page = self.client.query(TableName=self.table(tables.RECALLS), IndexName="by_tenant",
                                      KeyConditionExpression="tenant = :t",
                                      ExpressionAttributeValues={":t": {"S": tenant}}, **options)
-            found.extend(Takedown.of(item) for item in page["Items"])
+            found.extend(Recall.of(item) for item in page["Items"])
             start = page.get("LastEvaluatedKey")
             if not start:
                 return sorted(found, key=lambda t: t.at)
 
-    def keep_takedown(self, takedown: Takedown, refresh_id: str, refresh_date: str) -> None:
-        """Notes the refresh that kept the takedown because the same Blob is still public (D119)."""
+    def keep_recall(self, recall: Recall, refresh_id: str, refresh_date: str) -> None:
+        """Notes the refresh that kept the recall because the same Blob is still public (D119)."""
         try:
             self.client.update_item(
-                TableName=self.table(tables.TAKEDOWNS), Key={"pk": {"S": f"{takedown.tenant}#{takedown.media_csid}"}},
+                TableName=self.table(tables.RECALLS), Key={"pk": {"S": f"{recall.tenant}#{recall.media_csid}"}},
                 UpdateExpression="SET kept_by = :r, kept_on = :d", ConditionExpression="attribute_exists(pk)",
                 ExpressionAttributeValues={":r": {"S": refresh_id}, ":d": {"S": refresh_date}})
         except self.client.exceptions.ConditionalCheckFailedException:
             pass  # released meanwhile
 
-    def delete_takedown(self, tenant: str, media_csid: str, kept_only: bool = False) -> bool:
-        """Ends a takedown. With kept_only (an admin's release), only one a refresh kept. False if there was none."""
+    def delete_recall(self, tenant: str, media_csid: str, kept_only: bool = False) -> bool:
+        """Ends a recall. With kept_only (an admin's release), only one a refresh kept. False if there was none."""
         condition = "attribute_exists(kept_by)" if kept_only else "attribute_exists(pk)"
         try:
-            self.client.delete_item(TableName=self.table(tables.TAKEDOWNS),
+            self.client.delete_item(TableName=self.table(tables.RECALLS),
                                     Key={"pk": {"S": f"{tenant}#{media_csid}"}}, ConditionExpression=condition)
         except self.client.exceptions.ConditionalCheckFailedException:
             return False
