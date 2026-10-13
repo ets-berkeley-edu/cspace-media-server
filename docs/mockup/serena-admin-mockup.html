@@ -278,7 +278,7 @@
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
       <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
       <li><strong>Recalls:</strong> "Recall…" opens the form; "Show what would be recalled" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
-      <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
+      <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, a "Media look up" button (opens Media look up on that path) and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
     </ul>
   </div>
@@ -790,8 +790,21 @@
     dialog(`${esc(size === "original" ? "Original file" : size)}`, `<p class="mono" style="margin-top:0;overflow-wrap:anywhere">${esc(path)}</p>
       <div style="aspect-ratio:4/3;max-width:100%;border-radius:8px;overflow:hidden;border:1px solid var(--border)">${thumbSvg(seed, "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block"')}</div>
       <p class="secondary" style="margin-bottom:0">${result ? `This request: ${result}. ` : ""}Shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored), whether or not the public is served it. Never cached.</p>`,
-      `<button type="button" class="primary" data-close>Dismiss</button>`);
+      `<button type="button" id="viewLookup">Media look up</button><button type="button" class="primary" data-close>Dismiss</button>`);
     bindDialog();
+    $("#viewLookup").onclick = () => { close(); lookUpPath(path); };
+  }
+
+  // Opens Media look up on a path (the sample data matches it by its Blob CSID, shortened or not).
+  function lookUpPath(path) {
+    const csid = (/\/blobs\/([^/]+)\//.exec(path) || [])[1] || "";
+    const [head, tail] = csid.split("…");
+    const matches = b => tail === undefined ? b.blob === csid : b.blob.startsWith(head) && b.blob.endsWith(tail);
+    const hit = Object.values(LOOKUPS).find(v => (v.blobs || []).some(matches));
+    S.lookup = hit ? {...hit, input: path} : {...LOOKUPS.notlisted, input: path, blobs: LOOKUPS.notlisted.blobs.map(b => ({...b, blob: csid}))};
+    S.blobIndex = hit ? Math.max(0, hit.blobs.findIndex(matches)) : 0;
+    S.page = "lookup";
+    render();
   }
 
   function showFull(seed, kind) {
