@@ -365,7 +365,7 @@
         sizes: [{size: "Medium", served: true, stored: "PNG · 412 KB · fetched Oct 11, 3:12 PM PDT"}]}]},
     recalled: {label: "The recalled image", input: MEDIA,
       blobs: [{blob: BLOB, media: MEDIA, kind: "image", access: "public",
-        verdict: {tone: "not", head: "Not served: recalled", why: `Recalled in Serena by admin on ${"Oct 12, 2026, 11:02 PM PDT"}. Reason: “Testing.”`, next: "It stays recalled until a refresh on a later day no longer lists the file as public. If that refresh still lists it, Serena alerts, and an admin can then release it.", link: "recalls"},
+        verdict: {tone: "not", head: "Not served: recalled", why: `Recalled in Serena by admin on ${"Oct 12, 2026, 11:02 PM PDT"}. Reason: “Testing.”`, next: "It stays recalled until a refresh on a later day no longer lists the Media record as public. If that refresh still lists it, Serena alerts, and an admin can then release it.", link: "recalls"},
         checks: [["ok", "In the servable list", "Refresh pahma-2026-10-12-1"], ["ok", "Kind", "image"], ["ok", "Access", "public"], ["no", "Recall", "Recalled by admin, Oct 12, 11:02 PM PDT"]],
         sizes: SIZES_PAHMA.map(s => ({size: s, served: false, reason: "recalled", stored: s === "Medium" ? "PNG · 71 bytes · fetched Oct 12, 10:48 PM PDT" : null}))}]},
     notlisted: {label: "Not in the servable list", input: "3e9a1b77-52d0-4c8f-a1e6-9f0b2d4c6e81",
@@ -624,7 +624,7 @@
     });
     if (stop < 0) out += `<li class="end"><span class="dot" aria-hidden="true">✓</span><div><div class="t">Served</div><div class="d">${esc(v.why)} ${esc(v.next)}</div></div></li>`;
     out += `</ol>`;
-    out += `<h3>Sizes</h3><div class="tw"><table><thead><tr><th>Size</th><th>Result</th><th>Stored copy (in Serena)</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">not served</span> <span class="secondary">${esc(s.reason)}</span>`}</td><td class="secondary">${s.stored ? esc(s.stored) : (s.served ? "none yet: fetched on its first request" : "none")}</td></tr>`).join("")}</tbody></table></div>`;
+    out += `<h3>Sizes</h3><div class="tw"><table><thead><tr><th>Size</th><th>Result</th><th>Stored copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">not served</span> <span class="secondary">${esc(s.reason)}</span>`}</td><td class="secondary">${s.stored ? esc(s.stored) : (s.served ? "none yet: fetched on its first request" : "none")}</td></tr>`).join("")}</tbody></table></div>`;
     if (b.note) out += `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>`;
     return out;
   }
@@ -674,8 +674,8 @@
         <div class="answer-head ${v.tone}"><span class="mark" aria-hidden="true">${{served: "✓", not: "✕", depends: "!"}[v.tone]}</span><div><div class="head">${esc(v.head)}</div><div>${v.why}</div></div></div>
         <p class="secondary" style="margin:6px 0 6px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
         <p class="stamps"><span><span class="k">Last served</span> ${latest(b, "lastServed") ? esc(latest(b, "lastServed")) : "not in the last 30 days"}</span><span><span class="k">First stored in Serena</span> ${earliest(b, "firstStored") ? esc(earliest(b, "firstStored")) : "never"}</span></p>
-        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy (in Serena)</th><th>First stored</th><th>Last served</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary">${s.firstStored ? esc(s.firstStored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? esc(s.lastServed) : "—"}</td></tr>`).join("")}</tbody></table></div>
-        <p class="muted" style="margin:6px 0 0;font-size:12px">First stored: when Serena fetched that size and stored it in its S3 bucket. Last served: Serena's last answer with the file (from its log; "—" if not in the last 30 days).</p>
+        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy</th><th>Last served</th><th>First stored</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? esc(s.lastServed) : "—"}</td><td class="secondary">${s.firstStored ? esc(s.firstStored) : "—"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="muted" style="margin:6px 0 0;font-size:12px">Last served: Serena's last answer with the file (from its log; "—" if not in the last 30 days). First stored: when Serena fetched that size and stored it in its S3 bucket.</p>
         ${b.note ? `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>` : ""}
         ${compareHtml(b)}
       </div></div>`;
