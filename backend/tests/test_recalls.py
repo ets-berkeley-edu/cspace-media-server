@@ -297,8 +297,10 @@ def test_media_look_up_shows_collectionspace_beside_serena(client: TestClient, s
     (item,) = client.get(lookup, params={"q": UNKNOWN}).json()["items"]
     assert item["cspace"] == {"state": "gone", "next": "CollectionSpace has no Blob or Media record with this CSID "
                                                        "either."}
-    add_blob(store, "pahma", PAHMA.placeholder_blob_csid, None)
-    (item,) = client.get(lookup, params={"q": PAHMA.placeholder_blob_csid}).json()["items"]
+    placeholder = PAHMA.placeholder_blob_csid
+    assert placeholder is not None
+    add_blob(store, "pahma", placeholder, None)
+    (item,) = client.get(lookup, params={"q": placeholder}).json()["items"]
     assert item["cspace"] == {"state": "no_media"}
 
 
