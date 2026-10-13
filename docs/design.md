@@ -432,8 +432,8 @@ reason and the path, with the PDF link suffix removed; never an IP address, a qu
 request under a museum Serena doesn't serve is logged with no museum, so no museum's admins see it. The admin app's
 Requests page reads these lines, with the "served" ones (see Admin web app, The Requests page). Until October 12,
 2026, each task also counted them in an Unserved requests table, for a page of its own; the Requests page replaced
-both (D102). The admin app is also to list the files Serena knows it can't serve, and why (for example restricted
-files, files that failed their checks, fetch errors).
+both (D102). A list of the files Serena knows it can't serve was planned too, and dropped (D115): the Requests page
+shows every unserved request by reason, and "Look up a file" explains any one file.
 
 ### Signed URLs
 
@@ -512,7 +512,7 @@ where the table is read as a list, a sort key:
 | Table | Partition key | Sort key | Fields |
 | --- | --- | --- | --- |
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
-| Takedowns | `<tenant>#<media CSID>` | | state (taken down, or unlocked), who, when, why |
+| Takedowns | `<tenant>#<media CSID>` | | the Blob CSID the Media record had when it was taken down; who, when, why; and, once a servability update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A takedown that ends is deleted; its history is in the audit log (see How a takedown ends) |
 | Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits and audit retention, over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its banner and alerts page |
@@ -698,6 +698,9 @@ table, so a restart never loses a step.
   that stops halfway never serves a Blob that the new servable list dropped. Writes are batched (25 at a time), and what
   DynamoDB leaves unprocessed is retried with backoff; a whole servability update that still fails is tried twice more
   before the refresh ends `update_failed` with the reason. The refresh shows the counts: deleted, written, unchanged.
+- **Takedowns, after the servability update.** Once the update has succeeded, the worker goes through the museum's
+  takedowns and ends the ones the new servable list shows CollectionSpace has caught up with (see How a takedown ends,
+  D119). The refresh shows how many it removed and how many it kept.
 ### Admin actions on refreshes
 
 Decided October 11, 2026 (settling F5), and revised October 12, 2026 (D73 to D75, D82, D83). Any admin of the museum
@@ -746,8 +749,11 @@ watchdog raises it on every pass while it holds but it is recorded, logged and e
 alert whose email failed is sent again on the next pass. Alerts carry museum names, refresh dates, refresh IDs and reasons,
 never personal data.
 
-The alert for a restricted-image Blob whose files haven't been uploaded comes with that upload (pull request 14 in the
-plan); until then, its requests are counted as `restricted_image_not_uploaded`.
+Takedowns raise their own alerts (see How a takedown ends): an admin's takedown, a takedown a refresh kept because
+CollectionSpace still has the file as public, an admin's release, and a notice when a refresh removed takedowns.
+
+The alert for a restricted-image Blob whose files haven't all been uploaded comes with that upload (pull request 14b in
+the plan, D127); until then, its requests are logged as `restricted_image_not_uploaded`.
 
 ### Takedowns
 
@@ -763,12 +769,91 @@ plan); until then, its requests are counted as `restricted_image_not_uploaded`.
 
   Both depend on Lyrasis's denorm job running before the ETL. To stop serving one file to everyone at once, an
   admin takes down its Media record in the admin app.
-- **In Serena's admin app:** an admin takes down a Media record by CSID. It takes effect on the next request.
-  Nothing is deleted; the cached files stay in S3. An admin can later unlock it, which removes Serena's override and
-  hands servability back to the ETL's state.
+- **In Serena's admin app:** an admin takes down Media records at once, until CollectionSpace and the next refresh
+  catch up (decided October 12, 2026, D116 to D120, D128 to D131). It takes effect on the next request. Nothing is
+  deleted; the cached files stay in S3. Museum staff always change CollectionSpace as well: a successful refresh is the
+  source of truth for what Serena serves, and a takedown in Serena is a bridge until it agrees. See How a takedown
+  ends, below.
 - **Optional, later:** CollectionSpace Listeners (custom Java, with retries, since CollectionSpace's framework has no
   outbound calls of its own) or an ETL-side poller of Postgres, either feeding the takedown table. Listeners are
   optional in CollectionSpace, so Serena can't depend on them.
+
+#### Taking down
+
+- **What the admin gives.** Up to 12 CSIDs in one box (separated by new lines, commas or spaces), or a plain-text file
+  of up to 1,000, one per line, blank lines ignored. Each may be a Media CSID or a Blob CSID; a Media record has one
+  Blob, so either names the same record. A Media CSID and its own Blob CSID listed together count once.
+- **How Serena finds each one.** First in its servability table: a Blob CSID is a record's key, which gives its Media
+  CSID; a Media CSID is found through the `by_media` index, which gives its Blob (or Blobs, while a replaced image's
+  old Blob is still listed). Only for CSIDs the table doesn't know (a file not yet published, or one the ETL withholds)
+  does Serena ask CollectionSpace, with the museum's read-only account: `GET media/<csid>` (a Media record, with its
+  Blob CSID), then `GET blobs/<csid>` and a search for the Media record whose `blobCsid` is that CSID. A CSID neither
+  knows, or one the table doesn't know while CollectionSpace can't be reached, is listed as not found and isn't taken
+  down: Serena serves none of them today, and storing a Blob CSID as if it were a Media CSID would do nothing while
+  looking as if it worked (D117). The rest of the list goes ahead.
+- **The summary, before anything changes.** For each Media record: its Blob, kind, whether Serena serves it today,
+  whether it's already taken down, and a thumbnail that opens to the full size (D129). Thumbnails and full-size views
+  come only through the admin API, to signed-in admins, with `Cache-Control: no-store`, never through Serena's public
+  serving or CloudFront: a file being taken down may be sensitive, and must still show here afterwards. Serena uses its
+  stored copy if it has one, and otherwise asks CollectionSpace without storing what it gets. Images and cards show
+  their Thumbnail and open to the largest size the museum serves; a PDF shows CollectionSpace's thumbnail if there is
+  one, or a PDF icon, and opens the document; a 3D file shows an icon. With neither a stored copy nor CollectionSpace,
+  a placeholder.
+- **Confirming.** The admin gives one reason for the whole list. Each Media record's takedown stores its Media CSID, the
+  Blob CSID it has, who, when and why, and is audited on its own (`takedown`), so each record's history stands alone.
+  The team gets one emailed alert per takedown, "An admin took down Media records", naming how many (D118).
+
+#### How a takedown ends
+
+A successful ETL refresh is the source of truth for what Serena serves (decided October 12, 2026, D119). So only a
+successful servability update ends a takedown, and only when the servable list shows that CollectionSpace has caught up.
+An admin can't undo a takedown, with one narrow exception, Release, below.
+
+After each successful servability update, the worker looks at each of the museum's takedowns:
+
+1. **Too early: kept, silently.** The refresh's refresh date isn't after the day the takedown was made (Pacific). The
+   ETL reads CollectionSpace at 03:01 and Serena gets the list about half an hour later, so a list for the same day may
+   have been made before staff could change CollectionSpace.
+2. **CollectionSpace has caught up: removed.** The new servable list no longer lists the taken-down Blob as public:
+   - not listed at all: the Media record was unpublished, its Object marked sensitive, or (Cinefiles) its document's
+     record status changed;
+   - listed with a different Blob, the old one gone: staff replaced the image and made the record public again;
+   - listed as restricted: (Cinefiles) the document's access code changed, so only signed-in Glimmer readers get it.
+
+   The takedown is deleted, the audit log records it (`takedown_removed`, "removed by refresh pahma-2026-10-14-1: no
+   longer listed as public"), and the team gets one notice per refresh that removed any, naming how many.
+3. **Still public: kept, with an alert.** The new servable list still lists the same Blob as public. Either staff
+   haven't changed CollectionSpace (or the change hasn't reached the public core: at Cinefiles, unpublishing a Media
+   record changes nothing, and Lyrasis's denorm job must run before the ETL), or the takedown was a mistake. The list
+   can't tell which, so Serena keeps serving the unavailable image and raises an alert, "Taken down in Serena, but
+   still public in CollectionSpace", once per refresh date while it holds. The takedown records which refresh kept it.
+
+**Release.** The one admin action on a takedown: only on a takedown a refresh kept (case 3), an admin may release it,
+saying CollectionSpace is right and the file should be served. It needs a reason, is audited (`takedown_release`) and
+raises an emailed alert, "An admin released a takedown". There is no other way to end a takedown by hand.
+
+Examples, for one Media record taken down on October 14 at 10:00:
+
+| What staff do in CollectionSpace | October 15's refresh lists | What happens |
+| --- | --- | --- |
+| Unpublish the Media record that day | nothing for that Blob | removed on October 15 |
+| Replace its image and publish it again | the Media record with a new Blob | removed on October 15; the new Blob is served |
+| Nothing (forgot, or the change didn't reach the core) | the same Blob, public | kept, with the alert, until a later refresh shows the change, or an admin releases it |
+| Nothing: the takedown was a mistake | the same Blob, public | kept, with the alert; an admin releases it |
+
+A takedown made on October 15 at 03:15 is first looked at by October 16's refresh (case 1).
+
+A takedown of a file Serena doesn't serve yet (found through CollectionSpace) follows the same rules: if the next
+refresh still doesn't list it as public, CollectionSpace hasn't published it, and the takedown is removed; if it lists
+it as public, the takedown is kept with the alert. So a takedown can't hold back a future publication on its own:
+staff must change CollectionSpace for that.
+
+#### The Takedowns page
+
+Every active takedown however old (Media CSID, Blob CSID, who, when, why, and, for one a refresh kept, "Still public in
+CollectionSpace" with a Release button), and the last 30 days' removed and released takedowns (by which refresh or
+admin, and why), from the audit log. Sorted and paged like the other tables; a "Take down" button opens the form above
+(D120).
 
 ### Restricted-image Blob
 
@@ -779,8 +864,15 @@ about it (decided October 9, 2026).
 
 An admin uploads its files in the admin app, one per derivative the museum serves (and the original, where the museum
 allows it); Serena stores them in S3 and indexes them, and watermarks them for a watermarking museum. Before the
-upload, requests for it get the unavailable image (reason `restricted_image_not_uploaded`) and raise an alert.
-(Decided October 9, 2026.)
+upload, requests for it get the unavailable image (reason `restricted_image_not_uploaded`). (Decided October 9, 2026.)
+Built in pull request 14b (decided October 12, 2026, D124 to D127):
+- each file gets the same checks as a fetched image: an image content type, it decodes, and it's within the museum's
+  image size limit; it's stored in S3 by its hash and indexed under the restricted-image Blob CSID and its derivative,
+  and the upload is audited with its SHA-256;
+- uploading again replaces that derivative's file: the index points to the new hash, the old object stays (nothing is
+  deleted), and the audit log records the SHA-256 before and after;
+- once a day, the watchdog checks each museum with a restricted-image Blob and, if any of its files isn't uploaded,
+  raises "The restricted-image Blob's files aren't all uploaded", naming the missing ones.
 
 ## Image fetch
 
@@ -847,8 +939,8 @@ upload, requests for it get the unavailable image (reason `restricted_image_not_
   their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID are
   indexed under the Media CSID and the Blob CSID listed for it in the servable list of the last servability update, so a replaced image is fetched
   again after the next daily update.
-- **Never deleted.** A takedown leaves objects and index entries in place. Unlocking a takedown serves them again
-  without another fetch.
+- **Never deleted.** A takedown leaves objects and index entries in place. When it ends (see How a takedown ends), they
+  are served again without another fetch.
 
 ## Watermarks
 
@@ -906,15 +998,22 @@ reachable only from campus networks.
   - the audit log's CSV export: every entry the museum keeps, oldest first (time, admin, action, target, details),
     with any cell a spreadsheet could run as a formula made safe (D96); the export is audited;
   - restricted-image Blob upload;
-  - takedown and unlock by Media CSID;
+  - takedowns: the Takedowns page, taking down by Media or Blob CSID, and Release (see Takedowns);
   - the Requests page: what Serena served and couldn't serve (see The Requests page, below);
-  - a lookup of why a file is or isn't served; the list of files Serena knows it can't serve;
+  - "Look up a file": why a file is or isn't served (see below);
   - an "API documentation" button: Swagger UI, bundled with the app (no CDN), read-only, showing the ETL API's
     description generated from the code (decided October 10, 2026);
-  - an audit log of every admin action: sign-in, sign-out, signing everyone out, takedown, unlock, a settings change
+  - an audit log of every admin action: sign-in, sign-out, signing everyone out, takedown, release, a settings change
     (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, an
     admin refresh, an audit export and the restricted-image upload, each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
+    A refresh's removal of a takedown is in it too, with the refresh as its actor (D119).
+- **Look up a file** (decided October 12, 2026, D121 to D123). An admin gives a file's URL or path (any shape Serena
+  serves), a Blob CSID or a Media CSID (which shows its Blob or Blobs). The page shows each step of the servability
+  check in order, with its outcome: in the servable list (and the refresh it came from), kind, access and signed access,
+  takedown, derivative allowed, watermarked size; then whether a copy is stored (when fetched, size, content type) and
+  the verdict: served, or the reason it isn't. It never calls CollectionSpace: a file not stored yet says "would be
+  fetched on the next request". It isn't audited (a read, like the Requests page).
 - **The Requests page** (decided October 12, 2026, D100 to D113). What Serena served and couldn't serve for the
   museum, from the app's log:
   - **Lines.** The app logs one line per request (D103): "served", with the path, the kind, the cache (`hit`, or
@@ -959,10 +1058,12 @@ reachable only from campus networks.
 - **Least privilege.** The app's task role can read the servability table; read and write the takedown and settings
   tables (the admin app's takedowns and settings are served by the app), the cache index, refreshes, alerts,
   audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
-  uploaded servable lists; use the KMS key; read its own secrets; and run Logs Insights queries on its own log group
+  uploaded servable lists; use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
+  check, fetches and the takedown form's lookups and thumbnails); and run Logs Insights queries on its own log group
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Requests page (D110). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
-  delete audit entries (the daily removal, D98), read and put the servable lists in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
+  delete takedowns (D119), read, put and delete audit entries (the takedown removals' entries, and the daily removal,
+  D98), read and put the servable lists in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
 - **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30
   days and encrypted with the KMS key, D110) and embedded metrics: requests, hits, misses, unserved
   requests by reason, fetch time, upstream errors by cause, duplicate fetches, refresh outcomes. No passwords, tokens,
@@ -1093,6 +1194,9 @@ The F numbers follow the team's list of follow-ups.
   if several clients get the same URL, only the first one to use it gets a response? To discuss (raised October 8,
   2026).
 - **Notifications list.** The team mailing list that receives alarms.
+- **The Media record behind a Blob.** Confirm against a real museum's CollectionSpace how the takedown form finds the
+  Media record whose `blobCsid` is a given Blob CSID (a search on the Media service), and whether CollectionSpace makes
+  a thumbnail for a PDF.
 - **Requests page queries in AWS.** The Logs Insights query text is tested only as text: run the four queries
   against the QA environment's log group before production, to confirm the JSON fields (`message`, `logger`,
   `museum`) and `datefloor` behave as expected.
