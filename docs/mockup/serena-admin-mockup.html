@@ -190,6 +190,51 @@
   .size .n { font-weight: 600; display: flex; justify-content: space-between; gap: 6px; align-items: center; }
   .size .s { color: var(--text-secondary); font-size: 12px; margin-top: 3px; }
   .meta-line { font-size: 12px; color: var(--text-muted); margin-top: 16px; }
+  .layout-switch { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border: 1px dashed var(--text-warning); background: var(--bg-warning); color: var(--text-warning); border-radius: 10px; padding: 6px 10px; margin: 0 0 16px; font-size: 12px; }
+  .layout-switch button { height: 26px; font-size: 12px; border-radius: 20px; }
+  .layout-switch button[aria-pressed="true"] { background: var(--text-warning); color: var(--surface-2); border-color: var(--text-warning); font-weight: 600; }
+  /* B. Decision path */
+  .path-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 12px; }
+  .path-head .pill { font-size: 14px; padding: 4px 12px; }
+  .path { list-style: none; margin: 0 0 6px; padding: 0; position: relative; }
+  .path li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 0 0 16px; position: relative; }
+  .path li:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 26px; bottom: 0; width: 2px; background: var(--border-strong); }
+  .path .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--bg-success); color: var(--text-success); }
+  .path .no .dot { background: var(--bg-danger); color: var(--text-danger); }
+  .path .maybe .dot { background: var(--bg-warning); color: var(--text-warning); }
+  .path .skip { opacity: 0.5; }
+  .path .skip .dot { background: var(--bg-neutral); color: var(--text-neutral); }
+  .path .t { font-weight: 600; }
+  .path .d { color: var(--text-secondary); font-size: 13px; }
+  .callout { margin-top: 8px; border-radius: 8px; padding: 10px 12px; font-size: 13px; max-width: 70ch; }
+  .callout.not { background: var(--bg-danger); color: var(--text-danger); }
+  .callout.depends { background: var(--bg-warning); color: var(--text-warning); }
+  .callout .secondary { color: inherit; opacity: 0.9; }
+  /* C. Inspector */
+  .inspector { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .inspector { grid-template-columns: 1fr; } }
+  .facts { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface-1); min-width: 0; }
+  .facts .preview { aspect-ratio: 4 / 3; max-width: 100%; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; position: relative; display: grid; place-items: center; }
+  .facts .preview svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .facts .preview .cap { position: relative; font-size: 12px; background: var(--surface-2); color: var(--text-secondary); padding: 2px 8px; border-radius: 10px; align-self: end; margin-bottom: 8px; }
+  .facts dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; margin: 12px 0; font-size: 13px; }
+  .facts dt { color: var(--text-secondary); }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  .facts h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 12px 0 6px; }
+  .mini-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+  .mini-checks li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 6px; }
+  .mini-checks .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--bg-success); color: var(--text-success); margin-top: 1px; }
+  .mini-checks .no .dot { background: var(--bg-danger); color: var(--text-danger); }
+  .mini-checks .maybe .dot { background: var(--bg-warning); color: var(--text-warning); }
+  .mini-checks .skip { opacity: 0.5; }
+  .mini-checks .skip .dot { background: var(--bg-neutral); color: var(--text-neutral); }
+  .answer { min-width: 0; }
+  .answer-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; border-radius: 10px; padding: 12px 14px; }
+  .answer-head.served { background: var(--bg-success); color: var(--text-success); }
+  .answer-head.not { background: var(--bg-danger); color: var(--text-danger); }
+  .answer-head.depends { background: var(--bg-warning); color: var(--text-warning); }
+  .answer-head .mark { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--surface-2); }
+  .answer-head .head { font-size: 16px; font-weight: 700; }
   .blob-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
   .blob-tabs button[aria-pressed="true"] { background: var(--bg-accent); color: var(--text-accent); border-color: var(--text-accent); }
 </style>
@@ -216,7 +261,8 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
-      <li><strong>Media look up (redesigned):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
+      <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the stored copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
+      <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
       <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
       <li><strong>Recalls:</strong> "Recall…" opens the form; "Show what would be recalled" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
@@ -230,7 +276,7 @@
 <script>
 (() => {
   const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
-  const S = {pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
+  const S = {layout: "A", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   const name = () => MUSEUMS[S.museum];
@@ -473,6 +519,7 @@
       <p class="lead">Why Serena serves a file or not. Paste a file's URL or path, a Blob CSID or a Media CSID. Serena answers from its own records; it never asks CollectionSpace.</p>
       <form class="lookup-form" id="lookupForm" role="search"><input type="search" id="lookupInput" placeholder="URL, path, Blob CSID or Media CSID" value="${esc(r ? r.input : "")}" aria-label="URL, path, Blob CSID or Media CSID"><button class="primary" type="submit">Look up</button></form>
       <div class="examples">Examples: ${ex.map(([k, v]) => `<button type="button" data-example="${k}">${esc(v.label)}</button>`).join("")}${S.museum !== "cinefiles" ? '<span>(the restricted PDF is under Cinefiles)</span>' : ""}</div>`;
+    out += `<div class="layout-switch" role="group" aria-label="Mockup only: layout to review"><span>Mockup only, layout to review:</span>${Object.entries(LAYOUTS).map(([k, v]) => `<button type="button" data-layout="${k}" aria-pressed="${S.layout === k}">${k}. ${v}</button>`).join("")}</div>`;
     if (!r) return out + `<p class="muted">No file looked up yet.</p>`;
     if (r.refused) {
       return out + verdictHtml({tone: "not", ...r.refused}) + `<p class="meta-line">Looked up ${esc(r.input)}</p>`;
@@ -481,6 +528,9 @@
       out += `<p class="secondary" style="margin:0 0 8px">This Media record has ${r.blobs.length} Blobs in the servable list:</p><div class="blob-tabs" role="group" aria-label="Blobs">${r.blobs.map((b, i) => `<button type="button" data-blob="${i}" aria-pressed="${i === S.blobIndex}">${esc(b.label || short(b.blob))}</button>`).join("")}</div>`;
     }
     const b = r.blobs[Math.min(S.blobIndex, r.blobs.length - 1)];
+    const meta = `<p class="meta-line">Looked up ${esc(r.input)} · last servability update: refresh ${S.museum}-2026-10-12-1 (refresh date 2026-10-12)</p>`;
+    if (S.layout === "B") return out + layoutPath(b) + meta;
+    if (S.layout === "C") return out + layoutInspector(b) + meta;
     out += verdictHtml(b.verdict);
     out += `<div class="ident"><div><span class="k">Blob</span>${csidHtml(b.blob)}</div>${b.media ? `<div><span class="k">Media record</span>${csidHtml(b.media)}</div>` : ""}
       ${b.kind ? `<div><span class="k">Kind</span><span class="pill t-neutral">${esc(b.kind)}</span></div>` : ""}${b.access ? `<div><span class="k">Access</span><span class="pill ${b.access === "public" ? "t-success" : "t-warning"}">${esc(b.access)}</span></div>` : ""}</div>`;
@@ -488,6 +538,51 @@
     out += sizesHtml(b);
     out += `<p class="meta-line">Looked up ${esc(r.input)} · last servability update: refresh ${S.museum}-2026-10-12-1 (refresh date 2026-10-12)</p>`;
     return out;
+  }
+
+  const LAYOUTS = {A: "Verdict first", B: "Decision path", C: "Inspector"};
+  const MARK = {ok: "✓", no: "✕", maybe: "!", skip: "–"};
+  const SAY = {ok: "passes", no: "fails", maybe: "depends", skip: "not reached"};
+
+  // B. Decision path: the checks as the path a request takes, top to bottom; the path stops where the verdict is
+  // decided, with the explanation right there; the sizes are one compact table.
+  function layoutPath(b) {
+    const v = b.verdict;
+    let out = `<div class="path-head ${v.tone}"><span class="pill ${v.tone === "served" ? "t-success" : v.tone === "depends" ? "t-warning" : "t-danger"}">${esc(v.head)}</span>
+      <span class="secondary">Blob ${csidHtml(b.blob)}${b.media ? ` · Media record ${csidHtml(b.media)}` : ""}</span></div>
+      <ol class="path">`;
+    const stop = b.checks.findIndex(([st]) => st === "no" || st === "maybe");
+    b.checks.forEach(([st, t, d], i) => {
+      out += `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><div><div class="t">${esc(t)}<span class="visually-hidden"> ${SAY[st]}</span></div><div class="d">${esc(d)}</div>
+        ${i === stop ? `<div class="callout ${v.tone}"><div>${v.why}</div><div class="secondary" style="margin-top:4px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</div></div>` : ""}</div></li>`;
+    });
+    if (stop < 0) out += `<li class="end"><span class="dot" aria-hidden="true">✓</span><div><div class="t">Served</div><div class="d">${esc(v.why)} ${esc(v.next)}</div></div></li>`;
+    out += `</ol>`;
+    out += `<h3>Sizes</h3><div class="tw"><table><thead><tr><th>Size</th><th>Result</th><th>Stored copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">not served</span> <span class="secondary">${esc(s.reason)}</span>`}</td><td class="secondary">${s.stored ? esc(s.stored) : (s.served ? "none yet: fetched on its first request" : "none")}</td></tr>`).join("")}</tbody></table></div>`;
+    if (b.note) out += `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>`;
+    return out;
+  }
+
+  // C. Inspector: the file's facts in a side panel (with its stored copy, if any), and the answer and the sizes beside
+  // them, as in a property sheet.
+  function layoutInspector(b) {
+    const v = b.verdict;
+    const stored = b.sizes.find(s => s.stored);
+    const facts = [["Blob", csidHtml(b.blob)], ["Media record", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'],
+      ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>']];
+    const checks = b.checks.map(([st, t, d]) => `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><span><strong>${esc(t)}</strong><span class="visually-hidden"> ${SAY[st]}</span><br><span class="secondary">${esc(d)}</span></span></li>`).join("");
+    return `<div class="inspector">
+      <aside class="facts" aria-label="The file">
+        <div class="preview">${stored ? thumbSvg(5, b.kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"') : ""}<span class="cap">${stored ? `Serena's stored ${esc(stored.size)}` : "No stored copy to show"}</span></div>
+        <dl>${facts.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl>
+        <h4>Checks</h4><ul class="mini-checks">${checks}</ul>
+      </aside>
+      <div class="answer">
+        <div class="answer-head ${v.tone}"><span class="mark" aria-hidden="true">${{served: "✓", not: "✕", depends: "!"}[v.tone]}</span><div><div class="head">${esc(v.head)}</div><div>${v.why}</div></div></div>
+        <p class="secondary" style="margin:6px 0 14px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
+        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td></tr>`).join("")}</tbody></table></div>
+        ${b.note ? `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>` : ""}
+      </div></div>`;
   }
 
   function verdictHtml(v) {
@@ -569,6 +664,7 @@
     document.querySelectorAll("[data-pagego]").forEach(b => b.onclick = () => { const [id, to] = b.dataset.pagego.split(":"); S.pages[id].page = +to; render(); });
     document.querySelectorAll("[data-ack]").forEach(b => b.onclick = () => { ALERTS[+b.dataset.ack].ack = {by: S.user, at: new Date().toISOString()}; render(); });
     document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => { S.lookup = LOOKUPS[b.dataset.example]; S.blobIndex = 0; render(); });
+    document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = b.dataset.layout; render(); });
     document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +b.dataset.blob; render(); });
     const lk = $("#lookupForm");
     if (lk) lk.onsubmit = e => { e.preventDefault(); const q = $("#lookupInput").value.trim(); if (!q) return;
