@@ -131,7 +131,12 @@
   .card .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
   .toolbar .spacer { flex: 1; }
-  .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; font-size: 12px; color: var(--text-secondary); padding: 8px 10px; }
+  .pager { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; justify-content: flex-end; font-size: 12px; color: var(--text-secondary); padding: 6px 10px; border-top: 1px solid var(--border); }
+  .pager label { display: inline-flex; align-items: center; gap: 6px; }
+  .pager select { min-height: 0; height: 26px; padding: 0 4px; font-size: 12px; border-color: var(--border); }
+  .pager .range { font-variant-numeric: tabular-nums; min-width: 7ch; text-align: right; }
+  .pager .nav { display: inline-flex; gap: 2px; }
+  .pager .nav button { height: 26px; min-width: 26px; padding: 0 6px; border-color: transparent; background: none; font-size: 14px; line-height: 1; }
   .copy { height: 24px; padding: 0 7px; font-size: 11px; margin-left: 4px; }
   .notes { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem; }
   .notes h2 { font-size: 15px; margin: 0 0 8px; }
@@ -225,7 +230,7 @@
 <script>
 (() => {
   const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
-  const S = {signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
+  const S = {pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   const name = () => MUSEUMS[S.museum];
@@ -385,9 +390,18 @@
       const on = c.key === sort.key;
       return `<th aria-sort="${on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${id}:${c.key}">${esc(c.title)}<span class="arrow" aria-hidden="true">${on ? (sort.dir === "asc" ? "▲" : "▼") : "▲"}</span></button></th>`;
     }).join("");
-    const body = order.map(([r, i]) => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`).join("");
+    const pg = S.pages[id] || (S.pages[id] = {size: 25, page: 1});
+    const pages = Math.max(1, Math.ceil(order.length / pg.size));
+    pg.page = Math.min(pg.page, pages);
+    const from = (pg.page - 1) * pg.size;
+    const shown = order.slice(from, from + pg.size);
+    const go = (to, label, off, aria) => `<button type="button" data-pagego="${id}:${to}" aria-label="${aria}" ${off ? "disabled" : ""}>${label}</button>`;
+    const pager = `<div class="pager"><label>Rows per page <select data-pagesize="${id}">${[10, 25, 50, 100].map(n => `<option ${n === pg.size ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <span class="range">${order.length ? `${from + 1}–${from + shown.length} of ${order.length}` : "0 of 0"}</span>
+      <span class="nav">${go(1, "«", pg.page === 1, "First page")}${go(pg.page - 1, "‹", pg.page === 1, "Previous page")}${go(pg.page + 1, "›", pg.page === pages, "Next page")}${go(pages, "»", pg.page === pages, "Last page")}</span></div>`;
+    const body = shown.map(([r, i]) => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`).join("");
     return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted">None.</td></tr>`}</tbody></table>
-      <div class="pager">Items per page <select aria-label="Items per page"><option>10</option><option selected>25</option><option>50</option><option>100</option></select> 1–${rows.length} of ${rows.length}</div></div>`;
+      ${pager}</div>`;
   }
   const PAGES = {
     overview: () => `${title(`${esc(name())} overview`)}<p class="lead">Today's refresh, the alerts waiting, and what Serena served in the last 24 hours.</p>
@@ -551,6 +565,8 @@
       render();
       const again = document.querySelector(`[data-sort="${id}:${key}"]`); if (again) again.focus();
     });
+    document.querySelectorAll("[data-pagesize]").forEach(el => el.onchange = () => { S.pages[el.dataset.pagesize] = {size: +el.value, page: 1}; render(); });
+    document.querySelectorAll("[data-pagego]").forEach(b => b.onclick = () => { const [id, to] = b.dataset.pagego.split(":"); S.pages[id].page = +to; render(); });
     document.querySelectorAll("[data-ack]").forEach(b => b.onclick = () => { ALERTS[+b.dataset.ack].ack = {by: S.user, at: new Date().toISOString()}; render(); });
     document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => { S.lookup = LOOKUPS[b.dataset.example]; S.blobIndex = 0; render(); });
     document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +b.dataset.blob; render(); });
