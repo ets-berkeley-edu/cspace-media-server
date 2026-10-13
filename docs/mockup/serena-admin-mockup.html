@@ -78,6 +78,9 @@
   .topbar button { background: transparent; color: var(--topbar-text); border-color: rgba(255,255,255,0.35); }
   .topbar button:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
   .menu-wrap { position: relative; }
+  .topbar .icon-btn { width: 34px; height: 32px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; }
+  .topbar .icon-btn svg { width: 20px; height: 20px; }
+  .topbar .icon-btn[aria-current="page"] { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); }
   .menu { position: absolute; right: 0; top: 38px; background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); min-width: 230px; z-index: 5; padding: 4px; }
   .menu button { display: block; width: 100%; text-align: left; border: 0; background: none; color: var(--text-primary); height: 34px; }
   .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
@@ -201,7 +204,7 @@
     <ul>
       <li><strong>Media look up (redesigned):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the taken-down image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
-      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Refreshes, Start a refresh, Alerts), Files (Requests, Media look up, Takedowns), Admin (Settings, Audit log, API documentation).</li>
+      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Refreshes, Start a refresh, Alerts), Files (Requests, Media look up, Takedowns), Admin (Audit log, API documentation). Settings is the gear button at the top right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
       <li><strong>Takedowns:</strong> "Take down" opens the form; "Show what would be taken down" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a takedown a refresh kept.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
     </ul>
@@ -327,11 +330,12 @@
 
   const NAV = [["Daily refresh", [["overview", "Overview"], ["refreshes", "Refreshes"], ["start", "Start a refresh"], ["alerts", "Alerts"]]],
     ["Files", [["requests", "Requests"], ["lookup", "Media look up"], ["takedowns", "Takedowns"]]],
-    ["Admin", [["settings", "Settings"], ["audit", "Audit log"], ["api", "API documentation"]]]];
+    ["Admin", [["audit", "Audit log"], ["api", "API documentation"]]]];
 
   function frame() {
     const open = ALERTS.filter(a => !a.ack).length;
     return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup @ 1b67acf</span><span class="spacer"></span>
+      <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
       ${S.menu ? `<div class="menu" role="menu">${Object.entries(MUSEUMS).filter(([k]) => k !== S.museum).slice(0, 2).map(([k, v]) => `<button role="menuitem" data-museum="${k}">Switch to ${v}</button>`).join("")}<button role="menuitem" data-museum-other>Sign in to another museum</button><hr><button role="menuitem" id="signOutAll">Sign everyone out of ${esc(name())}</button><button role="menuitem" id="signOut">Sign out of ${esc(name())}</button></div>` : ""}</div></div>
       ${S.alerts && open ? `<div class="banner" id="alertBanner"><strong>${open} alert${open > 1 ? "s" : ""}:</strong> ${esc(ALERTS.find(a => !a.ack).title)}<span class="spacer"></span><button type="button" data-go="alerts">Open alerts</button></div>` : ""}
