@@ -298,8 +298,10 @@
   const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: ""};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
-  // Text typed into the mockup never carries markup: it is shown on the page in many places.
-  const typed = el => el.value.replace(/[&<>"'`]/g, "");
+  // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
+  // many places.
+  const clean = v => String(v ?? "").replace(/[&<>"'`]/g, "");
+  const typed = el => clean(el.value);
   const name = () => MUSEUMS[S.museum];
 
   // Pacific time, in words; UTC in the tooltip.
@@ -940,39 +942,39 @@
 
   // ---- events
   function bind() {
-    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = b.dataset.go; S.menu = false; render(); });
+    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); S.menu = false; render(); });
     const lf = $("#loginForm");
-    if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.museum = $("#loginMuseum").value; S.user = typed($("#loginUser")) || "admin"; S.lookup = null; render(); };
+    if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.museum = clean($("#loginMuseum").value); S.user = typed($("#loginUser")) || "admin"; S.lookup = null; render(); };
     const mb = $("#museumBtn"); if (mb) mb.onclick = () => { S.menu = !S.menu; render(); };
-    document.querySelectorAll("[data-museum]").forEach(b => b.onclick = () => { S.museum = b.dataset.museum; S.menu = false; S.lookup = null; S.reason = ""; render(); });
+    document.querySelectorAll("[data-museum]").forEach(b => b.onclick = () => { S.museum = clean(b.dataset.museum); S.menu = false; S.lookup = null; S.reason = ""; render(); });
     const so = $("#signOut"); if (so) so.onclick = () => { S.signedIn = false; S.menu = false; render(); };
     const other = document.querySelector("[data-museum-other]"); if (other) other.onclick = () => { S.signedIn = false; S.menu = false; render(); };
     document.querySelectorAll("[data-sort]").forEach(b => b.onclick = () => {
-      const [id, key] = b.dataset.sort.split(":");
+      const [id, key] = clean(b.dataset.sort).split(":");
       const now = S.sort[id];
       S.sort[id] = now.key === key ? {key, dir: now.dir === "asc" ? "desc" : "asc"} : {key, dir: "asc"};
       render();
       const again = document.querySelector(`[data-sort="${id}:${key}"]`); if (again) again.focus();
     });
-    document.querySelectorAll("[data-pagesize]").forEach(el => el.onchange = () => { S.pages[el.dataset.pagesize] = {size: +el.value, page: 1}; render(); });
-    document.querySelectorAll("[data-pagego]").forEach(b => b.onclick = () => { const [id, to] = b.dataset.pagego.split(":"); S.pages[id].page = +to; render(); });
+    document.querySelectorAll("[data-pagesize]").forEach(el => el.onchange = () => { S.pages[clean(el.dataset.pagesize)] = {size: +el.value, page: 1}; render(); });
+    document.querySelectorAll("[data-pagego]").forEach(b => b.onclick = () => { const [id, to] = clean(b.dataset.pagego).split(":"); S.pages[id].page = +to; render(); });
     document.querySelectorAll("[data-ack]").forEach(b => b.onclick = () => {
-      const a = here(ALERTS)[+b.dataset.ack]; a.ack = {by: S.user, at: NOW};
+      const a = here(ALERTS)[+clean(b.dataset.ack)]; a.ack = {by: S.user, at: NOW};
       AUDIT.unshift({at: NOW, admin: S.user, action: "alert acknowledge", target: `${a.title} · ${a.date}`, details: ""}); render();
     });
-    document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { S.range = b.dataset.range; S.reason = ""; render(); });
-    const ro = $("#reqOutcome"); if (ro) ro.onchange = () => { S.outcome = ro.value; render(); };
-    const rr = $("#reqReason"); if (rr) rr.onchange = () => { S.reason = rr.value; render(); };
-    document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => openLookup(EXAMPLES[+b.dataset.example].input));
-    document.querySelectorAll("details[data-details]").forEach(d => d.ontoggle = () => { S.open[d.dataset.details] = d.open; });
-    document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = b.dataset.layout; render(); });
-    document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +b.dataset.blob; render(); });
+    document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { S.range = clean(b.dataset.range); S.reason = ""; render(); });
+    const ro = $("#reqOutcome"); if (ro) ro.onchange = () => { S.outcome = clean(ro.value); render(); };
+    const rr = $("#reqReason"); if (rr) rr.onchange = () => { S.reason = clean(rr.value); render(); };
+    document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => openLookup(EXAMPLES[+clean(b.dataset.example)].input));
+    document.querySelectorAll("details[data-details]").forEach(d => d.ontoggle = () => { S.open[clean(d.dataset.details)] = d.open; });
+    document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = clean(b.dataset.layout); render(); });
+    document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +clean(b.dataset.blob); render(); });
     const lk = $("#lookupForm");
     if (lk) lk.onsubmit = e => { e.preventDefault(); const q = typed($("#lookupInput")).trim(); if (q) openLookup(q); };
-    document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = b.dataset.copy; Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { b.textContent = "Copied"; }, () => { b.textContent = "Select it"; }); });
+    document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = clean(b.dataset.copy); Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { b.textContent = "Copied"; }, () => { b.textContent = "Select it"; }); });
     const tb = $("#recallBtn"); if (tb) tb.onclick = () => { recallForm(); bindDialog(); };
     document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {
-      const t = recallRows()[+b.dataset.release];
+      const t = recallRows()[+clean(b.dataset.release)];
       dialog("Release a recall", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the recall only if CollectionSpace is right and the file should be served again.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
         `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="relConfirm" disabled>Release</button>`);
       bindDialog(() => {
@@ -982,9 +984,9 @@
         ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin released a recall", about: t.media, msg: `${S.user} released the recall of Media record ${t.media}, which refresh ${t.kept.refresh} kept. Reason: ${why}.`, ack: null});
       });
     });
-    document.querySelectorAll("[data-csid]").forEach(b => b.onclick = () => showCsid(b.dataset.csid, b.dataset.what));
-    document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => showPath(b.dataset.view));
-    document.querySelectorAll("main [data-full]").forEach(b => b.onclick = () => showFull(+b.dataset.full));
+    document.querySelectorAll("[data-csid]").forEach(b => b.onclick = () => showCsid(clean(b.dataset.csid), clean(b.dataset.what)));
+    document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => showPath(clean(b.dataset.view)));
+    document.querySelectorAll("main [data-full]").forEach(b => b.onclick = () => showFull(+clean(b.dataset.full)));
   }
 
   // A path on Past requests: plain text until hovered, then a link that opens the file in a dialog (through the admin
@@ -1056,7 +1058,7 @@
     const rr = $("#relReason"), rc = $("#relConfirm");
     if (rr) rr.oninput = () => { rc.disabled = !rr.value.trim(); };
     if (rc) rc.onclick = () => { onConfirm && onConfirm(); close(); render(); };
-    document.querySelectorAll("#dlg [data-full]").forEach(b => b.onclick = () => showFull(+b.dataset.full));
+    document.querySelectorAll("#dlg [data-full]").forEach(b => b.onclick = () => showFull(+clean(b.dataset.full)));
   }
 
   $("#dlg").addEventListener("click", e => { if (e.target === $("#dlg")) close(); });
