@@ -132,9 +132,11 @@ def create_router() -> APIRouter:
 
     @router.get("/media/{media_csid}/preview")
     def preview(request: Request, session: SignedIn, t: Recalls_, media_csid: MediaCsid,
-                size: Annotated[str, Query(pattern="^(thumbnail|full)$")] = "thumbnail") -> Response:
+                size: Annotated[str, Query(pattern="^(thumbnail|full)$")] = "thumbnail",
+                source: Annotated[str, Query(pattern="^(any|cspace)$")] = "any") -> Response:
         """A Media record's thumbnail or full-size view, for the recall form (D129): Serena's stored copy if it has
-        one, otherwise CollectionSpace's, not stored. Never cached."""
+        one, otherwise CollectionSpace's, not stored. source=cspace skips Serena's copy: Media look up's view of
+        CollectionSpace's file now (D144). Never cached."""
         museum = museum_of(request, session.tenant)
         if not is_csid(media_csid):
             raise HTTPException(404, "No such Media record.")
@@ -146,7 +148,7 @@ def create_router() -> APIRouter:
         if size == "full":
             derivative = None if kind == "pdf" else museum.derivatives[-1]
         limit = t.museum_settings.get(museum).size_limit_mb.get(kind or "image", 0) * 1024 * 1024  # type: ignore[call-overload]
-        for row in rows:
+        for row in rows if source == "any" else []:
             entry = cache_index.lookup(t.store, museum.key, row.blob_csid, derivative)
             if entry is not None and entry.content_type in PREVIEW_TYPES:
                 obj = t.s3.get_object(Bucket=t.buckets[museum.key], Key=entry.key)
@@ -154,13 +156,55 @@ def create_router() -> APIRouter:
                                          headers=PREVIEW_HEADERS)
         return _from_collectionspace(t, museum.key, media_csid, derivative, limit)
 
+    @router.get("/blobs/{blob_csid}/preview")
+    def blob_preview(request: Request, session: SignedIn, t: Recalls_, blob_csid: MediaCsid,
+                     size: Annotated[str, Query(pattern="^[A-Za-z]{1,20}$")] = "full") -> Response:
+        """A Blob's file at one size, for the file dialogs of Past requests, Recalls and Media look up (D144, D145):
+        Serena's stored copy if it has one, otherwise the file from CollectionSpace by the Blob's Media record, not
+        stored. "full" is the largest size the museum serves. Admins see recalled and restricted files too. Never
+        cached."""
+        museum = museum_of(request, session.tenant)
+        if not is_csid(blob_csid):
+            raise HTTPException(404, "No such Blob.")
+        record = t.store.servability(museum.key, blob_csid)
+        kind = record.kind if record else None
+        if kind == "3D":
+            raise HTTPException(404, "A 3D file has no preview.")
+        if size == "full":
+            derivative: str | None = museum.derivatives[-1]
+        elif size == "original":
+            derivative = None
+        elif size in museum.derivatives:
+            derivative = size
+        else:
+            raise HTTPException(422, f"Not one of {museum.name}'s sizes.")
+        if kind == "pdf":
+            derivative = None  # a PDF has only its original file
+        entry = cache_index.lookup(t.store, museum.key, blob_csid, derivative)
+        if entry is not None and entry.content_type in PREVIEW_TYPES:
+            obj = t.s3.get_object(Bucket=t.buckets[museum.key], Key=entry.key)
+            return StreamingResponse(obj["Body"].iter_chunks(), media_type=entry.content_type,
+                                     headers=PREVIEW_HEADERS)
+        media = record.media_csid if record else None
+        if record is None and t.cspace is not None:
+            try:
+                media = t.cspace.get(museum.key).media_of_blob(blob_csid)
+            except Exception as error:
+                log.warning("no preview from CollectionSpace", extra={"museum": museum.key,
+                                                                       "error": type(error).__name__})
+                raise HTTPException(404, "Not stored, and CollectionSpace can't be reached.") from error
+        if media is None:
+            raise HTTPException(404, "Not stored, and no Media record has this Blob.")
+        limit = t.museum_settings.get(museum).size_limit_mb.get(kind or "image", 0) * 1024 * 1024  # type: ignore[call-overload]
+        return _from_collectionspace(t, museum.key, media, derivative, limit)
+
     @router.get("/lookup")
     def lookup(request: Request, session: SignedIn, t: Recalls_,
                q: Annotated[str, Query(min_length=1, max_length=2000)]) -> dict[str, Any]:
-        """Why a file is or isn't served (D121, D122). Never calls CollectionSpace; not audited (D123)."""
+        """Why a file is or isn't served (D121), beside what CollectionSpace says now (D139); not audited (D123)."""
         museum = museum_of(request, session.tenant)
         try:
-            return explain(museum, q, t.store, t.refreshes)
+            return explain(museum, q, t.store, t.refreshes, t.cspace.get(museum.key) if t.cspace else None)
         except LookupProblem as problem:
             raise HTTPException(422, str(problem)) from problem
 

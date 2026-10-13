@@ -104,6 +104,9 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
             cache = "miss"
         if entry is None:
             return _unavailable(request, tenant, Reason.INTERNAL_ERROR)
+        if cache == "hit":
+            cache_index.served(request.app.state.store, tenant, parsed.blob_csid, parsed.derivative, entry,
+                               datetime.now(UTC))
         kind = decision.record.kind if decision.record is not None else None
         return _redirect(request, tenant, entry, decision.signed_kid, kind, cache)
     except signed_links.SigningKeysUnavailable:

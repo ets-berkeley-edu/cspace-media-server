@@ -178,7 +178,7 @@ class Fetcher:
                 return Reason.NOT_DECODABLE
             self._upload(tenant, path, sha256, content_type, context)
             entry = cache_index.Entry(sha256, content_type, size,
-                                      datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
+                                      datetime.now(UTC).strftime(cache_index.STAMP))
             cache_index.record(self.store, tenant, record.blob_csid, derivative, entry)
             log.info("fetched", extra={**context, "kind": kind, "size": size,
                                        "seconds": round(time.monotonic() - started, 3)})

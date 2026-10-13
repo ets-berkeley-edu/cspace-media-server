@@ -79,3 +79,12 @@ export function targetOf(action: string, target: string): string {
   return [what.charAt(0).toUpperCase() + what.slice(1), refreshDate, subject !== refreshDate ? subject : '']
     .filter(Boolean).join(' · ')
 }
+
+const PATH = /^\/([a-z]+)\/imageserver\/blobs\/([A-Za-z0-9-]{1,64})\/(?:derivatives\/([A-Za-z]+)\/)?content$/
+const CSID = /^[0-9a-f]{8}(-[0-9a-f]{4}){2,3}(-[0-9a-f]{12})?$/i
+
+/** A logged path's Blob CSID and size, or null for a path with no CSID to look up (a bad CSID): D145. */
+export function blobOfPath(path: string): {blob: string, size: string} | null {
+  const found = PATH.exec(path)
+  return found && CSID.test(found[2]) ? {blob: found[2], size: found[3] || 'original'} : null
+}

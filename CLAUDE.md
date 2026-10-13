@@ -89,7 +89,8 @@ dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `n
 (security.yml) and weekly. Its API is `backend/serena/admin_api.py` (sign-in, the audit log and its export),
 `backend/serena/admin_settings.py` (settings), `backend/serena/admin_refreshes.py` (refreshes, overrides, admin
 refreshes, alerts), `backend/serena/admin_recalls.py` (recalls, their thumbnails, and Media look up, with
-`recalls.py` and `lookup.py`) and `backend/serena/admin_requests.py` (the Past requests page, which reads the log through
+`recalls.py` and `lookup.py`; Media look up reads the Media record from CollectionSpace beside Serena's answer, which never
+depends on it) and `backend/serena/admin_requests.py` (the Past requests page, which reads the log through
 `backend/serena/requests_log.py`: CloudWatch Logs Insights in AWS, a local log file otherwise). The Selenium tests are in `serenade/` (`./serena ui`, against the local stack only).
 
 CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`

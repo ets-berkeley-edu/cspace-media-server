@@ -94,24 +94,68 @@ describe('the Recalls page', () => {
 })
 
 describe('Media look up', () => {
-  it('shows each step and the verdict for each size', async () => {
-    const result = {
-      input: MEDIA, refused: null, refresh: {refresh_id: 'pahma-2026-10-15-1', refresh_date: '2026-10-15'},
-      items: [{blob_csid: BLOB, media_csid: MEDIA, kind: 'image', access: 'public',
-        steps: [{check: 'In the servable list', outcome: 'Listed.', ok: true},
-          {check: 'Recall', outcome: 'Recalled by admin.', ok: false}],
-        sizes: [{size: 'Medium', served: false, reason: 'recalled', verdict: 'not served', stored: null}]}]
-    }
-    const calls = fakeApi({[`GET /museums/pahma/lookup?q=${MEDIA}`]: {body: result}})
+  const CS = {state: 'exists', media_csid: MEDIA, blob_csid: BLOB, updated_at: '2026-10-16T06:20:00.000Z',
+    changed_since_refresh: true, fields: [{label: 'Publish to', value: 'None'}],
+    next: 'The Media record changed in CollectionSpace after the last refresh.'}
+  const ITEM = {blob_csid: BLOB, media_csid: MEDIA, kind: 'image', access: 'public',
+    steps: [{check: 'In the servable list', outcome: 'Listed.', ok: true},
+      {check: 'Recall', outcome: 'Recalled by admin at 2026-10-15T06:02:15+00:00: Testing.', ok: false}],
+    sizes: [{size: 'Thumbnail', served: false, reason: 'recalled', verdict: 'not served', stored: null},
+      {size: 'Medium', served: false, reason: 'recalled', verdict: 'not served',
+        stored: {fetched_at: '2026-10-15T05:48:00Z', last_served: '2026-10-15T05:59:30Z', size: 98304, content_type: 'image/jpeg'}}],
+    cspace: CS}
+  const RESULT = {input: MEDIA, refused: null,
+    refresh: {refresh_id: 'pahma-2026-10-15-1', refresh_date: '2026-10-15', started_at: '2026-10-15T10:01:00+00:00'},
+    items: [ITEM]}
+
+  it('shows the verdict, the sizes, and the file in Serena beside CollectionSpace (layout C)', async () => {
+    const calls = fakeApi({[`GET /museums/pahma/lookup?q=${MEDIA}`]: {body: RESULT}})
     const wrapper = await at('/pahma/lookup', LookUp)
     expect(wrapper.find('#page-title').text()).toBe('PAHMA Media look up')
     await wrapper.find('#lookup-input').setValue(MEDIA)
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     expect(calls.map(c => c.path)).toEqual([`/museums/pahma/lookup?q=${MEDIA}`])
-    expect(wrapper.find('#lookup-refresh').text()).toContain('pahma-2026-10-15-1')
-    expect(wrapper.find('.lookup-steps').text()).toContain('Recalled by admin.')
-    expect(wrapper.find('.lookup-sizes').text()).toContain('recalled')
+    expect(wrapper.find('#lookup-verdict').text()).toContain('Not served: recalled')
+    expect(wrapper.find('#lookup-next').text()).toContain('Open Recalls')
+    expect(wrapper.find('#lookup-sizes').text()).toContain('image/jpeg, 96 KB')
+    expect(wrapper.find('#lookup-sizes').text()).toContain('2026-10-15 05:59:30 UTC') // last served
+    expect(wrapper.find('#serena-preview').attributes('src')).toBe(`/admin/v1/museums/pahma/blobs/${BLOB}/preview?size=Medium`)
+    expect(wrapper.find('#cspace-preview').attributes('src')).toBe(`/admin/v1/museums/pahma/media/${MEDIA}/preview?size=full&source=cspace`)
+    expect(wrapper.find('#cspace-details').text()).toContain('Publish to')
+    const compare = wrapper.find('#lookup-compare')
+    expect(compare.findAll('tr.differs').map(r => r.find('th').text().replace(/\s+/g, ' '))).toEqual(['As of differs'])
+    expect(wrapper.find('#lookup-next-refresh').text()).toContain('changed in CollectionSpace after the last refresh')
+    wrapper.unmount()
+  })
+
+  it('looks up its ?q=, and says when CollectionSpace can\'t be reached', async () => {
+    fakeApi({[`GET /museums/pahma/lookup?q=${BLOB}`]: {body: {...RESULT, input: BLOB,
+      items: [{...ITEM, steps: ITEM.steps.slice(0, 1), sizes: [{...ITEM.sizes[0], served: true, reason: null}],
+        cspace: {state: 'unavailable'}}]}}})
+    const wrapper = await at(`/pahma/lookup?q=${BLOB}`, LookUp)
+    expect(wrapper.find('#lookup-verdict').text()).toContain('Served')
+    expect(wrapper.find('#lookup-cspace-down').exists()).toBe(true)
+    expect(wrapper.find('#lookup-compare').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('the file dialogs', () => {
+  it('opens a recall\'s CSIDs, with Media look up', async () => {
+    fakeApi({'GET /museums/pahma/recalls': {body: PAGE}, [`GET /museums/pahma/lookup?q=${MEDIA}`]: {body: {
+      input: MEDIA, refused: null, refresh: null, items: []}}})
+    const wrapper = await at('/pahma/recalls', Recalls)
+    const links = wrapper.findAll('#active-recalls .recall-csid')
+    expect(links.map(l => l.text())).toEqual([MEDIA, BLOB])
+    await links[1].trigger('click')
+    await flushPromises()
+    const dialog = document.querySelector('#file-dialog')
+    expect(dialog?.textContent).toContain(BLOB)
+    expect(dialog?.querySelector('img')?.getAttribute('src')).toBe(`/admin/v1/museums/pahma/blobs/${BLOB}/preview?size=full`)
+    ;(document.querySelector('#file-dialog-dismiss') as HTMLElement).click()
+    await flushPromises()
+    expect(document.querySelector('#file-dialog')).toBeNull()
     wrapper.unmount()
   })
 })

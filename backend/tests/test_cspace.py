@@ -53,6 +53,17 @@ def test_a_soft_deleted_media_record(state: str) -> None:
     assert client().media_state(MEDIA) == MediaState.DELETED
 
 
+def test_a_media_record_for_media_look_up() -> None:
+    """D139, D140: its state, Blob, last change and the museum's fields, a vocabulary term by its display name."""
+    fields = [("media_common", "publishTo", "Publish to"), ("media_common", "noSuchField", "Missing")]
+    assert client().media_record(MEDIA, fields).state == MediaState.GONE
+    fake.add(MEDIA, blob="0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b").publish_to = "None"
+    record = client().media_record(MEDIA, fields)
+    assert (record.state, record.blob_csid) == (MediaState.EXISTS, "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b")
+    assert record.fields == (("Publish to", "None"), ("Missing", ""))
+    assert record.updated_at is not None and record.updated_at.endswith("Z")
+
+
 def test_wrong_credentials() -> None:
     fake.add(MEDIA)
     with pytest.raises(CSpaceError) as caught:
