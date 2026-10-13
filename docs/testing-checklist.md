@@ -325,14 +325,19 @@ export. Locally the page reads a log file inside the app's container in place of
 and the log lines; the CloudWatch queries themselves are checked once Serena is in QA (see design.md, Open questions).
 Start afresh from the pull request's branch (see the top of this file).
 
-- [ ] In a terminal, run `./serena smoke`. It ends "Smoke test passed: a refresh updated, and
-  /pahma/imageserver/blobs/<CSID>/derivatives/Medium/content fetched, stored and served." Copy that path.
-- [ ] Ask for the same image again, and for two that aren't served, replacing `<path>` with the path you copied:
+- [ ] In a terminal, in your clone, paste these lines as they are. They run the smoke test (a refresh, then one image
+  fetched from the simulator: "served", cache miss), pick its image's path out of the last line, and ask for three more:
+  the same image again ("served", cache hit), a CSID that isn't in PAHMA's servable list, and a bad CSID with a signed
+  link's `uid` and `sig` (both "unserved", not listed):
   ```
-  curl -s -o /dev/null http://localhost:8300<path>
-  curl -s -o /dev/null http://localhost:8300/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/content
-  curl -s -o /dev/null "http://localhost:8300/pahma/imageserver/blobs/not-a-csid/content?uid=12345&sig=abc"
+  path="$(./serena smoke | sed -n 's|.*and \(/pahma/[^ ]*\) fetched.*|\1|p')" && [ -n "$path" ] && echo "Image: $path" &&
+  curl -s -o /dev/null "http://localhost:8300$path" &&
+  curl -s -o /dev/null http://localhost:8300/pahma/imageserver/blobs/0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b/content &&
+  curl -s -o /dev/null "http://localhost:8300/pahma/imageserver/blobs/not-a-csid/content?uid=12345&sig=abc" &&
+  echo "Done: 2 served, 2 unserved"
   ```
+  Expect "Image: /pahma/imageserver/blobs/<CSID>/derivatives/Medium/content" and "Done: 2 served, 2 unserved". If
+  neither appears, the smoke test failed (its message is above them): start afresh with `./serena down && ./serena up`.
 - [ ] Open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`). Open "Past requests" (in the menu,
   under Media records). Expect a spinner and "Reading Serena's log…" for a moment, then the title "PAHMA Past requests" and
   "Last 24 hours" chosen.
