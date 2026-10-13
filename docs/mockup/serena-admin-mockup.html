@@ -236,6 +236,8 @@
   .mini-checks .skip { opacity: 0.5; }
   .mini-checks .skip .dot { background: var(--bg-neutral); color: var(--text-neutral); }
   .answer { min-width: 0; }
+  .stamps { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 14px; font-size: 13px; }
+  .stamps .k { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px; }
   table.compare th[scope=row] { background: none; color: var(--text-primary); width: 150px; white-space: normal; }
   table.compare tr.diff td, table.compare tr.diff th { background: var(--bg-warning); }
   .cs-down { border: 1px dashed var(--border-strong); border-radius: 8px; padding: 10px 12px; color: var(--text-secondary); font-size: 13px; }
@@ -271,6 +273,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Last served and First stored (layout C):</strong> under the verdict, when Serena last served the file (any size) and when it first stored it in its S3 bucket; the sizes table has both for each size, and "In Serena" Details has them too. In the app, "first stored" is the cache index's fetched-at time, which Serena already keeps. "Last served" would come from Serena's log (the "served" lines Past requests reads), so it reaches back 30 days, the log's retention; a time kept per size in Serena's tables instead would mean a write on every request, which Serena avoids.</li>
       <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's stored copy; CollectionSpace's Medium, not stored) and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
       <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no stored copy, the preview is CollectionSpace's thumbnail, not stored. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (unpublished since) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
       <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the stored copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
@@ -425,6 +428,24 @@
       sizes: SIX.map(sz => sz === "Thumbnail" ? {size: sz, served: true, stored: "JPEG · 11 KB · fetched Oct 3, 9:20 AM PDT"} : {size: sz, served: false, reason: "media deleted (on a fetch)", stored: null}),
       cs: {state: "deleted", blob: "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091", updated: "2026-10-13T15:02:00Z", fields: PAHMA_FIELDS("All"),
         next: "Staff deleted the Media record this morning. The next refresh drops this Blob."}}]};
+
+  // When Serena first stored each size (the cache index's fetched-at), and when it last served it (from the "served"
+  // log lines, as Past requests reads them: the last 30 days).
+  const LAST_SERVED = {
+    "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b": {Medium: "Oct 13, 2026, 8:58 AM PDT"},
+    [BLOB]: {Medium: "Oct 12, 2026, 10:59 PM PDT"},
+    "7d4c2a10-9b8e-4f6d-a3c2-1e0f9d8c7b6a": {original: "Oct 13, 2026, 7:30 AM PDT"},
+    "aa11bb22-cc33-4d44-9e55-ff6677889900": {Thumbnail: "Oct 13, 2026, 9:02 AM PDT", Small: "Oct 13, 2026, 6:01 AM PDT"},
+    "5e4d3c2b-1a09-4f8e-9d7c-6b5a4f3e2d1c": {Medium: "Oct 13, 2026, 9:40 AM PDT"},
+    "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091": {Thumbnail: "Oct 13, 2026, 9:55 AM PDT"},
+  };
+  Object.values(LOOKUPS).forEach(l => (l.blobs || []).forEach(b => b.sizes.forEach(sz => {
+    const m = sz.stored && / · fetched (\w+ \d+), (.+)$/.exec(sz.stored);
+    if (m) { sz.firstStored = `${m[1]}, 2026, ${m[2]}`; sz.stored = sz.stored.slice(0, m.index); }
+    sz.lastServed = (LAST_SERVED[b.blob] || {})[sz.size] || null;
+  })));
+  const latest = (b, key) => b.sizes.map(sz => sz[key]).filter(Boolean).sort((x, y) => Date.parse(y.replace(" PDT", "")) - Date.parse(x.replace(" PDT", "")))[0];
+  const earliest = (b, key) => b.sizes.map(sz => sz[key]).filter(Boolean).sort((x, y) => Date.parse(x.replace(" PDT", "")) - Date.parse(y.replace(" PDT", "")))[0];
 
   // ---- rendering
   function render() {
@@ -628,7 +649,9 @@
       ["Blob", csidHtml(cs.blob) + (cs.blob !== b.blob ? ' <span class="pill t-warning">differs</span>' : "")],
       ...cs.fields.map(([k, val]) => [esc(k), esc(val)]), ["Last changed", when(cs.updated)]] : [];
     const facts = [["Blob", csidHtml(b.blob)], ["Media record", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'],
-      ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>']];
+      ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>'],
+      ["First stored", earliest(b, "firstStored") ? esc(earliest(b, "firstStored")) : '<span class="muted">never</span>'],
+      ["Last served", latest(b, "lastServed") ? esc(latest(b, "lastServed")) : '<span class="muted">not in the last 30 days</span>']];
     const checks = b.checks.map(([st, t, d]) => `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><span><strong>${esc(t)}</strong><span class="visually-hidden"> ${SAY[st]}</span><br><span class="secondary">${esc(d)}</span></span></li>`).join("");
     return `<div class="inspector">
       <aside class="inspect-side" aria-label="The file in Serena and in CollectionSpace">
@@ -649,8 +672,10 @@
       </aside>
       <div class="answer">
         <div class="answer-head ${v.tone}"><span class="mark" aria-hidden="true">${{served: "✓", not: "✕", depends: "!"}[v.tone]}</span><div><div class="head">${esc(v.head)}</div><div>${v.why}</div></div></div>
-        <p class="secondary" style="margin:6px 0 14px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
-        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy (in Serena)</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="secondary" style="margin:6px 0 6px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
+        <p class="stamps"><span><span class="k">Last served</span> ${latest(b, "lastServed") ? esc(latest(b, "lastServed")) : "not in the last 30 days"}</span><span><span class="k">First stored in Serena</span> ${earliest(b, "firstStored") ? esc(earliest(b, "firstStored")) : "never"}</span></p>
+        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy (in Serena)</th><th>First stored</th><th>Last served</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary">${s.firstStored ? esc(s.firstStored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? esc(s.lastServed) : "—"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="muted" style="margin:6px 0 0;font-size:12px">First stored: when Serena fetched that size and stored it in its S3 bucket. Last served: Serena's last answer with the file (from its log; "—" if not in the last 30 days).</p>
         ${b.note ? `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>` : ""}
         ${compareHtml(b)}
       </div></div>`;
