@@ -21,6 +21,7 @@
     --bg-danger: #fbe7e5; --text-danger: #8a1f14;
     --bg-neutral: #ecebe5; --text-neutral: #4a4945;
     --topbar: #23324a; --topbar-text: #f2f4f8;
+    --badge: #d93025; --badge-text: #ffffff;  /* the bell's count: the same red in both themes, on the dark app bar */
     --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
     --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
@@ -80,6 +81,8 @@
   .menu-wrap { position: relative; }
   .topbar .icon-btn { width: 34px; height: 32px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; }
   .topbar .icon-btn svg { width: 20px; height: 20px; }
+  .topbar .icon-btn.bell { position: relative; }
+  .topbar .badge { position: absolute; top: -3px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-text); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--topbar); }
   .topbar .icon-btn[aria-current="page"] { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); }
   .menu { position: absolute; right: 0; top: 38px; background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); min-width: 230px; z-index: 5; padding: 4px; }
   .menu button { display: block; width: 100%; text-align: left; border: 0; background: none; color: var(--text-primary); height: 34px; }
@@ -191,7 +194,7 @@
     <summary>Mockup settings</summary>
     <div class="row">
       <label>Theme <select id="mockTheme"><option value="">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-      <label><input type="checkbox" id="mockAlerts" checked> Unacknowledged alerts</label>
+      <label>Unacknowledged alerts <select id="mockAlerts"><option value="0">None</option><option value="1" selected>1</option><option value="3">3</option></select></label>
       <label><input type="checkbox" id="mockCspaceDown"> CollectionSpace unreachable</label>
       <button type="button" id="mockSignOut">Back to sign-in</button>
     </div>
@@ -204,7 +207,7 @@
     <ul>
       <li><strong>Media look up (redesigned):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the taken-down image from the screenshot, a file not in the servable list, Cinefiles' restricted PDF (switch museum in the menu at the top right), the placeholder image, a Media CSID with two Blobs (a replaced image, until the next refresh), and a path Serena refuses.</li>
-      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Refreshes, Start a refresh, Alerts), Files (Requests, Media look up, Takedowns), Admin (Audit log, API documentation). Settings is the gear button at the top right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
+      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Refreshes, Start a refresh, Alerts), Files (Requests, Media look up, Takedowns), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right also opens Alerts; while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
       <li><strong>Takedowns:</strong> "Take down" opens the form; "Show what would be taken down" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a takedown a refresh kept.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
     </ul>
@@ -335,10 +338,11 @@
   function frame() {
     const open = ALERTS.filter(a => !a.ack).length;
     return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup @ 1b67acf</span><span class="spacer"></span>
+      <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
       ${S.menu ? `<div class="menu" role="menu">${Object.entries(MUSEUMS).filter(([k]) => k !== S.museum).slice(0, 2).map(([k, v]) => `<button role="menuitem" data-museum="${k}">Switch to ${v}</button>`).join("")}<button role="menuitem" data-museum-other>Sign in to another museum</button><hr><button role="menuitem" id="signOutAll">Sign everyone out of ${esc(name())}</button><button role="menuitem" id="signOut">Sign out of ${esc(name())}</button></div>` : ""}</div></div>
-      ${S.alerts && open ? `<div class="banner" id="alertBanner"><strong>${open} alert${open > 1 ? "s" : ""}:</strong> ${esc(ALERTS.find(a => !a.ack).title)}<span class="spacer"></span><button type="button" data-go="alerts">Open alerts</button></div>` : ""}
+      ${open ? `<div class="banner" id="alertBanner"><strong>${open} alert${open > 1 ? "s" : ""}:</strong> ${esc(ALERTS.find(a => !a.ack).title)}<span class="spacer"></span><button type="button" data-go="alerts">Open alerts</button></div>` : ""}
       <div class="shell"><nav class="side" aria-label="Pages">${NAV.map(([g, items]) => `<div class="group">${g}</div>` + items.map(([k, v]) => `<button type="button" data-go="${k}" ${S.page === k ? 'aria-current="page"' : ""}>${v}</button>`).join("")).join("")}</nav>
       <main id="main">${(PAGES[S.page] || PAGES.overview)()}</main></div>`;
   }
@@ -516,7 +520,17 @@
 
   $("#dlg").addEventListener("click", e => { if (e.target === $("#dlg")) close(); });
   $("#mockTheme").onchange = render;
-  $("#mockAlerts").onchange = e => { S.alerts = e.target.checked; render(); };
+  // Mockup settings: how many sample alerts wait to be acknowledged.
+  const EXTRA = [
+    {at: "2026-10-13T15:00:04Z", date: "2026-10-13", title: "Today's refresh isn't finished by the deadline", about: "2026-10-13", msg: "PAHMA's refresh for 2026-10-13 isn't updated or abandoned by its deadline, 08:00 Pacific.", ack: null},
+    {at: "2026-10-13T10:40:12Z", date: "2026-10-13", title: "Taken down in Serena, but still public in CollectionSpace", about: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", msg: "Refresh pahma-2026-10-12-1 still lists Media record 6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3 as public, so its takedown in Serena stays.", ack: null}];
+  $("#mockAlerts").onchange = e => {
+    const n = +e.target.value;
+    ALERTS.splice(0, ALERTS.length, ...ALERTS.filter(a => !EXTRA.includes(a)));
+    if (n === 3) { EXTRA.forEach(a => { a.ack = null; }); ALERTS.unshift(...EXTRA); }
+    ALERTS[ALERTS.length - 2].ack = n ? null : {by: "admin", at: "2026-10-13T06:10:00Z"};
+    render();
+  };
   $("#mockCspaceDown").onchange = e => { S.cspaceDown = e.target.checked; };
   $("#mockSignOut").onclick = () => { S.signedIn = false; render(); };
   // Open on the page under review, signed in, with the screenshot's file looked up.
