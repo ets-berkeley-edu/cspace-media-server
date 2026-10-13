@@ -276,7 +276,7 @@ def test_media_look_up_shows_collectionspace_beside_serena(client: TestClient, s
     (item,) = client.get(lookup, params={"q": MEDIA}).json()["items"]
     cs = item["cspace"]
     assert (cs["state"], cs["media_csid"], cs["blob_csid"]) == ("exists", MEDIA, BLOB)
-    assert cs["fields"] == [{"label": "Publish to", "value": "All"}]  # PAHMA's lookup field, its display name
+    assert cs["fields"] == [{"label": "Approved for web", "value": "Yes"}]  # PAHMA's lookup field (D140)
     assert cs["next"] == "Nothing has changed in CollectionSpace since the last refresh."
     thumbnail = next(s for s in item["sizes"] if s["size"] == "Thumbnail")
     assert thumbnail["stored"]["fetched_at"] == "2026-10-01T10:00:00Z"

@@ -228,10 +228,13 @@ _TERM = re.compile(r"^urn:cspace:.*'(.*)'$", re.DOTALL)
 
 
 def _display(text: str) -> str:
-    """A field's value as people read it: a vocabulary term's refName shows as its display name."""
+    """A field's value as people read it: a vocabulary term's refName shows as its display name, a boolean as Yes or
+    No."""
     text = text.strip()
     found = _TERM.match(text)
-    return found.group(1) if found else text
+    if found:
+        return found.group(1)
+    return {"true": "Yes", "false": "No"}.get(text.lower(), text)
 
 
 def _xml(content: bytes, path: str) -> Any:

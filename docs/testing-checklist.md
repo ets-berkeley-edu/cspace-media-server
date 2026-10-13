@@ -443,14 +443,14 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
     its stored copy (image/png), Last served and First stored;
   - two panels on the left: "In Serena" with the stored Medium, and "In CollectionSpace now" with CollectionSpace's
     file, "not stored"; each with a collapsed "Details". Open both: In Serena lists the Blob, Media record, kind,
-    access and the checks; In CollectionSpace now lists the Media record, State "Exists", the same Blob, "Publish to:
-    All" and Last changed;
+    access and the checks; In CollectionSpace now lists the Media record, State "Exists", the same Blob, "Approved for
+    web: Yes" and Last changed;
   - "Serena and CollectionSpace": the Media record, Blob, Access and As of rows, none marked "differs", and "What
     the next refresh will do: Nothing has changed in CollectionSpace since the last refresh."
 - [ ] Copy the page's address (it ends `?q=` and the URL) into a new tab: expect the same answer.
-- [ ] Unpublish the record in the simulator, with the Media CSID from the page (`<media>` below):
-  `curl -s -X POST http://localhost:8380/_fake/publish/<media> -H 'Content-Type: application/json' -d '{"publish_to": "None"}'`.
-  Look it up again: expect still "Served" (Serena's answer comes from the last refresh), "Publish to: None", the As
+- [ ] Take the record off the web in the simulator, with the Media CSID from the page (`<media>` below):
+  `curl -s -X POST http://localhost:8380/_fake/approve/<media> -H 'Content-Type: application/json' -d '{"approved": false}'`.
+  Look it up again: expect still "Served" (Serena's answer comes from the last refresh), "Approved for web: No", the As
   of row marked "differs", and "The Media record changed in CollectionSpace after the last refresh. The next refresh
   shows whether it's still public."
 - [ ] Replace its image: `curl -s -X POST http://localhost:8380/_fake/replace/<media>`. Look it up again: expect the

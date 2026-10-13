@@ -95,7 +95,7 @@ describe('the Recalls page', () => {
 
 describe('Media look up', () => {
   const CS = {state: 'exists', media_csid: MEDIA, blob_csid: BLOB, updated_at: '2026-10-16T06:20:00.000Z',
-    changed_since_refresh: true, fields: [{label: 'Publish to', value: 'None'}],
+    changed_since_refresh: true, fields: [{label: 'Approved for web', value: 'No'}],
     next: 'The Media record changed in CollectionSpace after the last refresh.'}
   const ITEM = {blob_csid: BLOB, media_csid: MEDIA, kind: 'image', access: 'public',
     steps: [{check: 'In the servable list', outcome: 'Listed.', ok: true},
@@ -122,7 +122,7 @@ describe('Media look up', () => {
     expect(wrapper.find('#lookup-sizes').text()).toContain('2026-10-15 05:59:30 UTC') // last served
     expect(wrapper.find('#serena-preview').attributes('src')).toBe(`/admin/v1/museums/pahma/blobs/${BLOB}/preview?size=Medium`)
     expect(wrapper.find('#cspace-preview').attributes('src')).toBe(`/admin/v1/museums/pahma/media/${MEDIA}/preview?size=full&source=cspace`)
-    expect(wrapper.find('#cspace-details').text()).toContain('Publish to')
+    expect(wrapper.find('#cspace-details').text()).toContain('Approved for web')
     const compare = wrapper.find('#lookup-compare')
     expect(compare.findAll('tr.differs').map(r => r.find('th').text().replace(/\s+/g, ' '))).toEqual(['As of differs'])
     expect(wrapper.find('#lookup-next-refresh').text()).toContain('changed in CollectionSpace after the last refresh')

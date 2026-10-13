@@ -16,7 +16,8 @@ Development hooks:
   POST /_fake/delete/<csid>         soft-delete it (the Media service still returns it, as CollectionSpace does)
   POST /_fake/replace/<csid>        replace its image (CollectionSpace makes a new Blob, so a record with a Blob
                                     gets a new Blob CSID; the Media service then returns the new file)
-  POST /_fake/publish/<csid>        {"publish_to": "None"}: change its "Publish to" (staff unpublishing it)
+  POST /_fake/approve/<csid>        {"approved": false}: change its "Approved for web" (PAHMA's media_pahma
+                                    approvedforweb), as staff do to take it off the web
   POST /_fake/remove-file/<csid>    leave the record with no file
   POST /_fake/fail                  {"match", "status", "times"}: answer requests whose path contains match with status
   GET  /_fake/calls                 the paths called, in order
@@ -54,7 +55,8 @@ class Media:
     state: str = "project"  # CollectionSpace's workflow state; "deleted" when soft-deleted
     files: dict[str, tuple[bytes, str]] = field(default_factory=dict)  # "content" or a derivative -> (bytes, type)
     blob: str | None = None  # its Blob's CSID (blobCsid)
-    publish_to: str = "All"  # media_common's publishTo, as PAHMA's Media records have it (for Media look up)
+    publish_to: str = "All"  # media_common's publishTo, a vocabulary term (core CollectionSpace)
+    approved_for_web: bool = True  # media_pahma's approvedforweb: what PAHMA's ETL reads (for Media look up)
     updated_at: str = field(default_factory=lambda: _now())  # collectionspace_core's updatedAt
 
 
@@ -154,6 +156,8 @@ def _media_xml(media: Media) -> bytes:
             f'{f"<blobCsid>{media.blob}</blobCsid>" if media.blob else ""}<publishToList><publishTo>'
             f"urn:cspace:pahma.cspace.berkeley.edu:vocabularies:name(publishto):item:name({media.publish_to.lower()})"
             f"'{media.publish_to}'</publishTo></publishToList></ns2:media_common>"
+            f'<ns2:media_pahma xmlns:ns2="http://collectionspace.org/services/media/local/pahma">'
+            f"<approvedforweb>{str(media.approved_for_web).lower()}</approvedforweb></ns2:media_pahma>"
             f'<ns2:collectionspace_core xmlns:ns2="http://collectionspace.org/collectionspace_core/">'
             f"<workflowState>{media.state}</workflowState><updatedAt>{media.updated_at}</updatedAt>"
             f"</ns2:collectionspace_core></document>").encode()
@@ -274,14 +278,14 @@ def replace(csid: str) -> dict[str, str]:
     return {"csid": csid, "replaced": "yes", "blob": media.blob or ""}
 
 
-@app.post("/_fake/publish/{csid}")
-async def publish(request: Request, csid: str) -> dict[str, str]:
-    """Set the Media record's "Publish to" (All, None, ...), as staff do to unpublish it."""
+@app.post("/_fake/approve/{csid}")
+async def approve(request: Request, csid: str) -> dict[str, Any]:
+    """Set the Media record's "Approved for web", as PAHMA's staff do to take it off the web."""
     body: dict[str, Any] = await request.json()
     media = store.media[csid]
-    media.publish_to = str(body["publish_to"])
+    media.approved_for_web = bool(body["approved"])
     media.updated_at = _now()
-    return {"csid": csid, "publish_to": media.publish_to}
+    return {"csid": csid, "approved": media.approved_for_web}
 
 
 @app.post("/_fake/remove-file/{csid}")
