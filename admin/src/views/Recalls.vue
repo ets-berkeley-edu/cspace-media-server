@@ -1,21 +1,21 @@
 <template>
   <v-container fluid>
     <div class="d-flex align-center flex-wrap ga-4 mb-4">
-      <h1 id="page-title" class="text-h5">{{ museumName(museum) }} Takedowns</h1>
+      <h1 id="page-title" class="text-h5">{{ museumName(museum) }} Recalls</h1>
       <v-spacer />
-      <v-btn id="take-down" color="error" @click="openForm">Take down</v-btn>
+      <v-btn id="recall" color="error" @click="openForm">Recall…</v-btn>
     </div>
     <p class="mb-4">
-      A takedown stops Serena serving a Media record's file at once, until CollectionSpace and a later refresh catch up.
-      Change the record in CollectionSpace too: a refresh, on a later day, removes the takedown once its servable list
-      no longer has the file as public. If the list still has it as public, the takedown stays and Serena raises an
+      A recall stops Serena serving a Media record's file at once, until CollectionSpace and a later refresh catch up.
+      Change the record in CollectionSpace too: a refresh, on a later day, ends the recall once its servable list
+      no longer has the file as public. If the list still has it as public, the recall stays and Serena raises an
       alert; only then can an admin release it, if CollectionSpace is right.
     </p>
     <LoadError :message="error" />
 
-    <h2 class="text-h6 mb-2">Active takedowns</h2>
+    <h2 class="text-h6 mb-2">Active recalls</h2>
     <v-data-table
-      id="active-takedowns"
+      id="active-recalls"
       :headers="activeHeaders"
       :items="page?.active || []"
       :sort-by="[{key: 'at', order: 'desc'}]"
@@ -25,7 +25,7 @@
       :loading="loading"
       item-value="media_csid"
       density="compact"
-      no-data-text="No active takedowns."
+      no-data-text="No active recalls."
       class="mb-6"
     >
       <template #[`item.blob_csids`]="{item}">{{ item.blob_csids.join(', ') }}</template>
@@ -48,7 +48,7 @@
 
     <h2 class="text-h6 mb-2">Ended in the last {{ page?.days || 30 }} days</h2>
     <v-data-table
-      id="ended-takedowns"
+      id="ended-recalls"
       :headers="endedHeaders"
       :items="page?.ended || []"
       :sort-by="[{key: 'at', order: 'desc'}]"
@@ -60,14 +60,14 @@
     >
       <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
       <template #[`item.action`]="{item}">
-        {{ item.action === 'takedown_release' ? 'Released' : 'Removed by a refresh' }}
+        {{ item.action === 'recall_release' ? 'Released' : 'Ended by a refresh' }}
       </template>
       <template #[`item.details`]="{item}">{{ item.details.reason || item.details.why || '' }}</template>
     </v-data-table>
 
     <v-dialog v-model="form" max-width="1100" scrollable>
       <v-card>
-        <v-card-title>Take down Media records</v-card-title>
+        <v-card-title>Recall Media records</v-card-title>
         <v-card-text>
           <template v-if="!summary">
             <p class="mb-3">
@@ -76,14 +76,14 @@
               down until you confirm.
             </p>
             <v-textarea
-              id="takedown-csids"
+              id="recall-csids"
               v-model="box"
               label="Media or Blob CSIDs"
               rows="4"
               :disabled="!!file"
             />
             <v-file-input
-              id="takedown-file"
+              id="recall-file"
               v-model="file"
               label="Or a text file of CSIDs"
               accept=".txt,text/plain"
@@ -100,15 +100,15 @@
           </template>
           <template v-else>
             <p class="mb-3">
-              {{ toTakeDown.length }} Media record{{ toTakeDown.length === 1 ? '' : 's' }} to take down. Click a
+              {{ toRecall.length }} Media record{{ toRecall.length === 1 ? '' : 's' }} to recall. Click a
               thumbnail to see the full size.
             </p>
-            <v-table id="takedown-summary" density="compact" class="mb-4">
+            <v-table id="recall-summary" density="compact" class="mb-4">
               <thead>
                 <tr><th /><th>Media CSID</th><th>Blob</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr>
               </thead>
               <tbody>
-                <tr v-for="r in summary.records" :key="r.media_csid" :class="{'text-disabled': r.taken_down}">
+                <tr v-for="r in summary.records" :key="r.media_csid" :class="{'text-disabled': r.recalled}">
                   <td>
                     <span v-if="r.kind === '3D'" class="preview-placeholder">3D</span>
                     <button
@@ -131,21 +131,21 @@
                   <td>{{ r.media_csid }}</td>
                   <td>{{ r.blob_csids.join(', ') }}</td>
                   <td>{{ r.kind || 'not known' }}</td>
-                  <td>{{ r.taken_down ? 'already taken down' : r.served_today ? 'yes' : 'no' }}</td>
+                  <td>{{ r.recalled ? 'already recalled' : r.served_today ? 'yes' : 'no' }}</td>
                   <td>{{ r.source === 'serena' ? 'Serena' : 'CollectionSpace (not served today)' }}</td>
                   <td>{{ r.entered.join(', ') }}</td>
                 </tr>
               </tbody>
             </v-table>
             <template v-if="summary.not_found.length">
-              <p class="mb-1">Not taken down:</p>
-              <ul id="takedown-not-found" class="mb-4 ml-6">
+              <p class="mb-1">Not recalled:</p>
+              <ul id="recall-not-found" class="mb-4 ml-6">
                 <li v-for="n in summary.not_found" :key="n.csid">{{ n.csid }}: {{ n.message }}</li>
               </ul>
             </template>
             <v-textarea
-              v-if="toTakeDown.length"
-              id="takedown-reason"
+              v-if="toRecall.length"
+              id="recall-reason"
               v-model="reason"
               label="Reason (required)"
               rows="2"
@@ -166,22 +166,22 @@
           <v-btn v-if="summary" @click="summary = null">Back</v-btn>
           <v-btn
             v-if="!summary"
-            id="takedown-summarize"
+            id="recall-summarize"
             color="primary"
             :loading="busy"
             @click="summarize"
           >
-            Show what would be taken down
+            Show what would be recalled
           </v-btn>
           <v-btn
-            v-else-if="toTakeDown.length"
-            id="takedown-confirm"
+            v-else-if="toRecall.length"
+            id="recall-confirm"
             color="error"
             :loading="busy"
             :disabled="!reason.trim()"
             @click="confirm"
           >
-            Take down {{ toTakeDown.length }} Media record{{ toTakeDown.length === 1 ? '' : 's' }}
+            Recall {{ toRecall.length }} Media record{{ toRecall.length === 1 ? '' : 's' }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -212,11 +212,11 @@
 
     <v-dialog v-model="releasing" max-width="560">
       <v-card>
-        <v-card-title>Release a takedown</v-card-title>
+        <v-card-title>Release a recall</v-card-title>
         <v-card-text>
           <p class="mb-3">
             Refresh {{ releaseOf?.kept_by }} still lists Media record {{ releaseOf?.media_csid }} as public. Release the
-            takedown only if CollectionSpace is right and the file should be served again.
+            recall only if CollectionSpace is right and the file should be served again.
           </p>
           <v-textarea
             id="release-reason"
@@ -248,7 +248,7 @@
 import {computed, reactive, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import {museumName} from '@/session'
-import type {Takedown, TakedownRecord, TakedownSummary, TakedownsPage} from '@/api'
+import type {Recall, RecallRecord, RecallSummary, RecallsPage} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
 import {PAGE_SIZES, when} from '@/words'
@@ -256,7 +256,7 @@ import {PAGE_SIZES, when} from '@/words'
 const activeHeaders = [
   {title: 'Media CSID', key: 'media_csid'},
   {title: 'Blob', key: 'blob_csids', sortable: false},
-  {title: 'Taken down by', key: 'by'},
+  {title: 'Recalled by', key: 'by'},
   {title: 'When (UTC)', key: 'at'},
   {title: 'Reason', key: 'reason'},
   {title: 'State', key: 'kept_by'}
@@ -271,32 +271,32 @@ const endedHeaders = [
 
 const route = useRoute()
 const museum = computed(() => String(route.params.museum))
-const page = ref<TakedownsPage | null>(null)
+const page = ref<RecallsPage | null>(null)
 const loading = ref(false)
 const error = ref('')
 
 const form = ref(false)
 const box = ref('')
 const file = ref<File | File[] | null>(null)
-const summary = ref<TakedownSummary | null>(null)
+const summary = ref<RecallSummary | null>(null)
 const reason = ref('')
 const busy = ref(false)
 const formError = ref('')
 const broken = reactive<Record<string, boolean>>({})
 const full = ref(false)
-const fullRecord = ref<TakedownRecord | null>(null)
+const fullRecord = ref<RecallRecord | null>(null)
 const releasing = ref(false)
-const releaseOf = ref<Takedown | null>(null)
+const releaseOf = ref<Recall | null>(null)
 const releaseReason = ref('')
 let sent = ''
 
-const toTakeDown = computed(() => (summary.value?.records || []).filter(r => !r.taken_down))
+const toRecall = computed(() => (summary.value?.records || []).filter(r => !r.recalled))
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    page.value = await api.takedowns(museum.value)
+    page.value = await api.recalls(museum.value)
   } catch (e) {
     error.value = problem(e)
   } finally {
@@ -342,7 +342,7 @@ async function summarize() {
   busy.value = true
   try {
     sent = text
-    summary.value = await api.takedownSummary(museum.value, text)
+    summary.value = await api.recallSummary(museum.value, text)
   } catch (e) {
     formError.value = problem(e)
   } finally {
@@ -354,7 +354,7 @@ async function confirm() {
   busy.value = true
   formError.value = ''
   try {
-    await api.takeDown(museum.value, sent, reason.value.trim())
+    await api.recall(museum.value, sent, reason.value.trim())
     form.value = false
     await load()
   } catch (e) {
@@ -364,13 +364,13 @@ async function confirm() {
   }
 }
 
-function openFull(record: TakedownRecord) {
+function openFull(record: RecallRecord) {
   fullRecord.value = record
   full.value = true
 }
 
-function openRelease(takedown: Takedown) {
-  releaseOf.value = takedown
+function openRelease(recall: Recall) {
+  releaseOf.value = recall
   releaseReason.value = ''
   formError.value = ''
   releasing.value = true

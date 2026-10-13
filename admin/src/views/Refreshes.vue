@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Refreshes</h1>
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Past refreshes</h1>
     <p class="mb-4">
       This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it. Open a refresh
       to see its servable list, its checks and what an admin can do.

@@ -210,7 +210,7 @@ class Refreshes:
         return _from_item(items[0]) if items else None
 
     def since(self, tenant: str, refresh_date: str) -> list[Refresh]:
-        """The museum's refreshes from `refresh_date` on, newest first (the admin app's Refreshes page, D93)."""
+        """The museum's refreshes from `refresh_date` on, newest first (the admin app's Past refreshes page, D93)."""
         found: list[Refresh] = []
         start: dict[str, Any] | None = None
         while True:

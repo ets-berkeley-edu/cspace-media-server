@@ -6,7 +6,7 @@ Every call goes through the Media service, by the Media CSID from the servabilit
     GET /cspace-services/media/<media CSID>/blob/content                           the original file
     GET /cspace-services/media/<media CSID>/blob/derivatives/<derivative>/content   a derivative
 
-For the takedown form only (design: Takedowns, Taking down), to tell a Media CSID from a Blob CSID that Serena's
+For the recall form only (design: Recalls, Recalling), to tell a Media CSID from a Blob CSID that Serena's
 servability table doesn't know, and to show a thumbnail of a file Serena hasn't stored:
 
     GET /cspace-services/media/<csid>                                              a Media record, with its blobCsid
@@ -124,7 +124,7 @@ class CSpaceClient:
         return MediaState.EXISTS
 
     def media_blob(self, media_csid: str) -> tuple[MediaState, str | None]:
-        """For the takedown form: whether a Media record exists, and its Blob CSID (its blobCsid)."""
+        """For the recall form: whether a Media record exists, and its Blob CSID (its blobCsid)."""
         path = f"/media/{media_csid}"
         with self.slots:
             response = self._send(path, stream=False)

@@ -11,7 +11,7 @@
     </p>
     <p v-else-if="status" class="mb-2">No refreshes yet.</p>
     <p class="mb-6">
-      What Serena served and couldn't serve is on the Requests page; "Look up a file" says why for any one file.
+      What Serena served and couldn't serve is on the Past requests page; "Media look up" says why for any one file.
     </p>
     <v-btn
       id="sign-out-all"

@@ -1,5 +1,5 @@
-"""The admin API for the Requests page: what Serena served and couldn't serve for the museum, from its log (design:
-The Requests page; decided October 12, 2026, D100 to D113). Any admin of the museum may read it; reading it isn't
+"""The admin API for the Past requests page: what Serena served and couldn't serve for the museum, from its log (design:
+The Past requests page; decided October 12, 2026, D100 to D113). Any admin of the museum may read it; reading it isn't
 audited (D111)."""
 from __future__ import annotations
 

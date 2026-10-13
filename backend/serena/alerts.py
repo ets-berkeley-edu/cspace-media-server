@@ -27,10 +27,10 @@ class Kind(StrEnum):
     NOT_UPDATED = "not_updated"  # no servability update in 24 hours
     THRESHOLD_OVERRIDDEN = "threshold_overridden"  # an admin overrode the delta threshold for a refresh (D62, D83)
     SETTING_CHANGED = "setting_changed"  # an admin changed the delta threshold or the audit retention (D89, D97)
-    TAKEDOWN = "takedown"  # an admin took down Media records (D118)
-    STILL_PUBLIC = "takedown_still_public"  # a refresh kept a takedown: the same Blob is still public (D119)
-    TAKEDOWN_RELEASED = "takedown_released"  # an admin released a takedown a refresh kept (D119)
-    TAKEDOWNS_REMOVED = "takedowns_removed"  # a refresh ended takedowns: CollectionSpace caught up (D119)
+    RECALL = "recall"  # an admin recalled Media records (D118)
+    STILL_PUBLIC = "recall_still_public"  # a refresh kept a recall: the same Blob is still public (D119)
+    RECALL_RELEASED = "recall_released"  # an admin released a recall a refresh kept (D119)
+    RECALLS_ENDED = "recalls_ended"  # a refresh ended recalls: CollectionSpace caught up (D119)
 
 
 TITLES = {
@@ -41,10 +41,10 @@ TITLES = {
     Kind.NOT_UPDATED: "Serena hasn't had a servability update in 24 hours",
     Kind.THRESHOLD_OVERRIDDEN: "An admin overrode the delta threshold",
     Kind.SETTING_CHANGED: "An admin changed a setting",
-    Kind.TAKEDOWN: "An admin took down Media records",
-    Kind.STILL_PUBLIC: "Taken down in Serena, but still public in CollectionSpace",
-    Kind.TAKEDOWN_RELEASED: "An admin released a takedown",
-    Kind.TAKEDOWNS_REMOVED: "A refresh removed takedowns",
+    Kind.RECALL: "An admin recalled Media records",
+    Kind.STILL_PUBLIC: "Recalled in Serena, but still public in CollectionSpace",
+    Kind.RECALL_RELEASED: "An admin released a recall",
+    Kind.RECALLS_ENDED: "A refresh ended recalls",
 }
 
 

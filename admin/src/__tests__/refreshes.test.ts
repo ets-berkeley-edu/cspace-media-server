@@ -7,6 +7,7 @@ import AlertBanner from '@/components/AlertBanner.vue'
 import RefreshDetail from '@/views/RefreshDetail.vue'
 import Refreshes from '@/views/Refreshes.vue'
 import StartRefresh from '@/views/StartRefresh.vue'
+import {waiting} from '@/session'
 import {pacificDate} from '@/words'
 
 const REFRESH = {
@@ -73,23 +74,28 @@ describe('overriding the delta threshold', () => {
 })
 
 describe('the alert banner', () => {
-  it('shows unacknowledged alerts and acknowledges one', async () => {
+  it('shows one line while alerts wait, newest first, with a way to the Alerts page', async () => {
     const alert = {key: '2026-10-10#missed_deadline#2026-10-10', refresh_date: '2026-10-10', kind: 'missed_deadline',
       title: 'Today\'s refresh isn\'t finished by the deadline', subject: '2026-10-10', message: 'Not updated by 08:00',
       created_at: '2026-10-10T15:00:00+00:00', acknowledged_by: null, acknowledged_at: null}
+    const newer = {...alert, key: 'newer', title: 'A servable list check failed', created_at: '2026-10-10T16:00:00+00:00'}
     const calls = fakeApi({
-      'GET /museums/pahma/alerts': {body: {alerts: [alert, {...alert, key: 'old', acknowledged_at: 'x', acknowledged_by: 'admin'}]}},
-      'POST /museums/pahma/alerts/acknowledge': {body: {acknowledged: alert.key}}
+      'GET /museums/pahma/alerts': {body: {alerts: [alert, newer, {...alert, key: 'old', acknowledged_at: 'x', acknowledged_by: 'admin'}]}}
     })
     const {wrapper} = await at('/pahma', AlertBanner)
-    expect(wrapper.findAll('.acknowledge')).toHaveLength(1)
-    expect(wrapper.text()).toContain('Not updated by 08:00')
-    expect(wrapper.text().split('2026-10-10')).toHaveLength(2) // the refresh date once: the subject is the same date
+    expect(wrapper.find('#alert-banner').text()).toContain('2 alerts:')
+    expect(wrapper.find('#alert-banner-title').text()).toBe('A servable list check failed')
+    expect(wrapper.find('#open-alerts').attributes('href')).toContain('/pahma/alerts')
+    expect(waiting.alerts).toHaveLength(2) // the bell counts these
     // The banner's checks don't count as activity, so an open tab still signs out when idle.
     expect(calls.find(c => c.path.endsWith('/alerts'))?.headers['X-Serena-Background']).toBe('1')
-    await wrapper.find('.acknowledge').trigger('click')
-    await flushPromises()
-    expect(calls.find(c => c.method === 'POST')?.body).toEqual({key: alert.key})
+    wrapper.unmount()
+  })
+
+  it('stays hidden while no alert waits', async () => {
+    fakeApi({'GET /museums/pahma/alerts': {body: {alerts: []}}})
+    const {wrapper} = await at('/pahma', AlertBanner)
+    expect(wrapper.find('#alert-banner').exists()).toBe(false)
     wrapper.unmount()
   })
 })

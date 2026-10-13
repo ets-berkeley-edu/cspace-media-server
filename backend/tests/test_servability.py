@@ -1,5 +1,5 @@
 import pytest
-from conftest import add_blob, take_down
+from conftest import add_blob, recall
 from fastapi.testclient import TestClient
 
 from serena.app import create_app
@@ -72,13 +72,13 @@ def test_not_listed(client: TestClient, store: Store, recorder: MemoryRecorder) 
     assert _reason(client, recorder, derivative("pahma")) == Reason.NOT_LISTED
 
 
-def test_takedowns(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+def test_recalls(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     add_blob(store, "pahma", BLOB, MEDIA)
-    take_down(store, "ucjeps", MEDIA)  # another museum's takedown changes nothing here
+    recall(store, "ucjeps", MEDIA)  # another museum's recall changes nothing here
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
-    take_down(store, "pahma", MEDIA)
-    assert _reason(client, recorder, derivative("pahma")) == Reason.TAKEN_DOWN  # on the very next request
-    store.delete_takedown("pahma", MEDIA)  # ended (by a refresh, or released)
+    recall(store, "pahma", MEDIA)
+    assert _reason(client, recorder, derivative("pahma")) == Reason.RECALLED  # on the very next request
+    store.delete_recall("pahma", MEDIA)  # ended (by a refresh, or released)
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
 
 
@@ -96,7 +96,7 @@ def test_a_failing_table_fails_closed(client: TestClient, store: Store, recorder
     def unreachable(*args: object) -> None:
         raise ConnectionError("DynamoDB unreachable")
 
-    monkeypatch.setattr(store, "takedown", unreachable)
+    monkeypatch.setattr(store, "recall", unreachable)
     response = client.get(derivative("pahma"))
     assert response.headers["location"] == "/unavailable/pahma.svg"
     assert recorder.recent[-1].reason == Reason.INTERNAL_ERROR

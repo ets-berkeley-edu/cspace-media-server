@@ -21,8 +21,8 @@ class Table:
 # pk <tenant>#<blob CSID>; indexed by <tenant>#<media CSID> (requests by Media CSID) and by museum (the servability
 # update)
 SERVABILITY = Table("servability", indexes={"by_media": "media_key", "by_tenant": "tenant"})
-# pk <tenant>#<media CSID>; indexed by museum (the Takedowns page, and the servability update's look at takedowns)
-TAKEDOWNS = Table("takedowns", indexes={"by_tenant": "tenant"})
+# pk <tenant>#<media CSID>; indexed by museum (the Recalls page, and the servability update's look at recalls)
+RECALLS = Table("recalls", indexes={"by_tenant": "tenant"})
 REFRESHES = Table("refreshes", sort_key="sk")  # pk <tenant>, sk <refresh ID>
 SETTINGS = Table("settings")  # pk <tenant>
 ALERTS = Table("alerts", sort_key="sk")  # pk <tenant>, sk <time>
@@ -30,7 +30,7 @@ CACHE_INDEX = Table("cache-index")  # pk <tenant>#<blob CSID>#<derivative>
 AUDIT = Table("audit", sort_key="sk")  # pk <tenant>, sk <time>#<admin>#<random>
 ADMIN_SESSIONS = Table("admin-sessions", ttl_attribute="expires_at")  # pk SHA-256 of the session's token
 
-ALL = (SERVABILITY, TAKEDOWNS, REFRESHES, SETTINGS, ALERTS, CACHE_INDEX, AUDIT, ADMIN_SESSIONS)
+ALL = (SERVABILITY, RECALLS, REFRESHES, SETTINGS, ALERTS, CACHE_INDEX, AUDIT, ADMIN_SESSIONS)
 
 
 def full_name(prefix: str, table: Table) -> str:

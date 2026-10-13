@@ -64,8 +64,8 @@ def test_a_first_day(client: TestClient, worker: Worker, store: Store) -> None:
     assert refresh["check"]["result"] == "passed"
     assert "first servability update: the delta threshold doesn't apply" in refresh["check"]["warnings"]
     assert set(refresh["links"]) == {"self", "servable_list", "check"}  # no Solr refresh report or update call (D72)
-    assert refresh["update"] == {"deleted": 0, "written": 50, "unchanged": 0, "takedowns_removed": 0,
-                                 "takedowns_kept": 0}
+    assert refresh["update"] == {"deleted": 0, "written": 50, "unchanged": 0, "recalls_ended": 0,
+                                 "recalls_kept": 0}
     assert served(store) == blobs
     latest = client.get("/etl/v1/museums/pahma", headers=auth()).json()
     assert latest["refresh_id"] == refresh["refresh_id"]
@@ -83,8 +83,8 @@ def test_the_next_day_deletes_writes_and_leaves_alone(client: TestClient, worker
     refresh = refresh_date(client, worker, second)
     assert refresh["state"] == "updated"
     assert (refresh["check"]["removed"], refresh["check"]["changed"], refresh["check"]["added"]) == (2, 1, 1)
-    assert refresh["update"] == {"deleted": 2, "written": 2, "unchanged": 97, "takedowns_removed": 0,
-                                 "takedowns_kept": 0}
+    assert refresh["update"] == {"deleted": 2, "written": 2, "unchanged": 97, "recalls_ended": 0,
+                                 "recalls_kept": 0}
     assert served(store) == second
 
 

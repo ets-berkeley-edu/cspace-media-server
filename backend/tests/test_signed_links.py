@@ -4,7 +4,7 @@ import time
 from typing import Any
 
 import pytest
-from conftest import TENANTS, add_blob, take_down
+from conftest import TENANTS, add_blob, recall
 from fastapi.testclient import TestClient
 
 from serena import cache_index, tables
@@ -256,11 +256,11 @@ def test_a_public_pdf_is_served_with_or_without_a_signature(app_client: TestClie
         assert response.headers["cache-control"].startswith("private, max-age=")
 
 
-def test_a_takedown_wins_over_a_signature(app_client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+def test_a_recall_wins_over_a_signature(app_client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
     cached(store)
-    take_down(store, "cinefiles", MEDIA)
+    recall(store, "cinefiles", MEDIA)
     assert unavailable(app_client.get(url(query=fresh())))
-    assert recorder.counts[("cinefiles", Reason.TAKEN_DOWN)] == 1
+    assert recorder.counts[("cinefiles", Reason.RECALLED)] == 1
 
 
 def test_no_derivatives_of_a_signed_pdf(app_client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
