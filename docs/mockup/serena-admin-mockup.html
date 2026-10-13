@@ -276,7 +276,7 @@
     <ul>
       <li><strong>Last served and First stored (layout C):</strong> under the verdict, when Serena last served the file (any size) and when it first stored it in its S3 bucket; the sizes table has both for each size, and "In Serena" Details has them too. In the app, "first stored" is the cache index's fetched-at time, which Serena already keeps. "Last served" would come from Serena's log (the "served" lines Past requests reads), so it reaches back 30 days, the log's retention; a time kept per size in Serena's tables instead would mean a write on every request, which Serena avoids.</li>
       <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's stored copy; CollectionSpace's Medium, not stored) and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
-      <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no stored copy, the preview is CollectionSpace's thumbnail, not stored. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (unpublished since) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
+      <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no stored copy, the preview is CollectionSpace's thumbnail, not stored. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (taken off the web since: "Approved for web" No) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
       <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the stored copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
       <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Sample data:</strong> one consistent set. "Now" is Oct 13, 2026, 10:00 AM PDT; the last refresh is pahma-2026-10-12-1. Every page draws on the same Media records, and each Past requests line's outcome comes from Serena's rules at its time, so a path, a CSID on Recalls, an example button or a typed CSID all land on the same answer in Media look up. Older lines can differ from today's answer when something changed since (a recall, a deletion). Recalling, releasing and acknowledging update Recalls, Alerts, the Audit log and Media look up together.</li>
@@ -333,7 +333,7 @@
   const BLOB = BR, MEDIA = "20349bfa-cad6-5f47-9acd-dcd34e3f0b98";
 
   // The Media records. `blobs`: the Blobs the servable list has for the record (`until`: when a refresh dropped it).
-  // `cs`: CollectionSpace's Media record now: its Blob, its "Publish to" (or other fields the ETL reads), when it
+  // `cs`: CollectionSpace's Media record now: its Blob, its "Approved for web" (PAHMA's media_pahma approvedforweb, the field its ETL reads; publish "None" means not approved), when it
   // last changed, and whether it's soft-deleted. `stored`: copies Serena stored before the log's sample lines (the
   // lines store the rest, on a miss). `recall`: the record's recall, active or ended. `ex`: an example button.
   const RECORDS = [
@@ -463,7 +463,7 @@
   }
 
   const plain = iso => new Date(iso).toLocaleString("en-US", {timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"});
-  const fieldsOf = r => r.cs.fields || [["Publish to (Media)", r.cs.publish]];
+  const fieldsOf = r => r.cs.fields || [["Approved for web", r.cs.publish === "None" ? "No" : "Yes"]];
 
   function explain(r, b, size) {
     const rc = r && r.recall, now = recallAt(r, NOW);
@@ -487,8 +487,8 @@
     if (b.unlisted) {
       v = {tone: "not", head: "Not served: not in the servable list", why: `Refresh ${lastRefresh()}'s servable list doesn't have this CSID, as a Blob or a Media record.`,
         next: !r ? "CollectionSpace has no Blob or Media record with this CSID either: check the CSID." : !r.cs.publish || r.cs.publish === "None"
-          ? "In CollectionSpace, its Media record isn't published. A change there shows here after the next refresh."
-          : "In CollectionSpace, it's on a published Media record changed after the last refresh, so the next refresh lists it."};
+          ? "In CollectionSpace, its Media record isn't approved for web. A change there shows here after the next refresh."
+          : "In CollectionSpace, it's on a Media record approved for web and changed after the last refresh, so the next refresh lists it."};
       if (rc && rc.ended) v.next += ` Its recall ended ${plain(rc.ended.at)} (${rc.ended.by}: ${rc.ended.why.toLowerCase()}).`;
     } else if (b.access !== "public") {
       v = {tone: "depends", head: "Served only on a signed link", why: "This PDF is restricted: Serena serves it only to Glimmer readers, through a portal's valid signed link.",
@@ -524,12 +524,12 @@
 
   function nextRefresh(r, b, after, pub, recall) {
     const c = r.cs, t = plain(c.updated);
-    if (b.unlisted) return !pub ? "CollectionSpace has this Blob on a Media record that isn't published, which is why it's not in the servable list. Nothing changes at the next refresh unless staff publish it."
+    if (b.unlisted) return !pub ? "CollectionSpace has this Blob on a Media record that isn't approved for web, which is why it's not in the servable list. Nothing changes at the next refresh unless staff approve it."
       : after ? `Staff changed the Media record ${t}, after the last refresh: the next refresh lists ${c.blob === b.blob ? "this Blob" : "its Blob"}.` : "The ETL's rules leave it out (its Object record, for example); the next refresh will too, unless that changes.";
     if (c.deleted) return `Staff deleted the Media record ${t}. The next refresh drops this Blob.`;
     if (c.blob !== b.blob) return after ? `Staff replaced the image ${t}. The next refresh lists the new Blob and drops this one; until then, a stored size is the old image, and any other size is fetched from the Media record, which now returns the new image.`
       : `CollectionSpace's Media record has the other Blob, ${short(c.blob)}. The servable list still has this one too, and requests for it are answered with the Media record's current image.`;
-    if (!pub) return `Staff unpublished the Media record ${t}, after the last refresh. The next refresh (on a later day) leaves the file out${recall ? ", which ends the recall" : ""}.`;
+    if (!pub) return `Staff cleared the Media record's "Approved for web" ${t}, after the last refresh. The next refresh (on a later day) leaves the file out${recall ? ", which ends the recall" : ""}.`;
     if (recall && recall.kept) return "It's still public in CollectionSpace: the next refresh lists it again and keeps the recall, with another alert, unless staff change the record or an admin releases the recall.";
     if (recall) return "It's still public in CollectionSpace: unless staff change the record, the next refresh lists it, keeps the recall and alerts.";
     return "Nothing has changed in CollectionSpace since the last refresh.";
