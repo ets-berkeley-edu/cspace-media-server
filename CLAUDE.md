@@ -83,10 +83,9 @@ To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with
 (`pip install --require-hashes -r requirements-tools.txt`). Each museum's configuration is
 `backend/serena/museums/<tenant>.yaml`.
 
-The admin app's UI mockup is `docs/mockup/serena-admin-mockup.html` (sample data only; hosted copy
-https://claude.ai/artifact/UG1bpSE6TCXNxzHGhJ4xao). It need not look like the app, only have the same layout and
-functions: a change to a page's layout or functions goes into the mockup and its hosted copy too. During a UI review,
-change only the mockup until Richard says to carry the changes into the app.
+The admin app's UI mockup is `docs/mockup/serena-admin-mockup.html` (sample data only). It need not look like the
+app, only have the same layout and functions: a change to a page's layout or functions goes into the mockup too. During
+a UI review, change only the mockup until Richard says to carry the changes into the app.
 
 The admin web app (Vue, TypeScript, Vuetify) is in `admin/` (the BMU's `frontend/` is the model), with npm
 dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `npm run lint`, `npm run typecheck`,
