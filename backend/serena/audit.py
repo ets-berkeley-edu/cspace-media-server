@@ -52,6 +52,24 @@ class Entry:
     details: dict[str, Any]
 
 
+REFRESH_ACTOR = "refresh "  # how a refresh's own entries name it (D150): "refresh <refresh ID>"
+
+
+def shown_by(admin: str) -> str:
+    """Who did it, as the admin app and the CSV export show it: a refresh's own entries are by Serena (D155); its
+    refresh ID goes in the details, or is the target."""
+    return "Serena" if admin.startswith(REFRESH_ACTOR) else admin
+
+
+def shown_details(entry: Entry) -> dict[str, Any]:
+    """The entry's details, with the refresh that acted when it isn't already the target (a recall a refresh ended)."""
+    if entry.admin.startswith(REFRESH_ACTOR):
+        refresh_id = entry.admin[len(REFRESH_ACTOR):]
+        if refresh_id != entry.target:
+            return {**entry.details, "refresh": refresh_id}
+    return entry.details
+
+
 class Audit:
     def __init__(self, store: Store, clock: Callable[[], datetime] = lambda: datetime.now(UTC)):
         self.store = store

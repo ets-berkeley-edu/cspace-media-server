@@ -16,7 +16,8 @@
     </div>
     <p class="mb-4">
       What Serena served and couldn't serve for this museum, read from its log. Times are UTC. The counts cover every
-      request in the range; the table below lists the newest requests. Click a column's name to sort by it.
+      request in the range; the table below lists the newest requests. Click a column's name to sort by it; hover over it
+      for what it holds.
     </p>
     <LoadError :message="error" />
     <div v-if="loading" id="requests-loading" class="d-flex align-center ga-3 my-6">
@@ -51,9 +52,12 @@
               <thead><tr><th>Path</th><th>Requests</th></tr></thead>
               <tbody>
                 <tr v-for="p in report.top_paths" :key="p.path">
-                  <td class="request-path">
-                    <FileLink v-if="blobOfPath(p.path)" @open="openPath(p.path)">{{ p.path }}</FileLink>
-                    <template v-else>{{ p.path }}</template>
+                  <td>
+                    <span class="request-path" :title="p.path">
+                      <FileLink v-if="blobOfPath(p.path)" @open="openPath(p.path)">{{ middlePath(p.path) }}</FileLink>
+                      <template v-else>{{ middlePath(p.path) }}</template>
+                      <CopyButton v-if="middlePath(p.path) !== p.path" :value="p.path" label="path" />
+                    </span>
                   </td>
                   <td>{{ p.requests }}</td>
                 </tr>
@@ -112,12 +116,18 @@
         density="compact"
         no-data-text="No requests match."
       >
-        <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
+        <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
+        <!-- eslint-disable-next-line vue/no-v-for-template-key -->
+        <template v-for="h in headers" :key="h.key" #[`header.${h.key}`]="slot">
+          <ColumnHeader v-bind="slot" :help="h.help" />
+        </template>
+        <template #[`item.at`]="{item}"><WhenText :at="item.at" /></template>
         <template #[`item.reason`]="{item}">{{ reasonOf(item.reason) }}</template>
         <template #[`item.path`]="{item}">
           <span class="request-path" :title="item.path">
             <FileLink v-if="blobOfPath(item.path)" @open="openPath(item.path, item)">{{ middlePath(item.path) }}</FileLink>
             <template v-else>{{ middlePath(item.path) }}</template>
+            <CopyButton v-if="middlePath(item.path) !== item.path" :value="item.path" label="path" />
           </span>
         </template>
         <template #[`item.kind`]="{item}">{{ item.kind ? kindWord(item.kind) : '' }}</template>
@@ -136,20 +146,23 @@ import type {RequestLine, RequestRange, RequestsReport} from '@/api'
 import {api, problem} from '@/api'
 import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
+import ColumnHeader from '@/components/ColumnHeader.vue'
+import CopyButton from '@/components/CopyButton.vue'
 import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
+import WhenText from '@/components/WhenText.vue'
 import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, kindWord, middlePath, reasonOf, when} from '@/words'
 
 const OUTCOMES = [{value: '', title: 'All'}, {value: 'served', title: 'Served'}, {value: 'unserved', title: 'Unserved'}]
 
 const headers = [
-  {title: 'Time', key: 'at'},
-  {title: 'Outcome', key: 'outcome'},
-  {title: 'Reason', key: 'reason'},
-  {title: 'Path', key: 'path'},
-  {title: 'Kind', key: 'kind'},
-  {title: 'Cache', key: 'cache'},
-  {title: 'Signed link', key: 'signed'}
+  {title: 'Time', key: 'at', help: 'When the request reached Serena (UTC).'},
+  {title: 'Outcome', key: 'outcome', help: 'Served: Serena sent the file. Unserved: it sent the unavailable image instead, for the reason beside it.'},
+  {title: 'Reason', key: 'reason', help: 'Why an unserved request wasn\'t served. Media look up says more for any one file.'},
+  {title: 'Path', key: 'path', help: 'The path asked for, shortened in the middle; the whole path on hover. Click it to see the file; ⧉ copies the whole path.'},
+  {title: 'Kind', key: 'kind', help: 'The file\'s kind, from the servable list: blank only when Serena doesn\'t know the file.'},
+  {title: 'Cache', key: 'cache', help: 'Hit: served from Serena\'s cached copy. Miss: fetched from CollectionSpace just then, and cached.'},
+  {title: 'Signed link', key: 'signed', help: 'Yes: a restricted file served on a portal\'s signed link.'}
 ]
 
 const route = useRoute()

@@ -149,10 +149,29 @@ def test_the_csv_export(client: TestClient, store: Store) -> None:
     assert response.status_code == 200 and response.headers["content-type"].startswith("text/csv")
     assert response.headers["content-disposition"].startswith('attachment; filename="serena-audit-pahma-')
     rows = list(csv.reader(io.StringIO(response.text)))
-    assert rows[0] == ["time (UTC)", "admin", "action", "target", "details"]
+    assert rows[0] == ["time (UTC)", "by", "action", "target", "details"]
     assert [r[2] for r in rows[1:]] == ["sign_in", "sign_in"]  # oldest first, the 45-day-old one included
     assert rows[1][3].startswith("'=")  # never run as a formula
     assert client.get("/admin/v1/museums/pahma/audit").json()["entries"][0]["action"] == "audit_export"
+
+
+def test_a_refreshs_own_entries_are_by_serena(client: TestClient, store: Store) -> None:
+    """The Audit log's "By" column and the CSV's (the UI review, October 13, 2026): a refresh's entries are by Serena,
+    with the refresh as the target or in the details. The stored entry is unchanged."""
+    audit = Audit(store)
+    media = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"  # synthetic
+    audit.record("pahma", "refresh pahma-2026-10-12-1", Action.RECALL_ENDED, media, {"why": "no longer listed"})
+    audit.record("pahma", "refresh pahma-2026-10-12-1", Action.REFRESH_OUTCOME, "pahma-2026-10-12-1",
+                 {"state": "updated"})
+    sign_in(client)
+    shown = {e["action"]: e for e in client.get("/admin/v1/museums/pahma/audit").json()["entries"]}
+    assert shown["recall_ended"]["by"] == "Serena"
+    assert shown["recall_ended"]["admin"] == "refresh pahma-2026-10-12-1"
+    assert shown["recall_ended"]["details"] == {"why": "no longer listed", "refresh": "pahma-2026-10-12-1"}
+    assert shown["refresh_outcome"]["details"] == {"state": "updated"}  # the refresh is already the target
+    assert shown["sign_in"]["by"] == "admin"
+    rows = list(csv.reader(io.StringIO(client.get("/admin/v1/museums/pahma/audit/export.csv").text)))
+    assert {r[1] for r in rows[1:]} == {"Serena", "admin"}
 
 
 def test_how_many_entries_a_shorter_retention_removes(client: TestClient, store: Store) -> None:

@@ -1034,6 +1034,42 @@ reachable only from campus networks.
     audio "audio file", video "video"; "file" only when the kind isn't known (not listed).
   - Past requests shows each path on one line, shortened in the middle (the museum, the first 8 and last 6 characters
     of the CSID, and the size), the whole path on hover and in the file dialog; the CSV export keeps whole paths.
+- **The UI review's rules** (Richard, October 13, 2026, D154 to D165; the mockup's version 24 in `docs/mockup/`):
+  - **Copy buttons** (D154, D165). Every CSID or path the app shortens with an ellipsis has ⧉ beside it, on the same
+    line, which copies the whole value and says "Copied" for a moment; the whole value is also on hover. Always
+    shown, not only on hover, so it works with a keyboard and a touch screen. A shortened CSID keeps its first 8 and
+    last 6 characters. ⧉ also follows an identification number (Media look up's heading) and a SHA-256 (the Audit
+    log's details), which admins paste elsewhere; refresh IDs, short and shown whole, are links instead.
+  - **Buttons** (D156). A dialog's or page's main action is filled: blue, or red when it changes what the public
+    sees or who is signed in (Recall, Release, Cancel recall, Sign everyone out). Every other button is outlined,
+    Cancel and Back included. Plain text is only for links.
+  - **Column help** (D164). A column's name with a dotted underline has a description, shown on hover or keyboard
+    focus (a Vuetify tooltip): every column of the Past refreshes, Alerts, Past requests, Recalls and Audit log
+    tables.
+  - **Links** (D157, D158). A refresh ID opens that refresh's page wherever it appears: in an alert's text and its
+    About, in the Audit log, under "kept by" on Recalls and in "Ended by refresh" there. An Audit log target that's a
+    Media CSID opens Media look up; a setting, the Settings page; an acknowledged alert, the Alerts page, but only for
+    alerts of the last 30 days (that page's range), so no link lands on a page without the thing. The Overview's
+    sentence links "Past requests" and "Media look up". Records a link points to aren't deleted: refreshes are kept,
+    and Media look up answers for any CSID.
+  - **"By"** (D155). The Audit log's column is "By", not "Admin": an admin, the ETL ("ETL (<museum>)") or Serena. A
+    refresh's own entries (its outcome, a recall it ended) are stored with the refresh as the actor and shown, in the
+    page and the CSV export, as by Serena, with the refresh as the target or in the details. Recalls says the same.
+  - **Recalls** (D155). The state is a tag (Waiting for a later refresh; Still public in CollectionSpace, kept by
+    <refresh>), and the one action a recall allows ("Cancel recall…" or "Release…") has its own column at the right.
+    The Media CSID is on one line with its Blob CSID beneath. The recall summary's thumbnails are all one size.
+  - **Times** (D160). A time in a table breaks only between its date and its clock time.
+  - **A session that ended** (D161). When the admin API answers 401 for a museum the app thinks it's signed in to (the
+    session timed out, or everyone was signed out), the app drops that museum and goes to the sign-in page, which
+    says the session ended and why, then returns to the page the admin was on (only a page of the museum signed in
+    to). "Sign everyone out" says why when it fails, and keeps its dialog open.
+  - **Media look up** (D162, D163). "Serena and CollectionSpace" says "✓ (No differences)" in green, or "⚠ (2
+    differences: Access, As of)" in amber, naming the highlighted rows. A Blob's URL with nothing after its CSID
+    (`…/blobs/<CSID>`, no `/content`) isn't one Serena serves: the page says so, with the reason a request gets
+    ("unknown path"), then looks the Blob up anyway, every size.
+  - **The file dialog** says the one reason there's no picture: a PDF (with "Open it in a new tab"), a 3D model, a
+    file this page can't show (a TIFF, say), or nothing to show because Serena has no cached copy and CollectionSpace
+    has no such file or can't be reached. The admin API's 404 for a preview carries that sentence.
 - **First-release features:**
   - alerts: the bell, the banner, the Alerts page and acknowledging there (see Watchdog and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
@@ -1046,7 +1082,7 @@ reachable only from campus networks.
     audit retention raises an emailed alert. Each setting shows its default value (the starting value in
     configuration), and "Use default" removes the admin's value. For the audit retention, the page says how many entries a shorter period would remove
     at the next daily removal;
-  - the audit log's CSV export: every entry the museum keeps, oldest first (time, admin, action, target, details),
+  - the audit log's CSV export: every entry the museum keeps, oldest first (time, by, action, target, details),
     with any cell a spreadsheet could run as a formula made safe (D96); the export is audited;
   - placeholder image upload;
   - recalls: the Recalls page, recalling by Media or Blob CSID, and Release (see Recalls);
@@ -1063,7 +1099,7 @@ reachable only from campus networks.
     used (`which_key`: current or previous, never the token, so a rotation's progress shows), and each refresh's
     outcome (updated, check_failed, update_failed, abandoned) by the refresh. Not the ETL's polls, `GET`s or ping, which
     it makes every few seconds while Serena checks.
-    A refresh ending a recall is in it too, with the refresh as its actor (D119).
+    A refresh ending a recall is in it too, with the refresh as its actor (D119), shown as by Serena (D155).
 - **Media look up** (decided October 12, 2026, D121 to D123; redesigned October 13, 2026, D139 to D145, from the UI
   review's layout C). An admin gives a file's URL or path (any shape Serena serves), a Blob CSID or a Media CSID (which
   shows its Blob or Blobs, one at a time). The page's address carries what was looked up (`?q=`), so the file dialogs
@@ -1101,8 +1137,9 @@ reachable only from campus networks.
 - **The Past requests page** (decided October 12, 2026, D100 to D113). What Serena served and couldn't serve for the
   museum, from the app's log:
   - **Lines.** The app logs one line per request (D103): "served", with the path, the kind, the cache (`hit`, or
-    `miss` when the file was just fetched) and whether a signed link was used; or "unserved", with the reason and the
-    path (see Requests Serena doesn't serve). Paths come without the PDF link suffix or a query string; no line holds
+    `miss` when the file was just fetched) and whether a signed link was used; or "unserved", with the reason, the
+    path and, when Serena found the Blob in its servable list (a recalled or restricted file, say), the kind, so the
+    Kind column is blank only for a file Serena doesn't know (see Requests Serena doesn't serve). Paths come without the PDF link suffix or a query string; no line holds
     an IP address, a signed link's `uid` or `sig`, or an email address. The page reads these two lines only, not the
     fetch lines: a failed fetch ends in an unserved request with its reason (D104).
   - **Layout** (D105). At the top, counts by day (served; unserved by reason) and the 20 most-requested paths; below,

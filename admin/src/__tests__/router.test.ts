@@ -4,14 +4,15 @@ import {fakeApi} from './fake'
 import {guard} from '@/router'
 
 function to(name: string, museum?: string, isPublic = false): RouteLocationNormalized {
-  return {name, params: museum ? {museum} : {}, meta: isPublic ? {public: true} : {}} as unknown as RouteLocationNormalized
+  return {name, params: museum ? {museum} : {}, meta: isPublic ? {public: true} : {},
+    fullPath: museum ? `/${museum}/${name}` : `/${name}`} as unknown as RouteLocationNormalized
 }
 
 describe('the route guard', () => {
   it('sends a museum page to sign-in when not signed in to that museum', async () => {
     fakeApi({'GET /me': {body: {environment: 'Test', sessions: [{museum: 'pahma', name: 'PAHMA', user: 'admin'}]}}})
     expect(await guard(to('overview', 'pahma'))).toBe(true)
-    expect(await guard(to('audit', 'cinefiles'))).toEqual({name: 'sign-in', query: {museum: 'cinefiles'}})
+    expect(await guard(to('audit', 'cinefiles'))).toEqual({name: 'sign-in', query: {museum: 'cinefiles', next: '/cinefiles/audit'}})
   })
 
   it('opens a signed-in museum from the home page', async () => {

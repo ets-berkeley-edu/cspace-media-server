@@ -512,3 +512,47 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   (admins see a recalled file), "Media look up" and "Dismiss"; click "Dismiss". Click the Media CSID, then "Media look up": expect "Not
   served: recalled".
 
+## 20. The UI review's changes, locally (20 minutes, before merging a pull request that changes them)
+
+What it checks: the mockup review of October 13, 2026 (D154 to D165): copy buttons, column help, links, the Recalls
+layout, the button rule, Media look up's sync heading and `/blobs/<CSID>` URLs, the file dialog's reasons, the Audit
+log's "By", and what happens when a session ends. The mockup, `docs/mockup/serena-admin-mockup.html` (version 24),
+shows the same pages. Start afresh from the pull request's branch, run `./serena etl pahma`, open the image's Medium URL
+it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
+
+- [ ] On "Overview", expect "Past requests" and "Media look up" in the sentence as links; click each.
+- [ ] On "Past requests", hover over a column's name (they have a dotted underline): expect a description. Tab to one
+  with the keyboard: expect the same. Expect each path on one line with ⧉ at its end; click ⧉, expect "Copied" for a
+  moment, and paste somewhere: expect the whole path. Expect a time to break only between its date and its clock
+  time when the window is narrow.
+- [ ] Recall your image's Media record on "Recalls": expect "Preview recall" and "Cancel" both as buttons with
+  outlines ("Preview recall" filled blue), the summary's Media CSID and Blob CSID shortened with ⧉, and its thumbnail
+  a fixed size. Confirm with a reason ("Recall 1 Media record" is filled red). In "Active recalls", expect the Media
+  CSID on one line with ⧉, "Blob CSID" and its CSID with ⧉ beneath, a blue tag "Waiting for a later refresh", and
+  "Cancel recall…" in its own column at the right. Click it: expect "Keep the recall" outlined and "Cancel recall"
+  filled red. Keep the recall.
+- [ ] Request the recalled image again in Chrome, then on "Past requests" expect its line's Kind "image" (an unserved
+  line has the kind when Serena knows the file); an unknown file's Kind stays blank.
+- [ ] Run `./serena etl pahma --rows 3` (a failed servable list check). On "Alerts", expect the alert's refresh ID,
+  in its text, as a link to that refresh's page (and under About too, when About names the refresh); a Media CSID
+  under About (the recall's alert) shortened with ⧉, opening Media look up.
+- [ ] **Optional, tomorrow** (only a refresh on a later day decides a recall): after section 17's overnight step,
+  expect on "Recalls" the tag "Still public in CollectionSpace", "kept by <refresh ID>" as a link to that refresh's
+  page, and "Release…" in the right-hand column.
+- [ ] On "Audit log", expect the column "By": "admin", "ETL (pahma)" and "Serena" (the refresh's outcome). Expect a
+  Media CSID target shortened with ⧉ (it opens Media look up), refresh IDs as links, an acknowledged alert's target
+  linking to "Alerts", and the servable list upload's SHA-256 shortened with ⧉. "Export CSV": expect the column `by`.
+- [ ] On "Media look up", look up your image's Medium URL: expect "Serena and CollectionSpace ✓ (No differences)" in
+  green, ⧉ after the identification number in the heading, and the comparison's CSIDs shortened with ⧉. Take the
+  record off the web (section 19's `curl`) and look it up again: expect "⚠ (1 difference: As of)" in amber.
+- [ ] Look up the same URL without `/derivatives/Medium/content` (it ends with the Blob CSID): expect "This URL isn't
+  one Serena serves …", reason "unknown path", then the Blob's answer with every size.
+- [ ] On "Past requests", click a path whose file Serena can't show: look up `9f9f9f9f-0000-4000-8000-000000000000`
+  first on Media look up, then request `/pahma/imageserver/blobs/9f9f9f9f-0000-4000-8000-000000000000/content` in
+  Chrome and click its path: expect "Nothing to show: Serena has no cached copy, and CollectionSpace has no file with
+  this CSID." and no "Open it in a new tab". The dialog's path has ⧉.
+- [ ] Open the admin app in a second tab, and there click "Sign everyone out of PAHMA" on "Overview", then confirm. In
+  the first tab, click "Audit log" (or reload): expect the sign-in page saying "Your PAHMA session ended …"; sign in:
+  expect "Audit log" (the page you were going to), not the Overview.
+- [ ] Stop the backend (`docker compose -p serena stop web`), click "Sign everyone out of PAHMA" and confirm: expect
+  the dialog to stay open and say why it failed. Start it again (`docker compose -p serena start web`).

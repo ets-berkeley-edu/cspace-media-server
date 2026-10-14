@@ -31,7 +31,8 @@ export interface Me {
 export interface AuditEntry {
   tenant: string
   at: string
-  admin: string
+  admin: string // as stored: an admin, "ETL (<museum>)" or "refresh <refresh ID>"
+  by: string // as shown: a refresh's own entries are by Serena (the refresh is the target or in the details)
   action: string
   target: string
   details: Record<string, unknown>
@@ -114,6 +115,28 @@ export interface AlertItem {
 
 const PREFIX = '/admin/v1'
 
+/**
+ * Called when Serena answers 401 for a museum the app thought it was signed in to: the session timed out (30 minutes
+ * without activity, or 8 hours) or an admin signed everyone out. The router sends the admin to sign in again, saying
+ * why, and back to the page afterwards (D161).
+ */
+let sessionEnded: ((museum: string) => void) | null = null
+
+export function onSessionEnded(handler: ((museum: string) => void) | null): void {
+  sessionEnded = handler
+}
+
+/** Something other than call() learned the museum's session ended (a file dialog's picture, say). */
+export function sessionEndedFor(museum: string): void {
+  sessionEnded?.(museum)
+}
+
+/** The museum of an admin API path that needs its session: /museums/<museum>/… or DELETE /sessions/<museum>. */
+export function museumOfPath(path: string): string | null {
+  const found = /^\/(?:museums|sessions)\/([a-z]+)(?:[/?]|$)/.exec(path)
+  return found ? found[1] : null
+}
+
 async function call<T>(method: string, path: string, body?: unknown, raw?: {file?: Blob, headers: Record<string, string>}): Promise<T> {
   const headers: Record<string, string> = {Accept: 'application/json', ...(raw ? raw.headers : {})}
   if (method !== 'GET') {
@@ -130,6 +153,12 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: {file
   })
   const text = await response.text()
   const data = text ? JSON.parse(text) : null
+  if (response.status === 401 && sessionEnded) {
+    const museum = museumOfPath(path)
+    if (museum) {
+      sessionEnded(museum)
+    }
+  }
   if (!response.ok) {
     const detail = data && typeof data.detail === 'string' ? data.detail : `Serena answered ${response.status}.`
     throw new ApiError(response.status, detail)

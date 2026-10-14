@@ -43,6 +43,29 @@ export function middlePath(path: string): string {
   return path.length > 72 ? `${path.slice(0, 40)}…${path.slice(-28)}` : path
 }
 
+/** A CSID shortened to both ends, for a table or a line (D154: every shortened CSID gets a copy button). */
+export function short(csid: string): string {
+  return csid.length > 20 ? `${csid.slice(0, 8)}…${csid.slice(-6)}` : csid
+}
+
+/** A refresh ID, as the ETL API makes them: <museum>-<refresh date>-<n>. */
+export const REFRESH_ID = /^[a-z]+-\d{4}-\d{2}-\d{2}-\d+$/
+
+/** The refresh IDs in a line of text (an alert's message), for linking them (D157). */
+export const REFRESH_IN_TEXT = /\b[a-z]+-\d{4}-\d{2}-\d{2}-\d+\b/g
+
+/** Who did it, as the Audit log's "By" and Recalls show it: a refresh's own entries are by Serena (D155). */
+export function actorOf(by: string): string {
+  return by.startsWith('refresh ') ? 'Serena' : by
+}
+
+/** A time split into its date and its clock time, so a narrow column breaks only between them (D160). */
+export function whenParts(iso: string | null | undefined): [string, string] {
+  const text = when(iso)
+  const space = text.indexOf(' ')
+  return space < 0 ? [text, ''] : [text.slice(0, space), text.slice(space + 1)]
+}
+
 /** An unserved request's reason, readable: not_listed → "not listed". */
 export function reasonOf(reason: string): string {
   return reason.replace(/_/g, ' ')
@@ -100,6 +123,11 @@ export function targetOf(action: string, target: string): string {
 
 const PATH = /^\/([a-z]+)\/imageserver\/blobs\/([A-Za-z0-9-]{1,64})\/(?:derivatives\/([A-Za-z]+)\/)?content$/
 const CSID = /^[0-9a-f]{8}(-[0-9a-f]{4}){2,3}(-[0-9a-f]{12})?$/i
+
+/** Whether a value is a CSID, as CollectionSpace makes them. */
+export function isCsid(value: string): boolean {
+  return CSID.test(value)
+}
 
 /** A logged path's Blob CSID and size, or null for a path with no CSID to look up (a bad CSID): D145. */
 export function blobOfPath(path: string): {blob: string, size: string} | null {

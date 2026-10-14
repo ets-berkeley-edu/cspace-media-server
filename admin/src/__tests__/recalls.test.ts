@@ -45,7 +45,10 @@ describe('the Recalls page', () => {
     const wrapper = await at('/pahma/recalls', Recalls)
     expect(wrapper.find('#page-title').text()).toBe('PAHMA Recalls')
     expect(wrapper.find('#active-recalls').text()).toContain('Still public in CollectionSpace')
-    expect(wrapper.find('#ended-recalls').text()).toContain('Ended by a refresh')
+    expect(wrapper.find('#ended-recalls').text()).toContain('Ended by refresh pahma-2026-10-15-1')
+    expect(wrapper.find('#ended-recalls a.refresh-link').attributes('href')).toBe('/admin/pahma/refreshes/pahma-2026-10-15-1')
+    expect(wrapper.find('#ended-recalls').text()).toContain('Serena') // a refresh's own entries are by Serena
+    expect(wrapper.find('#active-recalls a.refresh-link').text()).toBe('pahma-2026-10-15-1') // kept by (D157)
     await wrapper.find('#active-recalls .release').trigger('click')
     await flushPromises()
     const confirm = () => document.querySelector('#release-confirm') as HTMLButtonElement
@@ -100,7 +103,9 @@ describe('the Recalls page', () => {
     await flushPromises();
     (document.querySelector('#recall-summarize') as HTMLButtonElement).click()
     await vi.waitFor(() => expect(document.querySelector('#recall-summary')).not.toBeNull())
-    expect(document.querySelector('#recall-summary')?.textContent).toContain(MEDIA)
+    expect(document.querySelector('#recall-summary')?.textContent).toContain('1a2b3c4d…3b4c50') // shortened (D154)
+    expect(document.querySelector(`#recall-summary [title="${MEDIA}"]`)).not.toBeNull() // whole on hover
+    expect(document.querySelector('#recall-summary .copy-button')?.getAttribute('aria-label')).toBe('Copy Media CSID')
     expect(document.querySelector('#recall-not-found')?.textContent).toContain('typo: Not a CSID.')
     const thumbnail = document.querySelector('#recall-summary img') as HTMLImageElement
     expect(thumbnail.getAttribute('src')).toBe(`/admin/v1/museums/pahma/media/${MEDIA}/preview?size=thumbnail`)
@@ -142,7 +147,10 @@ describe('Media look up', () => {
     await flushPromises()
     expect(calls.map(c => c.path)).toEqual([`/museums/pahma/lookup?q=${MEDIA}`])
     expect(wrapper.find('#lookup-verdict').text()).toContain('Not served: recalled')
-    expect(wrapper.find('#lookup-heading').text()).toBe(`Media 9-12345 Media CSID ${MEDIA}`) // D153
+    expect(wrapper.find('#lookup-heading').text()).toContain('Media 9-12345') // D153
+    expect(wrapper.find('#lookup-heading').text()).toContain(`Media CSID ${MEDIA}`)
+    expect(wrapper.find('#lookup-heading .copy-button').attributes('aria-label')).toBe('Copy identification number') // D165
+    expect(wrapper.find('#lookup-sync').text()).toBe('⚠ (1 difference: As of)') // D162
     expect(wrapper.find('#lookup-next').text()).toContain('Open Recalls')
     expect(wrapper.find('#lookup-sizes').text()).toContain('image/jpeg, 96 KB')
     expect(wrapper.find('#lookup-sizes').text()).toContain('2026-10-15 05:59:30 UTC') // last served
@@ -173,8 +181,9 @@ describe('the file dialogs', () => {
     fakeApi({'GET /museums/pahma/recalls': {body: PAGE}, [`GET /museums/pahma/lookup?q=${MEDIA}`]: {body: {
       input: MEDIA, refused: null, refresh: null, items: []}}})
     const wrapper = await at('/pahma/recalls', Recalls)
-    const links = wrapper.findAll('#active-recalls .recall-csid')
-    expect(links.map(l => l.text())).toEqual([MEDIA, BLOB])
+    const links = wrapper.findAll('#active-recalls .recall-csid .file-link')
+    expect(links.map(l => l.text())).toEqual(['1a2b3c4d…3b4c50', '0f1e2d3c…3f4a50']) // shortened, with ⧉ (D154)
+    expect(wrapper.findAll('#active-recalls .copy-button')).toHaveLength(2)
     await links[1].trigger('click')
     await flushPromises()
     const dialog = document.querySelector('#file-dialog')

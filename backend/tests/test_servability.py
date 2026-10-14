@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from conftest import add_blob, recall
 from fastapi.testclient import TestClient
@@ -80,6 +82,20 @@ def test_recalls(client: TestClient, store: Store, recorder: MemoryRecorder) -> 
     assert _reason(client, recorder, derivative("pahma")) == Reason.RECALLED  # on the very next request
     store.delete_recall("pahma", MEDIA)  # ended (by a refresh, or released)
     assert _reason(client, recorder, derivative("pahma")) == SERVABLE
+
+
+def test_the_unserved_line_has_the_kind_when_serena_knows_it(client: TestClient, store: Store,
+                                                             recorder: MemoryRecorder,
+                                                             caplog: pytest.LogCaptureFixture) -> None:
+    """Past requests' Kind column is blank only for a file Serena doesn't know (October 13, 2026)."""
+    caplog.set_level(logging.INFO, logger="serena.unserved")
+    add_blob(store, "pahma", BLOB, MEDIA, "card")
+    recall(store, "pahma", MEDIA)
+    assert _reason(client, recorder, derivative("pahma")) == Reason.RECALLED
+    unknown = "2b3c4d5e-6f70-4a81-9b2c-3d4e5f607182"
+    assert _reason(client, recorder, derivative("pahma", blob=unknown)) == Reason.NOT_LISTED
+    lines = [r for r in caplog.records if r.getMessage() == "unserved"]
+    assert [getattr(r, "kind", None) for r in lines] == ["card", None]
 
 
 def test_placeholder_image(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:

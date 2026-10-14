@@ -25,6 +25,7 @@ import {VSelect} from 'vuetify/components/VSelect'
 import {VTable} from 'vuetify/components/VTable'
 import {VTextField} from 'vuetify/components/VTextField'
 import {VTextarea} from 'vuetify/components/VTextarea'
+import {VTooltip} from 'vuetify/components/VTooltip'
 
 /**
  * Vuetify as BOA, Damien, Diablo and the BMU set it up: its styles (main.scss: without them the components render
@@ -35,7 +36,7 @@ export default createVuetify({
   components: {
     VAlert, VApp, VAppBar, VAppBarTitle, VBadge, VBtn, VBtnToggle, VCard, VCardActions, VCardText, VCardTitle, VCheckbox, VChip,
     VContainer, VDataTable, VDialog, VFileInput, VForm, VIcon, VList, VListItem, VListItemTitle, VListSubheader, VMain, VMenu, VNavigationDrawer,
-    VProgressCircular, VSelect, VSpacer, VTable, VTextField, VTextarea
+    VProgressCircular, VSelect, VSpacer, VTable, VTextField, VTextarea, VTooltip
   },
   icons: {defaultSet: 'mdi', aliases, sets: {mdi}},
   defaults: {

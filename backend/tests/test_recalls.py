@@ -281,6 +281,13 @@ def test_look_up_a_file(client: TestClient, store: Store) -> None:
     assert client.get(lookup, params={"q": UNKNOWN}).json()["items"][0]["sizes"][0]["reason"] == "not_listed"
     assert client.get(lookup, params={"q": "/bampfa/imageserver/blobs/x/content"}).status_code == 422
     assert client.get(lookup, params={"q": "not a csid"}).status_code == 422
+    # A Blob's URL without /content (D163): Serena doesn't serve it, but the Blob is looked up anyway, every size.
+    bare = client.get(lookup, params={"q": f"/pahma/imageserver/blobs/{BLOB}"}).json()
+    assert bare["refused"] == "unknown_path"
+    assert [i["blob_csid"] for i in bare["items"]] == [BLOB]
+    assert [s["size"] for s in bare["items"][0]["sizes"]] == ["original", *PAHMA.derivatives]
+    nothing = client.get(lookup, params={"q": "/pahma/imageserver/blobs/not.a.csid"}).json()
+    assert nothing["items"] == [] and nothing["refused"] == "unknown_path"
 
 
 # --- Media look up beside CollectionSpace (D139 to D143)

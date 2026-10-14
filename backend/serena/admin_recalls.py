@@ -30,6 +30,9 @@ log = logging.getLogger("serena.admin_recalls")
 DAYS_SHOWN = 30  # the Recalls page lists the last 30 days' ended recalls (D120)
 PREVIEW_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"})
 # A thumbnail or full-size view comes only through the admin API, to signed-in admins, never cached (D129).
+# Why the file dialog has nothing to show (the UI review, October 13, 2026: the real reason, not a list of them all).
+NO_CACHE_CSPACE_DOWN = ("Nothing to show: Serena has no cached copy of this size, and CollectionSpace can't be reached "
+                        "right now.")
 PREVIEW_HEADERS = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"}
 
 
@@ -156,7 +159,7 @@ def create_router() -> APIRouter:
         rows = recalls.rows_of_media(t.store, museum.key, media_csid)
         kind = rows[0].kind if rows else None
         if kind == "3D":
-            raise HTTPException(404, "A 3D file has no preview.")
+            raise HTTPException(404, "A 3D model: no preview.")
         derivative: str | None = "Thumbnail" if "Thumbnail" in museum.derivatives else museum.derivatives[0]
         if size == "full":
             derivative = None if kind == "pdf" else museum.derivatives[-1]
@@ -182,7 +185,7 @@ def create_router() -> APIRouter:
         record = t.store.servability(museum.key, blob_csid)
         kind = record.kind if record else None
         if kind == "3D":
-            raise HTTPException(404, "A 3D file has no preview.")
+            raise HTTPException(404, "A 3D model: no preview.")
         if size == "full":
             derivative: str | None = museum.derivatives[-1]
         elif size == "original":
@@ -205,9 +208,10 @@ def create_router() -> APIRouter:
             except Exception as error:
                 log.warning("no preview from CollectionSpace", extra={"museum": museum.key,
                                                                        "error": type(error).__name__})
-                raise HTTPException(404, "Not cached, and CollectionSpace can't be reached.") from error
+                raise HTTPException(404, NO_CACHE_CSPACE_DOWN) from error
         if media is None:
-            raise HTTPException(404, "Not cached, and no Media record has this Blob.")
+            raise HTTPException(404, "Nothing to show: Serena has no cached copy, and CollectionSpace has no file "
+                                     "with this CSID.")
         limit = t.museum_settings.get(museum).size_limit_mb.get(kind or "image", 0) * 1024 * 1024  # type: ignore[call-overload]
         return _from_collectionspace(t, museum.key, media, derivative, limit)
 
@@ -227,18 +231,20 @@ def create_router() -> APIRouter:
 def _from_collectionspace(t: RecallServices, tenant: str, media_csid: str, derivative: str | None,
                           limit: int) -> Response:
     if t.cspace is None:
-        raise HTTPException(404, "No cached copy, and CollectionSpace isn't configured here.")
+        raise HTTPException(404, "Nothing to show: Serena has no cached copy, and CollectionSpace isn't "
+                                 "configured here.")
     stack = contextlib.ExitStack()
     try:
         fetched = stack.enter_context(t.cspace.get(tenant).fetch(media_csid, derivative))
     except Exception as error:
         stack.close()
         log.warning("no preview from CollectionSpace", extra={"museum": tenant, "error": type(error).__name__})
-        raise HTTPException(404, "No cached copy, and CollectionSpace can't be reached.") from error
+        raise HTTPException(404, NO_CACHE_CSPACE_DOWN) from error
     too_large = fetched.content_length is not None and limit and fetched.content_length > limit
     if fetched.status != 200 or fetched.content_type not in PREVIEW_TYPES or too_large:
         stack.close()
-        raise HTTPException(404, "CollectionSpace has no file this page can show.")
+        raise HTTPException(404, "Nothing to show: CollectionSpace's file at this size isn't one this page can show "
+                                 "(a TIFF, say), or it's over the size limit.")
 
     def chunks() -> Iterator[bytes]:
         sent = 0

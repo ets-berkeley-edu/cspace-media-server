@@ -108,8 +108,12 @@ async function signOut() {
   if (!current.value) {
     return
   }
-  await api.signOut(current.value.museum)
-  await refresh()
+  try {
+    await api.signOut(current.value.museum)
+  } catch {
+    // Already signed out (the session ended) or Serena couldn't be reached: what /me says next decides.
+  }
+  await refresh().catch(() => undefined)
   const next = session.signedIn[0]
   await router.push(next ? {name: 'overview', params: {museum: next.museum}} : {name: 'sign-in'})
 }

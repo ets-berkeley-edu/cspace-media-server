@@ -18,6 +18,7 @@
         id="lookup-go"
         type="submit"
         color="primary"
+        variant="flat"
         :loading="loading"
         :disabled="!q.trim()"
       >
@@ -25,13 +26,23 @@
       </v-btn>
     </v-form>
     <LoadError :message="error" />
+    <v-alert
+      v-if="result?.refused && result.items.length"
+      id="lookup-bare-blob"
+      type="info"
+      variant="tonal"
+      class="mb-4"
+    >
+      This URL isn't one Serena serves (it needs /content or /derivatives/&lt;size&gt;/content): a request for it gets
+      the unavailable image, reason "{{ reasonOf(result.refused) }}". Below, its Blob CSID, looked up on its own.
+    </v-alert>
     <h2 v-if="heading" id="lookup-heading" class="text-h6 mb-3">
-      {{ heading.title }}
+      {{ heading.title }}<CopyButton v-if="heading.number" :value="heading.number" label="identification number" />
       <span v-if="heading.csid" class="text-body-2 text-medium-emphasis ml-2">Media CSID <span class="mono">{{ heading.csid }}</span></span>
     </h2>
     <template v-if="result">
       <v-alert
-        v-if="result.refused"
+        v-if="result.refused && !result.items.length"
         id="lookup-refused"
         type="warning"
         variant="tonal"
@@ -49,7 +60,14 @@
             density="compact"
             variant="outlined"
           >
-            <v-btn v-for="(each, i) in result.items" :key="each.blob_csid" :value="i">{{ short(each.blob_csid) }}</v-btn>
+            <v-btn
+              v-for="(each, i) in result.items"
+              :key="each.blob_csid"
+              :value="i"
+              :title="each.blob_csid"
+            >
+              {{ short(each.blob_csid) }}
+            </v-btn>
           </v-btn-toggle>
         </div>
         <div class="inspector">
@@ -161,7 +179,16 @@
               First cached: when Serena fetched that size and cached it.
             </p>
 
-            <h2 class="text-h6 mb-2">Serena and CollectionSpace</h2>
+            <h2 id="lookup-compare-heading" class="text-h6 mb-2">
+              Serena and CollectionSpace
+              <span
+                v-if="sync"
+                id="lookup-sync"
+                class="text-body-1 font-weight-bold ml-1"
+                :class="sync.differs ? 'text-warning' : 'text-success'"
+                :title="sync.differs ? 'Rows where Serena\'s records and CollectionSpace differ are highlighted below.' : 'Serena\'s records match what CollectionSpace says now.'"
+              >{{ sync.text }}</span>
+            </h2>
             <p v-if="cs.state === 'no_media'" class="mb-2">
               Nothing to compare: this {{ noun }} has no Media record (the museum's placeholder image is served from
               uploaded files).
@@ -197,8 +224,15 @@
                         differs
                       </v-chip>
                     </th>
-                    <td>{{ row.serena }}</td>
-                    <td>{{ row.cspace }}</td>
+                    <td>
+                      <ShortCsid v-if="row.serenaCsid" :csid="row.serenaCsid" :label="row.label" />
+                      <template v-else>{{ row.serena }}</template>
+                    </td>
+                    <td>
+                      <template v-if="row.cspacePrefix">{{ row.cspacePrefix }} · </template>
+                      <ShortCsid v-if="row.cspaceCsid" :csid="row.cspaceCsid" :label="row.label" />
+                      <template v-else>{{ row.cspace }}</template>
+                    </td>
                   </tr>
                 </tbody>
               </v-table>
@@ -228,8 +262,10 @@ import {useRoute, useRouter} from 'vue-router'
 import {museumName} from '@/session'
 import type {Lookup, LookupCSpace, LookupItem} from '@/api'
 import {api, problem} from '@/api'
+import CopyButton from '@/components/CopyButton.vue'
 import LoadError from '@/components/LoadError.vue'
-import {kindWord, reasonOf, when} from '@/words'
+import ShortCsid from '@/components/ShortCsid.vue'
+import {kindWord, reasonOf, short, when} from '@/words'
 
 // Media look up, layout C from the UI review (decided October 13, 2026, D139 to D145): Serena's answer, with the file
 // in Serena and in CollectionSpace side by side.
@@ -248,9 +284,9 @@ const item = computed<LookupItem | null>(() => result.value?.items[Math.min(inde
 const cs = computed<LookupCSpace>(() => item.value?.cspace || {state: 'unavailable'})
 // Which Media record this is, as staff know it (D153): "Media <identification number>", with its CSID beside;
 // without a number (none, CollectionSpace can't be reached, or no such record), "Media <Media CSID>".
-const heading = computed<{title: string, csid?: string} | null>(() => {
+const heading = computed<{title: string, csid?: string, number?: string} | null>(() => {
   const it = item.value
-  if (!it || result.value?.refused) {
+  if (!it) {
     return null
   }
   if (cs.value.state === 'no_media') {
@@ -261,7 +297,7 @@ const heading = computed<{title: string, csid?: string} | null>(() => {
     return null
   }
   const number = cs.value.identification_number
-  return number ? {title: `Media ${number}`, csid: media} : {title: `Media ${media}`}
+  return number ? {title: `Media ${number}`, csid: media, number} : {title: `Media ${media}`}
 })
 const hasRecord = computed(() => cs.value.state === 'exists' || cs.value.state === 'deleted')
 const blobDiffers = computed(() => !!item.value?.kind && !!cs.value.blob_csid && cs.value.blob_csid !== item.value.blob_csid)
@@ -286,7 +322,17 @@ const cspaceCaption = computed(() => {
   }
 })
 
-const compare = computed(() => {
+interface CompareRow {
+  label: string
+  serena: string
+  cspace: string
+  differs: boolean
+  serenaCsid?: string // a CSID: shown shortened, with ⧉ (D154)
+  cspaceCsid?: string
+  cspacePrefix?: string
+}
+
+const compare = computed<CompareRow[]>(() => {
   const it = item.value
   const c = cs.value
   if (!it) {
@@ -295,15 +341,28 @@ const compare = computed(() => {
   const fields = (c.fields || []).map(f => `${f.label}: ${f.value || '(empty)'}`).join('; ') || 'none configured'
   const refresh = result.value?.refresh
   return [
-    {label: 'Media CSID', serena: it.media_csid ? short(it.media_csid) : 'not listed',
-     cspace: `${c.state === 'deleted' ? 'Soft-deleted' : 'Exists'} · ${short(c.media_csid || '')}`,
+    {label: 'Media CSID', serena: 'not listed', serenaCsid: it.media_csid || undefined,
+     cspacePrefix: c.state === 'deleted' ? 'Soft-deleted' : 'Exists', cspace: '', cspaceCsid: c.media_csid || undefined,
      differs: c.state === 'deleted' || (!!it.media_csid && c.media_csid !== it.media_csid)},
-    {label: 'Blob CSID', serena: it.kind ? short(it.blob_csid) : 'not listed', cspace: c.blob_csid ? short(c.blob_csid) : 'none',
-     differs: blobDiffers.value},
+    {label: 'Blob CSID', serena: 'not listed', serenaCsid: it.kind ? it.blob_csid : undefined,
+     cspace: 'none', cspaceCsid: c.blob_csid || undefined, differs: blobDiffers.value},
     {label: 'Access', serena: it.access || 'not listed', cspace: fields, differs: false},
     {label: 'As of', serena: refresh ? `Refresh ${refresh.refresh_id}, started ${when(refresh.started_at)}` : 'no refresh yet',
      cspace: c.updated_at ? `Last changed ${when(c.updated_at)}` : 'not known', differs: !!c.changed_since_refresh}
   ]
+})
+
+// Whether Serena's records and CollectionSpace agree, beside the heading (D162): green, or amber naming the rows.
+const sync = computed<{text: string, differs: boolean} | null>(() => {
+  if (!hasRecord.value) {
+    return null
+  }
+  const differing = compare.value.filter(r => r.differs).map(r => r.label)
+  if (!differing.length) {
+    return {text: '✓ (No differences)', differs: false}
+  }
+  const n = differing.length
+  return {text: `⚠ (${n} difference${n === 1 ? '' : 's'}: ${differing.join(', ')})`, differs: true}
 })
 
 interface Verdict {
@@ -364,10 +423,6 @@ const verdict = computed<Verdict>(() => {
   return {tone: 'not', head: `Not served: ${first ? reasonOf(first.reason!) : 'see the sizes'}`,
           why: first ? first.verdict : '', next: cs.value.next || ''}
 })
-
-function short(csid: string): string {
-  return csid.length > 20 ? `${csid.slice(0, 8)}…${csid.slice(-4)}` : csid
-}
 
 function bytes(n: number): string {
   return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} bytes`

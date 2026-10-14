@@ -3,7 +3,14 @@
     <div class="d-flex align-center flex-wrap ga-4 mb-4">
       <h1 id="page-title" class="text-h5">{{ museumName(museum) }} Recalls</h1>
       <v-spacer />
-      <v-btn id="recall" color="error" @click="openForm">Recall…</v-btn>
+      <v-btn
+        id="recall"
+        color="error"
+        variant="flat"
+        @click="openForm"
+      >
+        Recall…
+      </v-btn>
     </div>
     <p class="mb-4">
       A recall stops Serena serving a Media record's file at once, until CollectionSpace and a later refresh catch up.
@@ -29,37 +36,64 @@
       no-data-text="No active recalls."
       class="mb-6"
     >
+      <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
+      <!-- eslint-disable-next-line vue/no-v-for-template-key -->
+      <template v-for="h in activeHeaders" :key="h.key" #[`header.${h.key}`]="slot">
+        <ColumnHeader v-bind="slot" :help="h.help" />
+      </template>
       <template #[`item.media_csid`]="{item}">
-        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
+        <ShortCsid
+          class="recall-csid"
+          :csid="item.media_csid"
+          label="Media CSID"
+          openable
+          @open="openCsid(item.media_csid, 'Media CSID')"
+        />
+        <div v-for="blob in item.blob_csids" :key="blob" class="text-medium-emphasis text-no-wrap">
+          Blob CSID
+          <ShortCsid
+            class="recall-csid"
+            :csid="blob"
+            label="Blob CSID"
+            openable
+            @open="openCsid(blob, 'Blob CSID')"
+          />
+        </div>
       </template>
-      <template #[`item.blob_csids`]="{item}">
-        <span v-for="(blob, i) in item.blob_csids" :key="blob"><template v-if="i">, </template>
-          <FileLink class="recall-csid" @open="openCsid(blob, 'Blob CSID')">{{ blob }}</FileLink></span>
-      </template>
-      <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
+      <template #[`item.at`]="{item}"><WhenText :at="item.at" /></template>
       <template #[`item.kept_by`]="{item}">
         <template v-if="item.kept_by">
-          <span class="text-error">Still public in CollectionSpace</span> (refresh {{ item.kept_by }})
-          <v-btn
-            class="release ml-2"
-            size="small"
-            variant="outlined"
-            @click="openEnd(item, 'release')"
-          >
-            Release
-          </v-btn>
+          <v-chip size="small" color="error" variant="tonal">Still public in CollectionSpace</v-chip>
+          <div class="text-medium-emphasis text-no-wrap">kept by <RefreshLink :id="item.kept_by" /></div>
         </template>
-        <template v-else>
+        <v-chip
+          v-else
+          size="small"
+          color="info"
+          variant="tonal"
+        >
           Waiting for a later refresh
-          <v-btn
-            class="cancel-recall ml-2"
-            size="small"
-            variant="outlined"
-            @click="openEnd(item, 'cancel')"
-          >
-            Cancel recall
-          </v-btn>
-        </template>
+        </v-chip>
+      </template>
+      <template #[`item.actions`]="{item}">
+        <v-btn
+          v-if="item.kept_by"
+          class="release"
+          size="small"
+          variant="outlined"
+          @click="openEnd(item, 'release')"
+        >
+          Release…
+        </v-btn>
+        <v-btn
+          v-else
+          class="cancel-recall"
+          size="small"
+          variant="outlined"
+          @click="openEnd(item, 'cancel')"
+        >
+          Cancel recall…
+        </v-btn>
       </template>
     </v-data-table>
 
@@ -75,12 +109,27 @@
       density="compact"
       no-data-text="None."
     >
-      <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
-      <template #[`item.action`]="{item}">
-        {{ item.action === 'recall_release' ? 'Released' : item.action === 'recall_cancel' ? 'Cancelled' : 'Ended by a refresh' }}
+      <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
+      <!-- eslint-disable-next-line vue/no-v-for-template-key -->
+      <template v-for="h in endedHeaders" :key="h.key" #[`header.${h.key}`]="slot">
+        <ColumnHeader v-bind="slot" :help="h.help" />
       </template>
+      <template #[`item.at`]="{item}"><WhenText :at="item.at" /></template>
+      <template #[`item.action`]="{item}">
+        <template v-if="item.action === 'recall_release'">Released</template>
+        <template v-else-if="item.action === 'recall_cancel'">Cancelled</template>
+        <template v-else-if="item.by.startsWith('refresh ')">Ended by refresh <RefreshLink :id="item.by.slice(8)" /></template>
+        <template v-else>Ended by a refresh</template>
+      </template>
+      <template #[`item.by`]="{item}">{{ actorOf(item.by) }}</template>
       <template #[`item.media_csid`]="{item}">
-        <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
+        <ShortCsid
+          class="recall-csid"
+          :csid="item.media_csid"
+          label="Media CSID"
+          openable
+          @open="openCsid(item.media_csid, 'Media CSID')"
+        />
       </template>
       <template #[`item.details`]="{item}">{{ item.details.reason || item.details.why || '' }}</template>
     </v-data-table>
@@ -149,12 +198,19 @@
                       <span v-else class="preview-placeholder">{{ r.kind === 'pdf' ? 'PDF' : 'No preview' }}</span>
                     </button>
                   </td>
-                  <td>{{ r.media_csid }}</td>
-                  <td>{{ r.blob_csids.join(', ') }}</td>
+                  <td><ShortCsid :csid="r.media_csid" label="Media CSID" /></td>
+                  <td>
+                    <div v-for="blob in r.blob_csids" :key="blob"><ShortCsid :csid="blob" label="Blob CSID" /></div>
+                  </td>
                   <td>{{ r.kind ? kindWord(r.kind) : 'not known' }}</td>
                   <td>{{ r.recalled ? 'already recalled' : r.served_today ? 'yes' : 'no' }}</td>
                   <td>{{ r.source === 'serena' ? 'Serena' : 'CollectionSpace (not served today)' }}</td>
-                  <td>{{ r.entered.join(', ') }}</td>
+                  <td>
+                    <div v-for="given in r.entered" :key="given">
+                      <ShortCsid v-if="isCsid(given)" :csid="given" label="CSID" />
+                      <template v-else>{{ given }}</template>
+                    </div>
+                  </td>
                 </tr>
               </tbody>
             </v-table>
@@ -183,12 +239,13 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="form = false">Cancel</v-btn>
-          <v-btn v-if="summary" @click="summary = null">Back</v-btn>
+          <v-btn variant="outlined" @click="form = false">Cancel</v-btn>
+          <v-btn v-if="summary" variant="outlined" @click="summary = null">Back</v-btn>
           <v-btn
             v-if="!summary"
             id="recall-summarize"
             color="primary"
+            variant="flat"
             :loading="busy"
             @click="summarize"
           >
@@ -198,6 +255,7 @@
             v-else-if="toRecall.length"
             id="recall-confirm"
             color="error"
+            variant="flat"
             :loading="busy"
             :disabled="!reason.trim()"
             @click="confirm"
@@ -227,7 +285,7 @@
             alt=""
           >
         </v-card-text>
-        <v-card-actions><v-spacer /><v-btn @click="full = false">Close</v-btn></v-card-actions>
+        <v-card-actions><v-spacer /><v-btn variant="outlined" @click="full = false">Close</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -254,10 +312,11 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="ending = false">Keep the recall</v-btn>
+          <v-btn variant="outlined" @click="ending = false">Keep the recall</v-btn>
           <v-btn
             :id="`${endMode}-confirm`"
-            color="primary"
+            color="error"
+            variant="flat"
             :loading="busy"
             :disabled="!endReason.trim()"
             @click="confirmEnd"
@@ -278,24 +337,28 @@ import type {Recall, RecallRecord, RecallSummary, RecallsPage} from '@/api'
 import {api, problem} from '@/api'
 import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
-import FileLink from '@/components/FileLink.vue'
+import ColumnHeader from '@/components/ColumnHeader.vue'
 import LoadError from '@/components/LoadError.vue'
-import {PAGE_SIZES, kindWord, when} from '@/words'
+import RefreshLink from '@/components/RefreshLink.vue'
+import ShortCsid from '@/components/ShortCsid.vue'
+import WhenText from '@/components/WhenText.vue'
+import {PAGE_SIZES, actorOf, isCsid, kindWord} from '@/words'
 
+// The state as a tag, and the one action a recall allows in its own column at the right (D155).
 const activeHeaders = [
-  {title: 'Media CSID', key: 'media_csid'},
-  {title: 'Blob CSID', key: 'blob_csids', sortable: false},
-  {title: 'Recalled by', key: 'by'},
-  {title: 'When (UTC)', key: 'at'},
-  {title: 'Reason', key: 'reason'},
-  {title: 'State', key: 'kept_by'}
+  {title: 'Media CSID', key: 'media_csid', help: 'The recalled Media record, with its Blob beneath. Click a CSID to see the file; ⧉ copies the whole CSID.'},
+  {title: 'Recalled (UTC)', key: 'at', help: 'When the admin recalled it.'},
+  {title: 'By', key: 'by', help: 'The admin who recalled it.'},
+  {title: 'Reason', key: 'reason', help: 'The reason the admin gave.'},
+  {title: 'State', key: 'kept_by', help: 'Waiting for a later refresh: no refresh has decided it yet, so it can be cancelled. Still public in CollectionSpace: a refresh on a later day still listed the file as public, so the recall stays until it\'s released.'},
+  {title: '', key: 'actions', sortable: false, align: 'end' as const}
 ]
 const endedHeaders = [
-  {title: 'Media CSID', key: 'media_csid'},
-  {title: 'When (UTC)', key: 'at'},
-  {title: 'Ended by', key: 'by'},
-  {title: 'How', key: 'action'},
-  {title: 'Why', key: 'details', sortable: false}
+  {title: 'Media CSID', key: 'media_csid', help: 'The Media record whose recall ended. Click it to see the file; ⧉ copies the whole CSID.'},
+  {title: 'Ended (UTC)', key: 'at', help: 'When the recall ended.'},
+  {title: 'How', key: 'action', help: 'Ended by a refresh (its servable list no longer had the file as public), released, or cancelled.'},
+  {title: 'By', key: 'by', help: 'The admin who released or cancelled it, or Serena for a refresh.'},
+  {title: 'Why', key: 'details', sortable: false, help: 'The admin\'s reason, or why the refresh ended it.'}
 ]
 
 const route = useRoute()
@@ -439,9 +502,12 @@ async function confirmEnd() {
 </script>
 
 <style scoped>
+/* One size for every thumbnail, so the summary's rows line up whatever the files' shapes. */
 .thumbnail {
-  max-width: 96px;
-  max-height: 96px;
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
   display: block;
 }
 
@@ -458,9 +524,11 @@ async function confirmEnd() {
 }
 
 .preview-placeholder {
-  display: inline-block;
-  min-width: 64px;
-  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 72px;
   border: 1px solid rgba(0, 0, 0, 0.2);
   text-align: center;
   font-size: 0.8rem;
