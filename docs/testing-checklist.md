@@ -544,8 +544,9 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
 - [ ] On "Audit log", expect the column "By": "admin", "ETL (pahma)" and "Serena" (the refresh's outcome). Expect a
   Media CSID target shortened with ⧉ (it opens Media look up), refresh IDs as links, an acknowledged alert's target
   linking to "Alerts", and the servable list upload's SHA-256 shortened with ⧉. "Export CSV": expect the column `by`.
-- [ ] On "Media look up", look up your image's Medium URL: expect "Serena and CollectionSpace ✓ (No differences)" in
-  green, ⧉ after the identification number in the heading, and the comparison's CSIDs shortened with ⧉. Take the
+- [ ] Run `./serena etl pahma` first, so the failed check above isn't Serena's latest refresh (every `./serena etl`
+  touches the simulator's records, and a failed one leaves them changed after Serena's last update). Then, on "Media
+  look up", look up your image's Medium URL: expect "Serena and CollectionSpace ✓ (No differences)" in green, ⧉ after the identification number in the heading, and the comparison's CSIDs shortened with ⧉. Take the
   record off the web (section 19's `curl`) and look it up again: expect "⚠ (1 difference: As of)" in amber.
 - [ ] Look up the same URL without `/derivatives/Medium/content` (it ends with the Blob CSID): expect "This URL isn't
   one Serena serves …", reason "unknown path", then the Blob's answer with every size.
