@@ -60,13 +60,13 @@
                   alt="Serena's stored copy"
                   @error="broken.serena = true"
                 >
-                <span class="cap">{{ largestStored ? `Serena's stored ${largestStored.size}` : 'No copy stored in Serena' }}</span>
+                <span v-if="!largestStored || broken.serena" class="cap">{{ largestStored ? 'Serena\'s copy can\'t be shown' : 'No copy stored in Serena' }}</span>
               </div>
               <details id="serena-details" :open="open.serena" @toggle="open.serena = ($event.target as HTMLDetailsElement).open">
                 <summary>Details</summary>
                 <dl>
-                  <dt>Blob</dt><dd class="mono">{{ item.blob_csid }}</dd>
-                  <dt>Media record</dt><dd class="mono">{{ item.media_csid || 'none' }}</dd>
+                  <dt>Media CSID</dt><dd class="mono">{{ item.media_csid || 'none' }}</dd>
+                  <dt>Blob CSID</dt><dd class="mono">{{ item.blob_csid }}</dd>
                   <dt>Kind</dt><dd>{{ item.kind || 'not known' }}</dd>
                   <dt>Access</dt><dd>{{ item.access || 'not known' }}</dd>
                   <dt>First stored</dt><dd>{{ firstStored ? when(firstStored) : 'never' }}</dd>
@@ -90,7 +90,7 @@
                   alt="CollectionSpace's file now"
                   @error="broken.cspace = true"
                 >
-                <span class="cap">{{ cspaceCaption }}</span>
+                <span v-if="cspaceCaption" class="cap">{{ cspaceCaption }}</span>
               </div>
               <details
                 v-if="hasRecord"
@@ -100,9 +100,9 @@
               >
                 <summary>Details</summary>
                 <dl>
-                  <dt>Media record</dt><dd class="mono">{{ cs.media_csid }}</dd>
+                  <dt>Media CSID</dt><dd class="mono">{{ cs.media_csid }}</dd>
                   <dt>State</dt><dd>{{ cs.state === 'deleted' ? 'Soft-deleted' : 'Exists' }}</dd>
-                  <dt>Blob</dt>
+                  <dt>Blob CSID</dt>
                   <dd class="mono">
                     {{ cs.blob_csid || 'none' }}
                     <v-chip
@@ -254,7 +254,12 @@ const cspaceCaption = computed(() => {
   case 'no_media': return 'No Media record'
   case 'unavailable': return 'CollectionSpace can\'t be reached'
   case 'gone': return 'Not in CollectionSpace'
-  default: return `CollectionSpace's file now${cs.value.state === 'deleted' ? ' (soft-deleted)' : ''}, not stored`
+  default:
+    // A picture that shows needs no caption; a caption says why there's none, or that the file is soft-deleted.
+    if (broken.cspace || !cs.value.media_csid) {
+      return 'CollectionSpace\'s file can\'t be shown'
+    }
+    return cs.value.state === 'deleted' ? 'Soft-deleted in CollectionSpace' : ''
   }
 })
 
@@ -267,10 +272,10 @@ const compare = computed(() => {
   const fields = (c.fields || []).map(f => `${f.label}: ${f.value || '(empty)'}`).join('; ') || 'none configured'
   const refresh = result.value?.refresh
   return [
-    {label: 'Media record', serena: it.media_csid ? short(it.media_csid) : 'not listed',
+    {label: 'Media CSID', serena: it.media_csid ? short(it.media_csid) : 'not listed',
      cspace: `${c.state === 'deleted' ? 'Soft-deleted' : 'Exists'} · ${short(c.media_csid || '')}`,
      differs: c.state === 'deleted' || (!!it.media_csid && c.media_csid !== it.media_csid)},
-    {label: 'Blob', serena: it.kind ? short(it.blob_csid) : 'not listed', cspace: c.blob_csid ? short(c.blob_csid) : 'none',
+    {label: 'Blob CSID', serena: it.kind ? short(it.blob_csid) : 'not listed', cspace: c.blob_csid ? short(c.blob_csid) : 'none',
      differs: blobDiffers.value},
     {label: 'Access', serena: it.access || 'not listed', cspace: fields, differs: false},
     {label: 'As of', serena: refresh ? `Refresh ${refresh.refresh_id}, started ${when(refresh.started_at)}` : 'no refresh yet',
