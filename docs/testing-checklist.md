@@ -380,13 +380,15 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
     -d '{"csid": "1a2b3c4d-0000-4000-8000-000000000001", "blob": "0f1e2d3c-0000-4000-8000-000000000001"}'
   ```
 - [ ] Open "Recalls". Expect the title "PAHMA Recalls", no active recalls, and nothing ended. Click "Recall…".
-  In the box, paste the image's Blob CSID (from its URL), its Media CSID, `0f1e2d3c-0000-4000-8000-000000000001` and
-  `not-a/csid`, one per line. Click "Show what would be recalled". Expect two Media records:
+  In the box, paste four lines: your image's Blob CSID (from the URL in the first step), your image's Media CSID (you
+  copied it in the second step), `0f1e2d3c-0000-4000-8000-000000000001` (the Blob of the Media record you just added)
+  and `not-a/csid`. Click "Show what would be recalled". Expect two Media records:
   - yours, with both CSIDs under "You gave" (they're the same record), kind image, served today "yes", found in Serena;
   - `1a2b3c4d-0000-4000-8000-000000000001`, kind "not known", served today "no", found in "CollectionSpace (not served
     today)";
 
-  each with a thumbnail. Below them, "Not recalled: not-a/csid: Not a CSID."
+  each with a thumbnail. Below them, "Not recalled: not-a/csid: Not a CSID." (The slash makes it one. Any 1 to 64
+  letters, digits and hyphens have a CSID's shape and are looked up, so a word such as `cow` is "Not found" instead.)
 - [ ] Click your record's thumbnail: expect the full-size image in a window. Close it.
 - [ ] Expect "Recall 2 Media records" greyed out until you type a reason. Type one and click it. Expect both in
   "Active recalls", by `admin`, with your reason, and "Waiting for a later refresh". Within a minute, expect the
@@ -401,13 +403,24 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
 - [ ] In the box, paste 13 CSIDs (any text, one per line) and click "Show what would be recalled": expect "More than
   12 CSIDs: use a text file instead." Save the same 13 lines as a `.txt` file, clear the box, choose the file and
   click again: expect the summary, every line "Not found" or "Not a CSID". Cancel.
-- [ ] Run `./serena etl pahma` again. It's the same refresh date as your recalls (today, Pacific), so the refresh
-  doesn't look at them (a list made before staff could change CollectionSpace): expect both still active, and no new
-  alert. (Ending a recall needs a refresh on a later day; the tests cover every case. If you leave the stack running
-  until tomorrow, run `./serena etl pahma` then: expect your image's recall kept, "Still public in CollectionSpace"
-  with a Release button, the alert "Recalled in Serena, but still public in CollectionSpace", and the other
-  recall ended, under "Ended", "Ended by a refresh". Release yours with a reason and expect the image served
-  again.)
+- [ ] **Today's refresh leaves the recalls alone.** Run `./serena etl pahma` again. Open "Recalls": expect both recalls
+  still under "Active recalls", "Waiting for a later refresh", with no "Release" button. Open the alerts (the bell):
+  expect no new alert.
+
+  Why: a refresh can end a recall only when its refresh date is later than the recall's day. This refresh's date is
+  today (Pacific), the same day as your recalls. Its servable list was made from CollectionSpace before staff could act
+  on a recall, so Serena doesn't use it to end one.
+- [ ] **Optional, tomorrow: a later refresh ends or keeps each recall.** Leave the stack running overnight. Tomorrow
+  (Pacific), run `./serena etl pahma` and open "Recalls". Expect:
+  - **the simulator's record** (`1a2b3c4d-0000-4000-8000-000000000001`): ended. It's under "Ended" as "Ended by a
+    refresh", because the servable list doesn't have it;
+  - **your image's record:** still under "Active recalls", now "Still public in CollectionSpace", with a "Release"
+    button. The servable list still lists your image as public; in a real museum, staff haven't hidden it in
+    CollectionSpace yet;
+  - **a new alert:** "Recalled in Serena, but still public in CollectionSpace".
+
+  Click "Release" for your image, give a reason and confirm. Reload the image's URL in a fresh tab: expect the image,
+  not the unavailable image. (The tests cover every way a recall ends, so this step is optional.)
 
 ## 18. The admin app's layout and the recall words, locally (10 minutes, before merging a pull request that changes the layout)
 
