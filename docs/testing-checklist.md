@@ -533,9 +533,15 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
   filled red. Keep the recall.
 - [ ] Request the recalled image again in Chrome, then on "Past requests" expect its line's Kind "image" (an unserved
   line has the kind when Serena knows the file); an unknown file's Kind stays blank.
-- [ ] Run `./serena etl pahma --rows 3` (a failed servable list check). On "Alerts", expect the alert's refresh ID,
-  in its text, as a link to that refresh's page (and under About too, when About names the refresh); a Media CSID
-  under About (the recall's alert) shortened with ⧉, opening Media look up.
+- [ ] Make a refresh fail its check: run `./serena etl pahma --rows 3`. Then open "Alerts" and find the new alert,
+  "A servable list check failed". Expect:
+  - the refresh ID in the alert's text (for example `pahma-2026-10-14-2`) shown as a link. Click it: it opens that
+    refresh's page;
+  - if the About column also shows a refresh ID, that's a link to the same page.
+- [ ] Still on "Alerts", find the alert from your recall earlier in this section, "An admin recalled Media records".
+  Expect its About column to show the Media CSID shortened (`20349bfa…3f0b98`) with ⧉ beside it:
+  - click ⧉, then paste somewhere: you get the whole CSID;
+  - click the CSID: it opens Media look up for that record.
 - [ ] **Optional, tomorrow** (only a refresh on a later day decides a recall): after section 17's overnight step,
   expect on "Recalls" the tag "Still public in CollectionSpace", "kept by <refresh ID>" as a link to that refresh's
   page, and "Release…" in the right-hand column.
