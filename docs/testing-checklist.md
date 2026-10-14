@@ -538,10 +538,6 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
   - the refresh ID in the alert's text (for example `pahma-2026-10-14-2`) shown as a link. Click it: it opens that
     refresh's page;
   - if the About column also shows a refresh ID, that's a link to the same page.
-- [ ] Still on "Alerts", find the alert from your recall earlier in this section, "An admin recalled Media records".
-  Expect its About column to show the Media CSID shortened (`20349bfa…3f0b98`) with ⧉ beside it:
-  - click ⧉, then paste somewhere: you get the whole CSID;
-  - click the CSID: it opens Media look up for that record.
 - [ ] **Optional, tomorrow** (only a refresh on a later day decides a recall): after section 17's overnight step,
   expect on "Recalls" the tag "Still public in CollectionSpace", "kept by <refresh ID>" as a link to that refresh's
   page, and "Release…" in the right-hand column.
@@ -562,3 +558,8 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
   expect "Audit log" (the page you were going to), not the Overview.
 - [ ] Stop the backend (`docker compose -p serena stop web`), click "Sign everyone out of PAHMA" and confirm: expect
   the dialog to stay open and say why it failed. Start it again (`docker compose -p serena start web`).
+- [ ] Last (skip it if you'll do the optional step tomorrow, which needs the recall): on "Recalls", click "Cancel
+  recall…" on your recall, give a reason and confirm. Open "Alerts" and find "An admin cancelled a recall". Expect its
+  About column to show the Media CSID shortened (`20349bfa…3f0b98`) with ⧉ beside it:
+  - click ⧉, then paste somewhere: you get the whole CSID;
+  - click the CSID: it opens Media look up for that record.
