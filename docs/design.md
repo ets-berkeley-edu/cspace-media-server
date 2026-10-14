@@ -501,7 +501,8 @@ The words this document, the code, the ETL API and the admin app use for the dai
 | Rerun the ETL job | The ETL team runs a museum's ETL job again, the same day |
 | Recall | An admin's stop on serving a Media record's files, in Serena, until a refresh on a later day no longer lists them as public (see Recalls) |
 | Recall ended | A refresh ended a recall: its servable list no longer has the recalled Blob as public |
-| Release | The one admin action that ends a recall, and only one a refresh kept |
+| Release | The admin action that ends a recall a refresh kept, when CollectionSpace is right |
+| Cancel recall | The admin action that undoes a recall no refresh has decided yet (a mistake) |
 | Media look up | The admin app's page that says why Serena serves a file or not |
 | Past refreshes, Past requests | The admin app's pages of the last 30 days' refreshes, and of what Serena served and couldn't serve |
 
@@ -632,7 +633,9 @@ An open refresh becomes `abandoned` when a later refresh date's refresh or an ad
   must then be checked again; asking for a check of a `check_failed` refresh without a corrected list returns it as
   it is.
 - A refresh's refresh date is the Pacific date when it starts. A new refresh for the same refresh date is allowed once the
-  previous one is closed (`updated` or `abandoned`). Starting a later refresh date's refresh, or an admin refresh,
+  previous one is closed (`updated` or `abandoned`): that is how the ETL brings Serena up to date again the same day,
+  and the API has no "force" option (Richard, October 13, 2026, D149): the delta threshold guards against a broken ETL
+  run, so only an admin overrides it, in the admin app. Starting a later refresh date's refresh, or an admin refresh,
   closes an earlier open refresh as `abandoned`, except one the worker is checking or updating, which is never abandoned.
 - If the open refresh is one the worker is checking or updating, a later refresh date's refresh isn't started: `409`, and the
   ETL tries again until its step timeout, then carries on without Serena (decided October 9, 2026). So a museum has
@@ -818,7 +821,8 @@ the plan, D127); until then, its requests are logged as `placeholder_not_uploade
 
 A successful ETL refresh is the source of truth for what Serena serves (decided October 12, 2026, D119). So only a
 successful servability update ends a recall, and only when the servable list shows that CollectionSpace has caught up.
-An admin can't undo a recall, with one narrow exception, Release, below.
+An admin can end a recall by hand in two narrow cases, below: Cancel recall, before a refresh has decided it, and
+Release, once a refresh has kept it.
 
 After each successful servability update, the worker looks at each of the museum's recalls:
 
@@ -841,7 +845,15 @@ After each successful servability update, the worker looks at each of the museum
 
 **Release.** The one admin action on a recall: only on a recall a refresh kept (case 3), an admin may release it,
 saying CollectionSpace is right and the file should be served. It needs a reason, is audited (`recall_release`) and
-raises an emailed alert, "An admin released a recall". There is no other way to end a recall by hand.
+raises an emailed alert, "An admin released a recall".
+
+**Cancel recall** (Richard, October 13, 2026, D148). While a recall is "Waiting for a later refresh" (no refresh has
+kept it yet), an admin may cancel it: a recall made by mistake (a wrong CSID, say) shouldn't stop serving until the
+next refresh on a later day, which can be more than a day away if a refresh fails or over a weekend, so the window is
+the state, not a clock. It needs a reason, is audited (`recall_cancel`, with who recalled it and when), raises an
+emailed alert, "An admin cancelled a recall", and the file is served again at once; the Recalls page lists it under
+"Ended" as "Cancelled". Once a refresh has kept the recall, Release is the action instead. These are the only ways to
+end a recall by hand.
 
 Examples, for one Media record recalled on October 14 at 10:00:
 
@@ -850,7 +862,7 @@ Examples, for one Media record recalled on October 14 at 10:00:
 | Unpublish the Media record that day | nothing for that Blob | removed on October 15 |
 | Replace its image and publish it again | the Media record with a new Blob | removed on October 15; the new Blob is served |
 | Nothing (forgot, or the change didn't reach the core) | the same Blob, public | kept, with the alert, until a later refresh shows the change, or an admin releases it |
-| Nothing: the recall was a mistake | the same Blob, public | kept, with the alert; an admin releases it |
+| Nothing: the recall was a mistake | the same Blob, public | kept, with the alert; an admin releases it (or cancels it before October 15's refresh) |
 
 A recall made on October 15 at 03:15 is first looked at by October 16's refresh (case 1).
 
@@ -861,9 +873,9 @@ staff must change CollectionSpace for that.
 
 #### The Recalls page
 
-Every active recall however old (Media CSID, Blob CSID, who, when, why, and, for one a refresh kept, "Still public in
-CollectionSpace" with a Release button), and the last 30 days' ended and released recalls (by which refresh or
-admin, and why), from the audit log. Sorted and paged like the other tables; a "Recall…" button opens the form above
+Every active recall however old (Media CSID, Blob CSID, who, when, why, and its state: "Waiting for a later refresh"
+with a "Cancel recall" button, or, for one a refresh kept, "Still public in CollectionSpace" with a Release button),
+and the last 30 days' ended, released and cancelled recalls (by which refresh or admin, and why), from the audit log. Sorted and paged like the other tables; a "Recall…" button opens the form above
 (D120). Each Media and Blob CSID reads as text until hovered or focused, then as a link that opens the file in a dialog
 (the largest size the museum serves, through the admin API, never cached), with "Media look up" and "Dismiss" (D145).
 
@@ -1042,15 +1054,25 @@ reachable only from campus networks.
   - "Media look up": why a file is or isn't served (see below);
   - an "API documentation" button: Swagger UI, bundled with the app (no CDN), read-only, showing the ETL API's
     description generated from the code (decided October 10, 2026);
-  - an audit log of every admin action: sign-in, sign-out, signing everyone out, recall, release, a settings change
+  - an audit log of every admin action: sign-in, sign-out, signing everyone out, recall, release, cancel, a settings change
     (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, an
     admin refresh, an audit export and the placeholder upload, each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
+    The ETL's calls that change something are there too (Richard, October 13, 2026, D150): starting a refresh,
+    uploading a servable list and asking for the check, by "ETL (<museum>)", with which of the museum's two tokens it
+    used (`which_key`: current or previous, never the token, so a rotation's progress shows), and each refresh's
+    outcome (updated, check_failed, update_failed, abandoned) by the refresh. Not the ETL's polls, `GET`s or ping, which
+    it makes every few seconds while Serena checks.
     A refresh ending a recall is in it too, with the refresh as its actor (D119).
 - **Media look up** (decided October 12, 2026, D121 to D123; redesigned October 13, 2026, D139 to D145, from the UI
   review's layout C). An admin gives a file's URL or path (any shape Serena serves), a Blob CSID or a Media CSID (which
   shows its Blob or Blobs, one at a time). The page's address carries what was looked up (`?q=`), so the file dialogs
   can open it and an admin can share it. It isn't audited (a read, like the Past requests page).
+  - **Which Media record** (Richard, October 13, 2026, D153). Under the field, a heading names the record as staff know
+    it: "Media <identification number>" (media_common's `identificationNumber`, read in the same call to
+    CollectionSpace), with the Media CSID beside it. Without a number (none, CollectionSpace can't be reached, or no
+    such record): "Media <Media CSID>". The placeholder image: "Placeholder image". A file with no Media record at all
+    (an unknown CSID) has no heading.
   - **Serena's answer.** The verdict first (served; served only on a signed link; or the one reason it isn't), what to
     do next, then each size: served or why not, the cached copy (content type, size), when Serena last served it and
     when it first cached it. Each step of the servability check, in order, is in the "In Serena" panel's Details: in
@@ -1169,7 +1191,9 @@ reachable only from campus networks.
   Media-service calls above with synthetic files (PNG images, a PDF and an X3D model, made in code) and HTTP Basic auth
   with a synthetic account, and the recall form's two lookups: `blobs/<csid>` and the search for the Media record
   whose `blobCsid` is a given Blob CSID (D130). Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a
-  record, remove its file, inject failures, and list the calls it received. It also answers `accounts/0/accountroles`
+  record, remove its file, inject failures, switch an outage on or off (`/_fake/unreachable`: every call answers 503,
+  the records kept), and list the calls it received. An unknown CSID gets a 404 that says why (a Blob CSID given for a
+  Media record's is named as one). Each record has a synthetic identification number (`2026.1.<n>` unless given). It also answers `accounts/0/accountroles`
   for three synthetic admin accounts (`admin`, with the role in every museum; `pahma-admin`, in PAHMA only;
   `viewer`, in none; each password is its username), telling museums apart by host name (`pahma.fakecspace`, as each
   museum has its own CollectionSpace).

@@ -29,7 +29,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from . import recalls
 from . import servability_update as updating
 from . import servable_list_check as checking
-from .audit import Audit
+from .audit import Action, Audit
 from .config import Settings
 from .museum import Museum
 from .museum_settings import MuseumSettings
@@ -150,11 +150,23 @@ class Worker:
                 self._check(refresh)
             else:
                 self._update(refresh)
+            self._audit_outcome(refresh)
         except OutOfOrder as error:
             log.warning("refresh changed under the worker",
                         extra={"refresh_id": refresh.refresh_id, "detail": error.detail})
         finally:
             heartbeat.halt.set()
+
+    def _audit_outcome(self, refresh: Refresh) -> None:
+        """A refresh's outcome in the audit log, by the refresh, next to the ETL's calls (D150): updated,
+        check_failed or update_failed. A passed check goes straight on to the update, so it isn't an outcome."""
+        try:
+            now = self.s.refreshes.get(refresh.tenant, refresh.refresh_id)
+            if now is not None and now.state in (State.UPDATED, State.CHECK_FAILED, State.UPDATE_FAILED):
+                Audit(self.s.store).record(refresh.tenant, f"refresh {now.refresh_id}", Action.REFRESH_OUTCOME,
+                                           now.refresh_id, {"state": now.state.value, "reasons": now.reasons[-1:]})
+        except Exception:
+            log.exception("refresh outcome not audited", extra={"refresh_id": refresh.refresh_id})
 
     def _alert(self, refresh: Refresh) -> None:
         """A failed step's alert, raised at once (design: The daily sequence); the watchdog raises it again later if

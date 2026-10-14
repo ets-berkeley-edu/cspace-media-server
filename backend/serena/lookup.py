@@ -114,6 +114,7 @@ def _cspace(museum: Museum, item: dict[str, Any], store: Store, cspace: CSpaceCl
         _refuse_fetches(item, Reason.MEDIA_DELETED)
     recall = store.recall(museum.key, media) if listed else None
     return {"state": str(record.state), "media_csid": media, "blob_csid": record.blob_csid,
+            "identification_number": record.identification_number,
             "updated_at": record.updated_at, "changed_since_refresh": changed,
             "fields": [{"label": label, "value": value} for label, value in record.fields],
             "next": _next(listed, item["blob_csid"], kind_word(item["kind"]), record, changed,

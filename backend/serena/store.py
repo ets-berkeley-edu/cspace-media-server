@@ -113,9 +113,12 @@ class Store:
         except self.client.exceptions.ConditionalCheckFailedException:
             pass  # released meanwhile
 
-    def delete_recall(self, tenant: str, media_csid: str, kept_only: bool = False) -> bool:
-        """Ends a recall. With kept_only (an admin's release), only one a refresh kept. False if there was none."""
-        condition = "attribute_exists(kept_by)" if kept_only else "attribute_exists(pk)"
+    def delete_recall(self, tenant: str, media_csid: str, kept_only: bool = False, waiting_only: bool = False) -> bool:
+        """Ends a recall. With kept_only (an admin's release), only one a refresh kept; with waiting_only (an admin's
+        cancel, D148), only one no refresh has kept. False if there was none to end."""
+        condition = ("attribute_exists(kept_by)" if kept_only
+                     else "attribute_exists(pk) AND attribute_not_exists(kept_by)" if waiting_only
+                     else "attribute_exists(pk)")
         try:
             self.client.delete_item(TableName=self.table(tables.RECALLS),
                                     Key={"pk": {"S": f"{tenant}#{media_csid}"}}, ConditionExpression=condition)

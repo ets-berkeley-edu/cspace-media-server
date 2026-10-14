@@ -207,6 +207,7 @@ def create_router() -> APIRouter:
             raise HTTPException(413, f"At most {admin.settings.upload_max_mb} MB uncompressed.") from None
         except uploads.BadGzip:
             raise HTTPException(400, "The file looks like gzip but isn't valid gzip.") from None
+        before = await asyncio.to_thread(r.refreshes.newest, session.tenant)
         try:
             try:
                 refresh, _ = await asyncio.to_thread(r.refreshes.start, session.tenant,
@@ -230,6 +231,10 @@ def create_router() -> APIRouter:
                 raise HTTPException(409, error.detail) from None
         finally:
             os.unlink(received.path)
+        if before is not None and before.open:  # the open refresh it closed, by that refresh (D150)
+            admin.audit.record(session.tenant, f"refresh {before.refresh_id}", Action.REFRESH_OUTCOME,
+                               before.refresh_id, {"state": State.ABANDONED.value,
+                                                   "reasons": ["closed by an admin refresh"]})
         admin.audit.record(session.tenant, session.user, Action.ADMIN_REFRESH, refresh.refresh_id,
                            {"file_name": name, "refresh_date": refresh_date, "rows": received.rows,
                             "sha256": received.sha256, "reason": reason})

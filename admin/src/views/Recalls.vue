@@ -9,7 +9,8 @@
       A recall stops Serena serving a Media record's file at once, until CollectionSpace and a later refresh catch up.
       Change the record in CollectionSpace too: a refresh, on a later day, ends the recall once its servable list
       no longer has the file as public. If the list still has it as public, the recall stays and Serena raises an
-      alert; only then can an admin release it, if CollectionSpace is right.
+      alert, and an admin can release it if CollectionSpace is right. Until a refresh decides it, an admin can cancel a
+      recall made by mistake.
     </p>
     <LoadError :message="error" />
 
@@ -43,12 +44,22 @@
             class="release ml-2"
             size="small"
             variant="outlined"
-            @click="openRelease(item)"
+            @click="openEnd(item, 'release')"
           >
             Release
           </v-btn>
         </template>
-        <template v-else>Waiting for a later refresh</template>
+        <template v-else>
+          Waiting for a later refresh
+          <v-btn
+            class="cancel-recall ml-2"
+            size="small"
+            variant="outlined"
+            @click="openEnd(item, 'cancel')"
+          >
+            Cancel recall
+          </v-btn>
+        </template>
       </template>
     </v-data-table>
 
@@ -66,7 +77,7 @@
     >
       <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
       <template #[`item.action`]="{item}">
-        {{ item.action === 'recall_release' ? 'Released' : 'Ended by a refresh' }}
+        {{ item.action === 'recall_release' ? 'Released' : item.action === 'recall_cancel' ? 'Cancelled' : 'Ended by a refresh' }}
       </template>
       <template #[`item.media_csid`]="{item}">
         <FileLink class="recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
@@ -220,17 +231,22 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="releasing" max-width="560">
+    <!-- Release (a recall a refresh kept, D119) and Cancel recall (one no refresh has decided yet, D148) share it. -->
+    <v-dialog v-model="ending" max-width="560">
       <v-card>
-        <v-card-title>Release a recall</v-card-title>
+        <v-card-title>{{ endMode === 'release' ? 'Release a recall' : 'Cancel a recall' }}</v-card-title>
         <v-card-text>
-          <p class="mb-3">
-            Refresh {{ releaseOf?.kept_by }} still lists Media record {{ releaseOf?.media_csid }} as public. Release the
+          <p v-if="endMode === 'release'" class="mb-3">
+            Refresh {{ endOf?.kept_by }} still lists Media record {{ endOf?.media_csid }} as public. Release the
             recall only if CollectionSpace is right and the file should be served again.
           </p>
+          <p v-else class="mb-3">
+            No refresh has decided the recall of Media record {{ endOf?.media_csid }} yet. Cancel it only if it was a
+            mistake: Serena serves its files again at once.
+          </p>
           <v-textarea
-            id="release-reason"
-            v-model="releaseReason"
+            :id="`${endMode}-reason`"
+            v-model="endReason"
             label="Reason (required)"
             rows="2"
           />
@@ -238,15 +254,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="releasing = false">Cancel</v-btn>
+          <v-btn @click="ending = false">Keep the recall</v-btn>
           <v-btn
-            id="release-confirm"
+            :id="`${endMode}-confirm`"
             color="primary"
             :loading="busy"
-            :disabled="!releaseReason.trim()"
-            @click="confirmRelease"
+            :disabled="!endReason.trim()"
+            @click="confirmEnd"
           >
-            Release
+            {{ endMode === 'release' ? 'Release' : 'Cancel recall' }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -310,9 +326,10 @@ const formError = ref('')
 const broken = reactive<Record<string, boolean>>({})
 const full = ref(false)
 const fullRecord = ref<RecallRecord | null>(null)
-const releasing = ref(false)
-const releaseOf = ref<Recall | null>(null)
-const releaseReason = ref('')
+const ending = ref(false)
+const endMode = ref<'release' | 'cancel'>('release')
+const endOf = ref<Recall | null>(null)
+const endReason = ref('')
 let sent = ''
 
 const toRecall = computed(() => (summary.value?.records || []).filter(r => !r.recalled))
@@ -394,22 +411,24 @@ function openFull(record: RecallRecord) {
   full.value = true
 }
 
-function openRelease(recall: Recall) {
-  releaseOf.value = recall
-  releaseReason.value = ''
+function openEnd(recall: Recall, mode: 'release' | 'cancel') {
+  endMode.value = mode
+  endOf.value = recall
+  endReason.value = ''
   formError.value = ''
-  releasing.value = true
+  ending.value = true
 }
 
-async function confirmRelease() {
-  if (!releaseOf.value) {
+async function confirmEnd() {
+  if (!endOf.value) {
     return
   }
   busy.value = true
   formError.value = ''
   try {
-    await api.release(museum.value, releaseOf.value.media_csid, releaseReason.value.trim())
-    releasing.value = false
+    const end = endMode.value === 'release' ? api.release : api.cancelRecall
+    await end(museum.value, endOf.value.media_csid, endReason.value.trim())
+    ending.value = false
     await load()
   } catch (e) {
     formError.value = problem(e)

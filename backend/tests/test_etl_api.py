@@ -277,3 +277,47 @@ def test_the_api_documentation_in_the_repository_is_current() -> None:
     saved = Path(__file__).parents[2] / "docs" / "api" / "etl-v1.json"
     assert saved.read_text() == etl_api.openapi_document(), (
         "docs/api/etl-v1.json is out of date: run  python -m serena.etl_api --openapi > ../docs/api/etl-v1.json")
+
+
+# --- the ETL's calls in the audit log (D150)
+
+def test_the_etl_calls_that_change_something_are_audited(client: TestClient, store: Store, clock: Clock) -> None:
+    from serena.audit import Audit
+    audit = Audit(store)
+
+    def entries() -> list[tuple[str, str, str, str]]:
+        return [(e.admin, e.action, e.target, e.details.get("which_key", ""))
+                for e in reversed(audit.since("pahma", datetime(2026, 1, 1, tzinfo=UTC)))]
+
+    refresh = start(client)
+    start(client)  # the open refresh, returned: nothing new
+    client.get(refresh["links"]["self"], headers=auth())  # a poll: never audited
+    client.get("/etl/v1/ping", headers=auth())
+    assert put(client, refresh, FILE).status_code == 200
+    assert put(client, refresh, FILE).status_code == 200  # the same list again changes nothing
+    check = f"/etl/v1/museums/pahma/refreshes/{refresh['refresh_id']}/check"
+    assert client.post(check, headers=auth()).status_code == 202
+    assert client.post(check, headers=auth()).status_code == 202  # already queued: not again
+    rid = refresh["refresh_id"]
+    assert entries() == [("ETL (pahma)", "etl_refresh_start", rid, "current"),
+                         ("ETL (pahma)", "etl_servable_list_upload", rid, "current"),
+                         ("ETL (pahma)", "etl_check_request", rid, "current")]
+    upload = next(e for e in audit.since("pahma", datetime(2026, 1, 1, tzinfo=UTC))
+                  if e.action == "etl_servable_list_upload")
+    assert upload.details["rows"] == FILE.count(b"\n") - 1 and TOKENS["pahma"] not in json.dumps(upload.details)
+
+
+def test_the_previous_token_and_an_abandoned_refresh_are_audited(client: TestClient, store: Store,
+                                                                   clock: Clock) -> None:
+    from serena.audit import Audit
+    audit = Audit(store)
+    first = start(client)
+    clock.now = datetime(2026, 10, 11, 17, 0, tzinfo=UTC)  # the next Pacific day: the open refresh is abandoned
+    response = client.post("/etl/v1/museums/pahma/refreshes", headers={"Authorization": f"Bearer {OLD_PAHMA}"})
+    assert response.status_code == 201
+    every = list(reversed(audit.since("pahma", datetime(2026, 1, 1, tzinfo=UTC))))
+    assert [(e.admin, e.action, e.target) for e in every] == [
+        ("ETL (pahma)", "etl_refresh_start", first["refresh_id"]),
+        (f"refresh {first['refresh_id']}", "refresh_outcome", first["refresh_id"]),
+        ("ETL (pahma)", "etl_refresh_start", response.json()["refresh_id"])]
+    assert every[1].details["state"] == "abandoned" and every[2].details["which_key"] == "previous"

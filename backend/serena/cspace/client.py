@@ -81,6 +81,7 @@ class MediaRecord:
     blob_csid: str | None = None
     updated_at: str | None = None
     fields: tuple[tuple[str, str], ...] = ()  # (label, value), in the museum's order; "" when the field is empty
+    identification_number: str | None = None  # media_common's identificationNumber: the page's heading (D153)
 
 
 Credentials = Callable[[], tuple[str, str]]
@@ -167,13 +168,17 @@ class CSpaceClient:
         states = [el.text or "" for el in root.iter() if _local(el.tag) == "workflowState"]
         blob = next((el.text.strip() for el in root.iter() if _local(el.tag) == "blobCsid" and el.text), None)
         updated = next((el.text.strip() for el in root.iter() if _local(el.tag) == "updatedAt" and el.text), None)
+        number = next((el.text.strip() for section in root if _local(section.tag) == "media_common"
+                       for el in section if _local(el.tag) == "identificationNumber" and el.text and el.text.strip()),
+                      None)
         shown = []
         for part, name, label in fields:
             values = [_display(el.text) for section in root if _local(section.tag) == part
                       for el in section.iter() if _local(el.tag) == name and el.text and el.text.strip()]
             shown.append((label, ", ".join(values)))
         deleted = any("deleted" in state.lower() for state in states)
-        return MediaRecord(MediaState.DELETED if deleted else MediaState.EXISTS, blob or None, updated, tuple(shown))
+        return MediaRecord(MediaState.DELETED if deleted else MediaState.EXISTS, blob or None, updated, tuple(shown),
+                           number)
 
     def blob_exists(self, blob_csid: str) -> bool:
         path = f"/blobs/{blob_csid}"

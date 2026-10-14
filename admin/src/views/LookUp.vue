@@ -25,6 +25,10 @@
       </v-btn>
     </v-form>
     <LoadError :message="error" />
+    <h2 v-if="heading" id="lookup-heading" class="text-h6 mb-3">
+      {{ heading.title }}
+      <span v-if="heading.csid" class="text-body-2 text-medium-emphasis ml-2">Media CSID <span class="mono">{{ heading.csid }}</span></span>
+    </h2>
     <template v-if="result">
       <v-alert
         v-if="result.refused"
@@ -242,6 +246,23 @@ const broken = reactive({serena: false, cspace: false})
 
 const item = computed<LookupItem | null>(() => result.value?.items[Math.min(index.value, result.value.items.length - 1)] || null)
 const cs = computed<LookupCSpace>(() => item.value?.cspace || {state: 'unavailable'})
+// Which Media record this is, as staff know it (D153): "Media <identification number>", with its CSID beside;
+// without a number (none, CollectionSpace can't be reached, or no such record), "Media <Media CSID>".
+const heading = computed<{title: string, csid?: string} | null>(() => {
+  const it = item.value
+  if (!it || result.value?.refused) {
+    return null
+  }
+  if (cs.value.state === 'no_media') {
+    return {title: 'Placeholder image'}
+  }
+  const media = cs.value.media_csid || it.media_csid
+  if (!media) {
+    return null
+  }
+  const number = cs.value.identification_number
+  return number ? {title: `Media ${number}`, csid: media} : {title: `Media ${media}`}
+})
 const hasRecord = computed(() => cs.value.state === 'exists' || cs.value.state === 'deleted')
 const blobDiffers = computed(() => !!item.value?.kind && !!cs.value.blob_csid && cs.value.blob_csid !== item.value.blob_csid)
 const stored = computed(() => (item.value?.sizes || []).filter(s => s.stored))

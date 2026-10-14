@@ -223,6 +223,25 @@ def release(museum: Museum, media_csid: str, reason: str, admin: str, store: Sto
                         f"refresh {recall.kept_by} kept. Reason: {reason}", instance=at))
 
 
+class NotWaiting(Exception):
+    """Only a recall no refresh has kept can be cancelled (D148): once a refresh keeps it, Release is the action."""
+
+
+def cancel(museum: Museum, media_csid: str, reason: str, admin: str, store: Store, audit: Audit, alerts: Alerts,
+           clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    """Undoes a recall still "Waiting for a later refresh" (a mistake, say): served again at once (D148)."""
+    recall = store.recall(museum.key, media_csid)
+    if recall is None or recall.kept_by or not store.delete_recall(museum.key, media_csid, waiting_only=True):
+        raise NotWaiting(media_csid)
+    audit.record(museum.key, admin, Action.RECALL_CANCEL, media_csid,
+                 {"blob_csids": list(recall.blob_csids), "reason": reason, "recalled_by": recall.by,
+                  "recalled_at": recall.at})
+    at = clock().astimezone(UTC).isoformat(timespec="seconds")
+    alerts.raise_(Alert(museum.key, _today(clock), Kind.RECALL_CANCELLED, media_csid,
+                        f"An admin cancelled the recall of Media record {media_csid} for {museum.name}, before a "
+                        f"refresh decided it. Reason: {reason}", instance=at))
+
+
 @dataclass
 class AfterUpdate:
     ended: int = 0

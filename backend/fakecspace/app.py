@@ -11,14 +11,17 @@ Run: uvicorn fakecspace.app:app --port 8180
 User: serena, password serena (synthetic; Serena's read-only service account in development).
 Development hooks:
   POST /_fake/reset                 empty
-  POST /_fake/media                 {"csid", "kind": image|pdf|3D, "state"?, "blob"?}: a Media record with sample
-                                    files, and its Blob's CSID
+  POST /_fake/media                 {"csid", "kind": image|pdf|3D, "state"?, "blob"?, "identification"?}: a Media
+                                    record with sample files, its Blob's CSID and identification number (2026.1.<n>
+                                    unless given)
   POST /_fake/delete/<csid>         soft-delete it (the Media service still returns it, as CollectionSpace does)
   POST /_fake/replace/<csid>        replace its image (CollectionSpace makes a new Blob, so a record with a Blob
                                     gets a new Blob CSID; the Media service then returns the new file)
   POST /_fake/approve/<csid>        {"approved": false}: change its "Approved for web" (PAHMA's media_pahma
                                     approvedforweb), as staff do to take it off the web
   POST /_fake/remove-file/<csid>    leave the record with no file
+  POST /_fake/unreachable           {"on": true | false}: an outage; every CollectionSpace call answers 503, the
+                                    records are kept (an unknown CSID in these hooks gets a 404 that says why)
   POST /_fake/fail                  {"match", "status", "times"}: answer requests whose path contains match with status
   GET  /_fake/calls                 the paths called, in order
 """
@@ -33,7 +36,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from . import samples
@@ -57,6 +60,7 @@ class Media:
     blob: str | None = None  # its Blob's CSID (blobCsid)
     publish_to: str = "All"  # media_common's publishTo, a vocabulary term (core CollectionSpace)
     approved_for_web: bool = True  # media_pahma's approvedforweb: what PAHMA's ETL reads (for Media look up)
+    identification_number: str = ""  # media_common's identificationNumber, as staff know the record (D153)
     updated_at: str = field(default_factory=lambda: _now())  # collectionspace_core's updatedAt
 
 
@@ -81,9 +85,10 @@ class Store:
             self.media: dict[str, Media] = {}
             self.failures: list[Failure] = []
             self.calls: list[str] = []
+            self.unreachable = False  # an outage: every CollectionSpace call answers 503, the records kept
 
     def add(self, csid: str, kind: str = "image", state: str = "project", shade: int = 128,
-            blob: str | None = None) -> Media:
+            blob: str | None = None, identification_number: str | None = None) -> Media:
         if kind in ("image", "card"):
             image = samples.png(shade=shade)
             files = {"content": (image, "image/png"), **{name: (image, "image/png") for name in DERIVATIVES}}
@@ -93,8 +98,10 @@ class Store:
             files = {"content": (samples.x3d(), "model/x3d+xml")}
         else:
             raise ValueError(f"unknown kind {kind}")
-        media = Media(csid, state, files, blob)
         with self.lock:
+            # A synthetic identification number unless one is given: 2026.1.1, 2026.1.2, ... (D153)
+            number = identification_number if identification_number is not None else f"2026.1.{len(self.media) + 1}"
+            media = Media(csid, state, files, blob, identification_number=number)
             self.media[csid] = media
         return media
 
@@ -109,6 +116,8 @@ class Store:
     def injected(self, path: str) -> int | None:
         with self.lock:
             self.calls.append(path)
+            if self.unreachable:
+                return 503
             for failure in self.failures:
                 if failure.match in path and failure.times > 0:
                     failure.times -= 1
@@ -153,6 +162,7 @@ def _gate(request: Request) -> Response | None:
 def _media_xml(media: Media) -> bytes:
     return (f'<?xml version="1.0" encoding="UTF-8"?><document name="media">'
             f'<ns2:media_common xmlns:ns2="http://collectionspace.org/services/media"><csid>{media.csid}</csid>'
+            f"<identificationNumber>{media.identification_number}</identificationNumber>"
             f'{f"<blobCsid>{media.blob}</blobCsid>" if media.blob else ""}<publishToList><publishTo>'
             f"urn:cspace:pahma.cspace.berkeley.edu:vocabularies:name(publishto):item:name({media.publish_to.lower()})"
             f"'{media.publish_to}'</publishTo></publishToList></ns2:media_common>"
@@ -256,21 +266,34 @@ def reset() -> dict[str, str]:
 @app.post("/_fake/media")
 async def add_media(request: Request) -> JSONResponse:
     body: dict[str, Any] = await request.json()
-    media = store.add(body["csid"], body.get("kind", "image"), body.get("state", "project"), blob=body.get("blob"))
+    media = store.add(body["csid"], body.get("kind", "image"), body.get("state", "project"), blob=body.get("blob"),
+                      identification_number=body.get("identification"))
     return JSONResponse({"csid": media.csid, "files": sorted(media.files)})
+
+
+def _known(csid: str) -> Media:
+    """A development hook's Media record, or a 404 that says what to give (a Blob CSID isn't a Media record's)."""
+    media = store.media.get(csid)
+    if media is None:
+        blob_of = store.media_of_blob(csid)
+        hint = (f": that's the Blob of Media record {blob_of.csid}; give the Media CSID" if blob_of
+                else ": give a Media CSID the simulator has (POST /_fake/media adds one)")
+        raise HTTPException(404, f"No Media record {csid}{hint}")
+    return media
 
 
 @app.post("/_fake/delete/{csid}")
 def soft_delete(csid: str) -> dict[str, str]:
-    store.media[csid].state = "deleted"
-    store.media[csid].updated_at = _now()
+    media = _known(csid)
+    media.state = "deleted"
+    media.updated_at = _now()
     return {"csid": csid, "state": "deleted"}
 
 
 @app.post("/_fake/replace/{csid}")
 def replace(csid: str) -> dict[str, str]:
+    media = _known(csid)
     image = samples.png(shade=32)  # a different image
-    media = store.media[csid]
     media.files = {"content": (image, "image/png"), **{n: (image, "image/png") for n in DERIVATIVES}}
     if media.blob:
         media.blob = str(uuid.uuid4())  # CollectionSpace makes a new Blob for the new file
@@ -281,8 +304,8 @@ def replace(csid: str) -> dict[str, str]:
 @app.post("/_fake/approve/{csid}")
 async def approve(request: Request, csid: str) -> dict[str, Any]:
     """Set the Media record's "Approved for web", as PAHMA's staff do to take it off the web."""
+    media = _known(csid)
     body: dict[str, Any] = await request.json()
-    media = store.media[csid]
     media.approved_for_web = bool(body["approved"])
     media.updated_at = _now()
     return {"csid": csid, "approved": media.approved_for_web}
@@ -290,8 +313,17 @@ async def approve(request: Request, csid: str) -> dict[str, Any]:
 
 @app.post("/_fake/remove-file/{csid}")
 def remove_file(csid: str) -> dict[str, str]:
-    store.media[csid].files = {}
+    _known(csid).files = {}
     return {"csid": csid, "files": "none"}
+
+
+@app.post("/_fake/unreachable")
+async def unreachable(request: Request) -> dict[str, bool]:
+    """{"on": true}: an outage, every CollectionSpace call answers 503 and the records are kept; {"on": false}
+    ends it."""
+    body: dict[str, Any] = await request.json()
+    store.unreachable = bool(body["on"])
+    return {"unreachable": store.unreachable}
 
 
 @app.post("/_fake/fail")

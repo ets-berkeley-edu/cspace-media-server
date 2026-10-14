@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import uploads
+from .audit import Action, Audit
 from .config import Settings
 from .museum import Museum
 from .museum_settings import MuseumSettings
@@ -43,6 +44,7 @@ class Services:
     refreshes: Refreshes
     tokens: Tokens
     s3: Any
+    audit: Audit | None = None  # the ETL's calls that change something, and abandoned refreshes (D150)
 
 
 class Links(BaseModel):
@@ -143,19 +145,40 @@ def create_etl_app(services: Services) -> FastAPI:
         return response(Problem(type="about:blank", title="Internal error", status=500,
                                 detail="Serena couldn't complete the call; try again"))
 
-    def museum_of_token(authorization: Annotated[str | None, Header(include_in_schema=False)] = None) -> str:
+    def museum_of_token(request: Request,
+                        authorization: Annotated[str | None, Header(include_in_schema=False)] = None) -> str:
         scheme, _, token = (authorization or "").partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise ProblemError(401, "the-etl-api", "No token", "Send Authorization: Bearer <the museum's token>",
                                {"WWW-Authenticate": "Bearer"})
         try:
-            museum = services.tokens.museum_of(token.strip())
+            found = services.tokens.key_of(token.strip())
         except TokenStoreUnavailable:
             raise ProblemError(503, "the-etl-api", "Can't check tokens right now", "Try again") from None
-        if museum is None:
+        if found is None:
             raise ProblemError(401, "the-etl-api", "Unknown token", "Check the token for this museum",
                                {"WWW-Authenticate": "Bearer"})
-        return museum
+        request.state.token = found[1]  # "current" or "previous", for the audit log (D150)
+        return found[0]
+
+    def audited(request: Request, tenant: str, action: Action, target: str, details: dict[str, Any]) -> None:
+        """An audit entry by "ETL (<museum>)" for a call that changed something (D150). Never fails the call."""
+        if services.audit is None:
+            return
+        try:
+            services.audit.record(tenant, f"ETL ({tenant})", action, target,
+                                  {**details, "which_key": getattr(request.state, "token", "")})
+        except Exception:
+            log.exception("ETL call not audited", extra={"museum": tenant, "action": str(action)})
+
+    def abandoned(tenant: str, refresh: Refresh, reason: str) -> None:
+        if services.audit is None:
+            return
+        try:
+            services.audit.record(tenant, f"refresh {refresh.refresh_id}", Action.REFRESH_OUTCOME, refresh.refresh_id,
+                                  {"state": State.ABANDONED.value, "reasons": [reason]})
+        except Exception:
+            log.exception("abandoned refresh not audited", extra={"museum": tenant})
 
     TokenMuseum = Annotated[str, Depends(museum_of_token)]
 
@@ -188,14 +211,23 @@ def create_etl_app(services: Services) -> FastAPI:
               responses={200: {"description": "The museum's open refresh for today, returned instead of a new one",
                                "model": RefreshOut}, **openapi_responses(401, 403, 404, 409, 503)},
               summary="Start today's refresh")
-    def start_refresh(tenant: Tenant) -> JSONResponse:
+    def start_refresh(request: Request, tenant: Tenant) -> JSONResponse:
         """Serena assigns the refresh ID and the refresh date (the Pacific date now). If the museum's refresh for today
         is still open, returns it (200). An earlier refresh date's open refresh is closed as abandoned, unless Serena is
-        checking or updating it: then 409, and the ETL job tries again (decided October 9, 2026, D30)."""
+        checking or updating it: then 409, and the ETL job tries again (decided October 9, 2026, D30). Once today's
+        refresh is closed (updated or abandoned), calling this again starts the day's next one (pahma-2026-10-13-2,
+        say): that is how the ETL brings Serena up to date again the same day (D149). The delta threshold's override
+        stays an admin action in the admin app."""
+        before = services.refreshes.newest(tenant)
         try:
             refresh, created = services.refreshes.start(tenant)
         except OutOfOrder as error:  # Busy included
             raise out_of_order(error) from None
+        if created:
+            if before is not None and before.open and before.refresh_id != refresh.refresh_id:
+                abandoned(tenant, before, "a later refresh date's refresh started")
+            audited(request, tenant, Action.ETL_REFRESH_START, refresh.refresh_id,
+                    {"refresh_date": refresh.refresh_date})
         log.info("refresh started" if created else "open refresh returned",
                  extra={"museum": tenant, "refresh_id": refresh.refresh_id, "state": refresh.state.value})
         return _json(_out(services, refresh), 201 if created else 200)
@@ -270,6 +302,8 @@ def create_etl_app(services: Services) -> FastAPI:
                 raise out_of_order(error) from None
         finally:
             os.unlink(received.path)
+        await asyncio.to_thread(audited, request, tenant, Action.ETL_SERVABLE_LIST_UPLOAD, refresh.refresh_id,
+                                {"rows": received.rows, "sha256": sha})
         log.info("servable list received",
                  extra={"museum": tenant, "refresh_id": refresh.refresh_id, "rows": received.rows})
         return _json(_out(services, refresh))
@@ -299,14 +333,18 @@ def create_etl_app(services: Services) -> FastAPI:
                                               "it is", "model": RefreshOut},
                          **openapi_responses(401, 403, 404, 409, 503)},
               summary="Check the servable list, then update Serena from it")
-    def request_check(tenant: Tenant, refresh_id: str) -> JSONResponse:
+    def request_check(request: Request, tenant: Tenant, refresh_id: str) -> JSONResponse:
         """Queues the servable list check (202). When it passes, the worker goes straight on to the servability update
         (decided October 12, 2026, D80): poll the refresh until it is updated, check_failed or update_failed. Allowed
         once a servable list is uploaded (received). After a failed check, upload a corrected list first."""
-        return step(tenant, refresh_id, State.RECEIVED, State.CHECKING,
-                    frozenset({State.CHECKING, State.CHECK_FAILED, State.UPDATING, State.UPDATED,
-                               State.UPDATE_FAILED}),
-                    "the servable list check")
+        before = refresh_of(tenant, refresh_id).state
+        answer = step(tenant, refresh_id, State.RECEIVED, State.CHECKING,
+                      frozenset({State.CHECKING, State.CHECK_FAILED, State.UPDATING, State.UPDATED,
+                                 State.UPDATE_FAILED}),
+                      "the servable list check")
+        if before == State.RECEIVED:  # queued now, not a repeated call
+            audited(request, tenant, Action.ETL_CHECK_REQUEST, refresh_id, {})
+        return answer
 
     @app.get("/museums/{tenant}", response_model=RefreshOut, responses=openapi_responses(401, 403, 404, 503),
              summary="The museum's latest updated refresh")

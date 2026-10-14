@@ -30,6 +30,7 @@ class Kind(StrEnum):
     RECALL = "recall"  # an admin recalled Media records (D118)
     STILL_PUBLIC = "recall_still_public"  # a refresh kept a recall: the same Blob is still public (D119)
     RECALL_RELEASED = "recall_released"  # an admin released a recall a refresh kept (D119)
+    RECALL_CANCELLED = "recall_cancelled"  # an admin cancelled a recall still waiting for a later refresh (D148)
     RECALLS_ENDED = "recalls_ended"  # a refresh ended recalls: CollectionSpace caught up (D119)
 
 
@@ -44,6 +45,7 @@ TITLES = {
     Kind.RECALL: "An admin recalled Media records",
     Kind.STILL_PUBLIC: "Recalled in Serena, but still public in CollectionSpace",
     Kind.RECALL_RELEASED: "An admin released a recall",
+    Kind.RECALL_CANCELLED: "An admin cancelled a recall",
     Kind.RECALLS_ENDED: "A refresh ended recalls",
 }
 
