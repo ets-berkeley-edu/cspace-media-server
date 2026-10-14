@@ -20,14 +20,14 @@
             @error="failed = true"
           >
           <p v-else id="file-dialog-none" class="pa-4">
-            This page can't show it: a PDF, a TIFF original or a 3D file, or nothing stored and CollectionSpace
+            This page can't show it: a PDF, a TIFF original or a 3D file, or nothing cached and CollectionSpace
             unreachable. <a :href="file.url" target="_blank" rel="noopener">Open it in a new tab</a>.
           </p>
         </div>
         <p v-if="file.note" class="mt-3 mb-0">{{ file.note }}</p>
         <p class="mt-2 mb-0 text-medium-emphasis">
-          Shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored), whether or not
-          the public is served it. Never cached.
+          Shown to you through the admin app, from Serena's cached copy or, without one, from CollectionSpace (Serena
+          doesn't keep that), whether or not the public is served it. Your browser doesn't keep it either.
         </p>
       </v-card-text>
       <v-card-actions>

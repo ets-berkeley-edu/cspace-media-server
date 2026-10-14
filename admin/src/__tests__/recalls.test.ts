@@ -58,7 +58,7 @@ describe('the Recalls page', () => {
     wrapper.unmount()
   })
 
-  it('shows what would be recalled before it takes anything down', async () => {
+  it('previews the recall before it recalls anything', async () => {
     const calls = fakeApi({
       'GET /museums/pahma/recalls': {body: {...PAGE, active: []}},
       'POST /museums/pahma/recalls/summary': {body: SUMMARY},

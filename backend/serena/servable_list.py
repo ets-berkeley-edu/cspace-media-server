@@ -11,6 +11,14 @@ from typing import IO, Any
 
 HEADER = "blob_csid\tmedia_csid\tkind\taccess"
 KINDS = frozenset({"image", "card", "audio", "video", "3D", "pdf"})
+
+# How the admin app names each kind (D151): "file" only when the kind isn't known.
+KIND_WORDS = {"image": "image", "card": "catalog card", "pdf": "PDF", "3D": "3D model", "audio": "audio file",
+              "video": "video"}
+
+
+def kind_word(kind: str | None) -> str:
+    return KIND_WORDS.get(kind or "", "file")
 ACCESS = frozenset({"public", "restricted"})
 
 

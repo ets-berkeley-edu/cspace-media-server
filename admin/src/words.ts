@@ -25,6 +25,24 @@ export const REQUEST_RANGES = [
   {value: '7d', title: 'Last 7 days'}
 ]
 
+/** How the app names each kind (D151): "file" only when the kind isn't known. */
+export const KIND_WORDS: Record<string, string> = {
+  image: 'image', card: 'catalog card', pdf: 'PDF', '3D': '3D model', audio: 'audio file', video: 'video'
+}
+
+export function kindWord(kind: string | null | undefined): string {
+  return (kind && KIND_WORDS[kind]) || 'file'
+}
+
+/** A logged path on one line, shortened in the middle (D152): the museum, both ends of the CSID and the size stay. */
+export function middlePath(path: string): string {
+  const m = /^(\/[^/]+\/imageserver\/blobs\/)([^/]+)(\/.*)?$/.exec(path)
+  if (m && m[2].length > 16) {
+    return `${m[1]}${m[2].slice(0, 8)}…${m[2].slice(-6)}${m[3] || ''}`
+  }
+  return path.length > 72 ? `${path.slice(0, 40)}…${path.slice(-28)}` : path
+}
+
 /** An unserved request's reason, readable: not_listed → "not listed". */
 export function reasonOf(reason: string): string {
   return reason.replace(/_/g, ' ')

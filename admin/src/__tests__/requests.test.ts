@@ -92,7 +92,9 @@ describe('the Past requests page', () => {
     const wrapper = await open()
     await flushPromises()
     const links = wrapper.findAll('#requests-table .file-link')
-    expect(links.map(l => l.text())).toEqual([good.path])
+    // One line, shortened in the middle; the whole path on hover (D152).
+    expect(links.map(l => l.text())).toEqual(['/pahma/imageserver/blobs/0f1e2d3c…3f4a5b/derivatives/Medium/content'])
+    expect(wrapper.findAll('#requests-table .request-path').map(p => p.attributes('title'))).toContain(good.path)
     await links[0].trigger('click')
     await flushPromises()
     const dialog = document.querySelector('#file-dialog')

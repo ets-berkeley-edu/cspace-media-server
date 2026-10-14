@@ -274,15 +274,15 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
-      <li><strong>Last served and First stored (layout C):</strong> under the verdict, when Serena last served the file (any size) and when it first stored it in its S3 bucket; the sizes table has both for each size, and "In Serena" Details has them too. In the app, "first stored" is the cache index's fetched-at time, which Serena already keeps. "Last served" would come from Serena's log (the "served" lines Past requests reads), so it reaches back 30 days, the log's retention; a time kept per size in Serena's tables instead would mean a write on every request, which Serena avoids.</li>
-      <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's stored copy; CollectionSpace's file now, which Serena doesn't keep), captioned only when there's no picture (why not) or the file is soft-deleted and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
-      <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no stored copy, the preview is CollectionSpace's thumbnail, not stored. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (taken off the web since: "Approved for web" No) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
-      <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the stored copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
-      <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a stored copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
+      <li><strong>Last served and First cached (layout C):</strong> under the verdict, when Serena last served the file (any size) and when it first cached it in its S3 bucket; the sizes table has both for each size, and "In Serena" Details has them too. In the app, "first cached" is the cache index's fetched-at time, which Serena already keeps. "Last served" would come from Serena's log (the "served" lines Past requests reads), so it reaches back 30 days, the log's retention; a time kept per size in Serena's tables instead would mean a write on every request, which Serena avoids.</li>
+      <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's cached copy; CollectionSpace's file now, which Serena doesn't keep), captioned only when there's no picture (why not) or the file is soft-deleted and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
+      <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no cached copy, the preview is CollectionSpace's thumbnail, which Serena doesn't keep. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (taken off the web since: "Approved for web" No) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
+      <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the cached copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
+      <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a cached copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Sample data:</strong> one consistent set. "Now" is Oct 13, 2026, 10:00 AM PDT; the last refresh is pahma-2026-10-12-1. Every page draws on the same Media records, and each Past requests line's outcome comes from Serena's rules at its time, so a path, a CSID on Recalls, an example button or a typed CSID all land on the same answer in Media look up. Older lines can differ from today's answer when something changed since (a recall, a deletion). Recalling, releasing and acknowledging update Recalls, Alerts, the Audit log and Media look up together.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image, a recall a refresh kept, a file not in the servable list, files replaced or deleted in CollectionSpace today, a Media record with two Blobs, the placeholder image, a recall a refresh ended, and a path Serena refuses; Cinefiles' restricted PDF is under Cinefiles (Sign in to another museum). Typed CSIDs work too: an unknown one, the replaced image's new Blob (61f0e9d8-c7b6-4a59-8e4d-3c2b1a0f9e8d) or the unlisted file's Media record (7c1d9e20-3b4a-4f5e-8a6b-9c0d1e2f3a4b).</li>
       <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
-      <li><strong>Recalls:</strong> "Recall…" opens the form; "Show what would be recalled" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
+      <li><strong>Recalls:</strong> "Recall…" opens the form; "Preview recall" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
       <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, a "Media look up" button (opens Media look up on that path) and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
       <li><strong>Recalls:</strong> the Media record and Blob CSIDs work like Past requests' paths: plain text until hovered, then a link that opens the file in a dialog, with "Media look up" and Dismiss.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
@@ -310,7 +310,10 @@
     const text = d.toLocaleString("en-US", {timeZone: "America/Los_Angeles", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"});
     return `<span title="${esc(iso.replace("T", " ").replace(/(\.\d+)?(\+00:00|Z)$/, "") + " UTC")}">${esc(text)}</span>`;
   }
-  const short = csid => csid.length > 20 ? csid.slice(0, 8) + "…" + csid.slice(-4) : csid;
+  // How the admin app names each kind (D151): "file" only when the kind isn't known.
+  const KIND_WORDS = {image: "image", card: "catalog card", pdf: "PDF", "3D": "3D model", audio: "audio file", video: "video"};
+  const kindWord = kind => KIND_WORDS[kind] || "file";
+  const short = csid => csid.length > 20 ? csid.slice(0, 8) + "…" + csid.slice(-6) : csid;
   const csidHtml = csid => `<span class="mono" title="${esc(csid)}">${esc(csid)}</span><button type="button" class="copy" data-copy="${esc(csid)}">Copy</button>`;
 
   function thumbSvg(seed, kind) {
@@ -381,7 +384,7 @@
 
   // The log's sample lines, the last 7 days: [time, museum, Blob CSID, size, on a signed link]. Each line's outcome
   // comes from Serena's rules (decide, below) at its time, so the lines, the counts, Most requested, Last served and
-  // the stored copies agree with each other and with Media look up.
+  // the cached copies agree with each other and with Media look up.
   const EVENTS = [
     ["2026-10-07T17:00:00Z", "pahma", B1, "Thumbnail"], ["2026-10-08T19:00:00Z", "pahma", BE, "Medium"], ["2026-10-08T20:00:00Z", "pahma", BK, "Thumbnail"],
     ["2026-10-09T16:04:00Z", "cinefiles", BP, "original", true], ["2026-10-10T17:00:00Z", "pahma", BE, "Medium"], ["2026-10-10T18:00:00Z", "pahma", B1, "Thumbnail"],
@@ -400,7 +403,7 @@
   // ---- Serena's rules, as servability.decide and the fetch apply them
   const REASON = {not_listed: "not listed", restricted: "restricted", no_derivatives: "no derivatives for a PDF", recalled: "recalled",
     placeholder: "placeholder not uploaded", media_deleted: "media deleted", bad_csid: "bad CSID", unknown_size: "not a size served"};
-  const STORE = {};  // Blob CSID → size → {at, type, bytes}: Serena's stored copies (the cache index)
+  const STORE = {};  // Blob CSID → size → {at, type, bytes}: Serena's cached copies (the cache index)
   RECORDS.forEach(r => Object.entries(r.stored || {}).forEach(([blob, sizes]) => Object.entries(sizes).forEach(([size, at]) => {
     (STORE[blob] ||= {})[size] = {at, type: COPY[size][0], bytes: COPY[size][1]};
   })));
@@ -436,7 +439,7 @@
     const l = [...LOG].reverse().find(l => l.museum === museum && l.csid === csid && l.size === size && l.outcome === "served" && ms(l.at) > ms(NOW) - 30 * DAY);
     return l ? l.at : null;
   };
-  // What a request for this file shows: Serena's stored copy, else CollectionSpace's current image.
+  // What a request for this file shows: Serena's cached copy, else CollectionSpace's current image.
   const imageSeed = (museum, csid, size) => {
     if (storedAt(csid, size || "Medium", NOW)) return seedOf(csid);
     const r = findRecord(museum, csid);
@@ -480,7 +483,7 @@
     });
     const checks = b.unlisted
       ? [["no", "In the servable list", "Not listed"], ["skip", "Kind", "Not known"], ["skip", "Access", "Not known"], ["skip", "Recall", ended || "Not checked"]]
-      : [["ok", "In the servable list", `Refresh ${lastRefresh()}`], ["ok", "Kind", b.kind],
+      : [["ok", "In the servable list", `Refresh ${lastRefresh()}`], ["ok", "Kind", kindWord(b.kind)],
         b.access === "public" ? ["ok", "Access", "public"] : ["maybe", "Access", "restricted: signed link needed"],
         !r.media ? ["ok", "Recall", "No Media record"] : now ? ["no", "Recall", `Recalled by ${now.by}, ${plain(now.at)}`] : ["ok", "Recall", ended ? `None (${ended.toLowerCase()})` : "None"],
         ...(b.blob === PLACEHOLDER ? [["no", "Placeholder image", "No files uploaded"]] : [])];
@@ -506,14 +509,14 @@
         next: "Upload its files (coming in pull request 14b)."};
     } else if (served === focus.length) {
       v = {tone: "served", head: "Served", why: size ? `Every check passes for the ${sizeName} size.` : "Every check passes for every size.",
-        next: size ? (focus[0].stored ? "Serena has a stored copy, so it's served without asking CollectionSpace." : "Serena has no copy yet: the next request fetches it from CollectionSpace and stores it.")
-          : "A size with a stored copy is served from it; any other size is fetched from CollectionSpace on its first request, then stored."};
+        next: size ? (focus[0].stored ? "Serena has a cached copy, so it's served without asking CollectionSpace." : "Serena has no copy yet: the next request fetches it from CollectionSpace and stores it.")
+          : "A size with a cached copy is served from it; any other size is fetched from CollectionSpace on its first request, then cached."};
     } else if (served) {
-      v = {tone: "served", head: "Served (stored sizes only)", why: "Serena still lists it, so its stored sizes are served. A size without a stored copy is refused: the Media record is deleted in CollectionSpace.",
+      v = {tone: "served", head: "Served (cached sizes only)", why: "Serena still lists it, so its cached sizes are served. A size without a cached copy is refused: the Media record is deleted in CollectionSpace.",
         next: "The next refresh drops it. To stop serving it now, recall it.", link: "recalls"};
     } else {
-      v = {tone: "not", head: "Not served: the Media record is deleted in CollectionSpace", why: `Serena has no stored ${esc(sizeName)} copy, and a fetch finds the Media record soft-deleted in CollectionSpace.`,
-        next: "The next refresh drops it. To stop serving its stored sizes now, recall it.", link: "recalls"};
+      v = {tone: "not", head: "Not served: the Media record is deleted in CollectionSpace", why: `Serena has no cached ${esc(sizeName)} copy, and a fetch finds the Media record soft-deleted in CollectionSpace.`,
+        next: "The next refresh drops it. To stop serving its cached sizes now, recall it.", link: "recalls"};
     }
     let cs = null;
     if (r && r.cs) {
@@ -531,7 +534,7 @@
     if (b.unlisted) return !pub ? "CollectionSpace has this Blob on a Media record that isn't approved for web, which is why it's not in the servable list. Nothing changes at the next refresh unless staff approve it."
       : after ? `Staff changed the Media record ${t}, after the last refresh: the next refresh lists ${c.blob === b.blob ? "this Blob" : "its Blob"}.` : "The ETL's rules leave it out (its Object record, for example); the next refresh will too, unless that changes.";
     if (c.deleted) return `Staff deleted the Media record ${t}. The next refresh drops this Blob.`;
-    if (c.blob !== b.blob) return after ? `Staff replaced the image ${t}. The next refresh lists the new Blob and drops this one; until then, a stored size is the old image, and any other size is fetched from the Media record, which now returns the new image.`
+    if (c.blob !== b.blob) return after ? `Staff replaced the image ${t}. The next refresh lists the new Blob and drops this one; until then, a cached size is the old image, and any other size is fetched from the Media record, which now returns the new image.`
       : `CollectionSpace's Media record has the other Blob, ${short(c.blob)}. The servable list still has this one too, and requests for it are answered with the Media record's current image.`;
     if (!pub) return `Staff cleared the Media record's "Approved for web" ${t}, after the last refresh. The next refresh (on a later day) leaves the file out${recall ? ", which ends the recall" : ""}.`;
     if (recall && recall.kept) return "It's still public in CollectionSpace: the next refresh lists it again and keeps the recall, with another alert, unless staff change the record or an admin releases the recall.";
@@ -710,7 +713,7 @@
         {key: "outcome", title: "Outcome", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
         {key: "reason", title: "Reason"},
         {key: "path", title: "Path", html: r => pathCell(r)},
-        {key: "kind", title: "Kind", html: r => esc(r.kind) + (r.signed ? ' <span class="muted">· signed link</span>' : "")},
+        {key: "kind", title: "Kind", html: r => (r.kind ? esc(kindWord(r.kind)) : "") + (r.signed ? ' <span class="muted">· signed link</span>' : "")},
         {key: "cache", title: "Cache"}], shown, {key: "at", dir: "desc"})}`;
     },
 
@@ -753,7 +756,7 @@
     if (S.layout === "C") return out + layoutInspector(b) + meta;
     out += verdictHtml(b.verdict);
     out += `<div class="ident"><div><span class="k">Blob</span>${csidHtml(b.blob)}</div>${b.media ? `<div><span class="k">Media record</span>${csidHtml(b.media)}</div>` : ""}
-      ${b.kind ? `<div><span class="k">Kind</span><span class="pill t-neutral">${esc(b.kind)}</span></div>` : ""}${b.access ? `<div><span class="k">Access</span><span class="pill ${b.access === "public" ? "t-success" : "t-warning"}">${esc(b.access)}</span></div>` : ""}</div>`;
+      ${b.kind ? `<div><span class="k">Kind</span><span class="pill t-neutral">${esc(kindWord(b.kind))}</span></div>` : ""}${b.access ? `<div><span class="k">Access</span><span class="pill ${b.access === "public" ? "t-success" : "t-warning"}">${esc(b.access)}</span></div>` : ""}</div>`;
     out += `<h3 style="margin-top:0">Checks, in the order Serena makes them</h3><ol class="checks">${b.checks.map(([st, t, d]) => `<li class="${st}"><span class="ic" aria-hidden="true">${{ok: "✓", no: "✕", maybe: "!", skip: "–"}[st]}</span><span class="t">${esc(t)} <span class="visually-hidden">${{ok: "passes", no: "fails", maybe: "depends", skip: "not reached"}[st]}</span></span><span class="d">${esc(d)}</span></li>`).join("")}</ol>`;
     out += sizesHtml(b);
     out += meta;
@@ -778,23 +781,23 @@
     });
     if (stop < 0) out += `<li class="end"><span class="dot" aria-hidden="true">✓</span><div><div class="t">Served</div><div class="d">${esc(v.why)} ${esc(v.next)}</div></div></li>`;
     out += `</ol>`;
-    out += `<h3>Sizes</h3><div class="tw"><table><thead><tr><th>Size</th><th>Result</th><th>Stored copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">not served</span> <span class="secondary">${esc(s.reason)}</span>`}</td><td class="secondary">${s.stored ? esc(s.stored) : (s.served ? "none yet: fetched on its first request" : "none")}</td></tr>`).join("")}</tbody></table></div>`;
+    out += `<h3>Sizes</h3><div class="tw"><table><thead><tr><th>Size</th><th>Result</th><th>Cached copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">not served</span> <span class="secondary">${esc(s.reason)}</span>`}</td><td class="secondary">${s.stored ? esc(s.stored) : (s.served ? "none yet: fetched on its first request" : "none")}</td></tr>`).join("")}</tbody></table></div>`;
     if (b.note) out += `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>`;
     return out;
   }
 
-  // C. Inspector: the file's facts in a side panel (with its stored copy, if any), and the answer and the sizes beside
+  // C. Inspector: the file's facts in a side panel (with its cached copy, if any), and the answer and the sizes beside
   // them, as in a property sheet.
   function layoutInspector(b) {
     const v = b.verdict;
     const stored = b.sizes.find(s => s.stored);
     const cs = b.cs, down = S.cspaceDown;
     const pic = seed => thumbSvg(seed, b.kind || "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice"');
-    // Serena's stored copy is the image it fetched; CollectionSpace's is the Media record's Blob now (a replaced image differs).
+    // Serena's cached copy is the image it fetched; CollectionSpace's is the Media record's Blob now (a replaced image differs).
     const biggest = [...b.sizes].reverse().find(s => s.stored);
     // A picture that shows needs no caption; a caption says why there's none, or that the file is soft-deleted.
     const serenaPreview = biggest ? pic(seedOf(b.blob))
-      : `<span class="cap">No copy stored in Serena</span>`;
+      : `<span class="cap">No cached copy in Serena</span>`;
     const csPreview = !cs ? `<span class="cap">No Media record</span>`
       : down ? `<span class="cap">CollectionSpace can't be reached</span>`
       : cs.state === "gone" ? `<span class="cap">Not in CollectionSpace</span>`
@@ -803,8 +806,8 @@
       ["Blob CSID", csidHtml(cs.blob) + (cs.blob !== b.blob ? ' <span class="pill t-warning">differs</span>' : "")],
       ...cs.fields.map(([k, val]) => [esc(k), esc(val)]), ["Last changed", when(cs.updated)]] : [];
     const facts = [["Media CSID", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'], ["Blob CSID", csidHtml(b.blob)],
-      ["Kind", b.kind ? esc(b.kind) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>'],
-      ["First stored", earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : '<span class="muted">never</span>'],
+      ["Kind", b.kind ? esc(kindWord(b.kind)) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>'],
+      ["First cached", earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : '<span class="muted">never</span>'],
       ["Last served", latest(b, "lastServed") ? when(latest(b, "lastServed")) : '<span class="muted">not in the last 30 days</span>']];
     const checks = b.checks.map(([st, t, d]) => `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><span><strong>${esc(t)}</strong><span class="visually-hidden"> ${SAY[st]}</span><br><span class="secondary">${esc(d)}</span></span></li>`).join("");
     return `<div class="inspector">
@@ -827,9 +830,9 @@
       <div class="answer">
         <div class="answer-head ${v.tone}"><span class="mark" aria-hidden="true">${{served: "✓", not: "✕", depends: "!"}[v.tone]}</span><div><div class="head">${esc(v.head)}</div><div>${v.why}</div></div></div>
         <p class="secondary" style="margin:6px 0 6px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
-        <p class="stamps"><span><span class="k">Last served</span> ${latest(b, "lastServed") ? when(latest(b, "lastServed")) : "not in the last 30 days"}</span><span><span class="k">First stored in Serena</span> ${earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : "never"}</span></p>
-        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Stored copy</th><th>Last served</th><th>First stored</th></tr></thead><tbody>${b.sizes.map(s => `<tr${s.asked ? ' class="asked"' : ""}><td>${esc(s.size)}${s.asked ? ' <span class="pill t-info">this path</span>' : ""}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? when(s.lastServed) : "—"}</td><td class="secondary">${s.firstStored ? when(s.firstStored) : "—"}</td></tr>`).join("")}</tbody></table></div>
-        <p class="muted" style="margin:6px 0 0;font-size:12px">Last served: Serena's last answer with the file (from its log; "—" if not in the last 30 days). First stored: when Serena fetched that size and stored it in its S3 bucket.</p>
+        <p class="stamps"><span><span class="k">Last served</span> ${latest(b, "lastServed") ? when(latest(b, "lastServed")) : "not in the last 30 days"}</span><span><span class="k">First cached in Serena</span> ${earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : "never"}</span></p>
+        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Cached copy</th><th>Last served</th><th>First cached</th></tr></thead><tbody>${b.sizes.map(s => `<tr${s.asked ? ' class="asked"' : ""}><td>${esc(s.size)}${s.asked ? ' <span class="pill t-info">this path</span>' : ""}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? when(s.lastServed) : "—"}</td><td class="secondary">${s.firstStored ? when(s.firstStored) : "—"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="muted" style="margin:6px 0 0;font-size:12px">Last served: Serena's last answer with the file (from its log; "—" if not in the last 30 days). First cached: when Serena fetched that size and cached it in its S3 bucket.</p>
         ${b.note ? `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>` : ""}
         ${compareHtml(b)}
       </div></div>`;
@@ -867,7 +870,7 @@
     let out = `<h3>Sizes</h3>`;
     if (same) out += `<p class="secondary" style="margin:0 0 8px">All ${b.sizes.length} sizes: ${b.sizes[0].served ? "served" : `not served (${esc(b.sizes[0].reason)})`}.</p>`;
     out += `<div class="sizes">${b.sizes.map(s => `<div class="size"><div class="n"><span>${esc(s.size)}</span>${same ? "" : `<span class="pill ${s.served ? "t-success" : "t-danger"}">${s.served ? "served" : "not served"}</span>`}</div>
-      ${!same && !s.served ? `<div class="s">${esc(s.reason)}</div>` : ""}<div class="s">${s.stored ? `Stored: ${esc(s.stored)}` : (s.served ? "Not stored yet: fetched on its first request" : "No stored copy")}</div></div>`).join("")}</div>`;
+      ${!same && !s.served ? `<div class="s">${esc(s.reason)}</div>` : ""}<div class="s">${s.stored ? `Cached: ${esc(s.stored)}` : (s.served ? "Not cached yet: fetched on its first request" : "No cached copy")}</div></div>`).join("")}</div>`;
     if (b.note) out += `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>`;
     return out;
   }
@@ -906,7 +909,7 @@
     dialog("Recall Media records", `<p class="secondary" style="margin-top:0">Up to 12 Media or Blob CSIDs, separated by new lines, commas or spaces, or a text file of up to 1,000. Nothing is recalled until you confirm.</p>
       <div id="tdErr"></div><label class="field">Media or Blob CSIDs <textarea id="tdBox" rows="4">${S.museum === "pahma" ? `${BLOB}\n6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d\ne7d6c5b4-a392-4817-9e0d-c1b2a3948576\nnot-a/csid` : ""}</textarea></label>
       <label class="field">Or a text file of CSIDs <input type="file" id="tdFile" accept=".txt"></label>`,
-      `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="tdSummary">Show what would be recalled</button>`);
+      `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="tdSummary">Preview recall</button>`);
   }
 
   // What the form's CSIDs would recall: each found in Serena's servable list first, else in CollectionSpace.
@@ -930,7 +933,7 @@
     const todo = S.pendingRecall.length, what = `${todo} Media record${todo === 1 ? "" : "s"}`;
     dialog("Recall Media records", `<p style="margin-top:0">${what} to recall. Click a thumbnail for the full size.</p>
       <div class="tw"><table><thead><tr><th></th><th>Media CSID</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
-      ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td class="mono">${esc(short(x.media))}<div class="muted">Blob ${esc(short(x.blob))}</div></td><td>${x.kind}</td><td>${esc(x.served)}</td><td>${x.found}</td><td class="mono">${esc(short(x.gave))}</td></tr>`).join("")}</tbody></table></div>
+      ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td class="mono">${esc(short(x.media))}<div class="muted">Blob CSID ${esc(short(x.blob))}</div></td><td>${x.kind === "not known" ? "not known" : esc(kindWord(x.kind))}</td><td>${esc(x.served)}</td><td>${x.found}</td><td class="mono">${esc(short(x.gave))}</td></tr>`).join("")}</tbody></table></div>
       ${skipped.length ? `<p style="margin:12px 0 4px"><strong>Not recalled</strong></p><ul style="margin:0 0 12px">${skipped.map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>` : ""}
       <label class="field">Reason (required) <textarea id="tdReason" rows="2"></textarea></label>`,
       `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Back</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${what}</button>`);
@@ -1013,7 +1016,7 @@
     const blob = r && r.media === csid ? (r.blobs[0] || {blob: r.cs.blob}).blob : csid;
     dialog(`${esc(what)} <span class="mono" style="font-weight:400;font-size:13px">${esc(csid)}</span>`,
       `${bigPicture(imageSeed(S.museum, blob, "FullHD"), kindOf(S.museum, blob))}
-      <p class="secondary" style="margin-bottom:0">The largest size the museum serves, shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored).${recalled ? " The public isn't served it while it's recalled." : ""} Never cached.</p>`, foot);
+      <p class="secondary" style="margin-bottom:0">The largest size the museum serves, shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that).${recalled ? " The public isn't served it while it's recalled." : ""} Never cached.</p>`, foot);
     bindDialog();
     $("#viewLookup").onclick = () => { close(); openLookup(csid); };
   }
@@ -1025,14 +1028,14 @@
     const result = last ? (last.outcome === "served" ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">unserved</span> ${esc(last.reason)}`) : "";
     dialog(esc(size === "original" ? "Original file" : size), `<p class="mono" style="margin-top:0;overflow-wrap:anywhere">${esc(path)}</p>
       ${bigPicture(imageSeed(S.museum, csid, size), kindOf(S.museum, csid))}
-      <p class="secondary" style="margin-bottom:0">${result ? `The last request for it (${when(last.at)}): ${result}. ` : ""}Shown to you through the admin app, from Serena's stored copy or CollectionSpace (not stored), whether or not the public is served it. Never cached.</p>`, foot);
+      <p class="secondary" style="margin-bottom:0">${result ? `The last request for it (${when(last.at)}): ${result}. ` : ""}Shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that), whether or not the public is served it. Never cached.</p>`, foot);
     bindDialog();
     $("#viewLookup").onclick = () => { close(); openLookup(path); };
     return l;
   }
 
   function showFull(seed, kind) {
-    dialog("Full size", `<div style="aspect-ratio:4/3;max-width:100%">${thumbSvg(seed, kind || "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%"')}</div><p class="muted">From Serena's stored copy, or CollectionSpace's (not stored). Never cached by the browser.</p>`, `<button type="button" data-close>Close</button>`);
+    dialog("Full size", `<div style="aspect-ratio:4/3;max-width:100%">${thumbSvg(seed, kind || "image").replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%"')}</div><p class="muted">From Serena's cached copy, or CollectionSpace's (Serena doesn't keep that). Your browser doesn't keep it either.</p>`, `<button type="button" data-close>Close</button>`);
     bindDialog();
   }
 

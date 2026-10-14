@@ -140,7 +140,7 @@
                   </td>
                   <td>{{ r.media_csid }}</td>
                   <td>{{ r.blob_csids.join(', ') }}</td>
-                  <td>{{ r.kind || 'not known' }}</td>
+                  <td>{{ r.kind ? kindWord(r.kind) : 'not known' }}</td>
                   <td>{{ r.recalled ? 'already recalled' : r.served_today ? 'yes' : 'no' }}</td>
                   <td>{{ r.source === 'serena' ? 'Serena' : 'CollectionSpace (not served today)' }}</td>
                   <td>{{ r.entered.join(', ') }}</td>
@@ -181,7 +181,7 @@
             :loading="busy"
             @click="summarize"
           >
-            Show what would be recalled
+            Preview recall
           </v-btn>
           <v-btn
             v-else-if="toRecall.length"
@@ -264,7 +264,7 @@ import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
 import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
-import {PAGE_SIZES, when} from '@/words'
+import {PAGE_SIZES, kindWord, when} from '@/words'
 
 const activeHeaders = [
   {title: 'Media CSID', key: 'media_csid'},
