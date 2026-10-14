@@ -185,6 +185,7 @@ export interface RequestsReport {
   end: string
   max_lines: number
   truncated: boolean // more lines than max_lines: only the newest are listed (D107)
+  signed_links: boolean // the museum has signed access (Cinefiles): only its page shows the Signed link column
   days: {day: string, served: number, unserved: Record<string, number>, unserved_total: number}[]
   top_paths: {path: string, requests: number}[]
   lines: RequestLine[]
@@ -215,6 +216,7 @@ export interface Recall {
   reason: string
   kept_by: string | null // the refresh that kept it: the same Blob is still public in CollectionSpace (D119)
   kept_on: string | null
+  identification_number: string | null // read from CollectionSpace when it was recalled; null: none, or not read
 }
 
 export interface EndedRecall {

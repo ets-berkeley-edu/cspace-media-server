@@ -21,6 +21,9 @@ from .refreshes import PACIFIC, Refresh, Refreshes, State
 
 FAILED = {State.CHECK_FAILED: Kind.CHECK_FAILED, State.UPDATE_FAILED: Kind.UPDATE_FAILED,
           State.ABANDONED: Kind.ABANDONED}
+# How an alert says what happened, in words rather than the state's name (Richard, October 14, 2026).
+FAILED_WORDS = {State.CHECK_FAILED: "failed its servable list check",
+                State.UPDATE_FAILED: "failed its servability update", State.ABANDONED: "was abandoned"}
 NOT_UPDATED_AFTER = timedelta(hours=24)
 
 
@@ -38,9 +41,10 @@ class Watchdog:
         """The alert for a refresh that is check_failed, update_failed or abandoned; None otherwise."""
         if refresh.state not in FAILED:
             return None
-        reasons = "; ".join(refresh.reasons) or refresh.state.value
+        reasons = "; ".join(refresh.reasons)
+        what = f"Refresh {refresh.refresh_id} {FAILED_WORDS[refresh.state]}"
         return Alert(refresh.tenant, refresh.refresh_date, FAILED[refresh.state], refresh.refresh_id,
-                     f"Refresh {refresh.refresh_id} is {refresh.state.value}: {reasons}")
+                     f"{what}: {reasons}. Its page says more." if reasons else f"{what}. Its page says more.")
 
     def raise_failure(self, refresh: Refresh) -> None:
         """Raised by the worker as soon as a step fails, so the team hears at once (design: The daily sequence). The

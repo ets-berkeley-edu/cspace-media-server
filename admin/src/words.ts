@@ -36,7 +36,7 @@ export function kindWord(kind: string | null | undefined): string {
 
 /** A logged path on one line, shortened in the middle (D152): the museum, both ends of the CSID and the size stay. */
 export function middlePath(path: string): string {
-  const m = /^(\/[^/]+\/imageserver\/blobs\/)([^/]+)(\/.*)?$/.exec(path)
+  const m = /^(\/[^/]+\/imageserver\/(?:blobs|media)\/)([^/]+)(\/.*)?$/.exec(path)
   if (m && m[2].length > 16) {
     return `${m[1]}${m[2].slice(0, 8)}…${m[2].slice(-6)}${m[3] || ''}`
   }
@@ -64,6 +64,23 @@ export function whenParts(iso: string | null | undefined): [string, string] {
   const text = when(iso)
   const space = text.indexOf(' ')
   return space < 0 ? [text, ''] : [text.slice(0, space), text.slice(space + 1)]
+}
+
+/**
+ * A logged path as Past requests shows it (Richard, October 14, 2026): what's the same on every row (the museum and
+ * /imageserver/blobs/) left out, so the column fits: "0f1e2d3c…3f4a5b · Medium", "… · original", or "Media 20349bfa…3f0b98
+ * · Medium" for a Media-CSID URL. Any other shape, middlePath(). The whole path is on hover, in the file dialog and the
+ * CSV export, and ⧉ copies it.
+ */
+export function shortPath(path: string): string {
+  const m = /^\/[^/]+\/imageserver\/(blobs|media)\/([^/]+)(\/.*)?$/.exec(path)
+  if (!m) {
+    return middlePath(path)
+  }
+  const rest = m[3] || ''
+  const size = /^(?:\/blob)?\/derivatives\/([^/]+)\/content$/.exec(rest)?.[1] || (/^(?:\/blob)?\/content$/.test(rest) ? 'original' : null)
+  const name = `${m[1] === 'media' ? 'Media ' : ''}${short(m[2])}`
+  return size ? `${name} · ${size}` : `${name}${rest ? ` ${middlePath(rest)}` : ''}`
 }
 
 /** An unserved request's reason, readable: not_listed → "not listed". */

@@ -26,40 +26,64 @@
       id="active-recalls"
       :headers="activeHeaders"
       :items="page?.active || []"
-      :sort-by="[{key: 'at', order: 'desc'}]"
+      :sort-by="activeTable.sortBy"
       must-sort
-      :items-per-page="25"
+      :items-per-page="activeTable.itemsPerPage"
+      :page="activeTable.page"
       :items-per-page-options="PAGE_SIZES"
       :loading="loading"
+      :expanded="openActive"
       item-value="media_csid"
+      show-expand
       density="compact"
       no-data-text="No active recalls."
       class="mb-6"
+      @update:expanded="(open: string[]) => openActive = open"
+      @update:sort-by="(v: {key: string, order: 'asc' | 'desc'}[]) => activeTable.sortBy = v"
+      @update:page="(v: number) => activeTable.page = v"
+      @update:items-per-page="(v: number) => activeTable.itemsPerPage = v"
     >
       <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
       <!-- eslint-disable-next-line vue/no-v-for-template-key -->
       <template v-for="h in activeHeaders" :key="h.key" #[`header.${h.key}`]="slot">
         <ColumnHeader v-bind="slot" :help="h.help" />
       </template>
-      <template #[`item.media_csid`]="{item}">
-        <ShortCsid
-          class="recall-csid"
-          :csid="item.media_csid"
-          label="Media CSID"
-          openable
-          @open="openCsid(item.media_csid, 'Media CSID')"
-        />
-        <div v-for="blob in item.blob_csids" :key="blob" class="text-medium-emphasis text-no-wrap">
-          Blob CSID
-          <ShortCsid
-            class="recall-csid"
-            :csid="blob"
-            label="Blob CSID"
-            openable
-            @open="openCsid(blob, 'Blob CSID')"
-          />
-        </div>
+      <template #[`item.data-table-expand`]="{item, internalItem, isExpanded, toggleExpand}">
+        <button
+          type="button"
+          class="row-expand"
+          :aria-expanded="isExpanded(internalItem) ? 'true' : 'false'"
+          :aria-label="`${isExpanded(internalItem) ? 'Hide' : 'Show'} the CSIDs of ${numberOrCsid(item)}`"
+          @click="toggleExpand(internalItem)"
+        >
+          {{ isExpanded(internalItem) ? '▾' : '▸' }}
+        </button>
       </template>
+      <template #[`item.identification_number`]="{item}"><RecordName :number="item.identification_number" :csid="item.media_csid" /></template>
+      <template #expanded-row="{columns, item}">
+        <tr class="row-details">
+          <td :colspan="columns.length">
+            <dl class="row-detail">
+              <dt>Media CSID</dt>
+              <dd>
+                <FileLink class="mono recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
+                <CopyButton :value="item.media_csid" label="Media CSID" />
+              </dd>
+              <!-- eslint-disable-next-line vue/no-v-for-template-key -->
+              <template v-for="blob in item.blob_csids" :key="blob">
+                <dt>Blob CSID</dt>
+                <dd>
+                  <FileLink class="mono recall-csid" @open="openCsid(blob, 'Blob CSID')">{{ blob }}</FileLink>
+                  <CopyButton :value="blob" label="Blob CSID" />
+                </dd>
+              </template>
+              <dt />
+              <dd><router-link :to="{name: 'lookup', params: {museum}, query: {q: item.media_csid}}">Media look up</router-link></dd>
+            </dl>
+          </td>
+        </tr>
+      </template>
+
       <template #[`item.at`]="{item}"><WhenText :at="item.at" /></template>
       <template #[`item.kept_by`]="{item}">
         <template v-if="item.kept_by">
@@ -101,13 +125,21 @@
     <v-data-table
       id="ended-recalls"
       :headers="endedHeaders"
-      :items="page?.ended || []"
-      :sort-by="[{key: 'at', order: 'desc'}]"
+      :items="ended"
+      :sort-by="endedTable.sortBy"
       must-sort
-      :items-per-page="25"
+      :items-per-page="endedTable.itemsPerPage"
+      :page="endedTable.page"
       :items-per-page-options="PAGE_SIZES"
+      :expanded="openEnded"
+      item-value="row_key"
+      show-expand
       density="compact"
       no-data-text="None."
+      @update:expanded="(open: string[]) => openEnded = open"
+      @update:sort-by="(v: {key: string, order: 'asc' | 'desc'}[]) => endedTable.sortBy = v"
+      @update:page="(v: number) => endedTable.page = v"
+      @update:items-per-page="(v: number) => endedTable.itemsPerPage = v"
     >
       <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
       <!-- eslint-disable-next-line vue/no-v-for-template-key -->
@@ -122,14 +154,40 @@
         <template v-else>Ended by a refresh</template>
       </template>
       <template #[`item.by`]="{item}">{{ actorOf(item.by) }}</template>
-      <template #[`item.media_csid`]="{item}">
-        <ShortCsid
-          class="recall-csid"
-          :csid="item.media_csid"
-          label="Media CSID"
-          openable
-          @open="openCsid(item.media_csid, 'Media CSID')"
-        />
+      <template #[`item.data-table-expand`]="{item, internalItem, isExpanded, toggleExpand}">
+        <button
+          type="button"
+          class="row-expand"
+          :aria-expanded="isExpanded(internalItem) ? 'true' : 'false'"
+          :aria-label="`${isExpanded(internalItem) ? 'Hide' : 'Show'} the CSIDs of ${numberOrCsid(item)}`"
+          @click="toggleExpand(internalItem)"
+        >
+          {{ isExpanded(internalItem) ? '▾' : '▸' }}
+        </button>
+      </template>
+      <template #[`item.identification_number`]="{item}"><RecordName :number="item.identification_number" :csid="item.media_csid" /></template>
+      <template #expanded-row="{columns, item}">
+        <tr class="row-details">
+          <td :colspan="columns.length">
+            <dl class="row-detail">
+              <dt>Media CSID</dt>
+              <dd>
+                <FileLink class="mono recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
+                <CopyButton :value="item.media_csid" label="Media CSID" />
+              </dd>
+              <!-- eslint-disable-next-line vue/no-v-for-template-key -->
+              <template v-for="blob in blobsOf(item)" :key="blob">
+                <dt>Blob CSID</dt>
+                <dd>
+                  <FileLink class="mono recall-csid" @open="openCsid(blob, 'Blob CSID')">{{ blob }}</FileLink>
+                  <CopyButton :value="blob" label="Blob CSID" />
+                </dd>
+              </template>
+              <dt />
+              <dd><router-link :to="{name: 'lookup', params: {museum}, query: {q: item.media_csid}}">Media look up</router-link></dd>
+            </dl>
+          </td>
+        </tr>
       </template>
       <template #[`item.details`]="{item}">{{ item.details.reason || item.details.why || '' }}</template>
     </v-data-table>
@@ -240,7 +298,14 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="outlined" @click="form = false">Cancel</v-btn>
-          <v-btn v-if="summary" variant="outlined" @click="summary = null">Back</v-btn>
+          <v-btn
+            v-if="summary"
+            id="recall-change"
+            variant="outlined"
+            @click="summary = null"
+          >
+            Change CSIDs
+          </v-btn>
           <v-btn
             v-if="!summary"
             id="recall-summarize"
@@ -330,23 +395,32 @@
 </template>
 
 <script setup lang="ts">
-import {computed, reactive, ref, watch} from 'vue'
+import {computed, onActivated, reactive, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import {museumName} from '@/session'
-import type {Recall, RecallRecord, RecallSummary, RecallsPage} from '@/api'
+import type {EndedRecall, Recall, RecallRecord, RecallSummary, RecallsPage} from '@/api'
 import {api, problem} from '@/api'
 import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
 import ColumnHeader from '@/components/ColumnHeader.vue'
+import CopyButton from '@/components/CopyButton.vue'
+import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
+import RecordName from '@/components/RecordName.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import ShortCsid from '@/components/ShortCsid.vue'
 import WhenText from '@/components/WhenText.vue'
 import {PAGE_SIZES, actorOf, isCsid, kindWord} from '@/words'
+import {useTableState} from '@/tableState'
 
 // The state as a tag, and the one action a recall allows in its own column at the right (D155).
+// Each row opens (▸) to show its Media CSID and Blob CSID; the first column names the record as staff know it, by its
+// identification number (Richard, October 14, 2026).
+const NUMBER_HELP = 'The Media record\'s identification number in CollectionSpace, read when it was recalled (its shortened Media CSID if it has none). ▸ shows its Media CSID and Blob CSID.'
 const activeHeaders = [
-  {title: 'Media CSID', key: 'media_csid', help: 'The recalled Media record, with its Blob beneath. Click a CSID to see the file; ⧉ copies the whole CSID.'},
+  {title: '', key: 'data-table-expand', sortable: false},
+  {title: 'Identification number', key: 'identification_number', help: NUMBER_HELP,
+   value: (r: Recall) => r.identification_number || r.media_csid},
   {title: 'Recalled (UTC)', key: 'at', help: 'When the admin recalled it.'},
   {title: 'By', key: 'by', help: 'The admin who recalled it.'},
   {title: 'Reason', key: 'reason', help: 'The reason the admin gave.'},
@@ -354,7 +428,9 @@ const activeHeaders = [
   {title: '', key: 'actions', sortable: false, align: 'end' as const}
 ]
 const endedHeaders = [
-  {title: 'Media CSID', key: 'media_csid', help: 'The Media record whose recall ended. Click it to see the file; ⧉ copies the whole CSID.'},
+  {title: '', key: 'data-table-expand', sortable: false},
+  {title: 'Identification number', key: 'identification_number', help: NUMBER_HELP,
+   value: (r: EndedRow) => r.identification_number || r.media_csid},
   {title: 'Ended (UTC)', key: 'at', help: 'When the recall ended.'},
   {title: 'How', key: 'action', help: 'Ended by a refresh (its servable list no longer had the file as public), released, or cancelled.'},
   {title: 'By', key: 'by', help: 'The admin who released or cancelled it, or Serena for a refresh.'},
@@ -362,7 +438,12 @@ const endedHeaders = [
 ]
 
 const route = useRoute()
-const museum = computed(() => String(route.params.museum))
+// Each table's place in the address (October 14, 2026): a.sort, a.page, … and e.sort, e.page, ….
+const activeTable = useTableState('a.', 'at')
+const endedTable = useTableState('e.', 'at')
+// Kept alive, one per museum (App.vue): always this museum's, whichever page the address shows now.
+const ownMuseum = String(route.params.museum)
+const museum = computed(() => ownMuseum)
 const shownFile = ref<ShownFile | null>(null)
 
 // A Media record's or Blob's CSID opens its file, the largest size the museum serves, in a dialog (D145), titled
@@ -376,6 +457,24 @@ function openCsid(csid: string, what: 'Media CSID' | 'Blob CSID') {
   }
 }
 const page = ref<RecallsPage | null>(null)
+const openActive = ref<string[]>([])
+const openEnded = ref<string[]>([])
+
+// An ended recall's row: its audit entry, with the identification number and Blobs it recorded.
+type EndedRow = EndedRecall & {row_key: string, identification_number: string | null}
+const ended = computed<EndedRow[]>(() => (page.value?.ended || []).map(e => ({
+  ...e, row_key: `${e.at}#${e.media_csid}`,
+  identification_number: typeof e.details.identification_number === 'string' ? e.details.identification_number : null
+})))
+
+function blobsOf(row: EndedRow): string[] {
+  const blobs = row.details.blob_csids
+  return Array.isArray(blobs) ? blobs.filter((b): b is string => typeof b === 'string') : []
+}
+
+function numberOrCsid(row: {identification_number: string | null, media_csid: string}): string {
+  return row.identification_number || row.media_csid
+}
 const loading = ref(false)
 const error = ref('')
 
@@ -499,9 +598,42 @@ async function confirmEnd() {
     busy.value = false
   }
 }
+
+// Kept alive (App.vue): coming back shows it as it was, with any change since.
+let shown = false
+onActivated(() => {
+  if (shown) {
+    void load()
+  }
+  shown = true
+})
 </script>
 
 <style scoped>
+.row-expand {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(var(--v-border-color), 0.35);
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.row-detail {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 14px;
+  margin: 2px 0 6px;
+  font-size: 0.85rem;
+}
+.row-detail dt {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+.mono {
+  font-family: monospace;
+}
+
 /* One size for every thumbnail, so the summary's rows line up whatever the files' shapes. */
 .thumbnail {
   width: 96px;

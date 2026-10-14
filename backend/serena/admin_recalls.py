@@ -86,7 +86,7 @@ def _parse(text: str) -> list[str]:
 
 def _recall_json(t: Recall) -> dict[str, Any]:
     return {"media_csid": t.media_csid, "blob_csids": list(t.blob_csids), "by": t.by, "at": t.at, "reason": t.reason,
-            "kept_by": t.kept_by, "kept_on": t.kept_on}
+            "kept_by": t.kept_by, "kept_on": t.kept_on, "identification_number": t.identification_number}
 
 
 def create_router() -> APIRouter:
@@ -116,8 +116,10 @@ def create_router() -> APIRouter:
         """Takes down the Media records the CSIDs name, finding them again rather than trusting the page (D118)."""
         museum = museum_of(request, session.tenant)
         found = recalls.identify(museum, _parse(body.text), t.store, t.cspace)
+        numbers = recalls.identification_numbers(museum.key, [r.media_csid for r in found.records if not r.recalled],
+                                                 t.cspace)
         done = recalls.recall(museum, found, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
-                                   t.clock)
+                                   t.clock, numbers)
         return {**found.json(), "recalled": done}
 
     @router.post("/recalls/{media_csid}/cancel", dependencies=[Depends(changes)])

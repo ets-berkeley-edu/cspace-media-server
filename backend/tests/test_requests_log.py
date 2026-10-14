@@ -229,12 +229,15 @@ def test_the_report(client: TestClient, log_file: Path) -> None:
     body = client.get(URL).json()
     assert body["range"] == "24h"  # to start (D106)
     assert (body["max_lines"], body["truncated"]) == (MAX_LINES, False)
+    assert body["signed_links"] is False  # only Cinefiles has signed access: its page alone has the column
     assert [(ln["outcome"], ln["reason"]) for ln in body["lines"]] == [("unserved", "too_large"), ("served", "")]
     assert body["days"] == [{"day": now.date().isoformat(), "served": 1, "unserved": {"too_large": 1},
                              "unserved_total": 1}]
     assert body["top_paths"][0] == {"path": "/pahma/imageserver/blobs/b1/content", "requests": 1}
     assert client.get(URL, params={"range": "7d"}).status_code == 200
     assert client.get(URL, params={"range": "30d"}).status_code == 422
+    sign_in(client, "cinefiles")
+    assert client.get("/admin/v1/museums/cinefiles/requests").json()["signed_links"] is True
     sign_in(client, "bampfa")
     assert [ln["path"] for ln in client.get("/admin/v1/museums/bampfa/requests").json()["lines"]] == [
         "/pahma/imageserver/blobs/b1/content"]  # bampfa's own line (a synthetic path), never pahma's

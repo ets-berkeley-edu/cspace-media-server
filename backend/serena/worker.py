@@ -207,7 +207,8 @@ class Worker:
                         "threshold_overridden": overridden})
         if not result.passed:
             self.s.refreshes.transition(refresh, State.CHECK_FAILED, results={"check": result.summary()},
-                                        reason=f"servable list check failed: {result.error_count} problem(s)",
+                                        reason=f"{result.error_count} problem{'' if result.error_count == 1 else 's'}"
+                                               " in the servable list",
                                         release=True)
             self._alert(refresh)
             return

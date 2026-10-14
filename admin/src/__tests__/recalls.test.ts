@@ -10,7 +10,7 @@ import Recalls from '@/views/Recalls.vue'
 const MEDIA = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c50'
 const BLOB = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a50'
 const KEPT = {media_csid: MEDIA, blob_csids: [BLOB], by: 'admin', at: '2026-10-14T17:00:00+00:00', reason: 'a complaint',
-  kept_by: 'pahma-2026-10-15-1', kept_on: '2026-10-15'}
+  kept_by: 'pahma-2026-10-15-1', kept_on: '2026-10-15', identification_number: '2026.1.7'}
 const PAGE = {
   days: 30, max_in_box: 12, max_in_file: 1000, active: [KEPT],
   ended: [{media_csid: 'other-media', at: '2026-10-15T10:40:00Z', by: 'refresh pahma-2026-10-15-1',
@@ -181,9 +181,13 @@ describe('the file dialogs', () => {
     fakeApi({'GET /museums/pahma/recalls': {body: PAGE}, [`GET /museums/pahma/lookup?q=${MEDIA}`]: {body: {
       input: MEDIA, refused: null, refresh: null, items: []}}})
     const wrapper = await at('/pahma/recalls', Recalls)
-    const links = wrapper.findAll('#active-recalls .recall-csid .file-link')
-    expect(links.map(l => l.text())).toEqual(['1a2b3c4d…3b4c50', '0f1e2d3c…3f4a50']) // shortened, with ⧉ (D154)
-    expect(wrapper.findAll('#active-recalls .copy-button')).toHaveLength(2)
+    expect(wrapper.find('#active-recalls').text()).toContain('2026.1.7') // its identification number (October 14)
+    await wrapper.find('#active-recalls .row-expand').trigger('click') // ▸ shows its CSIDs
+    await flushPromises()
+    expect(wrapper.find('#active-recalls .row-expand').attributes('aria-expanded')).toBe('true')
+    const links = wrapper.findAll('#active-recalls .recall-csid')
+    expect(links.map(l => l.text())).toEqual([MEDIA, BLOB]) // whole, each with ⧉
+    expect(wrapper.findAll('#active-recalls .row-detail .copy-button')).toHaveLength(2)
     await links[1].trigger('click')
     await flushPromises()
     const dialog = document.querySelector('#file-dialog')

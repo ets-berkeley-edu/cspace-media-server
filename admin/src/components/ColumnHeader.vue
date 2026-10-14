@@ -5,6 +5,7 @@
       :text="help"
       location="top"
       max-width="320"
+      interactive
     >
       <template #activator="{props: activator}">
         <span v-bind="activator" class="column-help" tabindex="0">{{ column.title }}</span>

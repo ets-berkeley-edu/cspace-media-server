@@ -23,13 +23,17 @@
       id="audit-table"
       :headers="headers"
       :items="entries"
-      :sort-by="[{key: 'at', order: 'desc'}]"
+      :sort-by="table.sortBy"
       must-sort
-      :items-per-page="25"
+      :items-per-page="table.itemsPerPage"
+      :page="table.page"
       :items-per-page-options="PAGE_SIZES"
       :loading="!loaded && !error"
       density="compact"
       no-data-text="Nothing recorded in the last 30 days."
+      @update:sort-by="(v: {key: string, order: 'asc' | 'desc'}[]) => table.sortBy = v"
+      @update:page="(v: number) => table.page = v"
+      @update:items-per-page="(v: number) => table.itemsPerPage = v"
     >
       <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
       <!-- eslint-disable-next-line vue/no-v-for-template-key -->
@@ -65,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref, watch} from 'vue'
+import {computed, onActivated, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import {museumName} from '@/session'
 import type {AuditEntry} from '@/api'
@@ -76,6 +80,7 @@ import LoadError from '@/components/LoadError.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import WhenText from '@/components/WhenText.vue'
 import {PAGE_SIZES, REFRESH_ID, detailLines, isCsid, short, targetOf} from '@/words'
+import {useTableState} from '@/tableState'
 
 // Sortable: time, by, action and target; the details aren't (D94). "By", not "Admin": the ETL and Serena act too.
 const headers = [
@@ -87,7 +92,10 @@ const headers = [
 ]
 
 const route = useRoute()
-const museum = computed(() => String(route.params.museum))
+const table = useTableState('', 'at') // its place in the address (October 14, 2026)
+// Kept alive, one per museum (App.vue): always this museum's, whichever page the address shows now.
+const ownMuseum = String(route.params.museum)
+const museum = computed(() => ownMuseum)
 const entries = ref<AuditEntry[]>([])
 const loaded = ref(false)
 const error = ref('')
@@ -104,7 +112,8 @@ function alertStillListed(entry: AuditEntry): boolean {
   return Date.now() - raised < DAYS_LISTED * 24 * 60 * 60 * 1000
 }
 
-watch(museum, async m => {
+async function load() {
+  const m = museum.value
   loaded.value = false
   error.value = ''
   try {
@@ -113,7 +122,18 @@ watch(museum, async m => {
   } catch (e) {
     error.value = problem(e)
   }
-}, {immediate: true})
+}
+
+watch(museum, load, {immediate: true})
+
+// Kept alive (App.vue): coming back shows it as it was, with anything new since.
+let shown = false
+onActivated(() => {
+  if (shown) {
+    void load()
+  }
+  shown = true
+})
 </script>
 
 <style scoped>

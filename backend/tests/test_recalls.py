@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from test_admin import CHANGES, Clock, make_app, sign_in
 
 from fakecspace.app import USERS
+from fakecspace.app import app as fake_app
 from fakecspace.app import store as fake
 from serena import cache_index, recalls, tables
 from serena.audit import Audit
@@ -151,6 +152,31 @@ def test_taking_down(client: TestClient, store: Store) -> None:
     assert again["recalled"] == [] and again["records"][0]["recalled"] is True
     assert len(alerts_of(store, "recall")) == 1  # nothing new recalled: no alert
     assert client.post(URL, headers=CHANGES, json={"text": MEDIA, "reason": ""}).status_code == 422
+    # Each record's identification number, read from CollectionSpace when it's recalled (Richard, October 14, 2026):
+    # the one the simulator has; none for records it doesn't (the recall goes ahead regardless).
+    number = fake.media[UNPUBLISHED_MEDIA].identification_number
+    assert number.startswith("2026.1.")
+    assert store.recall("pahma", UNPUBLISHED_MEDIA).identification_number == number  # type: ignore[union-attr]
+    assert store.recall("pahma", MEDIA).identification_number is None  # type: ignore[union-attr]
+    active = {r["media_csid"]: r for r in client.get(URL).json()["active"]}
+    assert active[UNPUBLISHED_MEDIA]["identification_number"] == number
+    cancelled = client.post(f"{URL}/{UNPUBLISHED_MEDIA}/cancel", headers=CHANGES, json={"reason": "a test"})
+    assert cancelled.status_code == 200
+    (ended,) = client.get(URL).json()["ended"]
+    assert ended["details"]["identification_number"] == number  # the Ended table shows it too
+
+
+def test_the_simulator_keeps_a_record_it_already_has(client: TestClient) -> None:
+    """Each ./serena etl adds its records to the simulator first; one it has keeps its changes and its "last changed"
+    time, so a refresh doesn't make it look changed in CollectionSpace."""
+    sim = TestClient(fake_app)
+    sim.post("/_fake/media", json={"csid": MEDIA, "kind": "image", "blob": BLOB})
+    sim.post(f"/_fake/approve/{MEDIA}", json={"approved": False})
+    before = fake.media[MEDIA]
+    assert sim.post("/_fake/media", json={"csid": MEDIA, "kind": "image", "blob": BLOB}).json()["kept"] is True
+    after = fake.media[MEDIA]
+    assert after is before and after.approved_for_web is False
+    assert (after.identification_number, after.updated_at) == (before.identification_number, before.updated_at)
 
 
 # --- how a recall ends (D119)

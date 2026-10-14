@@ -46,6 +46,9 @@ def create_router() -> APIRouter:
             "end": report.end.isoformat(),
             "max_lines": MAX_LINES,
             "truncated": report.truncated,
+            # Only a museum with signed access (Cinefiles) can have a signed-link request: the page shows that column
+            # for it alone (Richard, October 14, 2026).
+            "signed_links": bool(request.app.state.museums[session.tenant].signed_access_kinds),
             "days": [{"day": d.day, "served": d.served, "unserved": d.unserved,
                       "unserved_total": sum(d.unserved.values())} for d in report.days],
             "top_paths": [{"path": path, "requests": n} for path, n in report.top_paths],

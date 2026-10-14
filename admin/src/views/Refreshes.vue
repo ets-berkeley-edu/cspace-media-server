@@ -10,14 +10,18 @@
       id="refreshes-table"
       :headers="headers"
       :items="refreshes"
-      :sort-by="[{key: 'updated_at', order: 'desc'}]"
+      :sort-by="table.sortBy"
       must-sort
-      :items-per-page="25"
+      :items-per-page="table.itemsPerPage"
+      :page="table.page"
       :items-per-page-options="PAGE_SIZES"
       :loading="!loaded && !error"
       item-value="refresh_id"
       density="compact"
       no-data-text="No refreshes in the last 30 days."
+      @update:sort-by="(v: {key: string, order: 'asc' | 'desc'}[]) => table.sortBy = v"
+      @update:page="(v: number) => table.page = v"
+      @update:items-per-page="(v: number) => table.itemsPerPage = v"
     >
       <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
       <!-- eslint-disable-next-line vue/no-v-for-template-key -->
@@ -36,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref, watch} from 'vue'
+import {computed, onActivated, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import {museumName} from '@/session'
 import type {RefreshSummary} from '@/api'
@@ -45,6 +49,7 @@ import ColumnHeader from '@/components/ColumnHeader.vue'
 import LoadError from '@/components/LoadError.vue'
 import WhenText from '@/components/WhenText.vue'
 import {PAGE_SIZES, stateOf} from '@/words'
+import {useTableState} from '@/tableState'
 
 // Every column has a meaningful order (D94); the state sorts by its label, as shown.
 const headers = [
@@ -56,12 +61,16 @@ const headers = [
 ]
 
 const route = useRoute()
-const museum = computed(() => String(route.params.museum))
+const table = useTableState('', 'updated_at') // its place in the address (October 14, 2026)
+// Kept alive, one per museum (App.vue): always this museum's, whichever page the address shows now.
+const ownMuseum = String(route.params.museum)
+const museum = computed(() => ownMuseum)
 const refreshes = ref<RefreshSummary[]>([])
 const loaded = ref(false)
 const error = ref('')
 
-watch(museum, async m => {
+async function load() {
+  const m = museum.value
   loaded.value = false
   error.value = ''
   try {
@@ -70,5 +79,16 @@ watch(museum, async m => {
   } catch (e) {
     error.value = problem(e)
   }
-}, {immediate: true})
+}
+
+watch(museum, load, {immediate: true})
+
+// Kept alive (App.vue): coming back shows it as it was, with anything new since.
+let shown = false
+onActivated(() => {
+  if (shown) {
+    void load()
+  }
+  shown = true
+})
 </script>

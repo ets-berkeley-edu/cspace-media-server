@@ -7,6 +7,7 @@
       size="small"
       variant="outlined"
       :to="{name: 'alerts', params: {museum}}"
+      @click="markMenuNavigation"
     >
       Open alerts
     </v-btn>
@@ -17,6 +18,7 @@
 import {computed, onBeforeUnmount, onMounted, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import {api} from '@/api'
+import {markMenuNavigation} from '@/navigation'
 import {alertsChanged, waiting} from '@/session'
 
 // One line, only while an alert waits to be acknowledged: how many, the newest one's title, and a way to the Alerts

@@ -20,6 +20,7 @@
           :to="{name: 'alerts', params: {museum: current.museum}}"
           :aria-label="waitingCount ? `Alerts: ${waitingCount} unacknowledged` : 'Alerts'"
           :title="waitingCount ? `${waitingCount} unacknowledged alert${waitingCount === 1 ? '' : 's'}` : 'Alerts'"
+          @click="markMenuNavigation"
         >
           <v-badge
             v-if="waitingCount"
@@ -37,6 +38,7 @@
           :to="{name: 'settings', params: {museum: current.museum}}"
           :aria-label="`${current.name} settings`"
           :title="`${current.name} settings`"
+          @click="markMenuNavigation"
         >
           <v-icon :icon="mdiCog" />
         </v-btn>
@@ -50,6 +52,7 @@
               :key="signed.museum"
               :to="{name: 'overview', params: {museum: signed.museum}}"
               :title="`${signed.name} (${signed.user})`"
+              @click="markMenuNavigation"
             />
             <v-list-item id="sign-in-another" :to="{name: 'sign-in'}" title="Sign in to another museum" />
           </v-list>
@@ -68,13 +71,22 @@
             :to="{name: item.name, params: {museum: current.museum}}"
             :title="item.title"
             :exact="item.name === 'overview'"
+            @click="markMenuNavigation"
           />
         </div>
       </v-list>
     </v-navigation-drawer>
     <v-main>
       <AlertBanner v-if="current" />
-      <router-view />
+      <div v-if="current && backTo" id="back-link" class="back-link px-4 pt-3">
+        <a :href="router.resolve(backTo.path).href" @click.prevent="goBack(router)">← Back to {{ backTo.title }}</a>
+      </div>
+      <!-- The list pages are kept alive, one per museum, so coming back finds them as they were (October 14, 2026). -->
+      <router-view v-slot="{Component, route: shown}">
+        <keep-alive :include="KEPT_ALIVE" :max="10">
+          <component :is="Component" :key="`${String(shown.name)}:${String(shown.params.museum || '')}`" />
+        </keep-alive>
+      </router-view>
     </v-main>
   </v-app>
 </template>
@@ -85,6 +97,7 @@ import {computed} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {api} from '@/api'
 import AlertBanner from '@/components/AlertBanner.vue'
+import {backTo, goBack, markMenuNavigation} from '@/navigation'
 import {refresh, session, signedInTo, waiting} from '@/session'
 
 // The left-hand menu's groups (the UI review, October 13, 2026). Alerts and Settings are in the app bar: the bell and
@@ -97,6 +110,9 @@ const NAV = [
     {name: 'requests', title: 'Past requests'}, {name: 'lookup', title: 'Media look up'}, {name: 'recalls', title: 'Recalls'}]},
   {title: 'Admin', items: [{name: 'audit', title: 'Audit log'}, {name: 'api', title: 'API documentation'}]}
 ]
+
+// The pages kept alive (by their components' names): the lists an admin works through and leaves by a link.
+const KEPT_ALIVE = ['Requests', 'Recalls', 'Alerts', 'AuditLog', 'Refreshes']
 
 const route = useRoute()
 const router = useRouter()
@@ -120,6 +136,13 @@ async function signOut() {
 </script>
 
 <style scoped>
+.back-link a {
+  text-decoration: none;
+}
+.back-link a:hover,
+.back-link a:focus-visible {
+  text-decoration: underline;
+}
 .nav-group {
   font-weight: 700;
   letter-spacing: 0.08em;

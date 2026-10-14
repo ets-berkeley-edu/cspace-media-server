@@ -32,6 +32,9 @@ log = logging.getLogger("serena.recalls")
 
 MAX_IN_BOX = 12  # the form's box (D116); more come as a file
 MAX_IN_FILE = 1000  # D128
+# Identification numbers are read for at most this many records of one recall (one CollectionSpace call each, four at
+# a time); the rest show their Media CSID. A recall of more is a rare, bulk one.
+MAX_NUMBERS = 100
 _SEPARATORS = re.compile(r"[\s,]+")
 
 
@@ -182,21 +185,48 @@ def _ask_collectionspace(tenant: str, csids: list[str], cspace: CSpaceClients | 
         return list(pool.map(one, csids))
 
 
+def identification_numbers(tenant: str, media_csids: list[str], cspace: CSpaceClients | None) -> dict[str, str]:
+    """Each Media record's identification number, for the Recalls page (Richard, October 14, 2026); best effort: a
+    record CollectionSpace doesn't answer for, or past MAX_NUMBERS, has none, and the recall goes ahead."""
+    if cspace is None or not media_csids:
+        return {}
+    try:
+        client = cspace.get(tenant)
+    except CSpaceError:
+        return {}
+
+    def one(media: str) -> tuple[str, str | None]:
+        try:
+            return media, client.media_record(media).identification_number
+        except CSpaceError as error:
+            log.info("no identification number for a recall", extra={"museum": tenant, "status": error.status})
+            return media, None
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return {media: number for media, number in pool.map(one, media_csids[:MAX_NUMBERS]) if number}
+
+
 def _today(clock: Callable[[], datetime]) -> str:
     return clock().astimezone(PACIFIC).date().isoformat()
 
 
 def recall(museum: Museum, summary: Summary, reason: str, admin: str, store: Store, audit: Audit,
-              alerts: Alerts, clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> list[str]:
-    """Takes down the summary's Media records not already recalled (D118). Returns their Media CSIDs."""
+              alerts: Alerts, clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+              numbers: dict[str, str] | None = None) -> list[str]:
+    """Takes down the summary's Media records not already recalled (D118), with each one's identification number
+    when known. Returns their Media CSIDs."""
     at = clock().astimezone(UTC).isoformat(timespec="seconds")
     done: list[str] = []
+    numbers = numbers or {}
     for found in summary.records:
         if found.recalled:
             continue
-        if store.put_recall(Recall(museum.key, found.media_csid, tuple(found.blob_csids), admin, at, reason)):
+        number = numbers.get(found.media_csid)
+        if store.put_recall(Recall(museum.key, found.media_csid, tuple(found.blob_csids), admin, at, reason,
+                                   identification_number=number)):
             audit.record(museum.key, admin, Action.RECALL, found.media_csid,
-                         {"blob_csids": found.blob_csids, "reason": reason, "found_in": found.source})
+                         {"blob_csids": found.blob_csids, "reason": reason, "found_in": found.source,
+                          **({"identification_number": number} if number else {})})
             done.append(found.media_csid)
     if done:
         what = "1 Media record" if len(done) == 1 else f"{len(done)} Media records"
@@ -204,6 +234,11 @@ def recall(museum: Museum, summary: Summary, reason: str, admin: str, store: Sto
                             f"An admin recalled {what} for {museum.name}. Reason: {reason}", instance=at))
         log.info("recall", extra={"museum": museum.key, "media_records": len(done)})
     return done
+
+
+def _number(recall: Recall) -> dict[str, str]:
+    """The recall's identification number for an ended recall's audit entry: the Recalls page's Ended table shows it."""
+    return {"identification_number": recall.identification_number} if recall.identification_number else {}
 
 
 class NotKept(Exception):
@@ -216,7 +251,8 @@ def release(museum: Museum, media_csid: str, reason: str, admin: str, store: Sto
     if recall is None or not recall.kept_by or not store.delete_recall(museum.key, media_csid, kept_only=True):
         raise NotKept(media_csid)
     audit.record(museum.key, admin, Action.RECALL_RELEASE, media_csid,
-                 {"blob_csids": list(recall.blob_csids), "kept_by": recall.kept_by, "reason": reason})
+                 {"blob_csids": list(recall.blob_csids), "kept_by": recall.kept_by, "reason": reason,
+                  **_number(recall)})
     at = clock().astimezone(UTC).isoformat(timespec="seconds")
     alerts.raise_(Alert(museum.key, _today(clock), Kind.RECALL_RELEASED, media_csid,
                         f"An admin released the recall of Media record {media_csid} for {museum.name}, which "
@@ -235,7 +271,7 @@ def cancel(museum: Museum, media_csid: str, reason: str, admin: str, store: Stor
         raise NotWaiting(media_csid)
     audit.record(museum.key, admin, Action.RECALL_CANCEL, media_csid,
                  {"blob_csids": list(recall.blob_csids), "reason": reason, "recalled_by": recall.by,
-                  "recalled_at": recall.at})
+                  "recalled_at": recall.at, **_number(recall)})
     at = clock().astimezone(UTC).isoformat(timespec="seconds")
     alerts.raise_(Alert(museum.key, _today(clock), Kind.RECALL_CANCELLED, media_csid,
                         f"An admin cancelled the recall of Media record {media_csid} for {museum.name}, before a "
@@ -273,7 +309,7 @@ def after_update(museum: Museum, refresh_id: str, refresh_date: str, store: Stor
             audit.record(museum.key, f"refresh {refresh_id}", Action.RECALL_ENDED, recall.media_csid,
                          {"blob_csids": list(recall.blob_csids), "refresh_id": refresh_id,
                           "why": "no longer listed as public", "recalled_by": recall.by,
-                          "recalled_at": recall.at})
+                          "recalled_at": recall.at, **_number(recall)})
     if counts.ended and alerts is not None:
         what = "1 recall" if counts.ended == 1 else f"{counts.ended} recalls"
         alerts.raise_(Alert(museum.key, refresh_date, Kind.RECALLS_ENDED, refresh_id,

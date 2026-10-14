@@ -13,7 +13,9 @@ Development hooks:
   POST /_fake/reset                 empty
   POST /_fake/media                 {"csid", "kind": image|pdf|3D, "state"?, "blob"?, "identification"?}: a Media
                                     record with sample files, its Blob's CSID and identification number (2026.1.<n>
-                                    unless given)
+                                    unless given). A record it already has is kept as it is (changes made with the
+                                    hooks below, its number and "last changed" included), so each ./serena etl, which
+                                    adds its records first, doesn't make them look changed.
   POST /_fake/delete/<csid>         soft-delete it (the Media service still returns it, as CollectionSpace does)
   POST /_fake/replace/<csid>        replace its image (CollectionSpace makes a new Blob, so a record with a Blob
                                     gets a new Blob CSID; the Media service then returns the new file)
@@ -266,6 +268,9 @@ def reset() -> dict[str, str]:
 @app.post("/_fake/media")
 async def add_media(request: Request) -> JSONResponse:
     body: dict[str, Any] = await request.json()
+    existing = store.media.get(body["csid"])
+    if existing is not None:
+        return JSONResponse({"csid": existing.csid, "files": sorted(existing.files), "kept": True})
     media = store.add(body["csid"], body.get("kind", "image"), body.get("state", "project"), blob=body.get("blob"),
                       identification_number=body.get("identification"))
     return JSONResponse({"csid": media.csid, "files": sorted(media.files)})

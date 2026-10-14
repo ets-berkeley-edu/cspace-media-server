@@ -11,14 +11,18 @@
       id="alerts-table"
       :headers="headers"
       :items="alerts"
-      :sort-by="[{key: 'created_at', order: 'desc'}]"
+      :sort-by="table.sortBy"
       must-sort
-      :items-per-page="25"
+      :items-per-page="table.itemsPerPage"
+      :page="table.page"
       :items-per-page-options="PAGE_SIZES"
       :loading="!loaded && !error"
       item-value="key"
       density="compact"
       no-data-text="No alerts in the last 30 days."
+      @update:sort-by="(v: {key: string, order: 'asc' | 'desc'}[]) => table.sortBy = v"
+      @update:page="(v: number) => table.page = v"
+      @update:items-per-page="(v: number) => table.itemsPerPage = v"
     >
       <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
       <!-- eslint-disable-next-line vue/no-v-for-template-key -->
@@ -56,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref, watch} from 'vue'
+import {computed, onActivated, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import type {AlertItem} from '@/api'
 import {api, problem} from '@/api'
@@ -67,6 +71,7 @@ import RefreshLink from '@/components/RefreshLink.vue'
 import WhenText from '@/components/WhenText.vue'
 import {alertsChanged, museumName} from '@/session'
 import {PAGE_SIZES, REFRESH_ID, REFRESH_IN_TEXT, isCsid, short} from '@/words'
+import {useTableState} from '@/tableState'
 
 // Sortable: when, refresh date, alert, about and acknowledged (D94); the alert sorts by its title.
 const headers = [
@@ -96,7 +101,10 @@ function withRefreshes(message: string): {text: string, refresh: boolean}[] {
 }
 
 const route = useRoute()
-const museum = computed(() => String(route.params.museum))
+const table = useTableState('', 'created_at') // its place in the address (October 14, 2026)
+// Kept alive, one per museum (App.vue): always this museum's, whichever page the address shows now.
+const ownMuseum = String(route.params.museum)
+const museum = computed(() => ownMuseum)
 const alerts = ref<AlertItem[]>([])
 const loaded = ref(false)
 const error = ref('')
@@ -121,6 +129,15 @@ async function acknowledge(key: string) {
 }
 
 watch([museum, alertsChanged], load, {immediate: true})
+
+// Kept alive (App.vue): coming back shows it as it was, with any new alerts.
+let shown = false
+onActivated(() => {
+  if (shown) {
+    void load()
+  }
+  shown = true
+})
 </script>
 
 <style scoped>

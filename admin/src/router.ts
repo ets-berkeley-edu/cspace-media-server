@@ -1,6 +1,7 @@
 import {createRouter, createWebHistory} from 'vue-router'
 import type {RouteLocationNormalized} from 'vue-router'
 import {onSessionEnded} from '@/api'
+import {trackBack} from '@/navigation'
 import {refresh, session, signedInTo} from '@/session'
 import Alerts from '@/views/Alerts.vue'
 import AuditLog from '@/views/AuditLog.vue'
@@ -50,9 +51,15 @@ export async function guard(to: RouteLocationNormalized) {
 
 const router = createRouter({
   history: createWebHistory('/admin/'),
-  routes
+  routes,
+  // Back and Forward return to where the page was scrolled (its list pages are kept alive, App.vue); a change of the
+  // same page's address (a filter, a page of a table, a new look up) doesn't scroll.
+  scrollBehavior(to, from, saved) {
+    return saved || (to.path === from.path ? false : {top: 0})
+  }
 })
 router.beforeEach(guard)
+trackBack(router)
 
 /**
  * A page of this museum is where the admin goes back to after signing in (D161): only a path of the app, in the museum
