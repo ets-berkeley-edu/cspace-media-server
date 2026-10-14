@@ -95,6 +95,7 @@ describe('the Past requests page', () => {
     const links = wrapper.findAll('#requests-table .file-link')
     // One line, shortened in the middle; the whole path on hover (D152).
     expect(links.map(l => l.text())).toEqual(['0f1e2d3c…3f4a5b · Medium'])
+    expect(links[0].attributes('title')).toMatch(/^View this file: \/pahma\/imageserver\/blobs\/[0-9a-f-]{36}\//) // whole
     expect(wrapper.findAll('#requests-table .request-path').map(p => p.attributes('title'))).toContain(good.path)
     await links[0].trigger('click')
     await flushPromises()

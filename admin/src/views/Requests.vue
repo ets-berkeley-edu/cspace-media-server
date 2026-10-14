@@ -54,7 +54,12 @@
                 <tr v-for="p in report.top_paths" :key="p.path">
                   <td>
                     <span class="request-path" :title="p.path">
-                      <FileLink v-if="blobOfPath(p.path)" :aria-label="`View this file: ${p.path}`" @open="openPath(p.path)">{{ shortPath(p.path) }}</FileLink>
+                      <FileLink
+                        v-if="blobOfPath(p.path)"
+                        :title="`View this file: ${p.path}`"
+                        :aria-label="`View this file: ${p.path}`"
+                        @open="openPath(p.path)"
+                      >{{ shortPath(p.path) }}</FileLink>
                       <template v-else>{{ shortPath(p.path) }}</template>
                       <CopyButton v-if="shortPath(p.path) !== p.path" :value="p.path" label="path" />
                     </span>
@@ -129,7 +134,12 @@
         <template #[`item.reason`]="{item}">{{ reasonOf(item.reason) }}</template>
         <template #[`item.path`]="{item}">
           <span class="request-path" :title="item.path">
-            <FileLink v-if="blobOfPath(item.path)" :aria-label="`View this file: ${item.path}`" @open="openPath(item.path, item)">{{ shortPath(item.path) }}</FileLink>
+            <FileLink
+              v-if="blobOfPath(item.path)"
+              :title="`View this file: ${item.path}`"
+              :aria-label="`View this file: ${item.path}`"
+              @open="openPath(item.path, item)"
+            >{{ shortPath(item.path) }}</FileLink>
             <template v-else>{{ shortPath(item.path) }}</template>
             <CopyButton v-if="shortPath(item.path) !== item.path" :value="item.path" label="path" />
           </span>

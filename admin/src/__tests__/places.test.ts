@@ -82,6 +82,8 @@ describe('a list page in the address', () => {
     expect(calls.map(c => c.path)).toEqual(['/museums/pahma/requests?range=7d'])
     expect(router.currentRoute.value.query).toEqual({range: '7d', outcome: 'unserved', reason: 'recalled'}) // kept
     expect(wrapper.findAll('#requests-table th').map(th => th.text())).not.toContain('Signed link') // not Cinefiles
+    expect(wrapper.find('#requests-table .file-link').exists()).toBe(false) // '/p' has no CSID: plain text
+    expect(wrapper.find('#requests-table [title="/p"]').exists()).toBe(true) // the whole path on hover
     wrapper.unmount()
   })
 })
