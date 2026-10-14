@@ -141,6 +141,15 @@
   .pager .nav button { height: 26px; min-width: 26px; padding: 0 6px; border-color: transparent; background: none; font-size: 14px; line-height: 1; }
   .copy { height: 24px; padding: 0 7px; font-size: 11px; margin-left: 4px; }
   .nowrap { white-space: nowrap; }
+  .back-link { margin: 0 0 6px; font-size: 14px; }
+  th.expander, td.expander { width: 28px; padding-right: 0; }
+  button.expand { border: 1px solid var(--border); background: var(--surface, transparent); color: inherit; width: 24px; height: 24px; padding: 0; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; }
+  tr.opened td { border-bottom-color: transparent; }
+  tr.detail-row td { padding-top: 0; }
+  dl.row-detail { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 4px; font-size: 13px; }
+  dl.row-detail dt { color: var(--text-muted); }
+  dl.row-detail dd { margin: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .nowrap button.path-link { overflow-wrap: normal; }
   .req-path .mono { font-size: 12px; }
   .copy.icon { height: 22px; min-width: 22px; padding: 0 5px; font-size: 12px; line-height: 1; vertical-align: middle; }
@@ -286,6 +295,8 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 26 (October 14, 2026, Richard):</strong> <strong>Past requests</strong> shows only what differs from row to row: "<CSID…> · <size>" (the whole path on hover, in ⧉ and in the file dialog), so the table fits; the app shows "Signed link" only for Cinefiles, the one museum with signed access. <strong>"← Back to …"</strong>: open a path's file from Past requests (or a CSID, or a refresh ID), then "Media look up": the page starts with "← Back to Past requests", which returns there as it was. The menu starts a new task, so there's no link after it. In the app, the list pages also keep their filters, sort and page in the address, so the browser's Back does the same. The recall dialog's "Back" is "Change CSIDs".</li>
+      <li><strong>Version 25 (October 14, 2026, Richard):</strong> on Recalls, each row has ▸ (a button, so the keyboard reaches it) that shows the row's details beneath it: the Media CSID and Blob CSID in full, each opening the file and with ⧉, and "Media look up". The first column is the Media record's identification number (D153's), with ⧉; a record without one shows its shortened Media CSID. In the app the number would be kept with the recall when it's made, so the page doesn't call CollectionSpace for every row.</li>
       <li><strong>Version 24 (October 13, 2026 review, from Richard's testing; D154–D165 accepted):</strong>
         <strong>Recalls:</strong> the state is a tag and the action ("Cancel recall…" or "Release…") has its own column at the right; CSIDs on one line, shortened, each with ⧉ to copy it; "By".
         <strong>Copy:</strong> every CSID or path shortened with an ellipsis has ⧉, which copies the whole of it ("Copied" for a moment): Media look up's comparison rows, Recalls, the recall summary, Past requests' paths, the file dialog's path.
@@ -642,7 +653,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 24</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 26</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -659,7 +670,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 24</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 26</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -669,12 +680,14 @@
       <main id="main">${(PAGES[S.page] || PAGES.overview)()}</main></div>`;
   }
 
-  const title = t => `<h2 id="page-title">${t}</h2>`;
+  // "← Back to …" (Richard, Oct 14): on a page reached through a link (a path, a CSID, a refresh ID); not after the menu.
+  const BACK_NAMES = {overview: "Overview", refreshes: "Past refreshes", requests: "Past requests", lookup: "Media look up", recalls: "Recalls", alerts: "Alerts", audit: "Audit log", settings: "Settings"};
+  const title = t => `${S.from && S.from !== S.page && BACK_NAMES[S.from] ? `<p class="back-link"><button type="button" class="link" data-back>← Back to ${BACK_NAMES[S.from]}</button></p>` : ""}<h2 id="page-title">${t}</h2>`;
 
   // A sortable table, as the app's v-data-table with must-sort: clicking a column's name sorts by it, ascending;
   // clicking it again reverses; a table is always sorted one way or the other. Rows keep their index in `rows`, for
   // the buttons in them. The pager is a stand-in (25 rows a page, as in the app).
-  function table(id, cols, rows, initial) {
+  function table(id, cols, rows, initial, opts) {
     const sort = S.sort[id] || (S.sort[id] = {...initial});
     const col = cols.find(c => c.key === sort.key) || cols[0];
     const value = r => col.val ? col.val(r) : r[col.key];
@@ -683,7 +696,10 @@
       const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "en", {numeric: true});
       return sort.dir === "asc" ? c : -c;
     });
-    const head = cols.map(c => {
+    // Expandable rows (Richard, Oct 14): a ▸ button first in each row shows the row's details beneath it.
+    const detail = opts && opts.detail;
+    const open = S.expanded || (S.expanded = {});
+    const head = (detail ? `<th class="expander"><span class="sr">Details</span></th>` : "") + cols.map(c => {
       // A column's hover description (Richard, Oct 13): a dotted underline, the description on hover.
       const label = c.help ? `<span class="help" title="${esc(c.help)}">${esc(c.title)}</span>` : esc(c.title);
       if (c.sortable === false) return `<th${c.cls ? ` class="${c.cls}"` : ""}>${label}</th>`;
@@ -699,8 +715,14 @@
     const pager = `<div class="pager"><label>Rows per page <select data-pagesize="${id}">${[10, 25, 50, 100].map(n => `<option ${n === pg.size ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <span class="range">${order.length ? `${from + 1}–${from + shown.length} of ${order.length}` : "0 of 0"}</span>
       <span class="nav">${go(1, "«", pg.page === 1, "First page")}${go(pg.page - 1, "‹", pg.page === 1, "Previous page")}${go(pg.page + 1, "›", pg.page === pages, "Next page")}${go(pages, "»", pg.page === pages, "Last page")}</span></div>`;
-    const body = shown.map(([r, i]) => `<tr${r.focus ? ' class="focus"' : ""}>${cols.map(c => `<td${c.num ? ' class="num"' : c.cls ? ` class="${c.cls}"` : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`).join("");
-    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted">None.</td></tr>`}</tbody></table>
+    const span = cols.length + (detail ? 1 : 0);
+    const body = shown.map(([r, i]) => {
+      const k = detail ? `${id}:${opts.key(r)}` : "", isOpen = detail && open[k];
+      const toggle = detail ? `<td class="expander"><button type="button" class="expand" data-expand="${esc(k)}" aria-expanded="${isOpen ? "true" : "false"}" aria-controls="d-${esc(k)}" aria-label="${isOpen ? "Hide" : "Show"} details">${isOpen ? "▾" : "▸"}</button></td>` : "";
+      const row = `<tr class="${[r.focus ? "focus" : "", isOpen ? "opened" : ""].join(" ").trim()}">${toggle}${cols.map(c => `<td${c.num ? ' class="num"' : c.cls ? ` class="${c.cls}"` : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`;
+      return row + (isOpen ? `<tr class="detail-row" id="d-${esc(k)}"><td></td><td colspan="${span - 1}">${detail(r, i)}</td></tr>` : "");
+    }).join("");
+    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${span}" class="muted">None.</td></tr>`}</tbody></table>
       ${pager}</div>`;
   }
   const PAGES = {
@@ -747,7 +769,7 @@
       <div role="group" aria-label="Range">${[["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"]].map(([k, v]) => `<button type="button" data-range="${k}" class="${S.range === k ? "primary" : ""}" aria-pressed="${S.range === k}">${v}</button>`).join(" ")}</div></div>
       <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
       <h3>Most requested</h3>${table("top", [
-        {key: "path", title: "Path", help: "The file's path, shortened in the middle; hover for the whole of it, or copy it.", html: r => pathCell(r)},
+        {key: "path", title: "Path", help: "The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). Hover for the whole path; ⧉ copies it.", html: r => pathCell(r)},
         {key: "n", title: "Requests", num: true, help: "How many requests asked for this path in the range.", html: r => r.n.toLocaleString("en-US")}], top, {key: "n", dir: "desc"})}
       <h3>Requests</h3><div class="toolbar"><select id="reqOutcome" aria-label="Outcome"><option value="">All outcomes</option>${["served", "unserved"].map(o => `<option ${S.outcome === o ? "selected" : ""}>${o}</option>`).join("")}</select>
         <select id="reqReason" aria-label="Reason"><option value="">Any reason</option>${reasons.map(([k]) => `<option ${S.reason === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select><span class="spacer"></span><button>Export CSV</button></div>
@@ -755,7 +777,7 @@
         {key: "at", title: "Time", help: "When the request reached Serena.", html: r => when(r.at)},
         {key: "outcome", title: "Outcome", help: "Served: Serena answered with the file. Unserved: the visitor got the unavailable image.", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
         {key: "reason", title: "Reason", help: "Why an unserved request wasn't served (recalled, not listed, bad CSID, …)."},
-        {key: "path", title: "Path", help: "The file's path, shortened in the middle; hover for the whole of it, copy it, or click it to see the file.", html: r => pathCell(r)},
+        {key: "path", title: "Path", help: "The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). Hover for the whole path, ⧉ copies it, click it to see the file.", html: r => pathCell(r)},
         {key: "kind", title: "Kind", help: "The file's kind from the servable list (image, catalog card, PDF, 3D model); blank when Serena doesn't know the file.", html: r => (r.kind ? esc(kindWord(r.kind)) : "") + (r.signed ? ' <span class="muted">· signed link</span>' : "")},
         {key: "cache", title: "Cache", help: "Hit: served from Serena's cached copy. Miss: fetched from CollectionSpace first, then cached."}], shown, {key: "at", dir: "desc"})}`;
     },
@@ -948,6 +970,13 @@
   }
 
   // ---- Recalls
+  // A recalled Media record's identification number, as staff know it (Richard, Oct 14; D153's number). In the app it
+  // would be kept with the recall, read from CollectionSpace when it's made; without one, the shortened Media CSID.
+  const idNumber = media => { const i = RECORDS.findIndex(x => x.media === media); return i >= 0 ? `2026.1.${i + 1}` : null; };
+  const idCell = media => { const n = idNumber(media); return n ? `<span class="nowrap">${esc(n)}${copyBtn(n)}</span>` : `<span class="nowrap"><span class="mono" title="${esc(media)}">${esc(short(media))}</span>${copyBtn(media)}</span>`; };
+  const recallDetail = (media, blobs) => `<dl class="row-detail"><dt>Media CSID</dt><dd><span class="nowrap">${csidLink(media, "Media CSID")}${copyBtn(media)}</span></dd>
+    ${blobs.map(b => `<dt>Blob CSID</dt><dd><span class="nowrap">${csidLink(b, "Blob CSID")}${copyBtn(b)}</span></dd>`).join("")}
+    <dt></dt><dd><button type="button" class="link" data-lookup="${esc(media)}">Media look up</button></dd></dl>`;
   const recallRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && !r.recall.ended)
     .map(r => ({r, media: r.media, blobs: r.blobs.map(b => b.blob), by: r.recall.by, at: r.recall.at, reason: r.recall.reason, kept: r.recall.kept}));
   const endedRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && r.recall.ended && ms(r.recall.ended.at) > ms(NOW) - 30 * DAY)
@@ -958,18 +987,20 @@
     return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there. Until a refresh decides a recall, "Cancel recall…" undoes a mistake. Click a column's name to sort by it.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
       <h3>Active</h3>${table("active", [
         {key: "thumb", title: "", sortable: false, html: t => `<button class="thumb" data-full="${imageSeed(S.museum, t.blobs[0])}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, t.blobs[0]), "image")}</button>`},
-        {key: "media", title: "Media CSID", help: "The recalled Media record, with its Blob beneath. Click a CSID to see the file; ⧉ copies the whole CSID.", html: t => `${csidLink(t.media, "Media CSID", short(t.media))}<div class="muted nowrap">Blob CSID ${csidLink(t.blobs[0], "Blob CSID", short(t.blobs[0]))}</div>`},
+        {key: "media", title: "Identification number", help: "The recalled Media record's identification number in CollectionSpace (its shortened Media CSID if it has none). ▸ shows its Media CSID and Blob CSID.", val: t => idNumber(t.media) || t.media, html: t => idCell(t.media)},
         {key: "at", title: "Recalled", help: "When the admin recalled it.", html: t => when(t.at)},
         {key: "by", title: "By", help: "The admin who recalled it."},
         {key: "reason", title: "Reason", help: "The reason the admin gave."},
         {key: "state", title: "State", help: "Waiting for a later refresh: no refresh has decided it yet. Still public in CollectionSpace: a refresh on a later day still listed the file as public, so the recall stays.", val: t => t.kept ? "0" : "1", html: t => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${refreshLink(t.kept.refresh)}</div>` : `<span class="pill t-info">Waiting for a later refresh</span>`},
-        {key: "act", title: "", sortable: false, cls: "actions", html: (t, i) => t.kept ? `<button type="button" data-release="${i}">Release…</button>` : `<button type="button" data-cancel="${i}">Cancel recall…</button>`}], active, {key: "at", dir: "desc"})}
+        {key: "act", title: "", sortable: false, cls: "actions", html: (t, i) => t.kept ? `<button type="button" data-release="${i}">Release…</button>` : `<button type="button" data-cancel="${i}">Cancel recall…</button>`}], active, {key: "at", dir: "desc"},
+        {key: t => t.media, detail: t => recallDetail(t.media, t.blobs)})}
       <h3>Ended in the last 30 days</h3>${table("ended", [
-        {key: "media", title: "Media CSID", help: "The Media record whose recall ended, with its Blob beneath.", html: e => `${csidLink(e.media, "Media CSID", short(e.media))}<div class="muted">Blob CSID ${csidLink(e.blob, "Blob CSID", short(e.blob))}</div>`},
+        {key: "media", title: "Identification number", help: "The Media record whose recall ended: its identification number in CollectionSpace. ▸ shows its Media CSID and Blob CSID.", val: e => idNumber(e.media) || e.media, html: e => idCell(e.media)},
         {key: "at", title: "Ended", help: "When the recall ended.", html: e => when(e.at)},
         {key: "how", title: "How", help: "Ended by a refresh (CollectionSpace caught up), Released (an admin, after a refresh kept it) or Cancelled (an admin, before a refresh decided it)."},
         {key: "by", title: "By", help: "The admin, or Serena for a refresh.", html: e => /^refresh /.test(e.by) ? "Serena" : esc(e.by)},
-        {key: "why", title: "Why", help: "The reason given, or why the refresh ended it."}], endedRows(), {key: "at", dir: "desc"})}`;
+        {key: "why", title: "Why", help: "The reason given, or why the refresh ended it."}], endedRows(), {key: "at", dir: "desc"},
+        {key: e => e.media, detail: e => recallDetail(e.media, [e.blob])})}`;
   }
 
   function dialog(head, body, foot) {
@@ -1009,19 +1040,23 @@
       ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td>${shortCopy(x.media)}<div class="muted">Blob CSID ${shortCopy(x.blob)}</div></td><td>${x.kind === "not known" ? "not known" : esc(kindWord(x.kind))}</td><td>${esc(x.served)}</td><td>${x.found}</td><td>${x.gave.length > 20 ? shortCopy(x.gave) : `<span class="mono">${esc(x.gave)}</span>`}</td></tr>`).join("")}</tbody></table></div>
       ${skipped.length ? `<p style="margin:12px 0 4px"><strong>Not recalled</strong></p><ul style="margin:0 0 12px">${skipped.map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>` : ""}
       <label class="field">Reason (required) <textarea id="tdReason" rows="2"></textarea></label>`,
-      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Back</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${what}</button>`);
+      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Change CSIDs</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${what}</button>`);
   }
 
   // Opens Media look up on an input (a path, a URL or a CSID).
+  // Leaving a page by a link: remember it, and where it was scrolled, for "← Back to …".
+  function leaving() { if (S.page !== "lookup") { S.from = S.page; S.scroll = window.scrollY; } }
   function openLookup(input) {
     S.lookup = lookupFor(input); S.blobIndex = S.lookup.index || 0; S.page = "lookup"; render();
   }
 
   // ---- events
   function bind() {
-    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); S.menu = false; S.focus = null; render(); });
-    document.querySelectorAll("[data-refresh]").forEach(b => b.onclick = () => { S.page = "refreshes"; S.focus = clean(b.dataset.refresh); render(); });
-    document.querySelectorAll("[data-lookup]").forEach(b => b.onclick = () => { S.focus = null; openLookup(clean(b.dataset.lookup)); });
+    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); S.menu = false; S.focus = null; S.from = null; render(); });
+    document.querySelectorAll("[data-back]").forEach(b => b.onclick = () => { S.page = S.from; S.from = null; S.focus = null; render(); window.scrollTo(0, S.scroll || 0); });
+    document.querySelectorAll("[data-expand]").forEach(b => b.onclick = () => { const k = clean(b.dataset.expand); S.expanded[k] = !S.expanded[k]; render(); const again = document.querySelector(`[data-expand="${CSS.escape(k)}"]`); if (again) again.focus(); });
+    document.querySelectorAll("[data-refresh]").forEach(b => b.onclick = () => { leaving(); S.page = "refreshes"; S.focus = clean(b.dataset.refresh); render(); });
+    document.querySelectorAll("[data-lookup]").forEach(b => b.onclick = () => { leaving(); S.focus = null; openLookup(clean(b.dataset.lookup)); });
     const lf = $("#loginForm");
     if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.timedOut = false; S.museum = clean($("#loginMuseum").value); S.user = typed($("#loginUser")) || "admin"; S.lookup = null; render(); };
     const mb = $("#museumBtn"); if (mb) mb.onclick = () => { S.menu = !S.menu; render(); };
@@ -1085,7 +1120,9 @@
   // with no CSID Serena could look up (a bad CSID) stays plain text.
   function pathCell(r) {
     const m = /\/blobs\/([^/]+)\//.exec(r.path);
-    const text = m ? r.path.replace(m[1], short(m[1])) : r.path;
+    // Only what differs from row to row (Richard, Oct 14): "<CSID…> · <size>"; the whole path on hover and in ⧉.
+    const size = (/\/derivatives\/([^/]+)\/content$/.exec(r.path) || [])[1] || (/\/content$/.test(r.path) ? "original" : "");
+    const text = m ? `${short(m[1])}${size ? ` · ${size}` : ""}` : r.path;
     if (!m || !CSID_RE.test(m[1])) return `<span class="nowrap req-path"><span class="mono" title="${esc(r.path)}">${esc(text)}</span>${m ? copyBtn(r.path) : ""}</span>`;
     return `<span class="nowrap req-path"><button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">${esc(text)}</button>${copyBtn(r.path)}</span>`;
   }
@@ -1105,7 +1142,7 @@
       `${bigPicture(imageSeed(S.museum, blob, "FullHD"), kindOf(S.museum, blob))}
       <p class="secondary" style="margin-bottom:0">The largest size the museum serves, shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that).${recalled ? " The public isn't served it while it's recalled." : ""} Never cached.</p>`, foot);
     bindDialog();
-    $("#viewLookup").onclick = () => { close(); openLookup(csid); };
+    $("#viewLookup").onclick = () => { close(); leaving(); openLookup(csid); };
   }
 
   function showPath(path) {
@@ -1127,7 +1164,7 @@
       ${picture}
       <p class="secondary" style="margin-bottom:0">${result ? `The last request for it (${when(last.at)}): ${result}. ` : ""}Shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that), whether or not Serena serves it to the public. Never cached.</p>`, foot);
     bindDialog();
-    $("#viewLookup").onclick = () => { close(); openLookup(path); };
+    $("#viewLookup").onclick = () => { close(); leaving(); openLookup(path); };
     return l;
   }
 

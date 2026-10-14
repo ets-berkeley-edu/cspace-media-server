@@ -516,25 +516,31 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
 
 What it checks: the mockup review of October 13, 2026 (D154 to D165): copy buttons, column help, links, the Recalls
 layout, the button rule, Media look up's sync heading and `/blobs/<CSID>` URLs, the file dialog's reasons, the Audit
-log's "By", and what happens when a session ends. The mockup, `docs/mockup/serena-admin-mockup.html` (version 24),
-shows the same pages. Start afresh from the pull request's branch, run `./serena etl pahma`, open the image's Medium URL
+log's "By", and what happens when a session ends; and Richard's review of October 14, 2026: Recalls by identification
+number with rows that open, Past requests' shorter paths, "← Back to …", list pages that keep their place, and the
+failed check's alert in words. The mockup, `docs/mockup/serena-admin-mockup.html` (version 26), shows the same pages. Start afresh from the pull request's branch, run `./serena etl pahma`, open the image's Medium URL
 it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 
 - [ ] On "Overview", expect "Past requests" and "Media look up" in the sentence as links; click each.
-- [ ] On "Past requests", hover over a column's name (they have a dotted underline): expect a description. Tab to one
-  with the keyboard: expect the same. Expect each path on one line with ⧉ at its end; click ⧉, expect "Copied" for a
-  moment, and paste somewhere: expect the whole path. Expect a time to break only between its date and its clock
-  time when the window is narrow.
+- [ ] On "Past requests", hover over a column's name (they have a dotted underline): expect a description, which
+  stays while you move the pointer onto it and closes with Esc. Tab to one with the keyboard: expect the same. Expect
+  each path as only what differs, "<CSID start…end> · <size>" (for example `0f1e2d3c…3f4a5b · Medium`), with ⧉ at its
+  end; hover over it: the whole path; click ⧉, expect "Copied" for a moment, and paste somewhere: expect the whole
+  path. Expect no "Signed link" column (only Cinefiles has one), and the table within the window. Expect a time to
+  break only between its date and its clock time when the window is narrow.
 - [ ] Recall your image's Media record on "Recalls": expect "Preview recall" and "Cancel" both as buttons with
   outlines ("Preview recall" filled blue), the summary's Media CSID and Blob CSID shortened with ⧉, and its thumbnail
-  a fixed size. Confirm with a reason ("Recall 1 Media record" is filled red). In "Active recalls", expect the Media
-  CSID on one line with ⧉, "Blob CSID" and its CSID with ⧉ beneath, a blue tag "Waiting for a later refresh", and
-  "Cancel recall…" in its own column at the right. Click it: expect "Keep the recall" outlined and "Cancel recall"
-  filled red. Keep the recall.
+  a fixed size. Click "Change CSIDs": expect the form again, with your CSID still in it; "Preview recall" again, then
+  confirm with a reason ("Recall 1 Media record" is filled red). In "Active recalls", expect the first column,
+  "Identification number", to show the record's number (`2026.1.<n>`) with ⧉, a blue tag "Waiting for a later
+  refresh", and "Cancel recall…" in its own column at the right. Click the row's ▸: expect its Media CSID and Blob
+  CSID, whole, each with ⧉ (click one: its file), and "Media look up"; ▾ closes it. Click "Cancel recall…": expect
+  "Keep the recall" outlined and "Cancel recall" filled red. Keep the recall.
 - [ ] Request the recalled image again in Chrome, then on "Past requests" expect its line's Kind "image" (an unserved
   line has the kind when Serena knows the file); an unknown file's Kind stays blank.
 - [ ] Make a refresh fail its check: run `./serena etl pahma --rows 3`. Then open "Alerts" and find the new alert,
-  "A servable list check failed". Expect:
+  "A servable list check failed". Expect its text to say "Refresh <refresh ID> failed its servable list check: <n>
+  problems in the servable list. Its page says more." (no "check_failed"), and:
   - the refresh ID in the alert's text (for example `pahma-2026-10-14-2`) shown as a link. Click it: it opens that
     refresh's page;
   - if the About column also shows a refresh ID, that's a link to the same page.
@@ -544,9 +550,8 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
 - [ ] On "Audit log", expect the column "By": "admin", "ETL (pahma)" and "Serena" (the refresh's outcome). Expect a
   Media CSID target shortened with ⧉ (it opens Media look up), refresh IDs as links, an acknowledged alert's target
   linking to "Alerts", and the servable list upload's SHA-256 shortened with ⧉. "Export CSV": expect the column `by`.
-- [ ] Run `./serena etl pahma` first, so the failed check above isn't Serena's latest refresh (every `./serena etl`
-  touches the simulator's records, and a failed one leaves them changed after Serena's last update). Then, on "Media
-  look up", look up your image's Medium URL: expect "Serena and CollectionSpace ✓ (No differences)" in green, ⧉ after the identification number in the heading, and the comparison's CSIDs shortened with ⧉. Take the
+- [ ] On "Media look up", look up your image's Medium URL (the failed check above didn't change the simulator's records:
+  it keeps a record it already has): expect "Serena and CollectionSpace ✓ (No differences)" in green, ⧉ after the identification number in the heading, and the comparison's CSIDs shortened with ⧉. Take the
   record off the web (section 19's `curl`) and look it up again: expect "⚠ (1 difference: As of)" in amber.
 - [ ] Look up the same URL without `/derivatives/Medium/content` (it ends with the Blob CSID): expect "This URL isn't
   one Serena serves …", reason "unknown path", then the Blob's answer with every size.
@@ -554,13 +559,23 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
   first on Media look up, then request `/pahma/imageserver/blobs/9f9f9f9f-0000-4000-8000-000000000000/content` in
   Chrome and click its path: expect "Nothing to show: Serena has no cached copy, and CollectionSpace has no file with
   this CSID." and no "Open it in a new tab". The dialog's path has ⧉.
+- [ ] **Keeping your place.** On "Past requests", choose "Last 7 days" and the outcome "Unserved", click "Reason" to
+  sort by it, and scroll down. Expect the address to hold them (`?range=7d&outcome=unserved&sort=reason.asc`). Click a
+  path, then "Media look up" in its dialog: expect "← Back to Past requests" above the title. Click it: expect Past
+  requests as you left it, the same range, filter, sort and scroll position, without the spinner. Open the path
+  again, then use the browser's Back button instead: expect the same. Copy the address into a new tab: expect the same
+  range, filter and sort.
+- [ ] From "Alerts", click a refresh ID: expect "← Back to Alerts" on the refresh's page. From the "Audit log", click a
+  Media CSID target: expect "← Back to Audit log" on Media look up. Then open "Media look up" from the menu on the
+  left: expect no "← Back to …" (the menu starts a new task).
 - [ ] Open the admin app in a second tab, and there click "Sign everyone out of PAHMA" on "Overview", then confirm. In
   the first tab, click "Audit log" (or reload): expect the sign-in page saying "Your PAHMA session ended …"; sign in:
   expect "Audit log" (the page you were going to), not the Overview.
 - [ ] Stop the backend (`docker compose -p serena stop web`), click "Sign everyone out of PAHMA" and confirm: expect
   the dialog to stay open and say why it failed. Start it again (`docker compose -p serena start web`).
 - [ ] Last (skip it if you'll do the optional step tomorrow, which needs the recall): on "Recalls", click "Cancel
-  recall…" on your recall, give a reason and confirm. Open "Alerts" and find "An admin cancelled a recall". Expect its
+  recall…" on your recall, give a reason and confirm. Expect it under "Ended in the last 30 days" by its
+  identification number, "Cancelled", with ▸ for its CSIDs. Open "Alerts" and find "An admin cancelled a recall". Expect its
   About column to show the Media CSID shortened (`20349bfa…3f0b98`) with ⧉ beside it:
   - click ⧉, then paste somewhere: you get the whole CSID;
   - click the CSID: it opens Media look up for that record.

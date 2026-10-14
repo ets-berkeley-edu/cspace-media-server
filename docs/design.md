@@ -1067,6 +1067,27 @@ reachable only from campus networks.
     differences: Access, As of)" in amber, naming the highlighted rows. A Blob's URL with nothing after its CSID
     (`…/blobs/<CSID>`, no `/content`) isn't one Serena serves: the page says so, with the reason a request gets
     ("unknown path"), then looks the Blob up anyway, every size.
+  - **Recalls by identification number** (Richard, October 14, 2026). The Recalls tables' first column is the Media
+    record's identification number, read from CollectionSpace (one call per record, four at a time, for at most 100
+    records of a recall) when it's recalled and kept with the recall and its audit entries, so the page doesn't call
+    CollectionSpace for every row; a record without one shows its shortened Media CSID. Each row opens (▸, a button
+    with aria-expanded) to its Media CSID and Blob CSID, whole, each with ⧉, and "Media look up". The recall dialog's
+    second step offers "Change CSIDs" (the form again, with the CSIDs kept) beside "Cancel".
+  - **Past requests' paths** (Richard, October 14, 2026). A path shows only what differs from row to row: its CSID,
+    shortened, and its size ("0f1e2d3c…3f4a5b · Medium", "Media 20349bfa…3f0b98 · Medium" for a Media-CSID URL); the
+    whole path is on hover, in ⧉, in the file dialog and in the CSV export. The "Signed link" column appears only for
+    a museum with signed access (Cinefiles), which the report says (`signed_links`).
+  - **Keeping an admin's place** (Richard, October 14, 2026). The list pages (Past requests, Recalls, Alerts, the
+    Audit log, Past refreshes) keep their filters and each table's sort, page and page size in the address, defaults
+    left out, and are kept alive (one per museum), so Back, "← Back to …" or a shared address finds the same view,
+    scrolled where it was; coming back reloads Alerts, Recalls, the Audit log and Past refreshes (not Past requests,
+    whose reports are cached a minute). A page reached through a link in the app (a path, a CSID, a refresh ID, a
+    target) starts with "← Back to <page>", which returns there (the browser's Back when that's the entry before);
+    a page opened from the menu, the bell, the gear, the banner, a bookmark or a shared address has none. Each browser
+    history entry keeps its own, so Back and Forward show the right one.
+  - **Tooltips and screen readers.** Column help stays open while the pointer moves onto it and closes with Esc
+    (WCAG 1.4.13); a shortened CSID carries the whole CSID for a screen reader, and a path's link names the whole
+    path.
   - **The file dialog** says the one reason there's no picture: a PDF (with "Open it in a new tab"), a 3D model, a
     file this page can't show (a TIFF, say), or nothing to show because Serena has no cached copy and CollectionSpace
     has no such file or can't be reached. The admin API's 404 for a preview carries that sentence.
