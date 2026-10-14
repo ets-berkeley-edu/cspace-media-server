@@ -60,7 +60,7 @@
                   alt="Serena's stored copy"
                   @error="broken.serena = true"
                 >
-                <span class="cap">{{ largestStored ? `Serena's stored ${largestStored.size}` : 'No copy stored in Serena' }}</span>
+                <span v-if="!largestStored || broken.serena" class="cap">{{ largestStored ? 'Serena\'s copy can\'t be shown' : 'No copy stored in Serena' }}</span>
               </div>
               <details id="serena-details" :open="open.serena" @toggle="open.serena = ($event.target as HTMLDetailsElement).open">
                 <summary>Details</summary>
@@ -90,7 +90,7 @@
                   alt="CollectionSpace's file now"
                   @error="broken.cspace = true"
                 >
-                <span class="cap">{{ cspaceCaption }}</span>
+                <span v-if="cspaceCaption" class="cap">{{ cspaceCaption }}</span>
               </div>
               <details
                 v-if="hasRecord"
@@ -254,7 +254,12 @@ const cspaceCaption = computed(() => {
   case 'no_media': return 'No Media record'
   case 'unavailable': return 'CollectionSpace can\'t be reached'
   case 'gone': return 'Not in CollectionSpace'
-  default: return `CollectionSpace's file now${cs.value.state === 'deleted' ? ' (soft-deleted)' : ''}, not stored`
+  default:
+    // A picture that shows needs no caption; a caption says why there's none, or that the file is soft-deleted.
+    if (broken.cspace || !cs.value.media_csid) {
+      return 'CollectionSpace\'s file can\'t be shown'
+    }
+    return cs.value.state === 'deleted' ? 'Soft-deleted in CollectionSpace' : ''
   }
 })
 

@@ -447,10 +447,11 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   - under it, "Last served" and "First stored in Serena" with today's date, and in the sizes table the Medium row with
     its stored copy (image/png), Last served and First stored;
   - two panels on the left: "In Serena" with the stored Medium, and "In CollectionSpace now" with CollectionSpace's
-    file, "not stored"; each with a collapsed "Details". Open both: In Serena lists the Blob, Media record, kind,
-    access and the checks; In CollectionSpace now lists the Media record, State "Exists", the same Blob, "Approved for
+    file, neither picture captioned (a caption appears only when there's no picture, saying why, or for a
+    soft-deleted file); each with a collapsed "Details". Open both: In Serena lists Media CSID, Blob CSID, kind,
+    access and the checks; In CollectionSpace now lists Media CSID, State "Exists", the same Blob CSID, "Approved for
     web: Yes" and Last changed;
-  - "Serena and CollectionSpace": the Media record, Blob, Access and As of rows, none marked "differs", and "What
+  - "Serena and CollectionSpace": the Media CSID, Blob CSID, Access and As of rows, none marked "differs", and "What
     the next refresh will do: Nothing has changed in CollectionSpace since the last refresh."
 - [ ] Copy the page's address (it ends `?q=` and the URL) into a new tab: expect the same answer.
 - [ ] Take the record off the web in the simulator, with the Media CSID from the page (`<media>` below):
@@ -459,12 +460,13 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   of row marked "differs", and "The Media record changed in CollectionSpace after the last refresh. The next refresh
   shows whether it's still public."
 - [ ] Replace its image: `curl -s -X POST http://localhost:8380/_fake/replace/<media>`. Look it up again: expect the
-  Blob row and the Blob in "In CollectionSpace now" marked "differs", a darker picture there than Serena's stored
-  copy, and "The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists the new
+  Blob CSID row and the Blob CSID in "In CollectionSpace now" marked "differs", a darker picture there than Serena's
+  stored copy, and "The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists the new
   Blob and drops this one; …".
 - [ ] Soft-delete it: `curl -s -X POST http://localhost:8380/_fake/delete/<media>`. Look it up by its Media CSID:
   expect "Served (stored sizes only)", Medium served "Yes", every other size "No", why not "media deleted", State
-  "Soft-deleted", and "The Media record is soft-deleted in CollectionSpace. The next refresh drops this Blob; …".
+  "Soft-deleted", "Soft-deleted in CollectionSpace" under its picture, and "The Media record is soft-deleted in
+  CollectionSpace. The next refresh drops this Blob; …".
 - [ ] Look up `9f9f9f9f-0000-4000-8000-000000000000` (synthetic, unknown): expect "Not served: not in the servable
   list", "Not in CollectionSpace", and "CollectionSpace has no Blob or Media record with this CSID either." Look up
   PAHMA's placeholder image, `59a733dd-d641-4e1a-8552`: expect "Nothing to compare: this file has no Media record".
@@ -476,7 +478,7 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   "Dismiss". Click "Media look up": expect Media look up on that path. Back on Past requests, expect the path with a
   bad CSID (if any) not to be a link.
 - [ ] On "Recalls", recall your image's Media record (with a reason). Hover over its Media CSID and its Blob CSID in
-  "Active recalls": each becomes a link. Click the Blob: expect the dialog with the picture (admins see a recalled
+  "Active recalls": each becomes a link. Click the Blob CSID: expect the dialog, titled "Blob CSID", with the picture (admins see a recalled
   file), "Media look up" and "Dismiss"; click "Dismiss". Click the Media CSID, then "Media look up": expect "Not
   served: recalled".
 

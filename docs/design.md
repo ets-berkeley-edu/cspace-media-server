@@ -1009,6 +1009,9 @@ reachable only from campus networks.
   never "Media record" or "Blob" alone; where both are listed, the Media CSID comes first (a Media record holds its
   Blob). This covers both Details panes on Media look up, its comparison rows, the Recalls tables and the file dialogs'
   titles.
+- **Media look up's pictures** (Richard, October 13, 2026): a picture that shows has no caption, since the panel's
+  title says whose it is; a caption appears only when there's no picture, saying why (no copy stored in Serena, no
+  Media record, CollectionSpace can't be reached, not in CollectionSpace), or under a soft-deleted file.
 - **First-release features:**
   - alerts: the bell, the banner, the Alerts page and acknowledging there (see Watchdog and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
