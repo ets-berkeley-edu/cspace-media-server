@@ -83,8 +83,10 @@ def refresh_of(admin: TestClient, refresh_id: str) -> dict[str, Any]:
     return body
 
 
-def audit(admin: TestClient) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = admin.get("/admin/v1/museums/pahma/audit").json()["entries"]
+def audit(admin: TestClient, actor: str = "admin") -> list[dict[str, Any]]:
+    """The audit log's entries, newest first, by one actor: an admin, or "refresh" for refreshes' outcomes (D150)."""
+    every: list[dict[str, Any]] = admin.get("/admin/v1/museums/pahma/audit").json()["entries"]
+    entries = [e for e in every if (e["admin"].startswith("refresh ") if actor == "refresh" else e["admin"] == actor)]
     return entries
 
 
@@ -246,6 +248,9 @@ def test_an_admin_refresh(admin: TestClient, etl: TestClient, worker: Worker, st
     assert len(rows) == len(BLOBS)
     entry = audit(admin)[0]
     assert entry["action"] == "admin_refresh" and entry["details"]["rows"] == len(BLOBS)
+    outcome = audit(admin, "refresh")[0]  # the refresh's outcome, by the refresh (D150)
+    assert (outcome["action"], outcome["target"], outcome["details"]["state"]) == (
+        "refresh_outcome", refresh["refresh_id"], "updated")
 
 
 def test_an_admin_refresh_whose_check_fails_changes_nothing(admin: TestClient, worker: Worker,
@@ -254,6 +259,8 @@ def test_an_admin_refresh_whose_check_fails_changes_nothing(admin: TestClient, w
     worker.tick()
     assert refresh_of(admin, refresh["refresh_id"])["state"] == "check_failed"
     assert store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"] == []
+    outcome = audit(admin, "refresh")[0]  # by the refresh, next to the ETL's calls (D150)
+    assert (outcome["target"], outcome["details"]["state"]) == (refresh["refresh_id"], "check_failed")
 
 
 def test_an_admin_refresh_refused(admin: TestClient, etl: TestClient) -> None:
@@ -276,6 +283,8 @@ def test_an_admin_refresh_closes_todays_open_refresh(admin: TestClient, etl: Tes
     old = refresh_of(admin, stuck["refresh_id"])
     assert old["state"] == "abandoned" and "closed by an admin refresh" in old["reasons"]
     assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "updated"
+    outcomes = [(e["target"], e["details"]["state"]) for e in audit(admin, "refresh")]
+    assert (stuck["refresh_id"], "abandoned") in outcomes and (new["refresh_id"], "updated") in outcomes  # D150
 
 
 def test_an_admin_refresh_after_an_earlier_day_was_left_open(admin: TestClient, etl: TestClient, worker: Worker,

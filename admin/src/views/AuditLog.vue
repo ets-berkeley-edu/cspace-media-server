@@ -13,9 +13,10 @@
       </v-btn>
     </div>
     <p class="mb-4">
-      Every admin action of the last 30 days, newest first. Click a column's name to sort by it. "Export CSV" saves every
-      entry this museum keeps, for as long as its audit retention (on the Settings page). The file holds admins'
-      usernames and reasons: keep it as carefully as the log.
+      Every admin action, the ETL's calls that change something and each refresh's outcome, of the last 30 days,
+      newest first. Click a column's name to sort by it. "Export CSV" saves every entry this museum keeps, for as long
+      as its audit retention (on the Settings page). The file holds admins' usernames and reasons: keep it as carefully
+      as the log.
     </p>
     <LoadError :message="error" />
     <v-data-table

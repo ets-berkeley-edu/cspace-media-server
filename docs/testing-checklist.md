@@ -277,7 +277,11 @@ go once every alert is acknowledged on the Alerts page (the bell opens it).
   and click "Start the refresh" (greyed out until all are done). Expect the new refresh's page, "an admin refresh, with
   the servable list for <today>", and, after reloading the page, `Updated`. On "Past refreshes", expect the `check_failed`
   refresh now `Abandoned`, its reasons naming the admin refresh.
-- [ ] Open "Audit log". Expect the override, each acknowledgement and the admin refresh, each with `admin`.
+- [ ] Open "Audit log". Expect the override, each acknowledgement and the admin refresh, each with `admin`. Expect the
+  ETL's calls too, by `ETL (pahma)`, which key `current`: for each `./serena etl pahma`, an `etl_refresh_start`, an
+  `etl_servable_list_upload` (with its rows) and an `etl_check_request`; and each refresh's outcome, by `refresh
+  pahma-<today>-<n>`: `refresh_outcome` with `updated` or `check_failed`, and `abandoned` for the one the admin
+  refresh closed. Nothing for the fake ETL's polls.
 - [ ] In a terminal: `./serena logs --no-follow web | grep threshold_overridden`. Expect the override's alert, logged
   once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
   `./serena logs --no-follow worker | grep '"threshold_overridden": true'`: expect one line, the
@@ -406,23 +410,27 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
   12 CSIDs: use a text file instead." Save the same 13 lines as a `.txt` file, clear the box, choose the file and
   click again: expect the summary, every line "Not found" or "Not a CSID". Cancel.
 - [ ] **Today's refresh leaves the recalls alone.** Run `./serena etl pahma` again. Open "Recalls": expect both recalls
-  still under "Active recalls", "Waiting for a later refresh", with no "Release" button. Open the alerts (the bell):
-  expect no new alert.
+  still under "Active recalls", "Waiting for a later refresh", each with a "Cancel recall" button and no "Release"
+  button. Open the alerts (the bell): expect no new alert.
 
   Why: a refresh can end a recall only when its refresh date is later than the recall's day. This refresh's date is
   today (Pacific), the same day as your recalls. Its servable list was made from CollectionSpace before staff could act
   on a recall, so Serena doesn't use it to end one.
-- [ ] **Optional, tomorrow: a later refresh ends or keeps each recall.** Leave the stack running overnight. Tomorrow
+- [ ] **Cancel a recall made by mistake.** Click "Cancel recall" for the simulator's record
+  (`1a2b3c4d-0000-4000-8000-000000000001`). Expect the dialog "Cancel a recall", with "Cancel recall" greyed out until
+  you type a reason. Type one and click "Cancel recall". Expect the record gone from "Active recalls" and listed under
+  "Ended in the last 30 days" as "Cancelled", by `admin`, with your reason; within a minute, the alert "An admin
+  cancelled a recall"; and on "Audit log", a `recall_cancel` entry. Your image's recall stays.
+- [ ] **Optional, tomorrow: a later refresh keeps your image's recall.** Leave the stack running overnight. Tomorrow
   (Pacific), run `./serena etl pahma` and open "Recalls". Expect:
-  - **the simulator's record** (`1a2b3c4d-0000-4000-8000-000000000001`): ended. It's under "Ended" as "Ended by a
-    refresh", because the servable list doesn't have it;
   - **your image's record:** still under "Active recalls", now "Still public in CollectionSpace", with a "Release"
-    button. The servable list still lists your image as public; in a real museum, staff haven't hidden it in
-    CollectionSpace yet;
+    button and no "Cancel recall". The servable list still lists your image as public; in a real museum, staff
+    haven't hidden it in CollectionSpace yet;
   - **a new alert:** "Recalled in Serena, but still public in CollectionSpace".
 
   Click "Release" for your image, give a reason and confirm. Reload the image's URL in a fresh tab: expect the image,
-  not the unavailable image. (The tests cover every way a recall ends, so this step is optional.)
+  not the unavailable image. (The tests cover every way a recall ends, a refresh ending one included, so this step
+  is optional.)
 
 ## 18. The admin app's layout and the recall words, locally (10 minutes, before merging a pull request that changes the layout)
 
@@ -458,6 +466,8 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
 
 - [ ] Open the image's Medium URL that `./serena etl pahma` printed, in Chrome, twice. In the admin app, open "Media
   look up" and look up that URL. Expect:
+  - under the field, the heading "Media 2026.1.<n>" (the simulator's synthetic identification number) and, beside it,
+    "Media CSID" with the record's CSID;
   - "Served", with "Serena has a cached copy";
   - under it, "Last served" and "First cached in Serena" with today's date, and in the sizes table the Medium row with
     its cached copy (image/png), Last served and First cached;
@@ -469,31 +479,36 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   - "Serena and CollectionSpace": the Media CSID, Blob CSID, Access and As of rows, none marked "differs", and "What
     the next refresh will do: Nothing has changed in CollectionSpace since the last refresh."
 - [ ] Copy the page's address (it ends `?q=` and the URL) into a new tab: expect the same answer.
-- [ ] Take the record off the web in the simulator, with the Media CSID from the page (`<media>` below):
+- [ ] Take the record off the web in the simulator, with the Media CSID from the heading (`<media>` below; a Blob CSID
+  gets a 404 that says so):
   `curl -s -X POST http://localhost:8380/_fake/approve/<media> -H 'Content-Type: application/json' -d '{"approved": false}'`.
   Look it up again: expect still "Served" (Serena's answer comes from the last refresh), "Approved for web: No", the As
   of row marked "differs", and "The Media record changed in CollectionSpace after the last refresh. The next refresh
   shows whether it's still public."
 - [ ] Replace its image: `curl -s -X POST http://localhost:8380/_fake/replace/<media>`. Look it up again: expect the
   Blob CSID row and the Blob CSID in "In CollectionSpace now" marked "differs", a darker picture there than Serena's
-  cached copy, and "The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists the new
-  Blob and drops this one; …".
+  cached copy, and "The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists
+  the new Blob and drops this one; …".
 - [ ] Soft-delete it: `curl -s -X POST http://localhost:8380/_fake/delete/<media>`. Look it up by its Media CSID:
   expect "Served (cached sizes only)", Medium served "Yes", every other size "No", why not "media deleted", State
   "Soft-deleted", "Soft-deleted in CollectionSpace" under its picture, and "The Media record is soft-deleted in
   CollectionSpace. The next refresh drops this Blob; …".
 - [ ] Look up `9f9f9f9f-0000-4000-8000-000000000000` (synthetic, unknown): expect "Not served: not in the servable
-  list", "Not in CollectionSpace", and "CollectionSpace has no Blob or Media record with this CSID either." Look up
-  PAHMA's placeholder image, `59a733dd-d641-4e1a-8552`: expect "Nothing to compare: this file has no Media record".
-- [ ] Stop the simulator (`docker compose stop fakecspace`) and look up the URL again: expect Serena's answer, the
-  notice "CollectionSpace can't be reached, so there's nothing to compare with", and "CollectionSpace can't be
-  reached" in the right-hand panel. Start it again (`docker compose start fakecspace`).
+  list", "Not in CollectionSpace", "CollectionSpace has no Blob or Media record with this CSID either.", and no
+  heading. Look up PAHMA's placeholder image, `59a733dd-d641-4e1a-8552`: expect the heading "Placeholder image" and
+  "Nothing to compare: this image has no Media record".
+- [ ] Switch on an outage in the simulator (its records are kept):
+  `curl -s -X POST http://localhost:8380/_fake/unreachable -H 'Content-Type: application/json' -d '{"on": true}'`.
+  Look up the URL again (it takes a few seconds: Serena retries CollectionSpace first): expect Serena's answer, the
+  notice "CollectionSpace can't be reached, so there's nothing to compare with", "CollectionSpace can't be reached" in
+  the right-hand panel, and the heading "Media <Media CSID>" (no identification number without CollectionSpace).
+  Switch the outage off with `{"on": false}` in the same command.
 - [ ] Open "Past requests" with "Last hour". Hover over a path: expect it underlined, as a link. Click your image's
   Medium path: expect a dialog with the path, the picture, "This request, <time>: served.", "Media look up" and
   "Dismiss". Click "Media look up": expect Media look up on that path. Back on Past requests, expect the path with a
   bad CSID (if any) not to be a link.
 - [ ] On "Recalls", recall your image's Media record (with a reason). Hover over its Media CSID and its Blob CSID in
-  "Active recalls": each becomes a link. Click the Blob CSID: expect the dialog, titled "Blob CSID", with the picture (admins see a recalled
-  file), "Media look up" and "Dismiss"; click "Dismiss". Click the Media CSID, then "Media look up": expect "Not
+  "Active recalls": each becomes a link. Click the Blob CSID: expect the dialog, titled "Blob CSID", with the picture
+  (admins see a recalled file), "Media look up" and "Dismiss"; click "Dismiss". Click the Media CSID, then "Media look up": expect "Not
   served: recalled".
 

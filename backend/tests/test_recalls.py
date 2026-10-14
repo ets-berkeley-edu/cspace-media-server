@@ -210,6 +210,29 @@ def test_release_only_a_recall_a_refresh_kept(client: TestClient, store: Store) 
     assert (page["max_in_box"], page["max_in_file"]) == (12, 1000)
 
 
+@pytest.mark.usefixtures("listed")
+def test_cancel_only_a_recall_no_refresh_has_kept(client: TestClient, store: Store) -> None:
+    """An admin can undo a recall still waiting for a later refresh; once a refresh keeps it, Release (D148)."""
+    sign_in(client)
+    made(store, MEDIA, BLOB)
+    cancel = f"{URL}/{MEDIA}/cancel"
+    assert client.post(cancel, json={"reason": "wrong CSID"}).status_code == 403
+    assert client.post(cancel, headers=CHANGES, json={"reason": ""}).status_code == 422
+    assert client.post(cancel, headers=CHANGES, json={"reason": "wrong CSID"}).status_code == 200
+    assert store.recall("pahma", MEDIA) is None
+    (alert,) = alerts_of(store, "recall_cancelled")
+    assert "before a refresh decided it. Reason: wrong CSID" in alert["message"]["S"]
+    page = client.get(URL).json()
+    assert page["active"] == [] and [(e["media_csid"], e["action"]) for e in page["ended"]] == [
+        (MEDIA, "recall_cancel")]
+    assert page["ended"][0]["details"]["reason"] == "wrong CSID"
+    assert client.post(cancel, headers=CHANGES, json={"reason": "again"}).status_code == 409  # none to cancel
+    made(store, MEDIA, BLOB)
+    recalls.after_update(PAHMA, "pahma-2026-10-15-1", "2026-10-15", store, Audit(store), None)  # kept: still public
+    assert client.post(cancel, headers=CHANGES, json={"reason": "too late"}).status_code == 409
+    assert store.recall("pahma", MEDIA) is not None
+
+
 # --- the thumbnails (D129)
 
 @pytest.mark.usefixtures("listed")
@@ -270,12 +293,13 @@ def stored(store: Store, blob: str, size: str | None, last_served: str | None = 
 @pytest.mark.usefixtures("listed")
 def test_media_look_up_shows_collectionspace_beside_serena(client: TestClient, store: Store) -> None:
     lookup = "/admin/v1/museums/pahma/lookup"
-    fake.add(MEDIA, blob=BLOB)
+    fake.add(MEDIA, blob=BLOB, identification_number="9-12345")
     stored(store, BLOB, "Thumbnail", "2026-10-12T18:00:00Z")
     sign_in(client)
     (item,) = client.get(lookup, params={"q": MEDIA}).json()["items"]
     cs = item["cspace"]
     assert (cs["state"], cs["media_csid"], cs["blob_csid"]) == ("exists", MEDIA, BLOB)
+    assert cs["identification_number"] == "9-12345"  # the page's heading (D153)
     assert cs["fields"] == [{"label": "Approved for web", "value": "Yes"}]  # PAHMA's lookup field (D140)
     assert cs["next"] == "Nothing has changed in CollectionSpace since the last refresh."
     thumbnail = next(s for s in item["sizes"] if s["size"] == "Thumbnail")
@@ -312,6 +336,19 @@ def test_media_look_up_without_collectionspace(client: TestClient) -> None:
     (item,) = client.get("/admin/v1/museums/pahma/lookup", params={"q": MEDIA}).json()["items"]
     assert item["cspace"] == {"state": "unavailable"}
     assert {s["reason"] for s in item["sizes"]} == {None}  # Serena's verdict doesn't depend on CollectionSpace
+
+
+@pytest.mark.usefixtures("listed")
+def test_media_look_up_during_a_collectionspace_outage(client: TestClient) -> None:
+    """The simulator's outage switch: every call answers 503, its records kept (checklist section 19)."""
+    fake.add(MEDIA, blob=BLOB)
+    fake.unreachable = True
+    sign_in(client)
+    (item,) = client.get("/admin/v1/museums/pahma/lookup", params={"q": MEDIA}).json()["items"]
+    assert item["cspace"] == {"state": "unavailable"}
+    fake.unreachable = False
+    (item,) = client.get("/admin/v1/museums/pahma/lookup", params={"q": MEDIA}).json()["items"]
+    assert item["cspace"]["state"] == "exists"
 
 
 def test_what_the_next_refresh_will_do() -> None:

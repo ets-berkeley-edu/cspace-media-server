@@ -94,7 +94,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
                         extra={"museum": key})
     app.mount(etl_api.PREFIX, etl_api.create_etl_app(etl_api.Services(
         settings, museums, app.state.museum_settings, Refreshes(store, clock) if clock else Refreshes(store), tokens,
-        s3)))
+        s3, Audit(store))))
 
     @app.get("/health", include_in_schema=False)
     def health() -> PlainTextResponse:

@@ -192,7 +192,7 @@ export interface EndedRecall {
   media_csid: string
   at: string
   by: string // an admin, or "refresh <refresh ID>"
-  action: 'recall_ended' | 'recall_release'
+  action: 'recall_ended' | 'recall_release' | 'recall_cancel'
   details: Record<string, unknown>
 }
 
@@ -233,6 +233,7 @@ export interface LookupCSpace {
   state: 'exists' | 'deleted' | 'gone' | 'unavailable' | 'no_media'
   media_csid?: string
   blob_csid?: string | null
+  identification_number?: string | null // the Media record's identification number: the page's heading (D153)
   updated_at?: string | null
   changed_since_refresh?: boolean
   fields?: {label: string, value: string}[]
@@ -268,6 +269,9 @@ export const api = {
     call<RecallSummary>('POST', `/museums/${museum}/recalls`, {text, reason}),
   release: (museum: string, mediaCsid: string, reason: string) =>
     call<{released: string}>('POST', `/museums/${museum}/recalls/${encodeURIComponent(mediaCsid)}/release`, {reason}),
+  /** Undoes a recall no refresh has decided yet (D148). */
+  cancelRecall: (museum: string, mediaCsid: string, reason: string) =>
+    call<{cancelled: string}>('POST', `/museums/${museum}/recalls/${encodeURIComponent(mediaCsid)}/cancel`, {reason}),
   // A Media record's thumbnail or full-size view, through the admin API only, never cached (D129).
   previewUrl: (museum: string, mediaCsid: string, size: 'thumbnail' | 'full' = 'thumbnail', source: 'any' | 'cspace' = 'any') =>
     `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${size}` +

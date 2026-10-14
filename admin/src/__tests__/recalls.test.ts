@@ -58,6 +58,30 @@ describe('the Recalls page', () => {
     wrapper.unmount()
   })
 
+  it('cancels a recall no refresh has decided yet, and shows a cancelled one under Ended (D148)', async () => {
+    const waiting = {...KEPT, kept_by: null, kept_on: null}
+    const page = {...PAGE, active: [waiting], ended: [...PAGE.ended, {media_csid: 'third-media', at: '2026-10-15T11:00:00Z',
+      by: 'admin', action: 'recall_cancel', details: {reason: 'wrong CSID'}}]}
+    const calls = fakeApi({
+      'GET /museums/pahma/recalls': {body: page},
+      [`POST /museums/pahma/recalls/${MEDIA}/cancel`]: {body: {cancelled: MEDIA}}
+    })
+    const wrapper = await at('/pahma/recalls', Recalls)
+    expect(wrapper.find('#active-recalls').text()).toContain('Waiting for a later refresh')
+    expect(wrapper.find('#active-recalls .release').exists()).toBe(false)
+    expect(wrapper.find('#ended-recalls').text()).toContain('Cancelled')
+    await wrapper.find('#active-recalls .cancel-recall').trigger('click')
+    await flushPromises()
+    const confirm = () => document.querySelector('#cancel-confirm') as HTMLButtonElement
+    expect(confirm().disabled).toBe(true) // a reason first
+    type('#cancel-reason', 'wrong CSID')
+    await flushPromises()
+    confirm().click()
+    await vi.waitFor(() => expect(calls.some(c => c.path.endsWith('/cancel'))).toBe(true))
+    expect(calls.find(c => c.path.endsWith('/cancel'))?.body).toEqual({reason: 'wrong CSID'})
+    wrapper.unmount()
+  })
+
   it('previews the recall before it recalls anything', async () => {
     const calls = fakeApi({
       'GET /museums/pahma/recalls': {body: {...PAGE, active: []}},
@@ -94,7 +118,8 @@ describe('the Recalls page', () => {
 })
 
 describe('Media look up', () => {
-  const CS = {state: 'exists', media_csid: MEDIA, blob_csid: BLOB, updated_at: '2026-10-16T06:20:00.000Z',
+  const CS = {state: 'exists', media_csid: MEDIA, blob_csid: BLOB, identification_number: '9-12345',
+    updated_at: '2026-10-16T06:20:00.000Z',
     changed_since_refresh: true, fields: [{label: 'Approved for web', value: 'No'}],
     next: 'The Media record changed in CollectionSpace after the last refresh.'}
   const ITEM = {blob_csid: BLOB, media_csid: MEDIA, kind: 'image', access: 'public',
@@ -117,6 +142,7 @@ describe('Media look up', () => {
     await flushPromises()
     expect(calls.map(c => c.path)).toEqual([`/museums/pahma/lookup?q=${MEDIA}`])
     expect(wrapper.find('#lookup-verdict').text()).toContain('Not served: recalled')
+    expect(wrapper.find('#lookup-heading').text()).toBe(`Media 9-12345 Media CSID ${MEDIA}`) // D153
     expect(wrapper.find('#lookup-next').text()).toContain('Open Recalls')
     expect(wrapper.find('#lookup-sizes').text()).toContain('image/jpeg, 96 KB')
     expect(wrapper.find('#lookup-sizes').text()).toContain('2026-10-15 05:59:30 UTC') // last served
@@ -137,6 +163,7 @@ describe('Media look up', () => {
     expect(wrapper.find('#lookup-verdict').text()).toContain('Served')
     expect(wrapper.find('#lookup-cspace-down').exists()).toBe(true)
     expect(wrapper.find('#lookup-compare').exists()).toBe(false)
+    expect(wrapper.find('#lookup-heading').text()).toBe(`Media ${MEDIA}`) // no identification number to show (D153)
     wrapper.unmount()
   })
 })

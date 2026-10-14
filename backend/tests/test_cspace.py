@@ -218,3 +218,20 @@ def test_the_samples() -> None:
     document = samples.pdf()
     assert document.startswith(b"%PDF-1.4") and document.rstrip().endswith(b"%%EOF")
     assert b"<X3D" in samples.x3d()
+
+
+def test_the_simulators_hooks_say_what_to_give() -> None:
+    """An unknown CSID gets a 404 that says why, not a 500; a Blob CSID is named as one (checklist section 19)."""
+    hooks = TestClient(fake_app)
+    fake.add("1a2b3c4d-0000-4000-8000-0000000000aa", blob="0f1e2d3c-0000-4000-8000-0000000000aa")
+    for hook in ("delete", "replace", "remove-file"):
+        assert hooks.post(f"/_fake/{hook}/no-such-csid").status_code == 404
+    answer = hooks.post("/_fake/approve/0f1e2d3c-0000-4000-8000-0000000000aa", json={"approved": False})
+    assert answer.status_code == 404
+    assert "the Blob of Media record 1a2b3c4d-0000-4000-8000-0000000000aa" in answer.json()["detail"]
+    assert hooks.post("/_fake/approve/1a2b3c4d-0000-4000-8000-0000000000aa", json={"approved": False}).json() == {
+        "csid": "1a2b3c4d-0000-4000-8000-0000000000aa", "approved": False}
+    assert hooks.post("/_fake/unreachable", json={"on": True}).json() == {"unreachable": True}
+    assert fake.unreachable is True
+    hooks.post("/_fake/unreachable", json={"on": False})
+    assert fake.unreachable is False

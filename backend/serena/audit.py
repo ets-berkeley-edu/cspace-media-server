@@ -25,6 +25,7 @@ class Action(StrEnum):
     SIGN_OUT_ALL = "sign_out_all"
     RECALL = "recall"
     RECALL_RELEASE = "recall_release"  # an admin's release of a recall a refresh kept (D119)
+    RECALL_CANCEL = "recall_cancel"  # an admin cancelled a recall no refresh has decided yet (D148)
     RECALL_ENDED = "recall_ended"  # a servability update ended a recall; the refresh is the actor (D119)
     SETTINGS_CHANGE = "settings_change"
     AUDIT_EXPORT = "audit_export"
@@ -33,6 +34,12 @@ class Action(StrEnum):
     ADMIN_REFRESH = "admin_refresh"
     PLACEHOLDER_UPLOAD = "placeholder_upload"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
+    # The ETL's calls that change something, by "ETL (<museum>)", and each refresh's outcome, by the refresh (D150).
+    # Never its GETs or ping, which it makes every few seconds while Serena checks.
+    ETL_REFRESH_START = "etl_refresh_start"
+    ETL_SERVABLE_LIST_UPLOAD = "etl_servable_list_upload"
+    ETL_CHECK_REQUEST = "etl_check_request"
+    REFRESH_OUTCOME = "refresh_outcome"
 
 
 @dataclass(frozen=True)

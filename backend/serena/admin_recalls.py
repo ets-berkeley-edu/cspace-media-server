@@ -98,7 +98,7 @@ def create_router() -> APIRouter:
         """Every active recall, and the last 30 days' ended ones, from the audit log (D120)."""
         ended = [{"media_csid": e.target, "at": e.at, "by": e.admin, "action": e.action, "details": e.details}
                  for e in t.audit.since(session.tenant, t.clock() - timedelta(days=DAYS_SHOWN))
-                 if e.action in (Action.RECALL_ENDED, Action.RECALL_RELEASE)]
+                 if e.action in (Action.RECALL_ENDED, Action.RECALL_RELEASE, Action.RECALL_CANCEL)]
         return {"days": DAYS_SHOWN, "active": [_recall_json(x) for x in t.store.recalls(session.tenant)],
                 "ended": ended, "max_in_box": recalls.MAX_IN_BOX, "max_in_file": recalls.MAX_IN_FILE}
 
@@ -117,10 +117,23 @@ def create_router() -> APIRouter:
                                    t.clock)
         return {**found.json(), "recalled": done}
 
+    @router.post("/recalls/{media_csid}/cancel", dependencies=[Depends(changes)])
+    def cancel(request: Request, session: SignedIn, t: Recalls_, media_csid: MediaCsid,
+               body: Reason) -> dict[str, Any]:
+        """Undoes a recall no refresh has decided yet; once a refresh keeps it, Release is the action (D148)."""
+        museum = museum_of(request, session.tenant)
+        try:
+            recalls.cancel(museum, media_csid, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
+                           t.clock)
+        except recalls.NotWaiting as error:
+            raise HTTPException(409, "Only a recall still waiting for a later refresh can be cancelled; once a "
+                                     "refresh has kept it, release it instead.") from error
+        return {"cancelled": media_csid}
+
     @router.post("/recalls/{media_csid}/release", dependencies=[Depends(changes)])
     def release(request: Request, session: SignedIn, t: Recalls_, media_csid: MediaCsid,
                 body: Reason) -> dict[str, Any]:
-        """The one admin action that ends a recall, and only one a refresh kept (D119)."""
+        """Ends a recall a refresh kept, when CollectionSpace is right (D119); Cancel undoes one before (D148)."""
         museum = museum_of(request, session.tenant)
         try:
             recalls.release(museum, media_csid, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
