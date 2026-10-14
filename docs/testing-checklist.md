@@ -346,6 +346,8 @@ Start afresh from the pull request's branch (see the top of this file).
 - [ ] In the table, expect four lines, newest first: two "unserved" with the reason "not listed" (their paths with no
   `?uid=…` or `sig=…`), then your path twice, "served", kind "image", cache "hit" (newer) and "miss" (older: the
   smoke test's first fetch).
+- [ ] Expect each path on one line, shortened in the middle (`/pahma/imageserver/blobs/<first 8>…<last 6>/derivatives/
+  Medium/content`). Hover over one: expect the whole path.
 - [ ] Click "Time" in the header: expect the oldest first; click again for newest first.
 - [ ] Choose Outcome "Unserved": expect the two unserved lines. Choose Reason "not listed": still two. Choose Outcome
   "Served": expect your two lines, and the Reason filter cleared and greyed out.
@@ -368,11 +370,11 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
   `/derivatives/Medium/content`) and open it in Chrome: expect a synthetic grey image.
 - [ ] In the admin app, open "Media look up" (in the menu, under Media records). Expect the title "PAHMA Media look up".
   Paste the URL and click "Look up". Expect "Served", "Every check passes for the Medium size", and "Serena has a
-  stored copy" (you opened it); at the foot, the refresh you just ran named as the last servability update. Open "In
+  cached copy" (you opened it); at the foot, the refresh you just ran named as the last servability update. Open "In
   Serena" Details: expect "Media CSID" then "Blob CSID" (in that order, as in the "In CollectionSpace now" Details),
   and the checks In the servable list, Kind (image), Access (public) and Recall (No recall). Copy the Media CSID.
 - [ ] Paste the Media CSID alone and look it up again: expect a row for the original and each of PAHMA's sizes
-  (Thumbnail, Small, Medium, FullHD, OriginalJpeg), each served "Yes"; Medium with a stored copy, the others "—".
+  (Thumbnail, Small, Medium, FullHD, OriginalJpeg), each served "Yes"; Medium with a cached copy, the others "—".
 - [ ] Add a Media record to the simulator that isn't in PAHMA's servable list (a file not published yet; synthetic
   CSIDs):
   ```
@@ -382,7 +384,7 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
 - [ ] Open "Recalls". Expect the title "PAHMA Recalls", no active recalls, and nothing ended. Click "Recall…".
   In the box, paste four lines: your image's Blob CSID (from the URL in the first step), your image's Media CSID (you
   copied it in the second step), `0f1e2d3c-0000-4000-8000-000000000001` (the Blob of the Media record you just added)
-  and `not-a/csid`. Click "Show what would be recalled". Expect two Media records:
+  and `not-a/csid`. Click "Preview recall". Expect two Media records:
   - yours, with both CSIDs under "You gave" (they're the same record), kind image, served today "yes", found in Serena;
   - `1a2b3c4d-0000-4000-8000-000000000001`, kind "not known", served today "no", found in "CollectionSpace (not served
     today)";
@@ -398,9 +400,9 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
   Look it up again: expect "Not served: recalled", with your name and reason, "Open Recalls", and every size served
   "No", why not "recalled".
 - [ ] Open "Audit log": expect two "recall" entries, one per Media record, each with your reason.
-- [ ] Click "Recall…" again, paste your Media CSID and click "Show what would be recalled": expect it greyed, served
+- [ ] Click "Recall…" again, paste your Media CSID and click "Preview recall": expect it greyed, served
   today "already recalled", and no "Recall" button. Cancel.
-- [ ] In the box, paste 13 CSIDs (any text, one per line) and click "Show what would be recalled": expect "More than
+- [ ] In the box, paste 13 CSIDs (any text, one per line) and click "Preview recall": expect "More than
   12 CSIDs: use a text file instead." Save the same 13 lines as a `.txt` file, clear the box, choose the file and
   click again: expect the summary, every line "Not found" or "Not a CSID". Cancel.
 - [ ] **Today's refresh leaves the recalls alone.** Run `./serena etl pahma` again. Open "Recalls": expect both recalls
@@ -449,17 +451,17 @@ after `./serena up --build` (or `./serena down` and `./serena up` if the stack w
 ## 19. Media look up beside CollectionSpace, and the file dialogs, locally (20 minutes, before merging a pull request that changes them)
 
 What it checks: Media look up's layout from the UI review (October 13, 2026, D139 to D145): Serena's answer beside
-what CollectionSpace says now, last served and first stored, and the dialogs that open a file from Past requests and
+what CollectionSpace says now, last served and first cached, and the dialogs that open a file from Past requests and
 Recalls. The API's tests cover each CollectionSpace case; this checks the pages in Chrome. Start afresh from the pull
 request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ and sign in to PAHMA as `admin`
 (password `admin`). The simulator's synthetic records are changed with `curl` against http://localhost:8380.
 
 - [ ] Open the image's Medium URL that `./serena etl pahma` printed, in Chrome, twice. In the admin app, open "Media
   look up" and look up that URL. Expect:
-  - "Served", with "Serena has a stored copy";
-  - under it, "Last served" and "First stored in Serena" with today's date, and in the sizes table the Medium row with
-    its stored copy (image/png), Last served and First stored;
-  - two panels on the left: "In Serena" with the stored Medium, and "In CollectionSpace now" with CollectionSpace's
+  - "Served", with "Serena has a cached copy";
+  - under it, "Last served" and "First cached in Serena" with today's date, and in the sizes table the Medium row with
+    its cached copy (image/png), Last served and First cached;
+  - two panels on the left: "In Serena" with the cached Medium, and "In CollectionSpace now" with CollectionSpace's
     file, neither picture captioned (a caption appears only when there's no picture, saying why, or for a
     soft-deleted file); each with a collapsed "Details". Open both: In Serena lists Media CSID, Blob CSID, kind,
     access and the checks; In CollectionSpace now lists Media CSID, State "Exists", the same Blob CSID, "Approved for
@@ -474,10 +476,10 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   shows whether it's still public."
 - [ ] Replace its image: `curl -s -X POST http://localhost:8380/_fake/replace/<media>`. Look it up again: expect the
   Blob CSID row and the Blob CSID in "In CollectionSpace now" marked "differs", a darker picture there than Serena's
-  stored copy, and "The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists the new
+  cached copy, and "The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists the new
   Blob and drops this one; …".
 - [ ] Soft-delete it: `curl -s -X POST http://localhost:8380/_fake/delete/<media>`. Look it up by its Media CSID:
-  expect "Served (stored sizes only)", Medium served "Yes", every other size "No", why not "media deleted", State
+  expect "Served (cached sizes only)", Medium served "Yes", every other size "No", why not "media deleted", State
   "Soft-deleted", "Soft-deleted in CollectionSpace" under its picture, and "The Media record is soft-deleted in
   CollectionSpace. The next refresh drops this Blob; …".
 - [ ] Look up `9f9f9f9f-0000-4000-8000-000000000000` (synthetic, unknown): expect "Not served: not in the servable

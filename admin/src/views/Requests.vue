@@ -115,11 +115,12 @@
         <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
         <template #[`item.reason`]="{item}">{{ reasonOf(item.reason) }}</template>
         <template #[`item.path`]="{item}">
-          <span class="request-path">
-            <FileLink v-if="blobOfPath(item.path)" @open="openPath(item.path, item)">{{ item.path }}</FileLink>
-            <template v-else>{{ item.path }}</template>
+          <span class="request-path" :title="item.path">
+            <FileLink v-if="blobOfPath(item.path)" @open="openPath(item.path, item)">{{ middlePath(item.path) }}</FileLink>
+            <template v-else>{{ middlePath(item.path) }}</template>
           </span>
         </template>
+        <template #[`item.kind`]="{item}">{{ item.kind ? kindWord(item.kind) : '' }}</template>
         <template #[`item.signed`]="{item}">{{ item.signed ? 'yes' : '' }}</template>
       </v-data-table>
     </template>
@@ -137,7 +138,7 @@ import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
 import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
-import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, reasonOf, when} from '@/words'
+import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, kindWord, middlePath, reasonOf, when} from '@/words'
 
 const OUTCOMES = [{value: '', title: 'All'}, {value: 'served', title: 'Served'}, {value: 'unserved', title: 'Unserved'}]
 
@@ -169,7 +170,7 @@ function openPath(path: string, line?: RequestLine) {
   }
   const outcome = line ? (line.outcome === 'served' ? 'served' : `unserved, ${reasonOf(line.reason)}`) : ''
   file.value = {
-    title: found.size === 'original' ? 'Original file' : found.size,
+    title: found.size === 'original' ? `Original ${kindWord(line?.kind)}` : found.size,
     name: path,
     url: api.blobPreviewUrl(museum.value, found.blob, found.size),
     lookup: path,
@@ -208,6 +209,6 @@ watch([museum, range], async ([m, r]) => {
 
 <style scoped>
 .request-path {
-  word-break: break-all;
+  white-space: nowrap;
 }
 </style>

@@ -22,6 +22,7 @@ from .museum import SERVED_KINDS, Museum
 from .recalls import rows_of_media
 from .refreshes import Refresh, Refreshes
 from .servability import ORIGINAL_ONLY_KINDS, decide
+from .servable_list import kind_word
 from .store import Store
 from .unserved import Reason
 
@@ -115,7 +116,8 @@ def _cspace(museum: Museum, item: dict[str, Any], store: Store, cspace: CSpaceCl
     return {"state": str(record.state), "media_csid": media, "blob_csid": record.blob_csid,
             "updated_at": record.updated_at, "changed_since_refresh": changed,
             "fields": [{"label": label, "value": value} for label, value in record.fields],
-            "next": _next(listed, item["blob_csid"], record, changed, recall.kept_by if recall else None,
+            "next": _next(listed, item["blob_csid"], kind_word(item["kind"]), record, changed,
+                          recall.kept_by if recall else None,
                           recall is not None)}
 
 
@@ -137,7 +139,8 @@ def _after(updated_at: str | None, started_at: str | None) -> bool:
         return False
 
 
-def _next(listed: bool, blob: str, record: MediaRecord, changed: bool, kept_by: str | None, recalled: bool) -> str:
+def _next(listed: bool, blob: str, noun: str, record: MediaRecord, changed: bool, kept_by: str | None,
+          recalled: bool) -> str:
     """What the next refresh will do (D141): only what Serena can tell for any museum. The ETL's rules decide what's
     public, so a change to the record says only that the next refresh will show the result."""
     if not listed:
@@ -149,14 +152,14 @@ def _next(listed: bool, blob: str, record: MediaRecord, changed: bool, kept_by: 
                 "record does.")
     if record.state is MediaState.DELETED:
         return ("The Media record is soft-deleted in CollectionSpace. The next refresh drops this Blob; until then, "
-                "only its stored sizes are served.")
+                "only its cached sizes are served.")
     if record.blob_csid and record.blob_csid != blob:
         if changed:
             return ("The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists "
-                    "the new Blob and drops this one; until then, a stored size is the old file, and any other size "
+                    f"the new Blob and drops this one; until then, a cached size is the old {noun}, and any other size "
                     "is fetched from the Media record, which returns the new one.")
         return ("CollectionSpace's Media record has another Blob. The servable list still has this one, and a request "
-                "for it is answered with the Media record's current file.")
+                f"for it is answered with the Media record's current {noun}.")
     if changed:
         return ("The Media record changed in CollectionSpace after the last refresh. The next refresh shows whether "
                 "it's still public" + (", and ends the recall if it isn't." if recalled else "."))
@@ -179,7 +182,7 @@ def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store) -> d
     else:
         steps.append(_step("In the servable list", "Listed in the servable list of the last servability update.",
                            True))
-        steps.append(_step("Kind", record.kind + ("" if record.kind in SERVED_KINDS else ": not served"),
+        steps.append(_step("Kind", kind_word(record.kind) + ("" if record.kind in SERVED_KINDS else ": not served"),
                            record.kind in SERVED_KINDS))
         if record.access == "public":
             steps.append(_step("Access", "public", True))
@@ -194,8 +197,8 @@ def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store) -> d
             if recall is None:
                 steps.append(_step("Recall", "No recall.", True))
             else:
-                kept = (f" Refresh {recall.kept_by} kept it: the file is still public in CollectionSpace."
-                        if recall.kept_by else "")
+                kept = (f" Refresh {recall.kept_by} kept it: the {kind_word(record.kind)} is still public in "
+                        "CollectionSpace." if recall.kept_by else "")
                 steps.append(_step("Recall", f"Recalled by {recall.by} at {recall.at}: {recall.reason}."
                                    + kept, False))
         if blob == museum.placeholder_blob_csid:
@@ -219,7 +222,7 @@ def _size(museum: Museum, blob: str, size: str | None, store: Store) -> dict[str
     if reason is not None:
         verdict = "not served"
     elif stored:
-        verdict = "served from the stored copy"
+        verdict = "served from the cached copy"
     else:
         verdict = "served: would be fetched on the next request"
     return {"size": size or "original", "served": reason is None, "reason": reason.value if reason else None,

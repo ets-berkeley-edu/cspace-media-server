@@ -321,10 +321,11 @@ def test_what_the_next_refresh_will_do() -> None:
     assert _after(record.updated_at, "2026-10-12T10:01:00+00:00") is True
     assert _after(record.updated_at, "2026-10-14T10:01:00+00:00") is False
     assert _after(None, "2026-10-14T10:01:00+00:00") is False
-    assert "ends the recall if it isn't" in _next(True, BLOB, record, True, None, True)
-    assert "lists the new Blob" in _next(True, BLOB_2, record, True, None, False)
-    assert "keeps the recall, with another alert" in _next(True, BLOB, record, False, "pahma-2026-10-12-1", True)
-    assert "shows whether it's public now" in _next(False, BLOB, record, True, None, False)
+    assert "ends the recall if it isn't" in _next(True, BLOB, "image", record, True, None, True)
+    assert "a cached size is the old image" in _next(True, BLOB_2, "image", record, True, None, False)
+    assert "keeps the recall, with another alert" in _next(True, BLOB, "image", record, False, "pahma-2026-10-12-1",
+                                                          True)
+    assert "shows whether it's public now" in _next(False, BLOB, "file", record, True, None, False)
 
 
 def test_last_served_is_recorded_at_most_once_a_day(store: Store) -> None:

@@ -806,9 +806,9 @@ the plan, D127); until then, its requests are logged as `placeholder_not_uploade
   whether it's already recalled, and a thumbnail that opens to the full size (D129). Thumbnails and full-size views
   come only through the admin API, to signed-in admins, with `Cache-Control: no-store`, never through Serena's public
   serving or CloudFront: a file being recalled may be sensitive, and must still show here afterwards. Serena uses its
-  stored copy if it has one, and otherwise asks CollectionSpace without storing what it gets. Images and cards show
+  cached copy if it has one, and otherwise asks CollectionSpace without storing what it gets. Images and cards show
   their Thumbnail and open to the largest size the museum serves; a PDF shows CollectionSpace's thumbnail if there is
-  one, or a PDF icon, and opens the document; a 3D file shows an icon. With neither a stored copy nor CollectionSpace,
+  one, or a PDF icon, and opens the document; a 3D file shows an icon. With neither a cached copy nor CollectionSpace,
   a placeholder.
 - **Confirming.** The admin gives one reason for the whole list. Each Media record's recall stores its Media CSID, the
   Blob CSID it has, who, when and why, and is audited on its own (`recall`), so each record's history stands alone.
@@ -1010,8 +1010,18 @@ reachable only from campus networks.
   Blob). This covers both Details panes on Media look up, its comparison rows, the Recalls tables and the file dialogs'
   titles.
 - **Media look up's pictures** (Richard, October 13, 2026): a picture that shows has no caption, since the panel's
-  title says whose it is; a caption appears only when there's no picture, saying why (no copy stored in Serena, no
+  title says whose it is; a caption appears only when there's no picture, saying why (no cached copy in Serena, no
   Media record, CollectionSpace can't be reached, not in CollectionSpace), or under a soft-deleted file.
+- **Words** (Richard, October 13, 2026, D146, D147, D151, D152):
+  - "Cached copy" is the admin app's word for Serena's copy of a file it fetched from CollectionSpace (stored by hash
+    and listed in the cache index; a cache hit serves it): "Cached copy", "First cached", "cached sizes". The
+    placeholder image's files are uploaded, not cached. The design's own text still says where and how copies are
+    stored (S3, `objects/<sha256>`).
+  - The recall dialog's first button is "Preview recall".
+  - Where Serena knows a file's kind, the app names it: image "image", card "catalog card", pdf "PDF", 3D "3D model",
+    audio "audio file", video "video"; "file" only when the kind isn't known (not listed).
+  - Past requests shows each path on one line, shortened in the middle (the museum, the first 8 and last 6 characters
+    of the CSID, and the size), the whole path on hover and in the file dialog; the CSV export keeps whole paths.
 - **First-release features:**
   - alerts: the bell, the banner, the Alerts page and acknowledging there (see Watchdog and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
@@ -1042,11 +1052,11 @@ reachable only from campus networks.
   shows its Blob or Blobs, one at a time). The page's address carries what was looked up (`?q=`), so the file dialogs
   can open it and an admin can share it. It isn't audited (a read, like the Past requests page).
   - **Serena's answer.** The verdict first (served; served only on a signed link; or the one reason it isn't), what to
-    do next, then each size: served or why not, the stored copy (content type, size), when Serena last served it and
-    when it first stored it. Each step of the servability check, in order, is in the "In Serena" panel's Details: in
+    do next, then each size: served or why not, the cached copy (content type, size), when Serena last served it and
+    when it first cached it. Each step of the servability check, in order, is in the "In Serena" panel's Details: in
     the servable list (and the refresh it came from), kind, access and signed access, recall, derivative allowed,
     watermarked size.
-  - **First stored and last served** (D142, D143). First stored is the cache index's fetched-at. Last served is the
+  - **First cached and last served** (D142, D143). First cached is the cache index's fetched-at. Last served is the
     cache index's `last_served`, to the day: written when a copy is fetched, then on a request that finds it only if
     the time recorded is more than a day old (a conditional update, so tasks don't race; a failure is logged and never
     fails the request). A file requested months apart still shows when, without a write on every request.
@@ -1056,14 +1066,14 @@ reachable only from campus networks.
     when it differs from Serena's), when it last changed, and the museum's lookup fields (D140: configured per museum,
     `lookup_fields`; PAHMA shows "Approved for web", `media_pahma`'s `approvedforweb`, the field its ETL reads; a
     vocabulary term shows by its display name, a boolean as Yes or No). Serena never decides from them:
-    the ETL's rules do, partly from the Object record, which isn't shown. A size without a stored copy of a record
+    the ETL's rules do, partly from the Object record, which isn't shown. A size without a cached copy of a record
     that is soft-deleted or gone is shown as refused, since its fetch would be. If CollectionSpace can't be reached,
     the page says so and Serena's answer stands.
   - **What the next refresh will do** (D141). One sentence from what Serena can tell for any museum: the record is
     deleted or gone (the next refresh drops the Blob); it has another Blob (replaced since the last refresh: the next
     refresh lists the new one; otherwise the list still has both); it changed since the last refresh (the next refresh
     shows whether it's still public, and ends a recall if it isn't); or nothing changed (with what happens to a recall).
-  - **Pictures** (D144). "In Serena" shows the largest stored copy; "In CollectionSpace now" the record's current
+  - **Pictures** (D144). "In Serena" shows the largest cached copy; "In CollectionSpace now" the record's current
     largest size, never stored. Both come through the admin API with `no-store`; admins see recalled and restricted
     files too.
 - **The Past requests page** (decided October 12, 2026, D100 to D113). What Serena served and couldn't serve for the

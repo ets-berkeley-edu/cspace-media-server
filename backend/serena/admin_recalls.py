@@ -192,9 +192,9 @@ def create_router() -> APIRouter:
             except Exception as error:
                 log.warning("no preview from CollectionSpace", extra={"museum": museum.key,
                                                                        "error": type(error).__name__})
-                raise HTTPException(404, "Not stored, and CollectionSpace can't be reached.") from error
+                raise HTTPException(404, "Not cached, and CollectionSpace can't be reached.") from error
         if media is None:
-            raise HTTPException(404, "Not stored, and no Media record has this Blob.")
+            raise HTTPException(404, "Not cached, and no Media record has this Blob.")
         limit = t.museum_settings.get(museum).size_limit_mb.get(kind or "image", 0) * 1024 * 1024  # type: ignore[call-overload]
         return _from_collectionspace(t, museum.key, media, derivative, limit)
 
@@ -214,14 +214,14 @@ def create_router() -> APIRouter:
 def _from_collectionspace(t: RecallServices, tenant: str, media_csid: str, derivative: str | None,
                           limit: int) -> Response:
     if t.cspace is None:
-        raise HTTPException(404, "No stored copy, and CollectionSpace isn't configured here.")
+        raise HTTPException(404, "No cached copy, and CollectionSpace isn't configured here.")
     stack = contextlib.ExitStack()
     try:
         fetched = stack.enter_context(t.cspace.get(tenant).fetch(media_csid, derivative))
     except Exception as error:
         stack.close()
         log.warning("no preview from CollectionSpace", extra={"museum": tenant, "error": type(error).__name__})
-        raise HTTPException(404, "No stored copy, and CollectionSpace can't be reached.") from error
+        raise HTTPException(404, "No cached copy, and CollectionSpace can't be reached.") from error
     too_large = fetched.content_length is not None and limit and fetched.content_length > limit
     if fetched.status != 200 or fetched.content_type not in PREVIEW_TYPES or too_large:
         stack.close()

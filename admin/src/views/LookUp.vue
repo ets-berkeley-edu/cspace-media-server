@@ -57,19 +57,19 @@
                   v-if="largestStored && !broken.serena"
                   id="serena-preview"
                   :src="api.blobPreviewUrl(museum, item.blob_csid, largestStored.size)"
-                  alt="Serena's stored copy"
+                  alt="Serena's cached copy"
                   @error="broken.serena = true"
                 >
-                <span v-if="!largestStored || broken.serena" class="cap">{{ largestStored ? 'Serena\'s copy can\'t be shown' : 'No copy stored in Serena' }}</span>
+                <span v-if="!largestStored || broken.serena" class="cap">{{ largestStored ? 'Serena\'s copy can\'t be shown' : 'No cached copy in Serena' }}</span>
               </div>
               <details id="serena-details" :open="open.serena" @toggle="open.serena = ($event.target as HTMLDetailsElement).open">
                 <summary>Details</summary>
                 <dl>
                   <dt>Media CSID</dt><dd class="mono">{{ item.media_csid || 'none' }}</dd>
                   <dt>Blob CSID</dt><dd class="mono">{{ item.blob_csid }}</dd>
-                  <dt>Kind</dt><dd>{{ item.kind || 'not known' }}</dd>
+                  <dt>Kind</dt><dd>{{ item.kind ? kindWord(item.kind) : 'not known' }}</dd>
                   <dt>Access</dt><dd>{{ item.access || 'not known' }}</dd>
-                  <dt>First stored</dt><dd>{{ firstStored ? when(firstStored) : 'never' }}</dd>
+                  <dt>First cached</dt><dd>{{ firstStored ? when(firstStored) : 'never' }}</dd>
                   <dt>Last served</dt><dd>{{ lastServed ? when(lastServed) : 'never' }}</dd>
                 </dl>
                 <h3 class="text-subtitle-2 mt-2">Checks</h3>
@@ -87,7 +87,7 @@
                   v-if="hasRecord && cs.media_csid && !broken.cspace"
                   id="cspace-preview"
                   :src="api.previewUrl(museum, cs.media_csid, 'full', 'cspace')"
-                  alt="CollectionSpace's file now"
+                  :alt="`CollectionSpace's ${noun} now`"
                   @error="broken.cspace = true"
                 >
                 <span v-if="cspaceCaption" class="cap">{{ cspaceCaption }}</span>
@@ -133,12 +133,12 @@
             </p>
             <p class="stamps">
               <span><span class="k">Last served</span> {{ lastServed ? when(lastServed) : 'never' }}</span>
-              <span><span class="k">First stored in Serena</span> {{ firstStored ? when(firstStored) : 'never' }}</span>
+              <span><span class="k">First cached in Serena</span> {{ firstStored ? when(firstStored) : 'never' }}</span>
             </p>
             <v-table id="lookup-sizes" density="compact" class="mb-1">
               <thead>
                 <tr class="text-no-wrap">
-                  <th>Size</th><th>Served</th><th>Why not</th><th>Stored copy</th><th>Last served</th><th>First stored</th>
+                  <th>Size</th><th>Served</th><th>Why not</th><th>Cached copy</th><th>Last served</th><th>First cached</th>
                 </tr>
               </thead>
               <tbody>
@@ -153,14 +153,14 @@
               </tbody>
             </v-table>
             <p class="text-caption text-medium-emphasis mb-4">
-              Last served: the day Serena last answered a request with its stored copy (recorded at most once a day).
-              First stored: when Serena fetched that size and stored it.
+              Last served: the day Serena last answered a request with its cached copy (recorded at most once a day).
+              First cached: when Serena fetched that size and cached it.
             </p>
 
             <h2 class="text-h6 mb-2">Serena and CollectionSpace</h2>
             <p v-if="cs.state === 'no_media'" class="mb-2">
-              Nothing to compare: this file has no Media record (the museum's placeholder image is served from uploaded
-              files).
+              Nothing to compare: this {{ noun }} has no Media record (the museum's placeholder image is served from
+              uploaded files).
             </p>
             <v-alert
               v-else-if="cs.state === 'unavailable'"
@@ -225,7 +225,7 @@ import {museumName} from '@/session'
 import type {Lookup, LookupCSpace, LookupItem} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
-import {reasonOf, when} from '@/words'
+import {kindWord, reasonOf, when} from '@/words'
 
 // Media look up, layout C from the UI review (decided October 13, 2026, D139 to D145): Serena's answer, with the file
 // in Serena and in CollectionSpace side by side.
@@ -245,6 +245,8 @@ const cs = computed<LookupCSpace>(() => item.value?.cspace || {state: 'unavailab
 const hasRecord = computed(() => cs.value.state === 'exists' || cs.value.state === 'deleted')
 const blobDiffers = computed(() => !!item.value?.kind && !!cs.value.blob_csid && cs.value.blob_csid !== item.value.blob_csid)
 const stored = computed(() => (item.value?.sizes || []).filter(s => s.stored))
+// How the page names this file: "image", "catalog card", "PDF", "3D model", or "file" when the kind isn't known (D151).
+const noun = computed(() => kindWord(item.value?.kind))
 const largestStored = computed(() => stored.value.length ? stored.value[stored.value.length - 1] : null)
 const firstStored = computed(() => stored.value.map(s => s.stored!.fetched_at).sort()[0] || null)
 const lastServed = computed(() => stored.value.map(s => s.stored!.last_served).filter(Boolean).sort().reverse()[0] || null)
@@ -257,7 +259,7 @@ const cspaceCaption = computed(() => {
   default:
     // A picture that shows needs no caption; a caption says why there's none, or that the file is soft-deleted.
     if (broken.cspace || !cs.value.media_csid) {
-      return 'CollectionSpace\'s file can\'t be shown'
+      return `CollectionSpace's ${noun.value} can't be shown`
     }
     return cs.value.state === 'deleted' ? 'Soft-deleted in CollectionSpace' : ''
   }
@@ -323,19 +325,19 @@ const verdict = computed<Verdict>(() => {
     return {tone: 'served', head: 'Served',
             why: one ? `Every check passes for the ${one.size} size.` : 'Every check passes for every size.',
             next: one
-              ? (one.stored ? 'Serena has a stored copy, so it\'s served without asking CollectionSpace.' : 'Serena has no copy yet: the next request fetches it from CollectionSpace and stores it.')
-              : 'A size with a stored copy is served from it; any other size is fetched from CollectionSpace on its first request, then stored.'}
+              ? (one.stored ? 'Serena has a cached copy, so it\'s served without asking CollectionSpace.' : 'Serena has no copy yet: the next request fetches it from CollectionSpace and caches it.')
+              : 'A size with a cached copy is served from it; any other size is fetched from CollectionSpace on its first request, then cached.'}
   }
   if (served.length) {
-    return {tone: 'served', head: 'Served (stored sizes only)',
-            why: 'Serena lists it, so its stored sizes are served; a size without a stored copy would be refused by the fetch.',
+    return {tone: 'served', head: 'Served (cached sizes only)',
+            why: 'Serena lists it, so its cached sizes are served; a size without a cached copy would be refused by the fetch.',
             next: 'To stop serving it now, recall it.', recalls: true}
   }
   const first = it.sizes.find(s => s.reason)
   if (first?.reason === 'media_deleted' || first?.reason === 'media_gone') {
     const how = first.reason === 'media_deleted' ? 'soft-deleted' : 'gone'
     return {tone: 'not', head: `Not served: the Media record is ${how} in CollectionSpace`,
-            why: `Serena has no stored copy${it.sizes.length === 1 ? ` of ${it.sizes[0].size}` : ''}, and a fetch would find the Media record ${how}.`,
+            why: `Serena has no cached copy${it.sizes.length === 1 ? ` of ${it.sizes[0].size}` : ''}, and a fetch would find the Media record ${how}.`,
             next: cs.value.next || ''}
   }
   return {tone: 'not', head: `Not served: ${first ? reasonOf(first.reason!) : 'see the sizes'}`,
