@@ -89,6 +89,11 @@ def test_naming_the_record(client: TestClient, store: Store) -> None:
     body = answer.json()
     assert "warning" not in body
     assert body["placeholder"]["identification_number"] == "P-1"
+    # Kept with the setting: the Settings page shows it without asking CollectionSpace.
+    fake.fail("/cspace-services/media/", 503, times=10)
+    assert client.get("/admin/v1/museums/pahma/settings").json()["placeholder"]["identification_number"] == "P-1"
+    fake.reset()
+    fake.add(RECORD, blob=PLACEHOLDER, identification_number="P-1")
     setting = next(s for s in body["settings"] if s["name"] == "placeholder_media_csid")
     assert (setting["value"], setting["default"], setting["changed"]) == (RECORD, None, True)
     # Every size fetched and indexed under the placeholder's Blob (D172).
@@ -107,7 +112,7 @@ def test_naming_the_record(client: TestClient, store: Store) -> None:
     reset = client.post(f"{URL}/reset", headers=CHANGES, json={"reason": "back to the generic picture"})
     assert reset.status_code == 200
     setting = next(s for s in reset.json()["settings"] if s["name"] == "placeholder_media_csid")
-    assert setting["value"] is None
+    assert setting["value"] is None and reset.json()["placeholder"]["identification_number"] is None
     client.app.state.museum_settings.forget("pahma")  # type: ignore[attr-defined]
     answer = client.get(f"/pahma/imageserver/blobs/{PLACEHOLDER}/derivatives/Medium/content", follow_redirects=False)
     assert answer.headers["location"] == "/placeholder.svg"

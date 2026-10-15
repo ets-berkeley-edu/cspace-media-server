@@ -918,7 +918,9 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
   logged as unserved, reason `placeholder_not_set`.
 - **Where** (D169): a setting on the Settings page, "Placeholder image (Media CSID)". Changing it needs a reason and is
   audited, like every setting; "Use default" goes back to the generic picture. The page shows the named record's
-  CSID, identification number and thumbnail.
+  CSID, identification number and thumbnail. The number is read from CollectionSpace when the setting is saved and
+  kept with it, so the page never waits for CollectionSpace; if staff change it, it shows after the next save
+  (Richard, October 14, 2026).
 - **Checked when saved** (D170): Serena asks CollectionSpace about the record first. It must exist, not be
   soft-deleted, and have a file; otherwise, or if CollectionSpace can't be reached, nothing is saved and the admin is
   told why.

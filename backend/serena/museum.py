@@ -41,6 +41,9 @@ class StartingSettings(BaseModel):
     # The Media record whose files Serena serves as the museum's placeholder image (decided October 14, 2026, D166 to
     # D172). None: Serena's generic "Image restricted" picture.
     placeholder_media_csid: str | None = None
+    # That record's identification number, read from CollectionSpace when the setting is saved, so the Settings page
+    # never waits for CollectionSpace. Not a setting admins change.
+    placeholder_identification_number: str | None = Field(default=None, max_length=200)
 
     @field_validator("watchdog_deadline")
     @classmethod

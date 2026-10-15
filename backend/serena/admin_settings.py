@@ -50,6 +50,7 @@ SETTINGS = (
     Setting("placeholder_media_csid", "placeholder", "Placeholder image (Media CSID)"),
 )
 PLACEHOLDER = "placeholder_media_csid"
+NUMBER = "placeholder_identification_number"  # kept with it (not a setting of its own)
 BY_NAME = {setting.name: setting for setting in SETTINGS}
 
 
@@ -132,18 +133,9 @@ def create_router() -> APIRouter:
             # The Blob the museum's ETL lists for its placeholder image (its configuration), if it uses one, and the
             # named record's identification number, for the Settings page (D169).
             "placeholder": {"blob_csid": museum.placeholder_blob_csid,
-                            "identification_number": number_of(st, museum, current.placeholder_media_csid)},
+                            "identification_number": current.placeholder_identification_number},
             "audit_retention_choices": [{"days": days, "entries_removed": removed[days]}
                                         for days in AUDIT_RETENTION_DAYS]}
-
-    def number_of(st: SettingsServices, museum: Museum, media_csid: str | None) -> str | None:
-        """Best effort: the named Media record's identification number, or None."""
-        if media_csid is None or st.fetcher is None:
-            return None
-        try:
-            return st.fetcher.clients.get(museum.key).media_record(media_csid).identification_number
-        except CSpaceError:
-            return None
 
     def placeholder_check(st: SettingsServices, museum: Museum, media_csid: str) -> dict[str, Any]:
         """D170 to D172: the Media record must exist, not be soft-deleted, and have a file; every size the museum serves
@@ -205,6 +197,11 @@ def create_router() -> APIRouter:
         extra: dict[str, Any] = {}
         if name == PLACEHOLDER and after is not None:
             extra = placeholder_check(st, museum, after)  # before saving: a record that won't do changes nothing
+        if name == PLACEHOLDER:
+            # Kept with the setting, as read when it's saved, so the Settings page doesn't ask CollectionSpace.
+            updated.pop(NUMBER, None)
+            if extra.get("identification_number"):
+                updated[NUMBER] = extra["identification_number"]
         if not st.store.put_settings_overrides(museum.key, updated, version):
             raise HTTPException(409, "Another admin changed this museum's settings just now: reload and try again.")
         st.museum_settings.forget(museum.key)
