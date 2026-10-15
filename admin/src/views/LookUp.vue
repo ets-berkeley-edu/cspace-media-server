@@ -193,8 +193,8 @@
               >{{ sync.text }}</span>
             </h2>
             <p v-if="cs.state === 'no_media'" class="mb-2">
-              Nothing to compare: this {{ noun }} has no Media record (the museum's placeholder image is served from
-              uploaded files).
+              Nothing to compare: this {{ noun }} has no Media record (the museum's placeholder image: its picture comes
+              from the Media record named on the Settings page).
             </p>
             <v-alert
               v-else-if="cs.state === 'unavailable'"
@@ -444,8 +444,8 @@ const verdict = computed<Verdict>(() => {
   }
   const placeholder = step('Placeholder image')
   if (placeholder && placeholder.ok === false) {
-    return {tone: 'not', head: 'Not served: the placeholder image isn\'t uploaded', why: placeholder.outcome,
-            next: 'Upload its files (coming in pull request 14b).'}
+    return {tone: 'not', head: 'Not served: Serena\'s generic picture instead', why: placeholder.outcome,
+            next: 'Name the placeholder image\'s Media record on the Settings page.'}
   }
   const served = it.sizes.filter(s => s.served)
   const one = it.sizes.length === 1 ? it.sizes[0] : null

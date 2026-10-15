@@ -31,7 +31,8 @@ class Reason(StrEnum):
     RECALLED = "recalled"
     NO_DERIVATIVES_FOR_KIND = "no_derivatives_for_kind"  # a derivative of a 3D or PDF Blob
     ORIGINAL_NOT_SERVED = "original_not_served"  # an image's original where the museum doesn't serve it
-    PLACEHOLDER_NOT_UPLOADED = "placeholder_not_uploaded"
+    # The museum's placeholder image while no Media record is named for it: the generic picture (D168)
+    PLACEHOLDER_NOT_SET = "placeholder_not_set"
     # Temporary: a size the museum watermarks, until watermarking is built (pull request 16 in the plan).
     WATERMARK_NOT_BUILT = "watermark_not_built"
     # A miss (design: Image fetch): the light check, then the fetch and its checks

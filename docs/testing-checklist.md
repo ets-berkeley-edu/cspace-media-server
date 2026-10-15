@@ -635,3 +635,35 @@ CSID (in its URL) and `<MEDIA>` its Media CSID (on Media look up).
 - [ ] Open http://localhost:8300/nowhere and http://localhost:8300/local-cdn/pahma: expect the plain text "Not found."
   (not JSON). http://localhost:8300/admin/v1/nowhere still answers JSON.
 - [ ] Last: on "Recalls", cancel your recall with a reason.
+
+## 22. The placeholder image's Media record, locally (15 minutes, before merging a pull request that changes it)
+
+What it checks: decisions D166 to D173 of October 14, 2026. PAHMA's placeholder image comes from a Media record named
+on the Settings page; until one is named, Serena serves its generic "Image restricted" picture. `./serena etl pahma`
+lists the placeholder (Blob `59a733dd-d641-4e1a-8552`, no Media CSID) and adds a synthetic Media record holding it to
+the simulator: `9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a`, identification number "Placeholder". Start afresh from the pull
+request's branch, run `./serena etl pahma`, then open http://localhost:5373/admin/ and sign in to PAHMA as `admin`
+(password `admin`).
+
+- [ ] In Chrome, open
+  http://localhost:8300/pahma/imageserver/blobs/59a733dd-d641-4e1a-8552/derivatives/Medium/content: expect the generic
+  picture (a lock and "Image restricted"), at `/placeholder.svg`. On "Past requests", expect the line unserved,
+  reason "placeholder not set".
+- [ ] On "Media look up", look up `59a733dd-d641-4e1a-8552`: expect "Not served: Serena's generic picture instead",
+  the Placeholder image check saying no Media record is named, and "Name the placeholder image's Media record on the
+  Settings page."
+- [ ] On "Settings", expect a "Placeholder image" card, its help, and "Placeholder image (Media CSID)" as "none: the
+  generic picture". Click "Change", type `9f9f9f9f-0000-4000-8000-000000000000` (synthetic, unknown), give a reason and
+  save: expect "CollectionSpace has no Media record with this CSID." under the field, and the dialog still open.
+- [ ] Type `9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a` and save (it takes a few seconds: Serena fetches every size). Expect
+  the row to show the CSID, "Media Placeholder" and a thumbnail, and "changed; default value none: the generic
+  picture". On "Audit log", expect the settings change with the Media CSID before (none) and after, the
+  identification number and the six sizes fetched.
+- [ ] Open the Medium URL above again: expect the simulator's picture now (a grey square), not the generic one. Media
+  look up on `59a733dd-d641-4e1a-8552`: expect "Served" and every size cached.
+- [ ] Back on "Settings", click "Use default" on the row, give a reason and confirm: expect "none: the generic
+  picture" again; within a minute, the Medium URL gives the generic picture again.
+- [ ] On "Alerts" (the watchdog runs every few minutes), expect one "The placeholder image isn't set", from before you
+  named the record, naming the refresh and the Blob and saying the public sees the generic picture. Acknowledge it.
+  It comes again only for a later refresh date while no record is named.
+

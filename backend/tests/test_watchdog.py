@@ -196,3 +196,26 @@ def test_the_worker_refreshes_the_watchdog_at_its_interval(store: Store, s3: Any
     assert not worker.watch()
     now[0] += 2
     assert worker.watch()
+
+
+def test_a_placeholder_image_no_record_is_named_for(store: Store, clock: Clock) -> None:
+    """D173: once per refresh date, while the servable list lists the placeholder and no Media record is named."""
+    from conftest import add_blob
+
+    pahma = museum.load("pahma")
+    dog = Watchdog({"pahma": pahma}, MuseumSettings(store, 0), Refreshes(store, clock), Alerts(store, None, "", clock),
+                   clock, store=store)
+    refreshes = Refreshes(store, clock)
+    at(clock, 3, 30)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.UPDATED)
+    at(clock, 3, 40)
+    assert dog.check() == []  # not listed: nothing to say
+    add_blob(store, "pahma", pahma.placeholder_blob_csid, None)
+    (alert,) = dog.check()
+    assert (alert.kind, alert.refresh_date, alert.subject) == (Kind.PLACEHOLDER_NOT_SET, "2026-10-10",
+                                                               refresh.refresh_id)
+    assert "generic picture" in alert.message and "Settings page" in alert.message
+    store.put_settings_overrides("pahma", {"placeholder_media_csid": "3c4d5e6f-7081-4a92-8b3c-4d5e6f708192"},
+                                 store.settings_with_version("pahma")[1])
+    assert dog.check() == []

@@ -16,6 +16,18 @@
     >
       {{ saveError }}
     </v-alert>
+    <v-alert
+      v-if="warning"
+      id="settings-warning"
+      type="warning"
+      variant="tonal"
+      density="compact"
+      class="mb-4"
+      closable
+      @click:close="warning = ''"
+    >
+      {{ warning }}
+    </v-alert>
     <v-card
       v-for="group in groups"
       :id="`settings-${group.key}`"
@@ -26,11 +38,40 @@
     >
       <v-card-title class="text-subtitle-1">{{ group.title }}</v-card-title>
       <v-card-text>
+        <p v-if="group.key === 'placeholder'" id="placeholder-help" class="text-body-2 mb-2">
+          The Media record whose picture the public sees in place of an image the museum restricts. Serena checks it
+          with CollectionSpace and fetches every size when it's saved; save it again after staff change its picture.
+          Without one, Serena's generic "Image restricted" picture.
+          <template v-if="data && !data.placeholder.blob_csid">
+            This museum's ETL doesn't list a placeholder image yet, so a record named here is used once it does.
+          </template>
+        </p>
         <v-table density="compact">
           <tbody>
             <tr v-for="setting in group.settings" :id="`setting-${setting.name.replace('.', '-')}`" :key="setting.name">
               <td>{{ setting.label }}</td>
-              <td class="font-weight-bold setting-value">{{ shown(setting, setting.value) }}</td>
+              <td class="font-weight-bold setting-value">
+                <template v-if="setting.name === PLACEHOLDER && setting.value">
+                  <!-- The named Media record (D169): its CSID, number and thumbnail. -->
+                  <div class="d-flex align-center ga-3">
+                    <img
+                      v-if="!brokenThumbnail"
+                      id="placeholder-thumbnail"
+                      class="placeholder-thumbnail"
+                      :src="api.previewUrl(museum, String(setting.value))"
+                      alt="The placeholder image"
+                      @error="brokenThumbnail = true"
+                    >
+                    <div>
+                      <div class="mono sel-all font-weight-regular">{{ setting.value }}</div>
+                      <div v-if="data?.placeholder.identification_number" class="font-weight-regular text-body-2">
+                        Media <span class="sel-all">{{ data.placeholder.identification_number }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <template v-else>{{ shown(setting, setting.value) }}</template>
+              </td>
               <td class="text-body-2">
                 <span v-if="setting.changed">changed; default value {{ shown(setting, setting.default) }}</span>
                 <span v-else>default value</span>
@@ -84,6 +125,9 @@
             :hint="hints[editing.name] || hints[editing.group]"
             persistent-hint
           />
+          <p v-if="editing.name === PLACEHOLDER && !toDefault" class="text-body-2 mt-2 mb-0">
+            Saving checks the record with CollectionSpace and fetches each of its sizes, which can take a minute.
+          </p>
           <p v-if="removing" id="retention-warning" class="text-warning mt-2">
             {{ removing }} audit {{ removing === 1 ? 'entry is' : 'entries are' }} older than that: the next daily
             removal deletes {{ removing === 1 ? 'it' : 'them' }}. Export the audit log first if you need {{ removing === 1 ? 'it' : 'them' }}.
@@ -128,15 +172,19 @@ const GROUPS: Record<string, string> = {
   etl: 'The ETL job',
   check: 'Servable list check',
   size_limits: 'Size limits',
-  audit: 'Audit log'
+  audit: 'Audit log',
+  placeholder: 'Placeholder image'
 }
+// The placeholder image's Media record (decided October 14, 2026, D166 to D172).
+const PLACEHOLDER = 'placeholder_media_csid'
 // The allowed values (D88); Serena checks them too.
 const hints: Record<string, string> = {
   watchdog_deadline: '00:00 to 23:59, Pacific',
   etl_poll_interval_seconds: '5 to 300',
   etl_step_timeout_seconds: '60 to 7,200 (2 hours)',
   delta_threshold_percent: '0.1 to 100',
-  size_limits: '1 to 2,048'
+  size_limits: '1 to 2,048',
+  placeholder_media_csid: 'The Media CSID of a record in this museum\'s CollectionSpace'
 }
 
 const route = useRoute()
@@ -150,6 +198,8 @@ const toDefault = ref(false)
 const value = ref<string | number>('')
 const reason = ref('')
 const busy = ref(false)
+const warning = ref('')
+const brokenThumbnail = ref(false)
 
 const groups = computed(() => Object.entries(GROUPS).map(([key, title]) => ({
   key, title, settings: (data.value?.settings || []).filter(s => s.group === key)
@@ -173,7 +223,10 @@ const valueProblem = ref('')
 const alerting = computed(() => ['delta_threshold_percent', 'audit_retention_days'].includes(editing.value?.name || ''))
 watch(value, () => { valueProblem.value = '' })
 
-function shown(setting: SettingItem, v: string | number): string {
+function shown(setting: SettingItem, v: string | number | null): string {
+  if (v === null) {
+    return setting.name === PLACEHOLDER ? 'none: the generic picture' : 'none'
+  }
   return setting.name === 'audit_retention_days' ? (RETENTION_LABELS[Number(v)] || `${v} days`) : String(v)
 }
 
@@ -189,7 +242,7 @@ async function load() {
 function open(setting: SettingItem, toTheDefault: boolean) {
   editing.value = setting
   toDefault.value = toTheDefault
-  value.value = setting.value
+  value.value = setting.value ?? ''
   reason.value = ''
   reasonField.value?.reset()
   saveError.value = ''
@@ -217,10 +270,18 @@ async function save() {
       : await api.changeSetting(museum.value, name, typeof value.value === 'string' ? value.value.trim() : value.value,
                                 reason.value.trim())
     alertsChanged.value++ // a change to the delta threshold or the audit retention raises an alert
+    warning.value = data.value?.warning || ''
+    brokenThumbnail.value = false
     dialog.value = false
   } catch (e) {
-    saveError.value = e instanceof ApiError ? e.message : 'That didn\'t work.'
-    dialog.value = false
+    const message = e instanceof ApiError ? e.message : 'That didn\'t work.'
+    if (editing.value?.name === PLACEHOLDER && !toDefault.value && e instanceof ApiError && e.status === 422) {
+      valueProblem.value = message // a record that won't do: said under the field, the dialog stays open (D170)
+      valueField.value?.focus()
+    } else {
+      saveError.value = message
+      dialog.value = false
+    }
   } finally {
     busy.value = false
   }
@@ -232,5 +293,14 @@ watch(museum, load, {immediate: true})
 <style scoped>
 .setting-value {
   white-space: nowrap;
+}
+.placeholder-thumbnail {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.mono {
+  font-family: monospace;
 }
 </style>

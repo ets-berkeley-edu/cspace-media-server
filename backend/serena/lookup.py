@@ -41,7 +41,9 @@ def _step(check: str, outcome: str, ok: bool | None) -> dict[str, Any]:
 
 
 def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
-            cspace: CSpaceClient | None = None, museums: dict[str, Museum] | None = None) -> dict[str, Any]:
+            cspace: CSpaceClient | None = None, museums: dict[str, Museum] | None = None,
+            placeholder_media: str | None = None) -> dict[str, Any]:
+    """`placeholder_media`: the Media record named for the museum's placeholder image on the Settings page (D166)."""
     text = text.strip()
     if not text:
         raise LookupProblem("Give a file's URL or path, a Blob CSID or a Media CSID.")
@@ -74,7 +76,7 @@ def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
             raise LookupProblem("That isn't a CSID, a URL or a path.")
         blobs = _blobs_of(store, museum, text)
     latest = refreshes.latest_updated(museum.key)
-    items = [_blob(museum, blob, sizes, store) for blob in blobs]
+    items = [_blob(museum, blob, sizes, store, placeholder_media) for blob in blobs]
     asked: dict[str, MediaRecord] = {}
     for item in items:
         item["cspace"] = _cspace(museum, item, store, cspace, latest, asked)
@@ -191,7 +193,8 @@ def _next(listed: bool, blob: str, noun: str, record: MediaRecord, changed: bool
     return "Nothing has changed in CollectionSpace since the last refresh."
 
 
-def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store) -> dict[str, Any]:
+def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store,
+          placeholder_media: str | None = None) -> dict[str, Any]:
     record = store.servability(museum.key, blob)
     steps = []
     if record is None:
@@ -220,17 +223,21 @@ def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store) -> d
                 steps.append(_step("Recall", f"Recalled by {recall.by} at {recall.at}: {recall.reason}."
                                    + kept, False))
         if blob == museum.placeholder_blob_csid:
-            steps.append(_step("Placeholder image", "The museum's placeholder image: served from files an admin "
-                               "uploads (pull request 14b); none yet.", False))
+            steps.append(_step("Placeholder image", f"The museum's placeholder image: served from Media record "
+                               f"{placeholder_media}, named on the Settings page." if placeholder_media else
+                               "The museum's placeholder image: no Media record is named for it on the Settings page, "
+                               "so a request gets Serena's generic picture.", placeholder_media is not None))
     if record is not None and record.kind in ORIGINAL_ONLY_KINDS:
         sizes = [s for s in sizes if s is None] or sizes  # derivatives of a PDF or 3D file are never served
     return {"blob_csid": blob, "media_csid": record.media_csid if record else None,
             "kind": record.kind if record else None, "access": record.access if record else None,
-            "steps": steps, "sizes": [_size(museum, blob, size, store) for size in sizes]}
+            "steps": steps, "sizes": [_size(museum, blob, size, store, placeholder_media) for size in sizes]}
 
 
-def _size(museum: Museum, blob: str, size: str | None, store: Store) -> dict[str, Any]:
-    decision = decide(museum, paths.BlobRequest(museum.key, blob, size), store)  # no signed link
+def _size(museum: Museum, blob: str, size: str | None, store: Store,
+          placeholder_media: str | None = None) -> dict[str, Any]:
+    decision = decide(museum, paths.BlobRequest(museum.key, blob, size), store,  # no signed link
+                      placeholder_media=placeholder_media)
     reason = decision.reason
     if reason is None and size in museum.watermark_sizes:
         reason = Reason.WATERMARK_NOT_BUILT

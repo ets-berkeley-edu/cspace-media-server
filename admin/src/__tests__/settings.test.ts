@@ -13,8 +13,12 @@ const SETTINGS = {
     {name: 'audit_retention_days', group: 'audit', label: 'How long the audit log is kept (days)', value: 90, default: 90,
       changed: false}
   ],
-  audit_retention_choices: [{days: 90, entries_removed: 0}, {days: 183, entries_removed: 0}]
+  audit_retention_choices: [{days: 90, entries_removed: 0}, {days: 183, entries_removed: 0}],
+  placeholder: {blob_csid: '59a733dd-d641-4e1a-8552', identification_number: null}
 }
+const RECORD = '3c4d5e6f-7081-4a92-8b3c-4d5e6f708192' // synthetic
+const PLACEHOLDER_SETTING = {name: 'placeholder_media_csid', group: 'placeholder', label: 'Placeholder image (Media CSID)',
+  value: null, default: null, changed: false}
 
 async function at(path: string, component: unknown) {
   const router = createRouter({history: createMemoryHistory('/admin/'), routes})
@@ -23,6 +27,44 @@ async function at(path: string, component: unknown) {
   await flushPromises()
   return wrapper
 }
+
+describe('the placeholder image\'s Media record (October 14, 2026, D166 to D172)', () => {
+  it('shows the generic picture until one is named, says why a record won\'t do, and warns about another Blob', async () => {
+    const page = {...SETTINGS, settings: [...SETTINGS.settings, PLACEHOLDER_SETTING]}
+    const saved = {...page, settings: [...SETTINGS.settings, {...PLACEHOLDER_SETTING, value: RECORD, changed: true}],
+      placeholder: {blob_csid: '59a733dd-d641-4e1a-8552', identification_number: 'P-1'},
+      warning: 'This Media record\'s Blob (x) isn\'t the one the ETL lists for the placeholder image (y).'}
+    const answers: Record<string, {status?: number, body: unknown}> = {
+      'GET /museums/pahma/settings': {body: page},
+      'PUT /museums/pahma/settings/placeholder_media_csid': {status: 422, body: {detail: 'CollectionSpace has no Media record with this CSID.'}}
+    }
+    const calls = fakeApi(answers)
+    const wrapper = await at('/pahma/settings', Settings)
+    expect(wrapper.find('#setting-placeholder_media_csid').text()).toContain('none: the generic picture')
+    expect(wrapper.find('#placeholder-help').text()).toContain('generic "Image restricted" picture')
+    await wrapper.find('#setting-placeholder_media_csid .change').trigger('click')
+    await flushPromises()
+    const field = document.querySelector('#setting-value') as HTMLInputElement
+    expect(field.value).toBe('') // not "null"
+    field.value = RECORD
+    field.dispatchEvent(new Event('input'))
+    const reason = document.querySelector('#reason') as HTMLTextAreaElement
+    reason.value = 'PAHMA\'s own picture'
+    reason.dispatchEvent(new Event('input'))
+    await flushPromises();
+    (document.querySelector('#save-setting') as HTMLButtonElement).click()
+    await vi.waitFor(() => expect(document.body.textContent).toContain('CollectionSpace has no Media record with this CSID.'))
+    expect(document.querySelector('#save-setting')).not.toBeNull() // the dialog stays open
+    answers['PUT /museums/pahma/settings/placeholder_media_csid'] = {body: saved};
+    (document.querySelector('#save-setting') as HTMLButtonElement).click()
+    await vi.waitFor(() => expect(wrapper.find('#settings-warning').exists()).toBe(true))
+    expect(calls.filter(c => c.method === 'PUT').map(c => c.body)).toEqual(
+      [{value: RECORD, reason: 'PAHMA\'s own picture'}, {value: RECORD, reason: 'PAHMA\'s own picture'}])
+    expect(wrapper.find('#setting-placeholder_media_csid').text()).toContain('Media P-1')
+    expect(wrapper.find('#placeholder-thumbnail').attributes('src')).toBe(`/admin/v1/museums/pahma/media/${RECORD}/preview?size=thumbnail`)
+    wrapper.unmount()
+  })
+})
 
 describe('the Settings page', () => {
   it('changes a setting only with a reason, and shows the default value', async () => {

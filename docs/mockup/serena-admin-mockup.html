@@ -302,6 +302,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 38 (October 14, 2026, D166 to D173):</strong> the placeholder image comes from a Media record named on <strong>Settings</strong> ("Placeholder image (Media CSID)"): Serena checks it with CollectionSpace and fetches every size when it's saved. Try the unknown sample CSID 9f9f9f9f-0000-4000-8000-000000000000 (refused) and then any other CSID. Until one is named, Media look up's "The placeholder image" says the public gets Serena's generic "Image restricted" picture.</li>
       <li><strong>Version 37 (October 14, 2026, in the pull request that builds versions 27 to 36 into the app):</strong> the mockup and the app agree on these pages. <strong>Times</strong> are UTC everywhere, as the app shows them ("2026-10-13 17:00:00 UTC"). <strong>Past requests</strong> has the app's words, its By day table, the 20 most requested, the Outcome and Reason filters, and a "Signed link" column only for Cinefiles. <strong>Recalls</strong>: "Recall…" under the explanation, outlined red, with no switch; the app's explanation and column names. <strong>The recall form</strong> takes paths and URLs too: a pasted one is cut down to its CSID at once, and again on "Preview recall"; another museum's path is listed under "Not recalled" with its reason; "You gave" shows the path. <strong>A reason is never a disabled button:</strong> Recall, Release, Cancel recall, a Settings change ("Change" and "Use default" on Settings now open the dialog) and Start a refresh say what's missing under the field and move focus there; a hint says where the reason is recorded. <strong>Alerts</strong> have Serena's own words: "An admin recalled Media record &lt;identification number&gt; (&lt;shortened Media CSID&gt;) for PAHMA. Reason: …" for one record, "&lt;n&gt; Media records" for several. <strong>Media look up</strong> reads a path as the app does: no leading slash or no museum is this museum's ("blobs/&lt;CSID&gt;/content"), another museum's path says which ("That's a Cinefiles path; you're looking up PAHMA's files."), and a /media/ URL is refused but its Media record is looked up; layout C only, as decided (D139). Not shown here: an error from Serena itself, which the app shows with its code ("Serena can't be reached right now. Try again in a minute. (502)"), and the plain "Not found." for an address outside Serena's APIs. Mockup only: the "Mockup settings" panel.</li>
       <li><strong>Version 36:</strong> Recalls opens with "Recall…" under the explanation, outlined red (Richard's choice).</li>
       <li><strong>Version 35 (October 14, 2026, Richard):</strong> on Recalls, a dashed switch (mockup only) moves the "Recall…" button: A beside the title (as in the app now), B at the right of the "Active" heading, beside the list it adds to, C under the explanation. "Look" switches it between solid red (as now), outlined red and blue: "Recall…" only opens the form, so the red, filled button can be kept for the one that recalls ("Recall 1 Media record"). Richard chose C, outlined red (October 14, 2026); version 37 removes the switch.</li>
@@ -459,7 +460,7 @@
   // ---- Serena's rules, as servability.decide and the fetch apply them
   // Each reason as the app shows it: Serena's reason with its underscores as spaces.
   const REASON = {unknown_path: "unknown path", not_listed: "not listed", restricted: "restricted", no_derivatives: "no derivatives for kind", recalled: "recalled",
-    placeholder: "placeholder not uploaded", media_deleted: "media deleted", bad_csid: "bad csid", unknown_size: "derivative not served"};
+    placeholder: "placeholder not set", media_deleted: "media deleted", bad_csid: "bad csid", unknown_size: "derivative not served"};
   const STORE = {};  // Blob CSID → size → {at, type, bytes}: Serena's cached copies (the cache index)
   RECORDS.forEach(r => Object.entries(r.stored || {}).forEach(([blob, sizes]) => Object.entries(sizes).forEach(([size, at]) => {
     (STORE[blob] ||= {})[size] = {at, type: COPY[size][0], bytes: COPY[size][1]};
@@ -480,7 +481,7 @@
     if (b.access !== "public" && !signed) return {reason: "restricted", r, b};
     if (size !== "original" && b.kind === "pdf") return {reason: "no_derivatives", r, b};
     if (recallAt(r, t)) return {reason: "recalled", r, b};
-    if (csid === PLACEHOLDER) return {reason: "placeholder", r, b};
+    if (csid === PLACEHOLDER && !S.placeholderMedia) return {reason: "placeholder", r, b}; // the generic picture (D168)
     if (storedAt(csid, size, t)) return {r, b, cache: "hit"};
     if (r.cs && r.cs.deleted && ms(r.cs.updated) <= ms(t)) return {reason: "media_deleted", r, b};
     return {r, b, cache: "miss"};
@@ -565,7 +566,7 @@
       : [["ok", "In the servable list", `Refresh ${lastRefresh()}`], ["ok", "Kind", kindWord(b.kind)],
         b.access === "public" ? ["ok", "Access", "public"] : ["maybe", "Access", "restricted: signed link needed"],
         !r.media ? ["ok", "Recall", "No Media record"] : now ? ["no", "Recall", `Recalled by ${now.by}, ${plain(now.at)}`] : ["ok", "Recall", ended ? `None (${ended.toLowerCase()})` : "None"],
-        ...(b.blob === PLACEHOLDER ? [["no", "Placeholder image", "No files uploaded"]] : [])];
+        ...(b.blob === PLACEHOLDER ? [S.placeholderMedia ? ["ok", "Placeholder image", `Served from Media record ${S.placeholderMedia}, named on the Settings page`] : ["no", "Placeholder image", "No Media record is named for it on the Settings page, so a request gets Serena's generic picture"]] : [])];
     const focus = size ? sizes.filter(s => s.size === size) : sizes;
     const served = focus.filter(s => s.served).length;
     const sizeName = size === "original" ? "original" : size;
@@ -583,9 +584,9 @@
       v = {tone: "not", head: "Not served: recalled", why: `Recalled in Serena by ${esc(now.by)} on ${plain(now.at)}. Reason: “${esc(now.reason)}.”`, link: "recalls",
         next: now.kept ? `Refresh ${now.kept.refresh} still lists the Media record as public, so Serena kept the recall and alerted. Change the record in CollectionSpace; or, if the recall was a mistake, release it on the Recalls page.`
           : "It stays recalled until a refresh on a later day no longer lists the Media record as public. If that refresh still lists it, Serena alerts, and an admin can then release it."};
-    } else if (b.blob === PLACEHOLDER) {
-      v = {tone: "not", head: "Not served: the placeholder image isn't uploaded", why: `This is ${esc(name())}'s placeholder image, shown in place of restricted images. Serena serves it from files an admin uploads, never from CollectionSpace.`,
-        next: "Upload its files (coming in pull request 14b)."};
+    } else if (b.blob === PLACEHOLDER && !S.placeholderMedia) {
+      v = {tone: "not", head: "Not served: Serena's generic picture instead", why: `This is ${esc(name())}'s placeholder image, shown in place of restricted images. No Media record is named for it on the Settings page, so a request gets Serena's generic picture.`,
+        next: "Name the placeholder image's Media record on the Settings page."};
     } else if (served === focus.length) {
       v = {tone: "served", head: "Served", why: size ? `Every check passes for the ${sizeName} size.` : "Every check passes for every size.",
         next: size ? (focus[0].stored ? "Serena has a cached copy, so it's served without asking CollectionSpace." : "Serena has no copy yet: the next request fetches it from CollectionSpace and stores it.")
@@ -691,7 +692,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 37</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 38</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -708,7 +709,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 37</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 38</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -833,7 +834,7 @@
     recalls: recallsPage,
 
     settings: () => `${title(`${esc(name())} Settings`)}<p class="lead">Each setting starts at its default value. A change needs a reason and is in the audit log; changes to the delta threshold and the audit retention also raise an alert.</p>
-      <div class="cards">${[["Watchdog", [["Deadline for today's refresh", "08:00 Pacific", false]]], ["The ETL job", [["Poll interval", "15 seconds", false], ["Step timeout", "900 seconds", true]]], ["Servable list check", [["Delta threshold", "5%", false]]], ["Audit log", [["Kept for", "90 days", false]]]].map(([g, rows]) => `<div class="card"><div class="label">${g}</div>${rows.map(([k, v, c]) => `<div style="margin-top:8px"><strong>${k}</strong><div class="num">${v} <span class="muted">${c ? "· changed; default value 1800" : "· default value"}</span></div><div style="display:flex;gap:6px;margin-top:4px"><button type="button" data-setting="${esc(k)}" data-setting-value="${esc(v)}">Change</button>${c ? `<button type="button" data-setting="${esc(k)}" data-setting-default="1800 seconds">Use default</button>` : ""}</div></div>`).join("")}</div>`).join("")}</div>`,
+      <div class="cards">${[["Watchdog", [["Deadline for today's refresh", "08:00 Pacific", false]]], ["The ETL job", [["Poll interval", "15 seconds", false], ["Step timeout", "900 seconds", true]]], ["Servable list check", [["Delta threshold", "5%", false]]], ["Audit log", [["Kept for", "90 days", false]]], ["Placeholder image", [["Placeholder image (Media CSID)", S.placeholderMedia ? `${S.placeholderMedia} · Media Placeholder` : "none: the generic picture", !!S.placeholderMedia]]]].map(([g, rows]) => `<div class="card"><div class="label">${g}</div>${rows.map(([k, v, c]) => `<div style="margin-top:8px"><strong>${k}</strong><div class="num">${v} <span class="muted">${c ? `· changed; default value ${k.startsWith("Placeholder") ? "none: the generic picture" : "1800"}` : "· default value"}</span></div><div style="display:flex;gap:6px;margin-top:4px"><button type="button" data-setting="${esc(k)}" data-setting-value="${esc(v)}">Change</button>${c ? `<button type="button" data-setting="${esc(k)}" data-setting-default="${k.startsWith("Placeholder") ? "none: the generic picture" : "1800 seconds"}">Use default</button>` : ""}</div></div>`).join("")}</div>`).join("")}</div><p class="secondary" id="placeholderHelp" style="max-width:760px">Placeholder image: the Media record whose picture the public sees in place of an image the museum restricts. Serena checks it with CollectionSpace and fetches every size when it's saved; save it again after staff change its picture. Without one, Serena's generic "Image restricted" picture.</p>`,
 
     audit: () => `${title(`${esc(name())} Audit log`)}<div class="toolbar"><span class="lead" style="margin:0">Every admin action, the ETL's calls that change something and each refresh's outcome, of the last 30 days, newest first. Click a column's name to sort by it (Details doesn't sort).</span><span class="spacer"></span><button>Export CSV</button></div>
       ${table("audit", [
@@ -965,7 +966,7 @@
   // Serena's records beside what CollectionSpace says now, for the Inspector.
   function compareHtml(b) {
     let out = `<h3>Serena and CollectionSpace</h3>`;
-    if (!b.cs) return out + `<p class="secondary">Nothing to compare: this file has no Media record (the museum's placeholder image is served from uploaded files).</p>`;
+    if (!b.cs) return out + `<p class="secondary">Nothing to compare: this file has no Media record (the museum's placeholder image: its picture comes from the Media record named on the Settings page).</p>`;
     if (S.cspaceDown) return out + `<div class="cs-down">CollectionSpace can't be reached, so there's nothing to compare with. Serena's answer above doesn't depend on it.</div>`;
     const cs = b.cs;
     if (cs.state === "gone") return out + `<p class="secondary">CollectionSpace has no Blob or Media record with this CSID either.</p>`;
@@ -1191,6 +1192,15 @@
         if (v && !v.value.trim()) { $("#setValueMsg").textContent = "Give a value first."; v.focus(); return; }
         if (v) $("#setValueMsg").textContent = "";
         if (!reasonGiven("setReason")) return;
+        if (label.startsWith("Placeholder")) {
+          // Checked with CollectionSpace before it's saved (D170): here, the unknown sample CSID is refused.
+          const csid = v ? typed(v).trim() : null;
+          if (csid && (!CSID_RE.test(csid) || csid === "9f9f9f9f-0000-4000-8000-000000000000")) { $("#setValueMsg").textContent = "CollectionSpace has no Media record with this CSID."; v.focus(); return; }
+          S.placeholderMedia = csid;
+          AUDIT.unshift({at: NOW, admin: S.user, action: "settings change", target: "placeholder_media_csid", details: `Before: ${S.placeholderBefore || "none"} · After: ${csid || "none"}${csid ? " · Fetched: original, Thumbnail, Small, Medium, FullHD, OriginalJpeg" : ""}`});
+          S.placeholderBefore = csid;
+          close(); render(); return;
+        }
         close();
       };
     });

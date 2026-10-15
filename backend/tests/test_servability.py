@@ -102,7 +102,7 @@ def test_placeholder_image(client: TestClient, store: Store, recorder: MemoryRec
     path = derivative("pahma", "Thumbnail", PLACEHOLDER)
     assert _reason(client, recorder, path) == Reason.NOT_LISTED  # it must be in the daily file like any other
     add_blob(store, "pahma", PLACEHOLDER, None)  # listed with no Media CSID
-    assert _reason(client, recorder, path) == Reason.PLACEHOLDER_NOT_UPLOADED
+    assert _reason(client, recorder, path) == Reason.PLACEHOLDER_NOT_SET  # the generic picture (D168)
 
 
 def test_a_failing_table_fails_closed(client: TestClient, store: Store, recorder: MemoryRecorder,

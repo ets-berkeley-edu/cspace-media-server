@@ -21,6 +21,13 @@ router = APIRouter()
 
 DEFAULT = "default"  # the unavailable image for a museum Serena doesn't serve
 _SVG = resources.files("serena.static").joinpath("unavailable.svg").read_bytes()
+# The generic "Image restricted" picture, served for a placeholder image no Media record is named for (D168).
+_PLACEHOLDER_SVG = resources.files("serena.static").joinpath("placeholder.svg").read_bytes()
+_SVG_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    # An SVG opened on its own is a document: let it run nothing and load nothing.
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+}
 
 
 def unavailable_url(base_url: str, tenant: str | None) -> str:
@@ -30,9 +37,18 @@ def unavailable_url(base_url: str, tenant: str | None) -> str:
     return f"{base_url}/{name}/unavailable.svg" if base_url else f"/unavailable/{name}.svg"
 
 
+def placeholder_url(base_url: str) -> str:
+    """Where the generic placeholder picture is (D168): <base>/default/placeholder.svg beside the unavailable images,
+    served by CloudFront without a signature; locally, Serena serves it at /placeholder.svg."""
+    return f"{base_url}/default/placeholder.svg" if base_url else "/placeholder.svg"
+
+
 def _unavailable(request: Request, tenant: str | None, reason: Reason, kind: str | None = None) -> RedirectResponse:
+    """The unavailable image; for the placeholder image no Media record is named for, the generic picture (D168).
+    Either way no-store, so a change takes effect at once."""
     report(_recorder(request), tenant, reason, paths.log_path(request.url.path), kind)
-    url = unavailable_url(request.app.state.settings.unavailable_base_url, tenant)
+    base = request.app.state.settings.unavailable_base_url
+    url = placeholder_url(base) if reason is Reason.PLACEHOLDER_NOT_SET else unavailable_url(base, tenant)
     return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
 
 
@@ -86,8 +102,9 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
         parsed = paths.parse(museum, rest)
         if isinstance(parsed, paths.Refused):
             return _unavailable(request, tenant, parsed.reason)
+        placeholder = request.app.state.museum_settings.get(museum).placeholder_media_csid
         decision = servability.decide(museum, parsed, request.app.state.store,
-                                      _vouch(request, tenant, parsed.blob_csid))
+                                      _vouch(request, tenant, parsed.blob_csid), placeholder)
         kind = decision.record.kind if decision.record is not None else None
         if decision.reason is not None:
             return _unavailable(request, tenant, decision.reason, kind)
@@ -122,12 +139,14 @@ def unavailable_image(request: Request, name: str) -> Response:
     """The unavailable image, for local development and tests only: in AWS, CloudFront serves it."""
     if name != DEFAULT and name not in request.app.state.museums:
         raise HTTPException(404)
-    return Response(_SVG, media_type="image/svg+xml", headers={
-        "Cache-Control": "public, max-age=300",
-        "X-Content-Type-Options": "nosniff",
-        # An SVG opened on its own is a document: let it run nothing and load nothing.
-        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
-    })
+    return Response(_SVG, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=300", **_SVG_HEADERS})
+
+
+@router.get("/placeholder.svg", include_in_schema=False)
+def placeholder_image() -> Response:
+    """The generic placeholder picture, for local development and tests only: in AWS, CloudFront serves it."""
+    return Response(_PLACEHOLDER_SVG, media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=300", **_SVG_HEADERS})
 
 
 @router.get(signing.LocalSigner.PREFIX + "/{tenant}/objects/{sha256}", include_in_schema=False)
