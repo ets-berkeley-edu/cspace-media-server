@@ -47,7 +47,7 @@
                 <v-btn
                   v-if="setting.changed"
                   size="small"
-                  variant="text"
+                  variant="outlined"
                   class="reset"
                   @click="open(setting, true)"
                 >
@@ -99,10 +99,11 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="dialog = false">Cancel</v-btn>
+          <v-btn variant="outlined" @click="dialog = false">Cancel</v-btn>
           <v-btn
             id="save-setting"
             color="primary"
+            variant="flat"
             :disabled="!ready"
             :loading="busy"
             @click="save"

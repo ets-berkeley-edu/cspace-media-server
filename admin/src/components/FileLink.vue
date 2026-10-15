@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 // A path or CSID that reads as plain text until hovered or focused, then as a link that opens the file (D145).
-defineProps<{title?: string}>()
+defineProps<{title?: string}>() // an aria-label given to it passes through to the button
 const emit = defineEmits<{open: []}>()
 </script>
 

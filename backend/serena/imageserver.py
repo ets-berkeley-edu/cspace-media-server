@@ -30,8 +30,8 @@ def unavailable_url(base_url: str, tenant: str | None) -> str:
     return f"{base_url}/{name}/unavailable.svg" if base_url else f"/unavailable/{name}.svg"
 
 
-def _unavailable(request: Request, tenant: str | None, reason: Reason) -> RedirectResponse:
-    report(_recorder(request), tenant, reason, paths.log_path(request.url.path))
+def _unavailable(request: Request, tenant: str | None, reason: Reason, kind: str | None = None) -> RedirectResponse:
+    report(_recorder(request), tenant, reason, paths.log_path(request.url.path), kind)
     url = unavailable_url(request.app.state.settings.unavailable_base_url, tenant)
     return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
 
@@ -88,26 +88,26 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
             return _unavailable(request, tenant, parsed.reason)
         decision = servability.decide(museum, parsed, request.app.state.store,
                                       _vouch(request, tenant, parsed.blob_csid))
+        kind = decision.record.kind if decision.record is not None else None
         if decision.reason is not None:
-            return _unavailable(request, tenant, decision.reason)
+            return _unavailable(request, tenant, decision.reason, kind)
         if parsed.derivative in museum.watermark_sizes:
             # Never an unwatermarked copy of a size the museum watermarks (design: Watermarks).
-            return _unavailable(request, tenant, Reason.WATERMARK_NOT_BUILT)
+            return _unavailable(request, tenant, Reason.WATERMARK_NOT_BUILT, kind)
         entry = cache_index.lookup(request.app.state.store, tenant, parsed.blob_csid, parsed.derivative)
         cache = "hit"
         if entry is None and decision.record is not None:
             # A miss: the light check, then fetch, check and store (design: The steps, steps 4 and 5).
             fetched = request.app.state.fetcher.get(museum, decision.record, parsed.derivative)
             if isinstance(fetched, Reason):
-                return _unavailable(request, tenant, fetched)
+                return _unavailable(request, tenant, fetched, kind)
             entry = fetched
             cache = "miss"
         if entry is None:
-            return _unavailable(request, tenant, Reason.INTERNAL_ERROR)
+            return _unavailable(request, tenant, Reason.INTERNAL_ERROR, kind)
         if cache == "hit":
             cache_index.served(request.app.state.store, tenant, parsed.blob_csid, parsed.derivative, entry,
                                datetime.now(UTC))
-        kind = decision.record.kind if decision.record is not None else None
         return _redirect(request, tenant, entry, decision.signed_kid, kind, cache)
     except signed_links.SigningKeysUnavailable:
         # Already logged, with the museum; fail closed (design: Signed links).

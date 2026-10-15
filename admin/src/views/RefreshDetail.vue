@@ -21,6 +21,7 @@
         v-if="refresh.actions.includes('retry_update')"
         id="retry-update"
         color="primary"
+        variant="flat"
         @click="open('retry_update')"
       >
         Retry the servability update
@@ -29,6 +30,7 @@
         v-if="refresh.actions.includes('override_threshold')"
         id="override-threshold"
         color="warning"
+        variant="flat"
         @click="open('override_threshold')"
       >
         Override the delta threshold
@@ -106,10 +108,11 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="dialog = false">Cancel</v-btn>
+          <v-btn variant="outlined" @click="dialog = false">Cancel</v-btn>
           <v-btn
             id="confirm-action"
             color="primary"
+            variant="flat"
             :disabled="!ready"
             :loading="busy"
             @click="act"

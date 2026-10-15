@@ -73,10 +73,14 @@ class MemoryRecorder:
             self.counts[(entry.museum, entry.reason)] += 1
 
 
-def report(recorder: Recorder | None, museum: str | None, reason: Reason, path: str) -> None:
+def report(recorder: Recorder | None, museum: str | None, reason: Reason, path: str, kind: str | None = None) -> None:
     """Log one unserved request, and hand it to the recorder if there is one (tests). `path` must come from
-    paths.log_path()."""
-    log.info("unserved", extra={"museum": museum, "reason": reason.value, "path": path})
+    paths.log_path(). The kind, when Serena found the Blob in its servable list (a recalled or restricted file, say),
+    so Past requests' Kind column is blank only for a file Serena doesn't know."""
+    extra: dict[str, str | None] = {"museum": museum, "reason": reason.value, "path": path}
+    if kind:
+        extra["kind"] = kind
+    log.info("unserved", extra=extra)
     if recorder is None:
         return
     try:

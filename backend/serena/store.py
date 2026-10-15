@@ -32,6 +32,9 @@ class Recall:
     reason: str = ""
     kept_by: str | None = None  # the refresh that kept it because the same Blob is still public (D119)
     kept_on: str | None = None  # that refresh's refresh date
+    # The Media record's identification number when it was recalled, as staff know it (Richard, October 14, 2026):
+    # read from CollectionSpace then, so the Recalls page needn't ask for every row. None: none, or not read.
+    identification_number: str | None = None
 
     def item(self) -> dict[str, Any]:
         found: dict[str, Any] = {
@@ -41,6 +44,8 @@ class Recall:
         if self.kept_by:
             found["kept_by"] = {"S": self.kept_by}
             found["kept_on"] = {"S": self.kept_on or ""}
+        if self.identification_number:
+            found["identification_number"] = {"S": self.identification_number}
         return found
 
     @classmethod
@@ -49,7 +54,8 @@ class Recall:
         return cls(tenant, media, tuple(b["S"] for b in item.get("blob_csids", {}).get("L", [])),
                    item.get("by", {}).get("S", ""), item.get("at", {}).get("S", ""),
                    item.get("reason", {}).get("S", ""), item.get("kept_by", {}).get("S") or None,
-                   item.get("kept_on", {}).get("S") or None)
+                   item.get("kept_on", {}).get("S") or None,
+                   item.get("identification_number", {}).get("S") or None)
 
 
 def dynamodb_client(settings: Settings) -> Any:

@@ -42,7 +42,8 @@ describe('the Past requests page', () => {
     expect(wrapper.find('#requests-loading').exists()).toBe(false)
     expect(wrapper.find('#page-title').text()).toBe('PAHMA Past requests')
     expect(wrapper.find('#requests-by-day').text()).toContain('not listed 1, too large 1')
-    expect(wrapper.find('#requests-top-paths').text()).toContain('/pahma/imageserver/blobs/b1/content')
+    expect(wrapper.find('#requests-top-paths').text()).toContain('b1 · original') // the part that differs (October 14)
+    expect(wrapper.find('#requests-top-paths [title="/pahma/imageserver/blobs/b1/content"]').exists()).toBe(true)
     const times = () => wrapper.findAll('#requests-table tbody tr').map(row => row.find('td').text())
     expect(times()[0]).toBe('2026-10-12 17:03:00 UTC') // newest first
     expect(wrapper.find('#export-requests').attributes('href')).toBe('/admin/v1/museums/pahma/requests/export.csv?range=24h')
@@ -93,7 +94,8 @@ describe('the Past requests page', () => {
     await flushPromises()
     const links = wrapper.findAll('#requests-table .file-link')
     // One line, shortened in the middle; the whole path on hover (D152).
-    expect(links.map(l => l.text())).toEqual(['/pahma/imageserver/blobs/0f1e2d3c…3f4a5b/derivatives/Medium/content'])
+    expect(links.map(l => l.text())).toEqual(['0f1e2d3c…3f4a5b · Medium'])
+    expect(links[0].attributes('title')).toMatch(/^View this file: \/pahma\/imageserver\/blobs\/[0-9a-f-]{36}\//) // whole
     expect(wrapper.findAll('#requests-table .request-path').map(p => p.attributes('title'))).toContain(good.path)
     await links[0].trigger('click')
     await flushPromises()

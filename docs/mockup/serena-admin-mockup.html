@@ -140,6 +140,25 @@
   .pager .nav { display: inline-flex; gap: 2px; }
   .pager .nav button { height: 26px; min-width: 26px; padding: 0 6px; border-color: transparent; background: none; font-size: 14px; line-height: 1; }
   .copy { height: 24px; padding: 0 7px; font-size: 11px; margin-left: 4px; }
+  .nowrap { white-space: nowrap; }
+  .back-link { margin: 0 0 6px; font-size: 14px; }
+  th.expander, td.expander { width: 28px; padding-right: 0; }
+  button.expand { border: 1px solid var(--border); background: var(--surface, transparent); color: inherit; width: 24px; height: 24px; padding: 0; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; }
+  tr.opened td { border-bottom-color: transparent; }
+  tr.detail-row td { padding-top: 0; }
+  dl.row-detail { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 4px; font-size: 13px; }
+  dl.row-detail dt { color: var(--text-muted); }
+  dl.row-detail dd { margin: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .nowrap button.path-link { overflow-wrap: normal; }
+  .req-path .mono { font-size: 12px; }
+  .copy.icon { height: 22px; min-width: 22px; padding: 0 5px; font-size: 12px; line-height: 1; vertical-align: middle; }
+  th .help { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+  tr.focus td { background: var(--surface-1); box-shadow: inset 3px 0 0 var(--text-accent); }
+  td.actions { text-align: right; white-space: nowrap; }
+  .sync-ok { color: var(--text-success); font-size: 15px; font-weight: 600; margin-left: 6px; }
+  .sync-diff { color: var(--text-warning); font-size: 15px; font-weight: 600; margin-left: 6px; }
+  .timeout { border: 1px solid var(--border); border-left: 3px solid var(--text-warning); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
   .notes { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.25rem; }
   .notes h2 { font-size: 15px; margin: 0 0 8px; }
   .notes li { margin-bottom: 6px; max-width: 110ch; }
@@ -267,6 +286,7 @@
       <label>Unacknowledged alerts <select id="mockAlerts"><option value="0">None</option><option value="1" selected>1</option><option value="3">3</option></select></label>
       <label><input type="checkbox" id="mockCspaceDown"> CollectionSpace unreachable</label>
       <button type="button" id="mockSignOut">Back to sign-in</button>
+      <button type="button" id="mockTimeout">Time out the session</button>
     </div>
   </details>
 
@@ -275,6 +295,18 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 26 (October 14, 2026, Richard):</strong> <strong>Past requests</strong> shows only what differs from row to row: "<CSID…> · <size>" (the whole path on hover, in ⧉ and in the file dialog), so the table fits; the app shows "Signed link" only for Cinefiles, the one museum with signed access. <strong>"← Back to …"</strong>: open a path's file from Past requests (or a CSID, or a refresh ID), then "Media look up": the page starts with "← Back to Past requests", which returns there as it was. The menu starts a new task, so there's no link after it. In the app, the list pages also keep their filters, sort and page in the address, so the browser's Back does the same. The recall dialog's "Back" is "Change CSIDs".</li>
+      <li><strong>Version 25 (October 14, 2026, Richard):</strong> on Recalls, each row has ▸ (a button, so the keyboard reaches it) that shows the row's details beneath it: the Media CSID and Blob CSID in full, each opening the file and with ⧉, and "Media look up". The first column is the Media record's identification number (D153's), with ⧉; a record without one shows its shortened Media CSID. In the app the number would be kept with the recall when it's made, so the page doesn't call CollectionSpace for every row.</li>
+      <li><strong>Version 24 (October 13, 2026 review, from Richard's testing; D154–D165 accepted):</strong>
+        <strong>Recalls:</strong> the state is a tag and the action ("Cancel recall…" or "Release…") has its own column at the right; CSIDs on one line, shortened, each with ⧉ to copy it; "By".
+        <strong>Copy:</strong> every CSID or path shortened with an ellipsis has ⧉, which copies the whole of it ("Copied" for a moment): Media look up's comparison rows, Recalls, the recall summary, Past requests' paths, the file dialog's path.
+        <strong>Column help:</strong> a dotted underline on a column's name means hover for what it holds (Past refreshes, Alerts, Past requests, Recalls, Audit log).
+        <strong>Links:</strong> a refresh ID in an alert (its About and its text), in the Audit log or under "kept by" opens that refresh (here, Past refreshes with the row marked; in the app, the refresh's own page); an Audit log target that's a Media CSID opens Media look up, a setting the Settings page, an alert of the last 30 days the Alerts page; the Overview sentence links "Past requests" and "Media look up".
+        <strong>Audit log:</strong> "By" in place of "Admin"; refresh outcomes and recalls a refresh ended are by Serena.
+        <strong>Media look up:</strong> "Serena and CollectionSpace" says "✓ (No differences)" in green, or "⚠ (2 differences: Blob CSID, As of)" in amber; a /blobs/&lt;CSID&gt; URL Serena doesn't serve (no /content) says so, then looks the Blob up anyway.
+        <strong>File dialog:</strong> the real reason when there's nothing to show (no cached copy and no such file in CollectionSpace; CollectionSpace unreachable; a PDF; a 3D model) instead of one sentence listing them all; "Open it in a new tab" only for a PDF.
+        <strong>Buttons:</strong> the main action is filled (blue, or red when it changes what the public sees or who is signed in: Recall, Release, Cancel recall, Sign everyone out); every other button is outlined; plain text is only for links.
+        <strong>Tables:</strong> a time breaks only between its date and its clock time; a shortened CSID or path keeps its ⧉ on the same line; Alerts' About and the Audit log's Target shorten a Media CSID like everywhere else. <strong>Copy, other fields (D165):</strong> ⧉ after the identification number in Media look up's heading and after a SHA-256 in the Audit log; refresh IDs don't get one. <strong>Sign-in:</strong> "Time out the session" in the mockup settings shows what an admin sees when a session times out: the sign-in page saying so, and the page they were on afterwards.</li>
       <li><strong>Last served and First cached (layout C):</strong> under the verdict, when Serena last served the file (any size) and when it first cached it in its S3 bucket; the sizes table has both for each size, and "In Serena" Details has them too. In the app, "first cached" is the cache index's fetched-at time, which Serena already keeps. "Last served" would come from Serena's log (the "served" lines Past requests reads), so it reaches back 30 days, the log's retention; a time kept per size in Serena's tables instead would mean a write on every request, which Serena avoids.</li>
       <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's cached copy; CollectionSpace's file now, which Serena doesn't keep), captioned only when there's no picture (why not) or the file is soft-deleted and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
       <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no cached copy, the preview is CollectionSpace's thumbnail, which Serena doesn't keep. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (taken off the web since: "Approved for web" No) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
@@ -309,12 +341,19 @@
   function when(iso) {
     const d = new Date(iso);
     const text = d.toLocaleString("en-US", {timeZone: "America/Los_Angeles", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"});
-    return `<span title="${esc(iso.replace("T", " ").replace(/(\.\d+)?(\+00:00|Z)$/, "") + " UTC")}">${esc(text)}</span>`;
+    return `<span title="${esc(iso.replace("T", " ").replace(/(\.\d+)?(\+00:00|Z)$/, "") + " UTC")}">${esc(text).replace(/^(.*?\d{4},) (.*)$/, '<span class="nowrap">$1</span> <span class="nowrap">$2</span>')}</span>`;
   }
   // How the admin app names each kind (D151): "file" only when the kind isn't known.
   const KIND_WORDS = {image: "image", card: "catalog card", pdf: "PDF", "3D": "3D model", audio: "audio file", video: "video"};
   const kindWord = kind => KIND_WORDS[kind] || "file";
   const short = csid => csid.length > 20 ? csid.slice(0, 8) + "…" + csid.slice(-6) : csid;
+  // A CSID (or path) shortened with an ellipsis always has a copy button that copies the whole of it (Richard, Oct 13).
+  const copyBtn = full => `<button type="button" class="copy icon" data-copy="${esc(full)}" title="Copy ${esc(full)}" aria-label="Copy ${esc(full)}">⧉</button>`;
+  const shortCopy = full => `<span class="nowrap"><span class="mono" title="${esc(full)}">${esc(short(full))}</span>${copyBtn(full)}</span>`;
+  // A refresh ID opens that refresh (in the app, the refresh's own page; here, Past refreshes with its row marked).
+  const refreshLink = id => `<button type="button" class="link mono nowrap" data-refresh="${esc(id)}">${esc(id)}</button>`;
+  const REFRESH_ID = /\b([a-z]+-\d{4}-\d{2}-\d{2}-\d+)\b/g;
+  const linkRefreshes = text => esc(text).replace(REFRESH_ID, (m, id) => refreshLink(id));
   const csidHtml = csid => `<span class="mono" title="${esc(csid)}">${esc(csid)}</span><button type="button" class="copy" data-copy="${esc(csid)}">Copy</button>`;
 
   function thumbSvg(seed, kind) {
@@ -458,6 +497,13 @@
       csid = m[2]; size = m[3] || "original";
       if (!CSID_RE.test(csid)) return {input: q, refused: {head: "Not served: not a CSID", why: `“${esc(csid)}” isn't a CSID.`, next: "No CSID was looked up."}};
       if (!SIZES.includes(size)) return {input: q, refused: {head: `Not served: not a size ${esc(name())} serves`, why: `“${esc(size)}” isn't one of ${esc(name())}'s sizes: Thumbnail, Small, Medium, FullHD and OriginalJpeg, and the original.`, next: "No CSID was looked up."}};
+    } else if (/\/imageserver\/blobs\/([^/?#]+)/.test(q) && CSID_RE.test(q.match(/\/imageserver\/blobs\/([^/?#]+)/)[1])) {
+      // Not a URL Serena serves (no /content, say), but it names a Blob: say so, then look the Blob up (Richard, Oct 13).
+      const blob = q.match(/\/imageserver\/blobs\/([^/?#]+)/)[1];
+      const found = lookupFor(blob);
+      found.input = q;
+      found.note = "This URL isn't one Serena serves (it needs /content or /derivatives/<size>/content): a request for it gets the unavailable image, reason \"unknown path\". Below, its Blob CSID, looked up on its own.";
+      return found;
     } else if (!CSID_RE.test(q)) {
       return {input: q, refused: {head: "Not looked up", why: "That isn't a file's URL or path, a Blob CSID or a Media CSID.", next: "Paste one of those."}};
     }
@@ -573,17 +619,17 @@
     recalledAlert("2026-10-02T18:30:01Z", "2026-10-02", "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", "Complaint about the caption", "admin", {by: "admin", at: "2026-10-02T18:35:00Z"}),
   ];
   const AUDIT = [
-    {at: "2026-10-13T10:09:41Z", admin: "refresh pahma-2026-10-13-1", action: "refresh outcome", target: "pahma-2026-10-13-1", details: "State: updated"},
-    {at: "2026-10-13T10:02:05Z", admin: "ETL (pahma)", action: "etl check request", target: "pahma-2026-10-13-1", details: "Which key: current"},
-    {at: "2026-10-13T10:02:04Z", admin: "ETL (pahma)", action: "etl servable list upload", target: "pahma-2026-10-13-1", details: "Rows: 21 · Which key: current"},
-    {at: "2026-10-13T10:01:00Z", admin: "ETL (pahma)", action: "etl refresh start", target: "pahma-2026-10-13-1", details: "Refresh date: 2026-10-13 · Which key: current"},
     {at: "2026-10-13T06:02:15Z", admin: "admin", action: "recall", target: MEDIA, details: `Blob ${BR} · Reason: Testing`},
     {at: "2026-10-13T05:47:30Z", admin: "admin", action: "sign in", target: "pahma", details: ""},
+    {at: "2026-10-12T10:41:12Z", admin: "Serena", action: "refresh outcome", target: "pahma-2026-10-12-1", details: "State: updated"},
+    {at: "2026-10-12T10:02:05Z", admin: "ETL (pahma)", action: "etl check request", target: "pahma-2026-10-12-1", details: "Which key: current"},
+    {at: "2026-10-12T10:02:04Z", admin: "ETL (pahma)", action: "etl servable list upload", target: "pahma-2026-10-12-1", details: "Rows: 187,402 · SHA-256: 88f538917c20b4d1e6a3f05c9d7e2b18a4c6f3e0d9b2a7c5e1f8d4b6a3c0e9f2 · Which key: current"},
+    {at: "2026-10-12T10:01:00Z", admin: "ETL (pahma)", action: "etl refresh start", target: "pahma-2026-10-12-1", details: "Refresh date: 2026-10-12 · Which key: current"},
     {at: "2026-10-12T22:15:02Z", admin: "admin", action: "settings change", target: "etl_step_timeout_seconds", details: "Before: 1800 · After: 900 · Reason: Slower ETL server this week"},
     {at: "2026-10-12T16:00:00Z", admin: "admin", action: "alert acknowledge", target: "Still public · 2026-10-12", details: ""},
     {at: "2026-10-11T15:00:30Z", admin: "pahma-admin", action: "alert acknowledge", target: "Recalls ended · 2026-10-11", details: ""},
     {at: "2026-10-11T15:00:00Z", admin: "pahma-admin", action: "alert acknowledge", target: "Still public · 2026-10-11", details: ""},
-    {at: "2026-10-11T10:39:52Z", admin: "refresh pahma-2026-10-11-1", action: "recall ended", target: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", details: `Blob ${BE} · No longer listed as public · Recalled by admin, Oct 10`},
+    {at: "2026-10-11T10:39:52Z", admin: "Serena", action: "recall ended", target: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", details: `Blob ${BE} · No longer listed as public · Recalled by admin, Oct 10`},
     {at: "2026-10-10T16:05:00Z", admin: "admin", action: "recall", target: "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", details: `Blob ${BE} · Reason: Wrong image on the record`},
     {at: "2026-10-10T15:20:00Z", admin: "admin", action: "alert acknowledge", target: "Check failed · 2026-10-10", details: ""},
     {at: "2026-10-09T21:14:03Z", admin: "pahma-admin", action: "recall", target: "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", details: `Blob ${BK} · Reason: Request from the community: culturally sensitive`},
@@ -607,9 +653,9 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup @ 1b67acf</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 26</span></div>
     <form class="login" id="loginForm">
-      <h2>Sign in</h2><p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
+      <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
       <label class="field">Museum <select id="loginMuseum">${Object.entries(MUSEUMS).map(([k, v]) => `<option value="${k}" ${k === S.museum ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       <label class="field">Username <input type="text" id="loginUser" value="admin" autocomplete="username"></label>
@@ -624,7 +670,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup @ 1b67acf</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 26</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -634,12 +680,14 @@
       <main id="main">${(PAGES[S.page] || PAGES.overview)()}</main></div>`;
   }
 
-  const title = t => `<h2 id="page-title">${t}</h2>`;
+  // "← Back to …" (Richard, Oct 14): on a page reached through a link (a path, a CSID, a refresh ID); not after the menu.
+  const BACK_NAMES = {overview: "Overview", refreshes: "Past refreshes", requests: "Past requests", lookup: "Media look up", recalls: "Recalls", alerts: "Alerts", audit: "Audit log", settings: "Settings"};
+  const title = t => `${S.from && S.from !== S.page && BACK_NAMES[S.from] ? `<p class="back-link"><button type="button" class="link" data-back>← Back to ${BACK_NAMES[S.from]}</button></p>` : ""}<h2 id="page-title">${t}</h2>`;
 
   // A sortable table, as the app's v-data-table with must-sort: clicking a column's name sorts by it, ascending;
   // clicking it again reverses; a table is always sorted one way or the other. Rows keep their index in `rows`, for
   // the buttons in them. The pager is a stand-in (25 rows a page, as in the app).
-  function table(id, cols, rows, initial) {
+  function table(id, cols, rows, initial, opts) {
     const sort = S.sort[id] || (S.sort[id] = {...initial});
     const col = cols.find(c => c.key === sort.key) || cols[0];
     const value = r => col.val ? col.val(r) : r[col.key];
@@ -648,10 +696,15 @@
       const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "en", {numeric: true});
       return sort.dir === "asc" ? c : -c;
     });
-    const head = cols.map(c => {
-      if (c.sortable === false) return `<th>${esc(c.title)}</th>`;
+    // Expandable rows (Richard, Oct 14): a ▸ button first in each row shows the row's details beneath it.
+    const detail = opts && opts.detail;
+    const open = S.expanded || (S.expanded = {});
+    const head = (detail ? `<th class="expander"><span class="sr">Details</span></th>` : "") + cols.map(c => {
+      // A column's hover description (Richard, Oct 13): a dotted underline, the description on hover.
+      const label = c.help ? `<span class="help" title="${esc(c.help)}">${esc(c.title)}</span>` : esc(c.title);
+      if (c.sortable === false) return `<th${c.cls ? ` class="${c.cls}"` : ""}>${label}</th>`;
       const on = c.key === sort.key;
-      return `<th aria-sort="${on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${id}:${c.key}">${esc(c.title)}<span class="arrow" aria-hidden="true">${on ? (sort.dir === "asc" ? "▲" : "▼") : "▲"}</span></button></th>`;
+      return `<th aria-sort="${on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${id}:${c.key}">${label}<span class="arrow" aria-hidden="true">${on ? (sort.dir === "asc" ? "▲" : "▼") : "▲"}</span></button></th>`;
     }).join("");
     const pg = S.pages[id] || (S.pages[id] = {size: 25, page: 1});
     const pages = Math.max(1, Math.ceil(order.length / pg.size));
@@ -662,8 +715,14 @@
     const pager = `<div class="pager"><label>Rows per page <select data-pagesize="${id}">${[10, 25, 50, 100].map(n => `<option ${n === pg.size ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       <span class="range">${order.length ? `${from + 1}–${from + shown.length} of ${order.length}` : "0 of 0"}</span>
       <span class="nav">${go(1, "«", pg.page === 1, "First page")}${go(pg.page - 1, "‹", pg.page === 1, "Previous page")}${go(pg.page + 1, "›", pg.page === pages, "Next page")}${go(pages, "»", pg.page === pages, "Last page")}</span></div>`;
-    const body = shown.map(([r, i]) => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`).join("");
-    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted">None.</td></tr>`}</tbody></table>
+    const span = cols.length + (detail ? 1 : 0);
+    const body = shown.map(([r, i]) => {
+      const k = detail ? `${id}:${opts.key(r)}` : "", isOpen = detail && open[k];
+      const toggle = detail ? `<td class="expander"><button type="button" class="expand" data-expand="${esc(k)}" aria-expanded="${isOpen ? "true" : "false"}" aria-controls="d-${esc(k)}" aria-label="${isOpen ? "Hide" : "Show"} details">${isOpen ? "▾" : "▸"}</button></td>` : "";
+      const row = `<tr class="${[r.focus ? "focus" : "", isOpen ? "opened" : ""].join(" ").trim()}">${toggle}${cols.map(c => `<td${c.num ? ' class="num"' : c.cls ? ` class="${c.cls}"` : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`;
+      return row + (isOpen ? `<tr class="detail-row" id="d-${esc(k)}"><td></td><td colspan="${span - 1}">${detail(r, i)}</td></tr>` : "");
+    }).join("");
+    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${span}" class="muted">None.</td></tr>`}</tbody></table>
       ${pager}</div>`;
   }
   const PAGES = {
@@ -675,16 +734,17 @@
       <div class="card"><div class="label">Alerts waiting</div><div class="value num">${here(ALERTS).filter(a => !a.ack).length}</div><button class="link" data-go="alerts">Open alerts</button></div>
       <div class="card"><div class="label">Last 24 hours</div><div class="value num">${day.filter(l => l.outcome === "served").length} served</div><div class="secondary num">${day.filter(l => l.outcome !== "served").length} unserved · <button class="link" data-go="requests">Past requests</button></div></div>
       <div class="card"><div class="label">Active recalls</div><div class="value num">${active.length}</div><div class="secondary">${kept} still public in CollectionSpace · <button class="link" data-go="recalls">Recalls</button></div></div></div>
-      <p class="secondary">What Serena served and couldn't serve is on the Past requests page; "Media look up" says why for any one file.</p>`;
+      <p class="secondary">What Serena served and couldn't serve is on the <button class="link" data-go="requests">Past requests</button> page; "<button class="link" data-go="lookup">Media look up</button>" says why for any one file.</p>`;
     },
 
     refreshes: () => `${title(`${esc(name())} Past refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it; click again to reverse.</p>
+      ${S.focus ? `<p class="secondary">Opened from a link: refresh <span class="mono">${esc(S.focus)}</span> is marked. (In the app the link opens the refresh's own page.)</p>` : ""}
       ${table("refreshes", [
-        {key: "id", title: "Refresh", html: r => `<button class="link mono">${S.museum}-${r.id}</button>`},
-        {key: "date", title: "Refresh date", html: r => `${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}`},
-        {key: "state", title: "State", html: r => `<span class="pill t-${r.tone}">${r.state}</span>`},
-        {key: "rows", title: "Rows", num: true, html: r => r.rows ? r.rows.toLocaleString("en-US") : "—"},
-        {key: "at", title: "Last change", html: r => when(r.at)}], REFRESHES, {key: "at", dir: "desc"})}`,
+        {key: "id", title: "Refresh", help: "The refresh's ID: the museum, its refresh date and its number that day.", html: r => `<button class="link mono">${S.museum}-${r.id}</button>`},
+        {key: "date", title: "Refresh date", help: "The Pacific date the refresh started. A recall made that day isn't decided by it.", html: r => `${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}`},
+        {key: "state", title: "State", help: "Where the refresh is: started, received, checking, check failed, updating, updated, update failed or abandoned.", html: r => `<span class="pill t-${r.tone}">${r.state}</span>`},
+        {key: "rows", title: "Rows", num: true, help: "Data rows in the refresh's servable list (one per Blob).", html: r => r.rows ? r.rows.toLocaleString("en-US") : "—"},
+        {key: "at", title: "Last change", help: "When the refresh last changed state.", html: r => when(r.at)}], REFRESHES.map(r => ({...r, focus: S.focus === `${S.museum}-${r.id}`})), {key: "at", dir: "desc"})}`,
 
     start: () => `${title(`${esc(name())}: Start a refresh`)}<p class="lead">An admin refresh: use when the ETL made the servable list but Serena's refresh failed. The list must come from the live public core.</p>
       <label class="field" style="max-width:420px">Servable list (.tsv or .tsv.gz) <input type="file" id="startFile"></label>
@@ -694,11 +754,11 @@
 
     alerts: () => `${title(`${esc(name())} Alerts`)}<p class="lead">The last 30 days' alerts, newest first. Each is emailed to the team once; acknowledge it here when it's handled. Click a column's name to sort by it.</p>
       ${table("alerts", [
-        {key: "at", title: "Raised", html: a => when(a.at)},
-        {key: "date", title: "Refresh date"},
-        {key: "title", title: "Alert", html: a => `<strong>${esc(a.title)}</strong><div class="secondary">${esc(a.msg)}</div>`},
-        {key: "about", title: "About", html: a => `<span class="mono">${esc(a.about)}</span>`},
-        {key: "ack", title: "Acknowledged", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}], here(ALERTS), {key: "at", dir: "desc"})}`,
+        {key: "at", title: "Raised", help: "When Serena raised the alert and emailed it to the team.", html: a => when(a.at)},
+        {key: "date", title: "Refresh date", help: "The refresh date the alert is about. The watchdog raises it again on a later date if the problem is still there."},
+        {key: "title", title: "Alert", help: "What happened, and what to do about it.", html: a => `<strong>${esc(a.title)}</strong><div class="secondary">${linkRefreshes(a.msg)}</div>`},
+        {key: "about", title: "About", help: "The refresh, Media record or date the alert is about. A refresh ID opens that refresh; a Media CSID opens Media look up.", html: a => targetHtml({target: a.about})},
+        {key: "ack", title: "Acknowledged", help: "Who acknowledged it, and when. Acknowledging doesn't fix anything: it says someone is on it.", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}], here(ALERTS), {key: "at", dir: "desc"})}`,
 
     requests: () => {
       const lines = inRange(), served = lines.filter(l => l.outcome === "served").length;
@@ -709,17 +769,17 @@
       <div role="group" aria-label="Range">${[["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"]].map(([k, v]) => `<button type="button" data-range="${k}" class="${S.range === k ? "primary" : ""}" aria-pressed="${S.range === k}">${v}</button>`).join(" ")}</div></div>
       <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
       <h3>Most requested</h3>${table("top", [
-        {key: "path", title: "Path", html: r => pathCell(r)},
-        {key: "n", title: "Requests", num: true, html: r => r.n.toLocaleString("en-US")}], top, {key: "n", dir: "desc"})}
+        {key: "path", title: "Path", help: "The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). Hover for the whole path; ⧉ copies it.", html: r => pathCell(r)},
+        {key: "n", title: "Requests", num: true, help: "How many requests asked for this path in the range.", html: r => r.n.toLocaleString("en-US")}], top, {key: "n", dir: "desc"})}
       <h3>Requests</h3><div class="toolbar"><select id="reqOutcome" aria-label="Outcome"><option value="">All outcomes</option>${["served", "unserved"].map(o => `<option ${S.outcome === o ? "selected" : ""}>${o}</option>`).join("")}</select>
         <select id="reqReason" aria-label="Reason"><option value="">Any reason</option>${reasons.map(([k]) => `<option ${S.reason === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select><span class="spacer"></span><button>Export CSV</button></div>
       ${table("lines", [
-        {key: "at", title: "Time", html: r => when(r.at)},
-        {key: "outcome", title: "Outcome", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
-        {key: "reason", title: "Reason"},
-        {key: "path", title: "Path", html: r => pathCell(r)},
-        {key: "kind", title: "Kind", html: r => (r.kind ? esc(kindWord(r.kind)) : "") + (r.signed ? ' <span class="muted">· signed link</span>' : "")},
-        {key: "cache", title: "Cache"}], shown, {key: "at", dir: "desc"})}`;
+        {key: "at", title: "Time", help: "When the request reached Serena.", html: r => when(r.at)},
+        {key: "outcome", title: "Outcome", help: "Served: Serena answered with the file. Unserved: the visitor got the unavailable image.", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
+        {key: "reason", title: "Reason", help: "Why an unserved request wasn't served (recalled, not listed, bad CSID, …)."},
+        {key: "path", title: "Path", help: "The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). Hover for the whole path, ⧉ copies it, click it to see the file.", html: r => pathCell(r)},
+        {key: "kind", title: "Kind", help: "The file's kind from the servable list (image, catalog card, PDF, 3D model); blank when Serena doesn't know the file.", html: r => (r.kind ? esc(kindWord(r.kind)) : "") + (r.signed ? ' <span class="muted">· signed link</span>' : "")},
+        {key: "cache", title: "Cache", help: "Hit: served from Serena's cached copy. Miss: fetched from CollectionSpace first, then cached."}], shown, {key: "at", dir: "desc"})}`;
     },
 
     lookup: lookupPage,
@@ -730,14 +790,24 @@
 
     audit: () => `${title(`${esc(name())} Audit log`)}<div class="toolbar"><span class="lead" style="margin:0">Every admin action, the ETL's calls that change something and each refresh's outcome, of the last 30 days, newest first. Click a column's name to sort by it (Details doesn't sort).</span><span class="spacer"></span><button>Export CSV</button></div>
       ${table("audit", [
-        {key: "at", title: "When", html: e => when(e.at)},
-        {key: "admin", title: "Admin"},
-        {key: "action", title: "Action"},
-        {key: "target", title: "Target", html: e => `<span class="mono">${esc(e.target)}</span>`},
-        {key: "details", title: "Details", sortable: false}], here(AUDIT), {key: "at", dir: "desc"})}`,
+        {key: "at", title: "When", help: "When it happened.", html: e => when(e.at)},
+        {key: "admin", title: "By", help: "Who did it: an admin (their CollectionSpace username), the ETL (with the museum), or Serena (a refresh's outcome, or a recall a refresh ended)."},
+        {key: "action", title: "Action", help: "What was done."},
+        {key: "target", title: "Target", help: "What it was done to. A Media CSID opens Media look up, a refresh ID the refresh, a setting the Settings page, an alert the Alerts page (last 30 days).", html: e => targetHtml(e)},
+        {key: "details", title: "Details", sortable: false, help: "The rest: reasons, counts, before and after. ⧉ copies a whole SHA-256.", html: e => esc(e.details || "").replace(/SHA-256: ([0-9a-f]{64})/, (_, h) => `SHA-256: ${shortCopy(h)}`)}], here(AUDIT), {key: "at", dir: "desc"})}`,
 
     api: () => `${title(`${esc(name())} ETL API documentation`)}<p class="lead">The ETL API's description, generated from the code, read-only (Swagger UI in the app; not shown in the mockup).</p>`,
   };
+
+  // An audit entry's target as a link where it names something the app can open (Richard, Oct 13).
+  function targetHtml(e) {
+    const t = e.target || "";
+    if (CSID_RE.test(t) && t.length > 20) return `<span class="nowrap"><button type="button" class="link mono" data-lookup="${esc(t)}" title="Media look up: ${esc(t)}">${esc(short(t))}</button>${copyBtn(t)}</span>`;
+    if (/^[a-z]+-\d{4}-\d{2}-\d{2}-\d+$/.test(t)) return refreshLink(t);
+    if (e.action === "settings change") return `<button type="button" class="link mono" data-go="settings">${esc(t)}</button>`;
+    if (e.action === "alert acknowledge" && ms(e.at) > ms(NOW) - 30 * DAY) return `<button type="button" class="link" data-go="alerts">${esc(t)}</button>`;
+    return `<span class="mono">${esc(t)}</span>`;
+  }
 
   // ---- Media look up
   // Which Media record this is, as staff know it (D153): "Media <identification number>" with its CSID beside;
@@ -749,7 +819,7 @@
     if (!media) return "";
     const i = RECORDS.findIndex(x => x.media === media);
     const number = !S.cspaceDown && i >= 0 && !(b.cs && b.cs.state === "gone") ? `2026.1.${i + 1}` : null;
-    return `<h2 class="lookup-heading">Media ${esc(number || media)}${number ? `<span class="secondary" style="font-size:13px;font-weight:400;margin-left:10px">Media CSID <span class="mono">${esc(media)}</span></span>` : ""}</h2>`;
+    return `<h2 class="lookup-heading">Media ${esc(number || media)}${number ? copyBtn(number) : ""}${number ? `<span class="secondary" style="font-size:13px;font-weight:400;margin-left:10px">Media CSID <span class="mono">${esc(media)}</span></span>` : ""}</h2>`;
   }
 
   function lookupPage() {
@@ -765,6 +835,7 @@
       return out + verdictHtml({tone: "not", ...r.refused}) + `<p class="meta-line">Looked up ${esc(r.input)}</p>`;
     }
     out += headingHtml(r.blobs[Math.min(S.blobIndex, r.blobs.length - 1)]);
+    if (r.note) out += `<div class="cs-down" style="margin-bottom:12px">${esc(r.note)}</div>`;
     if (r.blobs.length > 1) {
       out += `<p class="secondary" style="margin:0 0 8px">This Media record has ${r.blobs.length} Blobs in the servable list:</p><div class="blob-tabs" role="group" aria-label="Blobs">${r.blobs.map((b, i) => `<button type="button" data-blob="${i}" aria-pressed="${i === S.blobIndex}">${esc(b.label || short(b.blob))}</button>`).join("")}</div>`;
     }
@@ -866,11 +937,16 @@
     const csState = {exists: "Exists", deleted: "Soft-deleted", gone: "Not found"}[cs.state];
     const csMedia = cs.media || b.media;
     const rows = [
-      ["Media CSID", b.media ? `<span class="mono">${esc(short(b.media))}</span>` : "—", `${csState}${csMedia && csMedia !== b.media ? ` · <span class="mono">${esc(short(csMedia))}</span>` : ""}`, cs.state !== "exists" || (csMedia !== b.media && b.media)],
-      ["Blob CSID", b.media ? `<span class="mono">${esc(short(b.blob))}</span>` : `<span class="muted">not listed</span>`, `<span class="mono">${esc(short(cs.blob))}</span>`, !!b.media && cs.blob !== b.blob],
+      ["Media CSID", b.media ? shortCopy(b.media) : "—", `${csState}${csMedia ? ` · ${shortCopy(csMedia)}` : ""}`, cs.state !== "exists" || (csMedia !== b.media && b.media)],
+      ["Blob CSID", b.media ? shortCopy(b.blob) : `<span class="muted">not listed</span>`, shortCopy(cs.blob), !!b.media && cs.blob !== b.blob],
       ["Access", b.access ? esc(b.access) : "not listed", cs.fields.map(([k, v]) => `${esc(k)}: <strong>${esc(v)}</strong>`).join("<br>"), !!cs.fieldsChanged],
       ["As of", `Refresh ${lastRefresh()} (list made ${when(LIST_MADE)})`, `Last changed ${when(cs.updated)}`, ms(cs.updated) > ms(LIST_MADE)],
     ];
+    // In sync or not, at a glance (Richard, Oct 13): words, an icon and a colour.
+    const diffs = rows.filter(r => r[3]).map(r => r[0]);
+    out = out.replace("<h3>Serena and CollectionSpace</h3>", `<h3>Serena and CollectionSpace${diffs.length
+      ? `<span class="sync-diff" title="These rows differ: CollectionSpace changed after the last refresh, or holds another Blob.">⚠ (${diffs.length} difference${diffs.length === 1 ? "" : "s"}: ${diffs.join(", ")})</span>`
+      : `<span class="sync-ok" title="The same Media and Blob CSIDs, and nothing changed in CollectionSpace since the last refresh. Whether the record is public is the ETL's call, from its own rules.">✓ (No differences)</span>`}</h3>`);
     out += `<div class="tw"><table class="compare"><thead><tr><th></th><th>Serena (the last refresh)</th><th>CollectionSpace now</th></tr></thead><tbody>
       ${rows.map(([k, a, c, diff]) => `<tr class="${diff ? "diff" : ""}"><th scope="row">${k}${diff ? ' <span class="pill t-warning">differs</span>' : ""}</th><td>${a}</td><td>${c}</td></tr>`).join("")}</tbody></table></div>
       <p class="secondary" style="margin:8px 0 0"><strong>What the next refresh will do:</strong> ${esc(cs.next)}</p>
@@ -894,6 +970,13 @@
   }
 
   // ---- Recalls
+  // A recalled Media record's identification number, as staff know it (Richard, Oct 14; D153's number). In the app it
+  // would be kept with the recall, read from CollectionSpace when it's made; without one, the shortened Media CSID.
+  const idNumber = media => { const i = RECORDS.findIndex(x => x.media === media); return i >= 0 ? `2026.1.${i + 1}` : null; };
+  const idCell = media => { const n = idNumber(media); return n ? `<span class="nowrap">${esc(n)}${copyBtn(n)}</span>` : `<span class="nowrap"><span class="mono" title="${esc(media)}">${esc(short(media))}</span>${copyBtn(media)}</span>`; };
+  const recallDetail = (media, blobs) => `<dl class="row-detail"><dt>Media CSID</dt><dd><span class="nowrap">${csidLink(media, "Media CSID")}${copyBtn(media)}</span></dd>
+    ${blobs.map(b => `<dt>Blob CSID</dt><dd><span class="nowrap">${csidLink(b, "Blob CSID")}${copyBtn(b)}</span></dd>`).join("")}
+    <dt></dt><dd><button type="button" class="link" data-lookup="${esc(media)}">Media look up</button></dd></dl>`;
   const recallRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && !r.recall.ended)
     .map(r => ({r, media: r.media, blobs: r.blobs.map(b => b.blob), by: r.recall.by, at: r.recall.at, reason: r.recall.reason, kept: r.recall.kept}));
   const endedRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && r.recall.ended && ms(r.recall.ended.at) > ms(NOW) - 30 * DAY)
@@ -904,17 +987,20 @@
     return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there. Until a refresh decides a recall, "Cancel recall…" undoes a mistake. Click a column's name to sort by it.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
       <h3>Active</h3>${table("active", [
         {key: "thumb", title: "", sortable: false, html: t => `<button class="thumb" data-full="${imageSeed(S.museum, t.blobs[0])}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, t.blobs[0]), "image")}</button>`},
-        {key: "media", title: "Media CSID", html: t => `${csidLink(t.media, "Media CSID")}<div class="muted">Blob CSID ${csidLink(t.blobs[0], "Blob CSID", short(t.blobs[0]))}</div>`},
-        {key: "at", title: "Recalled", html: t => when(t.at)},
-        {key: "by", title: "By"},
-        {key: "reason", title: "Reason"},
-        {key: "state", title: "State", val: t => t.kept ? "0" : "1", html: (t, i) => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${esc(t.kept.refresh)}</div><button type="button" data-release="${i}" style="margin-top:4px">Release…</button>` : `<span class="pill t-info">Waiting for a later refresh</span><button type="button" data-cancel="${i}" style="margin-top:4px;display:block">Cancel recall…</button>`}], active, {key: "at", dir: "desc"})}
+        {key: "media", title: "Identification number", help: "The recalled Media record's identification number in CollectionSpace (its shortened Media CSID if it has none). ▸ shows its Media CSID and Blob CSID.", val: t => idNumber(t.media) || t.media, html: t => idCell(t.media)},
+        {key: "at", title: "Recalled", help: "When the admin recalled it.", html: t => when(t.at)},
+        {key: "by", title: "By", help: "The admin who recalled it."},
+        {key: "reason", title: "Reason", help: "The reason the admin gave."},
+        {key: "state", title: "State", help: "Waiting for a later refresh: no refresh has decided it yet. Still public in CollectionSpace: a refresh on a later day still listed the file as public, so the recall stays.", val: t => t.kept ? "0" : "1", html: t => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${refreshLink(t.kept.refresh)}</div>` : `<span class="pill t-info">Waiting for a later refresh</span>`},
+        {key: "act", title: "", sortable: false, cls: "actions", html: (t, i) => t.kept ? `<button type="button" data-release="${i}">Release…</button>` : `<button type="button" data-cancel="${i}">Cancel recall…</button>`}], active, {key: "at", dir: "desc"},
+        {key: t => t.media, detail: t => recallDetail(t.media, t.blobs)})}
       <h3>Ended in the last 30 days</h3>${table("ended", [
-        {key: "media", title: "Media CSID", html: e => `${csidLink(e.media, "Media CSID")}<div class="muted">Blob CSID ${csidLink(e.blob, "Blob CSID", short(e.blob))}</div>`},
-        {key: "at", title: "Ended", html: e => when(e.at)},
-        {key: "how", title: "How"},
-        {key: "by", title: "By"},
-        {key: "why", title: "Why"}], endedRows(), {key: "at", dir: "desc"})}`;
+        {key: "media", title: "Identification number", help: "The Media record whose recall ended: its identification number in CollectionSpace. ▸ shows its Media CSID and Blob CSID.", val: e => idNumber(e.media) || e.media, html: e => idCell(e.media)},
+        {key: "at", title: "Ended", help: "When the recall ended.", html: e => when(e.at)},
+        {key: "how", title: "How", help: "Ended by a refresh (CollectionSpace caught up), Released (an admin, after a refresh kept it) or Cancelled (an admin, before a refresh decided it)."},
+        {key: "by", title: "By", help: "The admin, or Serena for a refresh.", html: e => /^refresh /.test(e.by) ? "Serena" : esc(e.by)},
+        {key: "why", title: "Why", help: "The reason given, or why the refresh ended it."}], endedRows(), {key: "at", dir: "desc"},
+        {key: e => e.media, detail: e => recallDetail(e.media, [e.blob])})}`;
   }
 
   function dialog(head, body, foot) {
@@ -951,22 +1037,28 @@
     const todo = S.pendingRecall.length, what = `${todo} Media record${todo === 1 ? "" : "s"}`;
     dialog("Recall Media records", `<p style="margin-top:0">${what} to recall. Click a thumbnail for the full size.</p>
       <div class="tw"><table><thead><tr><th></th><th>Media CSID</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
-      ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td class="mono">${esc(short(x.media))}<div class="muted">Blob CSID ${esc(short(x.blob))}</div></td><td>${x.kind === "not known" ? "not known" : esc(kindWord(x.kind))}</td><td>${esc(x.served)}</td><td>${x.found}</td><td class="mono">${esc(short(x.gave))}</td></tr>`).join("")}</tbody></table></div>
+      ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td>${shortCopy(x.media)}<div class="muted">Blob CSID ${shortCopy(x.blob)}</div></td><td>${x.kind === "not known" ? "not known" : esc(kindWord(x.kind))}</td><td>${esc(x.served)}</td><td>${x.found}</td><td>${x.gave.length > 20 ? shortCopy(x.gave) : `<span class="mono">${esc(x.gave)}</span>`}</td></tr>`).join("")}</tbody></table></div>
       ${skipped.length ? `<p style="margin:12px 0 4px"><strong>Not recalled</strong></p><ul style="margin:0 0 12px">${skipped.map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>` : ""}
       <label class="field">Reason (required) <textarea id="tdReason" rows="2"></textarea></label>`,
-      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Back</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${what}</button>`);
+      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Change CSIDs</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${what}</button>`);
   }
 
   // Opens Media look up on an input (a path, a URL or a CSID).
+  // Leaving a page by a link: remember it, and where it was scrolled, for "← Back to …".
+  function leaving() { if (S.page !== "lookup") { S.from = S.page; S.scroll = window.scrollY; } }
   function openLookup(input) {
     S.lookup = lookupFor(input); S.blobIndex = S.lookup.index || 0; S.page = "lookup"; render();
   }
 
   // ---- events
   function bind() {
-    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); S.menu = false; render(); });
+    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); S.menu = false; S.focus = null; S.from = null; render(); });
+    document.querySelectorAll("[data-back]").forEach(b => b.onclick = () => { S.page = S.from; S.from = null; S.focus = null; render(); window.scrollTo(0, S.scroll || 0); });
+    document.querySelectorAll("[data-expand]").forEach(b => b.onclick = () => { const k = clean(b.dataset.expand); S.expanded[k] = !S.expanded[k]; render(); const again = document.querySelector(`[data-expand="${CSS.escape(k)}"]`); if (again) again.focus(); });
+    document.querySelectorAll("[data-refresh]").forEach(b => b.onclick = () => { leaving(); S.page = "refreshes"; S.focus = clean(b.dataset.refresh); render(); });
+    document.querySelectorAll("[data-lookup]").forEach(b => b.onclick = () => { leaving(); S.focus = null; openLookup(clean(b.dataset.lookup)); });
     const lf = $("#loginForm");
-    if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.museum = clean($("#loginMuseum").value); S.user = typed($("#loginUser")) || "admin"; S.lookup = null; render(); };
+    if (lf) lf.onsubmit = e => { e.preventDefault(); if ($("#loginPass").value === "wrong") { $("#loginErr").innerHTML = '<div class="err">CollectionSpace didn\'t accept that username and password.</div>'; return; } S.signedIn = true; S.timedOut = false; S.museum = clean($("#loginMuseum").value); S.user = typed($("#loginUser")) || "admin"; S.lookup = null; render(); };
     const mb = $("#museumBtn"); if (mb) mb.onclick = () => { S.menu = !S.menu; render(); };
     document.querySelectorAll("[data-museum]").forEach(b => b.onclick = () => { S.museum = clean(b.dataset.museum); S.menu = false; S.lookup = null; S.reason = ""; render(); });
     const so = $("#signOut"); if (so) so.onclick = () => { S.signedIn = false; S.menu = false; render(); };
@@ -993,12 +1085,12 @@
     document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +clean(b.dataset.blob); render(); });
     const lk = $("#lookupForm");
     if (lk) lk.onsubmit = e => { e.preventDefault(); const q = typed($("#lookupInput")).trim(); if (q) openLookup(q); };
-    document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = clean(b.dataset.copy); Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { b.textContent = "Copied"; }, () => { b.textContent = "Select it"; }); });
+    document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = clean(b.dataset.copy); Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { const was = b.textContent; b.textContent = "Copied"; setTimeout(() => { b.textContent = was; }, 1500); }, () => { b.textContent = "Select it"; }); });
     const tb = $("#recallBtn"); if (tb) tb.onclick = () => { recallForm(); bindDialog(); };
     document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {
       const t = recallRows()[+clean(b.dataset.release)];
       dialog("Release a recall", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the recall only if CollectionSpace is right and the file should be served again.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
-        `<button type="button" data-close>Keep the recall</button><button type="button" class="primary" id="relConfirm" disabled>Release</button>`);
+        `<button type="button" data-close>Keep the recall</button><button type="button" class="danger" id="relConfirm" disabled>Release</button>`);
       bindDialog(() => {
         const why = typed($("#relReason")).trim();
         t.r.recall.ended = {at: NOW, by: S.user, how: "Released", why};
@@ -1010,7 +1102,7 @@
     document.querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => {
       const t = recallRows()[+clean(b.dataset.cancel)];
       dialog("Cancel a recall", `<p style="margin-top:0">No refresh has decided the recall of Media record <span class="mono">${esc(t.media)}</span> yet. Cancel it only if it was a mistake: Serena serves its files again at once.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
-        `<button type="button" data-close>Keep the recall</button><button type="button" class="primary" id="relConfirm" disabled>Cancel recall</button>`);
+        `<button type="button" data-close>Keep the recall</button><button type="button" class="danger" id="relConfirm" disabled>Cancel recall</button>`);
       bindDialog(() => {
         const why = typed($("#relReason")).trim();
         t.r.recall.ended = {at: NOW, by: S.user, how: "Cancelled", why};
@@ -1028,14 +1120,16 @@
   // with no CSID Serena could look up (a bad CSID) stays plain text.
   function pathCell(r) {
     const m = /\/blobs\/([^/]+)\//.exec(r.path);
-    const text = m ? r.path.replace(m[1], short(m[1])) : r.path;
-    if (!m || !CSID_RE.test(m[1])) return `<span class="mono" title="${esc(r.path)}">${esc(text)}</span>`;
-    return `<button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">${esc(text)}</button>`;
+    // Only what differs from row to row (Richard, Oct 14): "<CSID…> · <size>"; the whole path on hover and in ⧉.
+    const size = (/\/derivatives\/([^/]+)\/content$/.exec(r.path) || [])[1] || (/\/content$/.test(r.path) ? "original" : "");
+    const text = m ? `${short(m[1])}${size ? ` · ${size}` : ""}` : r.path;
+    if (!m || !CSID_RE.test(m[1])) return `<span class="nowrap req-path"><span class="mono" title="${esc(r.path)}">${esc(text)}</span>${m ? copyBtn(r.path) : ""}</span>`;
+    return `<span class="nowrap req-path"><button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">${esc(text)}</button>${copyBtn(r.path)}</span>`;
   }
 
   // A CSID on the Recalls page: plain text until hovered, then a link that opens the file in the same dialog.
   function csidLink(csid, what, label) {
-    return `<button type="button" class="path-link mono" data-csid="${esc(csid)}" data-what="${esc(what)}" title="View this file">${esc(label || csid)}</button>`;
+    return `<span class="nowrap"><button type="button" class="path-link mono" data-csid="${esc(csid)}" data-what="${esc(what)}" title="View this file: ${esc(csid)}">${esc(label || csid)}</button>${label && label !== csid ? copyBtn(csid) : ""}</span>`;
   }
 
   const bigPicture = (seed, kind) => `<div style="aspect-ratio:4/3;max-width:100%;border-radius:8px;overflow:hidden;border:1px solid var(--border)">${thumbSvg(seed, kind).replace('viewBox="0 0 56 56"', 'viewBox="0 0 56 56" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block"')}</div>`;
@@ -1048,19 +1142,29 @@
       `${bigPicture(imageSeed(S.museum, blob, "FullHD"), kindOf(S.museum, blob))}
       <p class="secondary" style="margin-bottom:0">The largest size the museum serves, shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that).${recalled ? " The public isn't served it while it's recalled." : ""} Never cached.</p>`, foot);
     bindDialog();
-    $("#viewLookup").onclick = () => { close(); openLookup(csid); };
+    $("#viewLookup").onclick = () => { close(); leaving(); openLookup(csid); };
   }
 
   function showPath(path) {
     const l = LOG.find(x => x.path === path && x.museum === S.museum);
     const csid = (/\/blobs\/([^/]+)\//.exec(path) || [])[1], size = (/\/derivatives\/([^/]+)\//.exec(path) || [, "original"])[1];
     const last = [...LOG].reverse().find(x => x.path === path && x.museum === S.museum);
-    const result = last ? (last.outcome === "served" ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">unserved</span> ${esc(last.reason)}`) : "";
-    dialog(esc(size === "original" ? "Original file" : size), `<p class="mono" style="margin-top:0;overflow-wrap:anywhere">${esc(path)}</p>
-      ${bigPicture(imageSeed(S.museum, csid, size), kindOf(S.museum, csid))}
-      <p class="secondary" style="margin-bottom:0">${result ? `The last request for it (${when(last.at)}): ${result}. ` : ""}Shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that), whether or not the public is served it. Never cached.</p>`, foot);
+    const result = last ? (last.outcome === "served" ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">unserved</span> (${esc(last.reason)})`) : "";
+    const known = findRecord(S.museum, csid);
+    const kind = known ? kindOf(S.museum, csid) : null;
+    // Say why there's no picture, not a list of every possible reason (Richard, Oct 13).
+    const picture = !known
+      ? `<div class="cs-down">Nothing to show: Serena has no cached copy, and CollectionSpace has no file with this CSID. "Media look up" says why it isn't served.</div>`
+      : S.cspaceDown && !(STORE[csid] || {})[size]
+        ? `<div class="cs-down">Nothing to show: Serena has no cached copy of this size, and CollectionSpace can't be reached right now.</div>`
+        : kind === "pdf" ? `<div class="cs-down">A PDF: this page doesn't show it. <button class="link">Open it in a new tab</button>.</div>`
+        : kind === "3D" ? `<div class="cs-down">A 3D model: no preview.</div>`
+        : bigPicture(imageSeed(S.museum, csid, size), kind);
+    dialog(esc(size === "original" ? `Original ${kindWord(kind)}` : size), `<p class="mono" style="margin-top:0;overflow-wrap:anywhere">${esc(path)}${copyBtn(path)}</p>
+      ${picture}
+      <p class="secondary" style="margin-bottom:0">${result ? `The last request for it (${when(last.at)}): ${result}. ` : ""}Shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that), whether or not Serena serves it to the public. Never cached.</p>`, foot);
     bindDialog();
-    $("#viewLookup").onclick = () => { close(); openLookup(path); };
+    $("#viewLookup").onclick = () => { close(); leaving(); openLookup(path); };
     return l;
   }
 
@@ -1111,7 +1215,9 @@
     render();
   };
   $("#mockCspaceDown").onchange = e => { S.cspaceDown = e.target.checked; if (S.page === "lookup") render(); };
-  $("#mockSignOut").onclick = () => { S.signedIn = false; render(); };
+  $("#mockSignOut").onclick = () => { S.signedIn = false; S.timedOut = false; render(); };
+  // Any "not signed in" answer takes the admin to sign-in, says why, and returns to the page after (Richard, Oct 13).
+  $("#mockTimeout").onclick = () => { S.signedIn = false; S.timedOut = true; render(); };
   // Open on the page under review, signed in, with the screenshot's file looked up.
   S.signedIn = true; S.lookup = lookupFor(MEDIA);
   render();

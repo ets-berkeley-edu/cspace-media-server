@@ -3,6 +3,17 @@
     <v-card max-width="480" class="mx-auto mt-8">
       <v-card-title>Sign in</v-card-title>
       <v-card-text>
+        <v-alert
+          v-if="timedOut"
+          id="sign-in-timed-out"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mb-4"
+        >
+          Your {{ timedOutName }} session ended. Serena signs an admin out after 30 minutes without activity, after 8
+          hours, or when an admin signs everyone out. Sign in again{{ next ? ', and you\'ll return to the page you were on' : '' }}.
+        </v-alert>
         <p class="mb-4">
           Use your own CollectionSpace account for the museum. It needs the museum's Serena admin role.
           Serena checks it with the museum's CollectionSpace and doesn't keep your password.
@@ -42,6 +53,7 @@
             id="sign-in-button"
             type="submit"
             color="primary"
+            variant="flat"
             :disabled="!museum || !username || !password"
             :loading="busy"
           >
@@ -54,10 +66,11 @@
 </template>
 
 <script setup lang="ts">
-import {onMounted, ref} from 'vue'
+import {computed, onMounted, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import type {Museum} from '@/api'
 import {ApiError, api} from '@/api'
+import {safeNext} from '@/router'
 import {refresh} from '@/session'
 
 const route = useRoute()
@@ -68,6 +81,10 @@ const username = ref('')
 const password = ref('')
 const error = ref('')
 const busy = ref(false)
+// Sent here because the session ended under the admin (D161): say so, and go back to that page afterwards.
+const timedOut = computed(() => route.query.timedOut === '1')
+const timedOutName = computed(() => museums.value.find(m => m.key === route.query.museum)?.name || '')
+const next = computed(() => typeof route.query.museum === 'string' ? safeNext(route.query.next, route.query.museum) : null)
 
 onMounted(async () => {
   museums.value = await api.museums()
@@ -83,7 +100,8 @@ async function submit() {
     await api.signIn(museum.value, username.value, password.value)
     password.value = ''
     await refresh()
-    await router.push({name: 'overview', params: {museum: museum.value}})
+    const back = museum.value === route.query.museum ? next.value : null
+    await router.push(back || {name: 'overview', params: {museum: museum.value}})
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'Signing in failed.'
     password.value = ''

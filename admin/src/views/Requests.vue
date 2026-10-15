@@ -16,7 +16,8 @@
     </div>
     <p class="mb-4">
       What Serena served and couldn't serve for this museum, read from its log. Times are UTC. The counts cover every
-      request in the range; the table below lists the newest requests. Click a column's name to sort by it.
+      request in the range; the table below lists the newest requests. Click a column's name to sort by it; hover over it
+      for what it holds.
     </p>
     <LoadError :message="error" />
     <div v-if="loading" id="requests-loading" class="d-flex align-center ga-3 my-6">
@@ -51,9 +52,17 @@
               <thead><tr><th>Path</th><th>Requests</th></tr></thead>
               <tbody>
                 <tr v-for="p in report.top_paths" :key="p.path">
-                  <td class="request-path">
-                    <FileLink v-if="blobOfPath(p.path)" @open="openPath(p.path)">{{ p.path }}</FileLink>
-                    <template v-else>{{ p.path }}</template>
+                  <td>
+                    <span class="request-path" :title="p.path">
+                      <FileLink
+                        v-if="blobOfPath(p.path)"
+                        :title="`View this file: ${p.path}`"
+                        :aria-label="`View this file: ${p.path}`"
+                        @open="openPath(p.path)"
+                      >{{ shortPath(p.path) }}</FileLink>
+                      <template v-else>{{ shortPath(p.path) }}</template>
+                      <CopyButton v-if="shortPath(p.path) !== p.path" :value="p.path" label="path" />
+                    </span>
                   </td>
                   <td>{{ p.requests }}</td>
                 </tr>
@@ -105,19 +114,34 @@
         id="requests-table"
         :headers="headers"
         :items="shown"
-        :sort-by="[{key: 'at', order: 'desc'}]"
+        :sort-by="table.sortBy"
         must-sort
-        :items-per-page="25"
+        :items-per-page="table.itemsPerPage"
+        :page="table.page"
         :items-per-page-options="PAGE_SIZES"
         density="compact"
         no-data-text="No requests match."
+        @update:sort-by="(v: {key: string, order: 'asc' | 'desc'}[]) => table.sortBy = v"
+        @update:page="(v: number) => table.page = v"
+        @update:items-per-page="(v: number) => table.itemsPerPage = v"
       >
-        <template #[`item.at`]="{item}"><span class="text-no-wrap">{{ when(item.at) }}</span></template>
+        <!-- Vue 3 keys a template v-for on the template itself; BOA's rules also carry Vue 2's rule against it. -->
+        <!-- eslint-disable-next-line vue/no-v-for-template-key -->
+        <template v-for="h in headers" :key="h.key" #[`header.${h.key}`]="slot">
+          <ColumnHeader v-bind="slot" :help="h.help" />
+        </template>
+        <template #[`item.at`]="{item}"><WhenText :at="item.at" /></template>
         <template #[`item.reason`]="{item}">{{ reasonOf(item.reason) }}</template>
         <template #[`item.path`]="{item}">
           <span class="request-path" :title="item.path">
-            <FileLink v-if="blobOfPath(item.path)" @open="openPath(item.path, item)">{{ middlePath(item.path) }}</FileLink>
-            <template v-else>{{ middlePath(item.path) }}</template>
+            <FileLink
+              v-if="blobOfPath(item.path)"
+              :title="`View this file: ${item.path}`"
+              :aria-label="`View this file: ${item.path}`"
+              @open="openPath(item.path, item)"
+            >{{ shortPath(item.path) }}</FileLink>
+            <template v-else>{{ shortPath(item.path) }}</template>
+            <CopyButton v-if="shortPath(item.path) !== item.path" :value="item.path" label="path" />
           </span>
         </template>
         <template #[`item.kind`]="{item}">{{ item.kind ? kindWord(item.kind) : '' }}</template>
@@ -136,28 +160,38 @@ import type {RequestLine, RequestRange, RequestsReport} from '@/api'
 import {api, problem} from '@/api'
 import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
+import ColumnHeader from '@/components/ColumnHeader.vue'
+import CopyButton from '@/components/CopyButton.vue'
 import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
-import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, kindWord, middlePath, reasonOf, when} from '@/words'
+import WhenText from '@/components/WhenText.vue'
+import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, kindWord, reasonOf, shortPath, when} from '@/words'
+import {useQueryValue, useTableState} from '@/tableState'
 
 const OUTCOMES = [{value: '', title: 'All'}, {value: 'served', title: 'Served'}, {value: 'unserved', title: 'Unserved'}]
 
-const headers = [
-  {title: 'Time', key: 'at'},
-  {title: 'Outcome', key: 'outcome'},
-  {title: 'Reason', key: 'reason'},
-  {title: 'Path', key: 'path'},
-  {title: 'Kind', key: 'kind'},
-  {title: 'Cache', key: 'cache'},
-  {title: 'Signed link', key: 'signed'}
+const HEADERS = [
+  {title: 'Time', key: 'at', help: 'When the request reached Serena (UTC).'},
+  {title: 'Outcome', key: 'outcome', help: 'Served: Serena sent the file. Unserved: it sent the unavailable image instead, for the reason beside it.'},
+  {title: 'Reason', key: 'reason', help: 'Why an unserved request wasn\'t served. Media look up says more for any one file.'},
+  {title: 'Path', key: 'path', help: 'The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). The whole path on hover; click it to see the file; ⧉ copies the whole path.'},
+  {title: 'Kind', key: 'kind', help: 'The file\'s kind, from the servable list: blank only when Serena doesn\'t know the file.'},
+  {title: 'Cache', key: 'cache', help: 'Hit: served from Serena\'s cached copy. Miss: fetched from CollectionSpace just then, and cached.'},
+  {title: 'Signed link', key: 'signed', help: 'Yes: a restricted file served on a portal\'s signed link.'}
 ]
 
 const route = useRoute()
-const museum = computed(() => String(route.params.museum))
-const range = ref<RequestRange>('24h') // D106
-const outcome = ref('')
-const reason = ref('')
+const table = useTableState('', 'at') // its place in the address (October 14, 2026)
+// Kept alive, one per museum (App.vue): always this museum's, whichever page the address shows now.
+const ownMuseum = String(route.params.museum)
+const museum = computed(() => ownMuseum)
+// The range (24 hours to start, D106) and the filters are in the address too (October 14, 2026).
+const range = useQueryValue<RequestRange>('range', '24h', ['1h', '24h', '7d'])
+const outcome = useQueryValue<string>('outcome', '')
+const reason = useQueryValue<string>('reason', '')
 const report = ref<RequestsReport | null>(null)
+// The Signed link column only where a request can have one: a museum with signed access, Cinefiles (October 14, 2026).
+const headers = computed(() => HEADERS.filter(h => h.key !== 'signed' || report.value?.signed_links))
 const loading = ref(false)
 const error = ref('')
 const file = ref<ShownFile | null>(null)
@@ -192,10 +226,12 @@ watch(outcome, value => {
   }
 })
 
-watch([museum, range], async ([m, r]) => {
+watch([museum, range], async ([m, r], before) => {
   loading.value = true
   error.value = ''
-  reason.value = ''
+  if (before?.[1] !== undefined) {
+    reason.value = '' // a new range has its own reasons; the address's, on first load, stays
+  }
   try {
     report.value = await api.requests(m, r)
   } catch (e) {

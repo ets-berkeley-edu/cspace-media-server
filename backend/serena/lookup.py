@@ -11,6 +11,7 @@ email address): only paths.log_path()'s version of it is shown, and nothing of i
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -27,6 +28,9 @@ from .store import Store
 from .unserved import Reason
 
 log = logging.getLogger("serena.lookup")
+
+# A Blob's own URL with nothing after it, which Serena doesn't serve (it needs /content or /derivatives/<size>/content).
+BARE_BLOB = re.compile(r"^blobs/([^/]{1,64})/?$")
 
 
 class LookupProblem(ValueError):
@@ -52,11 +56,20 @@ def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
             raise LookupProblem(f"Not one of {museum.name}'s file paths: they start with {prefix}")
         parsed = paths.parse(museum, path[len(prefix):])
         if isinstance(parsed, paths.Refused):
-            return {"input": shown, "refused": parsed.reason.value, "items": [],
-                    "refresh": _refresh(refreshes.latest_updated(museum.key))}
-        blobs = [parsed.blob_csid]
-        sizes = [parsed.derivative]
+            # A Blob's URL without /content (D163): Serena doesn't serve that URL, but its Blob CSID is good, so the
+            # page says why the URL fails and then looks the Blob up on its own, every size.
+            bare = BARE_BLOB.match(path[len(prefix):])
+            if bare is None or not is_csid(bare.group(1)):
+                return {"input": shown, "refused": parsed.reason.value, "items": [],
+                        "refresh": _refresh(refreshes.latest_updated(museum.key))}
+            refused: str | None = parsed.reason.value
+            blobs = [bare.group(1)]
+        else:
+            refused = None
+            blobs = [parsed.blob_csid]
+            sizes = [parsed.derivative]
     else:
+        refused = None
         if not is_csid(text):
             raise LookupProblem("That isn't a CSID, a URL or a path.")
         if store.servability(museum.key, text) is not None:
@@ -68,7 +81,7 @@ def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
     asked: dict[str, MediaRecord] = {}
     for item in items:
         item["cspace"] = _cspace(museum, item, store, cspace, latest, asked)
-    return {"input": shown, "refused": None, "refresh": _refresh(latest), "items": items}
+    return {"input": shown, "refused": refused, "refresh": _refresh(latest), "items": items}
 
 
 def _refresh(latest: Refresh | None) -> dict[str, str] | None:

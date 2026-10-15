@@ -49,6 +49,7 @@
         id="start-refresh-button"
         type="submit"
         color="primary"
+        variant="flat"
         :disabled="!ready"
         :loading="busy"
       >

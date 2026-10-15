@@ -10,7 +10,7 @@ import Recalls from '@/views/Recalls.vue'
 const MEDIA = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c50'
 const BLOB = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a50'
 const KEPT = {media_csid: MEDIA, blob_csids: [BLOB], by: 'admin', at: '2026-10-14T17:00:00+00:00', reason: 'a complaint',
-  kept_by: 'pahma-2026-10-15-1', kept_on: '2026-10-15'}
+  kept_by: 'pahma-2026-10-15-1', kept_on: '2026-10-15', identification_number: '2026.1.7'}
 const PAGE = {
   days: 30, max_in_box: 12, max_in_file: 1000, active: [KEPT],
   ended: [{media_csid: 'other-media', at: '2026-10-15T10:40:00Z', by: 'refresh pahma-2026-10-15-1',
@@ -45,7 +45,10 @@ describe('the Recalls page', () => {
     const wrapper = await at('/pahma/recalls', Recalls)
     expect(wrapper.find('#page-title').text()).toBe('PAHMA Recalls')
     expect(wrapper.find('#active-recalls').text()).toContain('Still public in CollectionSpace')
-    expect(wrapper.find('#ended-recalls').text()).toContain('Ended by a refresh')
+    expect(wrapper.find('#ended-recalls').text()).toContain('Ended by refresh pahma-2026-10-15-1')
+    expect(wrapper.find('#ended-recalls a.refresh-link').attributes('href')).toBe('/admin/pahma/refreshes/pahma-2026-10-15-1')
+    expect(wrapper.find('#ended-recalls').text()).toContain('Serena') // a refresh's own entries are by Serena
+    expect(wrapper.find('#active-recalls a.refresh-link').text()).toBe('pahma-2026-10-15-1') // kept by (D157)
     await wrapper.find('#active-recalls .release').trigger('click')
     await flushPromises()
     const confirm = () => document.querySelector('#release-confirm') as HTMLButtonElement
@@ -100,7 +103,9 @@ describe('the Recalls page', () => {
     await flushPromises();
     (document.querySelector('#recall-summarize') as HTMLButtonElement).click()
     await vi.waitFor(() => expect(document.querySelector('#recall-summary')).not.toBeNull())
-    expect(document.querySelector('#recall-summary')?.textContent).toContain(MEDIA)
+    expect(document.querySelector('#recall-summary')?.textContent).toContain('1a2b3c4d…3b4c50') // shortened (D154)
+    expect(document.querySelector(`#recall-summary [title="${MEDIA}"]`)).not.toBeNull() // whole on hover
+    expect(document.querySelector('#recall-summary .copy-button')?.getAttribute('aria-label')).toBe('Copy Media CSID')
     expect(document.querySelector('#recall-not-found')?.textContent).toContain('typo: Not a CSID.')
     const thumbnail = document.querySelector('#recall-summary img') as HTMLImageElement
     expect(thumbnail.getAttribute('src')).toBe(`/admin/v1/museums/pahma/media/${MEDIA}/preview?size=thumbnail`)
@@ -142,7 +147,10 @@ describe('Media look up', () => {
     await flushPromises()
     expect(calls.map(c => c.path)).toEqual([`/museums/pahma/lookup?q=${MEDIA}`])
     expect(wrapper.find('#lookup-verdict').text()).toContain('Not served: recalled')
-    expect(wrapper.find('#lookup-heading').text()).toBe(`Media 9-12345 Media CSID ${MEDIA}`) // D153
+    expect(wrapper.find('#lookup-heading').text()).toContain('Media 9-12345') // D153
+    expect(wrapper.find('#lookup-heading').text()).toContain(`Media CSID ${MEDIA}`)
+    expect(wrapper.find('#lookup-heading .copy-button').attributes('aria-label')).toBe('Copy identification number') // D165
+    expect(wrapper.find('#lookup-sync').text()).toBe('⚠ (1 difference: As of)') // D162
     expect(wrapper.find('#lookup-next').text()).toContain('Open Recalls')
     expect(wrapper.find('#lookup-sizes').text()).toContain('image/jpeg, 96 KB')
     expect(wrapper.find('#lookup-sizes').text()).toContain('2026-10-15 05:59:30 UTC') // last served
@@ -173,8 +181,13 @@ describe('the file dialogs', () => {
     fakeApi({'GET /museums/pahma/recalls': {body: PAGE}, [`GET /museums/pahma/lookup?q=${MEDIA}`]: {body: {
       input: MEDIA, refused: null, refresh: null, items: []}}})
     const wrapper = await at('/pahma/recalls', Recalls)
+    expect(wrapper.find('#active-recalls').text()).toContain('2026.1.7') // its identification number (October 14)
+    await wrapper.find('#active-recalls .row-expand').trigger('click') // ▸ shows its CSIDs
+    await flushPromises()
+    expect(wrapper.find('#active-recalls .row-expand').attributes('aria-expanded')).toBe('true')
     const links = wrapper.findAll('#active-recalls .recall-csid')
-    expect(links.map(l => l.text())).toEqual([MEDIA, BLOB])
+    expect(links.map(l => l.text())).toEqual([MEDIA, BLOB]) // whole, each with ⧉
+    expect(wrapper.findAll('#active-recalls .row-detail .copy-button')).toHaveLength(2)
     await links[1].trigger('click')
     await flushPromises()
     const dialog = document.querySelector('#file-dialog')

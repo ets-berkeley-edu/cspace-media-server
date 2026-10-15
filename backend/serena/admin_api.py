@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from . import etl_api
 from .admin_sessions import Session, Sessions
-from .audit import Action, Audit
+from .audit import Action, Audit, shown_by, shown_details
 from .config import Settings
 from .cspace.accounts import account_roles, has_role
 from .cspace.client import CSpaceError, CSpaceUnavailable
@@ -181,18 +181,20 @@ def create_router() -> APIRouter:
         """The last 30 days' entries, newest first; the app sorts and pages them (decided October 12, 2026, D91,
         D93). The CSV export has the rest."""
         entries = s.audit.since(session.tenant, s.audit.clock() - timedelta(days=DAYS_SHOWN))
-        return {"museum": session.tenant, "days": DAYS_SHOWN, "entries": [asdict(e) for e in entries]}
+        return {"museum": session.tenant, "days": DAYS_SHOWN,
+                "entries": [{**asdict(e), "by": shown_by(e.admin), "details": shown_details(e)} for e in entries]}
 
     @router.get("/museums/{tenant}/audit/export.csv")
     def audit_export(session: SignedIn, s: Services) -> Response:
         """Every entry the museum still keeps, oldest first, as CSV (D96). The export is audited too."""
         out = io.StringIO()
         writer = csv.writer(out, lineterminator="\r\n")
-        writer.writerow(["time (UTC)", "admin", "action", "target", "details"])
+        writer.writerow(["time (UTC)", "by", "action", "target", "details"])
         rows = 0
         for entry in s.audit.everything(session.tenant):
             writer.writerow([csv_cell(value) for value in (
-                entry.at, entry.admin, entry.action, entry.target, json.dumps(entry.details, sort_keys=True))])
+                entry.at, shown_by(entry.admin), entry.action, entry.target,
+                json.dumps(shown_details(entry), sort_keys=True))])
             rows += 1
         s.audit.record(session.tenant, session.user, Action.AUDIT_EXPORT, details={"entries": rows})
         day = s.audit.clock().astimezone(UTC).date().isoformat()

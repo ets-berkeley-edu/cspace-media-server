@@ -10,7 +10,7 @@ from serena.alerts import Alerts, Kind
 from serena.museum_settings import MuseumSettings
 from serena.refreshes import Refreshes, State
 from serena.store import Store
-from serena.watchdog import Watchdog
+from serena.watchdog import FAILED_WORDS, Watchdog
 
 
 class Clock:
@@ -132,7 +132,9 @@ def test_failed_refreshes(watchdog: Watchdog, clock: Clock, store: Store, state:
     at(clock, 3, 10)
     (alert,) = watchdog.check()
     assert (alert.kind, alert.subject) == (kind, refresh.refresh_id)
-    assert "the reason" in alert.message
+    # In words, not the state's name (October 14, 2026)
+    assert alert.message == f"Refresh {refresh.refresh_id} {FAILED_WORDS[state]}: the reason. Its page says more."
+    assert "_" not in alert.message.replace(refresh.refresh_id, "")  # no state name such as check_failed
 
 
 def test_not_updated_in_24_hours(watchdog: Watchdog, clock: Clock, store: Store) -> None:

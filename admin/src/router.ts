@@ -1,5 +1,7 @@
 import {createRouter, createWebHistory} from 'vue-router'
 import type {RouteLocationNormalized} from 'vue-router'
+import {onSessionEnded} from '@/api'
+import {trackBack} from '@/navigation'
 import {refresh, session, signedInTo} from '@/session'
 import Alerts from '@/views/Alerts.vue'
 import AuditLog from '@/views/AuditLog.vue'
@@ -42,15 +44,45 @@ export async function guard(to: RouteLocationNormalized) {
     return true
   }
   if (!signedInTo(String(to.params.museum))) {
-    return {name: 'sign-in', query: {museum: String(to.params.museum)}}
+    return {name: 'sign-in', query: {museum: String(to.params.museum), next: to.fullPath}}
   }
   return true
 }
 
 const router = createRouter({
   history: createWebHistory('/admin/'),
-  routes
+  routes,
+  // Back and Forward return to where the page was scrolled (its list pages are kept alive, App.vue); a change of the
+  // same page's address (a filter, a page of a table, a new look up) doesn't scroll.
+  scrollBehavior(to, from, saved) {
+    return saved || (to.path === from.path ? false : {top: 0})
+  }
 })
 router.beforeEach(guard)
+trackBack(router)
+
+/**
+ * A page of this museum is where the admin goes back to after signing in (D161): only a path of the app, in the museum
+ * they sign in to, so a link can't send them anywhere else.
+ */
+export function safeNext(next: unknown, museum: string): string | null {
+  if (typeof next !== 'string' || !new RegExp(`^/${museum}(?:[/?#]|$)`).test(next)) {
+    return null
+  }
+  const resolved = router.resolve(next)
+  return resolved.matched.length && !resolved.meta.public && resolved.params.museum === museum ? resolved.fullPath : null
+}
+
+/** Serena said the museum's session ended (it timed out, or everyone was signed out): sign in again, saying why. */
+export function sessionEnded(museum: string): void {
+  session.signedIn = session.signedIn.filter(s => s.museum !== museum)
+  const here = router.currentRoute.value
+  if (here.meta.public || String(here.params.museum) !== museum) {
+    return
+  }
+  void router.push({name: 'sign-in', query: {museum, timedOut: '1', next: here.fullPath}})
+}
+
+onSessionEnded(sessionEnded)
 
 export default router
