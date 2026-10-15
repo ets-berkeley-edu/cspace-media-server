@@ -32,6 +32,7 @@ class Kind(StrEnum):
     RECALL_RELEASED = "recall_released"  # an admin released a recall a refresh kept (D119)
     RECALL_CANCELLED = "recall_cancelled"  # an admin cancelled a recall still waiting for a later refresh (D148)
     RECALLS_ENDED = "recalls_ended"  # a refresh ended recalls: CollectionSpace caught up (D119)
+    PLACEHOLDER_NOT_SET = "placeholder_not_set"  # the servable list lists the placeholder, no Media record named (D173)
 
 
 TITLES = {
@@ -47,6 +48,7 @@ TITLES = {
     Kind.RECALL_RELEASED: "An admin released a recall",
     Kind.RECALL_CANCELLED: "An admin cancelled a recall",
     Kind.RECALLS_ENDED: "A refresh ended recalls",
+    Kind.PLACEHOLDER_NOT_SET: "The placeholder image isn't set",
 }
 
 

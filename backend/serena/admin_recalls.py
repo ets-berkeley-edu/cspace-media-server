@@ -207,13 +207,18 @@ def create_router() -> APIRouter:
             return StreamingResponse(obj["Body"].iter_chunks(), media_type=entry.content_type,
                                      headers=PREVIEW_HEADERS)
         media = record.media_csid if record else None
-        if record is None and t.cspace is not None:
+        if blob_csid == museum.placeholder_blob_csid:
+            media = t.museum_settings.get(museum).placeholder_media_csid  # the record named for it (D166), if any
+        if record is None and media is None and t.cspace is not None:
             try:
                 media = t.cspace.get(museum.key).media_of_blob(blob_csid)
             except Exception as error:
                 log.warning("no preview from CollectionSpace", extra={"museum": museum.key,
                                                                        "error": type(error).__name__})
                 raise HTTPException(404, NO_CACHE_CSPACE_DOWN) from error
+        if media is None and blob_csid == museum.placeholder_blob_csid:
+            raise HTTPException(404, "Nothing to show: no Media record is named for the placeholder image on the "
+                                     "Settings page, so the public sees Serena's generic picture.")
         if media is None:
             raise HTTPException(404, "Nothing to show: Serena has no cached copy, and CollectionSpace has no file "
                                      "with this CSID.")
@@ -227,7 +232,7 @@ def create_router() -> APIRouter:
         museum = museum_of(request, session.tenant)
         try:
             return explain(museum, q, t.store, t.refreshes, t.cspace.get(museum.key) if t.cspace else None,
-                           services(request).museums)
+                           services(request).museums, t.museum_settings.get(museum).placeholder_media_csid)
         except LookupProblem as problem:
             raise HTTPException(422, str(problem)) from problem
 

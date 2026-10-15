@@ -128,6 +128,24 @@ class Fetcher:
                     self._failures[index_key] = (result, self.clock() + self.failure_seconds)
             return result
 
+    def fetch_all(self, museum: Museum, record: ServabilityRecord,
+                  sizes: list[str | None]) -> dict[str | None, cache_index.Entry] | tuple[str | None, Reason]:
+        """Every size of a file fetched again now, indexed only if all of them pass (the placeholder image, when an
+        admin names its Media record: D172). Returns the entries, or the first size that failed and why. The old copies
+        stay in S3; nothing is deleted."""
+        entries: dict[str | None, cache_index.Entry] = {}
+        for size in sizes:
+            with self._locks.hold(cache_index.key(museum.key, record.blob_csid, size)):
+                result = self._fetch(museum, record, size, index=False)
+            if isinstance(result, Reason):
+                return size, result
+            entries[size] = result
+        for size, entry in entries.items():
+            cache_index.record(self.store, museum.key, record.blob_csid, size, entry)
+            with self._failures_guard:
+                self._failures.pop(cache_index.key(museum.key, record.blob_csid, size), None)
+        return entries
+
     def _remembered(self, index_key: str) -> Reason | None:
         with self._failures_guard:
             found = self._failures.get(index_key)
@@ -138,7 +156,8 @@ class Fetcher:
                 return None
             return found[0]
 
-    def _fetch(self, museum: Museum, record: ServabilityRecord, derivative: str | None) -> cache_index.Entry | Reason:
+    def _fetch(self, museum: Museum, record: ServabilityRecord, derivative: str | None,
+               index: bool = True) -> cache_index.Entry | Reason:
         tenant, kind = museum.key, record.kind
         context = {"museum": tenant, "blob": record.blob_csid, "derivative": derivative or cache_index.ORIGINAL}
         if record.media_csid is None:
@@ -179,7 +198,8 @@ class Fetcher:
             self._upload(tenant, path, sha256, content_type, context)
             entry = cache_index.Entry(sha256, content_type, size,
                                       datetime.now(UTC).strftime(cache_index.STAMP))
-            cache_index.record(self.store, tenant, record.blob_csid, derivative, entry)
+            if index:
+                cache_index.record(self.store, tenant, record.blob_csid, derivative, entry)
             log.info("fetched", extra={**context, "kind": kind, "size": size,
                                        "seconds": round(time.monotonic() - started, 3)})
             return entry

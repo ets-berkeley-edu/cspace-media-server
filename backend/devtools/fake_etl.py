@@ -61,11 +61,17 @@ def tsv(listed: list[tuple[str, str, str, str]]) -> bytes:
     return ("blob_csid\tmedia_csid\tkind\taccess\n" + "".join("\t".join(row) + "\n" for row in listed)).encode()
 
 
+# A synthetic Media record holding the placeholder image's Blob, for an admin to name on the Settings page (D166).
+PLACEHOLDER_MEDIA = "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a"
+
+
 def add_to_simulator(cspace: httpx.Client, listed: list[tuple[str, str, str, str]]) -> None:
     for blob, media, kind, _ in listed:
-        if not media:  # the placeholder image: served from an admin's upload, never fetched
-            continue
-        cspace.post("/_fake/media", json={"csid": media, "kind": kind, "blob": blob}).raise_for_status()
+        # The placeholder image is listed without a Media CSID; its picture comes from the record an admin names.
+        record = {"csid": media or PLACEHOLDER_MEDIA, "kind": kind, "blob": blob}
+        if not media:
+            record["identification"] = "Placeholder"
+        cspace.post("/_fake/media", json=record).raise_for_status()
 
 
 def _call(response: httpx.Response) -> dict[str, Any]:

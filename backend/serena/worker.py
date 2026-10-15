@@ -272,7 +272,8 @@ def build_services(settings: Settings | None = None) -> WorkerServices:
     refreshes = Refreshes(store)
     if not settings.alert_topic_arn:
         log.warning("no alert topic: alerts are recorded and logged, not emailed")
-    watchdog = Watchdog(museums, museum_settings, refreshes, Alerts(store, sns, settings.alert_topic_arn))
+    watchdog = Watchdog(museums, museum_settings, refreshes, Alerts(store, sns, settings.alert_topic_arn),
+                        store=store)
     return WorkerServices(settings, museums, museum_settings, refreshes, store, s3, watchdog)
 
 

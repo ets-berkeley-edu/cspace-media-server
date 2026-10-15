@@ -162,7 +162,7 @@ flowchart LR
 | Worker | Checks each day's servable list and updates servability from it; runs the watchdog |
 | DynamoDB | Servability records, recalls, refreshes, settings, alerts, the cache index, the audit log |
 | S3 buckets | One private, KMS-encrypted bucket per museum, holding every file Serena has fetched or watermarked, and each servable list it has updated from |
-| CloudFront | Delivers files from S3 to browsers, only through signed URLs; serves the unavailable images without a signature |
+| CloudFront | Delivers files from S3 to browsers, only through signed URLs; serves the unavailable images and the generic placeholder picture without a signature |
 | Admin web app | Refreshes and alerts, settings, what Serena served and couldn't serve, recalls, placeholder images, why a file is or isn't served |
 | SNS | Emails alarms to the team's mailing list |
 | CloudWatch Logs | The app's and worker's JSON logs; the admin app's Past requests page queries the app's log with Logs Insights |
@@ -365,8 +365,8 @@ sequenceDiagram
    the cache index. For a watermarking museum, make the watermarked copy, store it the same way and index it too.
 6. **Redirect.** Answer 302 with a CloudFront signed URL for the object.
 
-The museum's placeholder image is served from the copy an admin uploaded (see Servability); Serena never calls
-CollectionSpace for it.
+The museum's placeholder image is fetched the same way, through the Media record an admin names for it (see
+Placeholder image); until one is named, its requests get Serena's generic picture.
 
 ### After an image is replaced
 
@@ -417,7 +417,7 @@ its own reason, so the admin app can say why a file isn't served:
 | `no_derivatives_for_kind` | A derivative of a 3D or PDF Blob |
 | `original_not_served` | An image's or card's original file, where the museum doesn't serve originals |
 | `recalled` | The Media record has an active recall in Serena |
-| `placeholder_not_uploaded` | The museum's placeholder image, before an admin uploads its files |
+| `placeholder_not_set` | The museum's placeholder image while no Media record is named for it: Serena's generic picture, not the unavailable image |
 | `watermark_not_built` | Temporary: a size the museum watermarks, until watermarking is built (pull request 16) |
 | `media_gone` | A miss: the Media record isn't in CollectionSpace (404 on the light check) |
 | `media_deleted` | A miss: the Media record is soft-deleted |
@@ -472,7 +472,9 @@ base URL (local development and tests), Serena serves the file itself at `/unava
 can run and load nothing. (Decided October 9, 2026.)
 
 The unavailable image is distinct from the placeholder image, which is a real Blob in the public core that Serena
-serves like any other (see Servability). Whether museums want a different unavailable image
+serves like any other (see Placeholder image). Beside the unavailable images, `<base URL>/default/placeholder.svg` is
+Serena's generic "Image restricted" picture, for a placeholder image no Media record is named for (locally,
+`/placeholder.svg`). Whether museums want a different unavailable image
 for "recalled" than for "not found" is an open question.
 
 ## Servability
@@ -527,7 +529,7 @@ where the table is read as a list, a sort key:
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
 | Recalls | `<tenant>#<media CSID>` | | indexed by museum (`by_tenant`, for the Recalls page and the servability update); the Blob CSID the Media record had when it was recalled; who, when, why; and, once a servability update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A recall that ends is deleted; its history is in the audit log (see How a recall ends) |
 | Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
-| Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits and audit retention, over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
+| Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits, audit retention and the placeholder image's Media record (D169), over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its bell, banner and Alerts page |
 | Cache index | see Storage | | |
 | Audit log | `<tenant>` | `<time>#<admin>#<random>` (the random part keeps two actions in the same microsecond apart) | the admin action, its target, details (before and after, for a setting); kept for the museum's audit retention (90 days to start; an admin's setting: 90 days, or 6, 12, 18, 24 or 36 months), the worker removing older entries once a day by the setting then in force (decided October 12, 2026, D97, D98) |
@@ -768,8 +770,9 @@ never personal data.
 Recalls raise their own alerts (see How a recall ends): an admin's recall, a recall a refresh kept because
 CollectionSpace still has the file as public, an admin's release, and a notice when a refresh ended recalls.
 
-The alert for a placeholder image whose files haven't all been uploaded comes with that upload (pull request 14b in
-the plan, D127); until then, its requests are logged as `placeholder_not_uploaded`.
+Once per refresh date, while the last servability update's servable list lists a museum's placeholder image and no
+Media record is named for it, the watchdog raises "The placeholder image isn't set": the public sees Serena's generic
+picture (decided October 14, 2026, D173, replacing D127).
 
 ### Recalls
 
@@ -904,17 +907,33 @@ October 12, 2026. Each museum's placeholder image's Blob CSID is in its configur
 The other museums' ETL leaves non-public images out of the public core, so they have none, and Serena raises no alert
 about it (decided October 9, 2026).
 
-An admin uploads its files in the admin app, one per derivative the museum serves (and the original, where the museum
-allows it); Serena stores them in S3 and indexes them, and watermarks them for a watermarking museum. Before the
-upload, requests for it get the unavailable image (reason `placeholder_not_uploaded`). (Decided October 9, 2026.)
-Built in pull request 14b (decided October 12, 2026, D124 to D127):
-- each file gets the same checks as a fetched image: an image content type, it decodes, and it's within the museum's
-  image size limit; it's stored in S3 by its hash and indexed under the placeholder image's Blob CSID and its derivative,
-  and the upload is audited with its SHA-256;
-- uploading again replaces that derivative's file: the index points to the new hash, the old object stays (nothing is
-  deleted), and the audit log records the SHA-256 before and after;
-- once a day, the watchdog checks each museum with a placeholder image and, if any of its files isn't uploaded,
-  raises "The placeholder image's files aren't all uploaded", naming the missing ones.
+Its picture comes from a Media record in the museum's CollectionSpace that an admin names in the admin app (decided
+October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided in D124 to D127):
+- **Every museum** can name one (D167). It's served only for the Blob in the museum's configuration, when its
+  servable list lists it: today only PAHMA's ETL does. For another museum, a named record is ready for when its ETL
+  lists a placeholder.
+- **Until one is named** (D168), a request for the placeholder gets Serena's generic "Image restricted" picture, the
+  same for every museum and every size: a 302 with `no-store` to `<base URL>/default/placeholder.svg`, served by
+  CloudFront without a signature beside the unavailable images (locally, Serena serves it at `/placeholder.svg`). It's
+  logged as unserved, reason `placeholder_not_set`.
+- **Where** (D169): a setting on the Settings page, "Placeholder image (Media CSID)". Changing it needs a reason and is
+  audited, like every setting; "Use default" goes back to the generic picture. The page shows the named record's
+  CSID, identification number and thumbnail. The number is read from CollectionSpace when the setting is saved and
+  kept with it, so the page never waits for CollectionSpace; if staff change it, it shows after the next save
+  (Richard, October 14, 2026).
+- **Checked when saved** (D170): Serena asks CollectionSpace about the record first. It must exist, not be
+  soft-deleted, and have a file; otherwise, or if CollectionSpace can't be reached, nothing is saved and the admin is
+  told why.
+- **Which Blob** (D171): Serena knows a request is for the placeholder by the Blob CSID in the museum's
+  configuration (PAHMA's `59a733dd-d641-4e1a-8552`), which the ETL lists without a Media CSID; it fetches through the
+  named record. If the record's own Blob is a different one, the save says so but goes ahead.
+- **Fetched when saved** (D172): saving the setting, with a new Media CSID or the same one again, fetches every size
+  the museum serves (each with the usual checks: an image type, it decodes, within the image size limit) and points
+  the cache index at the new copies, only if every size passes. Old copies stay in S3; nothing is deleted. The audit
+  entry records the Media CSID before and after, the record's identification number and the sizes fetched. After
+  staff change the picture in CollectionSpace, an admin saves the setting again, since the cache is keyed by the
+  configured Blob CSID, which doesn't change.
+- **The alert** (D173): see Watchdog and alerts.
 
 ## Image fetch
 
@@ -980,7 +999,8 @@ Built in pull request 14b (decided October 12, 2026, D124 to D127):
   size, fetched-at, and last served, to the day (D142; see Admin web app, Media look up). Watermarked copies have
   their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID are
   indexed under the Media CSID and the Blob CSID listed for it in the servable list of the last servability update, so a replaced image is fetched
-  again after the next daily update.
+  again after the next daily update. The placeholder image's copies, fetched through the Media record named for it,
+  are indexed under the Blob CSID in the museum's configuration (D172).
 - **Never deleted.** A recall leaves objects and index entries in place. When it ends (see How a recall ends), they
   are served again without another fetch.
 
@@ -1043,7 +1063,7 @@ reachable only from campus networks.
 - **Words** (Richard, October 13, 2026, D146, D147, D151, D152):
   - "Cached copy" is the admin app's word for Serena's copy of a file it fetched from CollectionSpace (stored by hash
     and listed in the cache index; a cache hit serves it): "Cached copy", "First cached", "cached sizes". The
-    placeholder image's files are uploaded, not cached. The design's own text still says where and how copies are
+    placeholder image's files are cached copies too, of the Media record named for it. The design's own text still says where and how copies are
     stored (S3, `objects/<sha256>`).
   - The recall dialog's first button is "Preview recall".
   - Where Serena knows a file's kind, the app names it: image "image", card "catalog card", pdf "PDF", 3D "3D model",
@@ -1065,7 +1085,8 @@ reachable only from campus networks.
     click selects rather than opens, an opened Recalls row's CSIDs are plain text, each followed by "View file".
     Refresh IDs, short and shown whole, are links.
   - **Buttons** (D156). A dialog's or page's main action is filled: blue, or red when it changes what the public
-    sees or who is signed in (Recall, Release, Cancel recall, Sign everyone out). Every other button is outlined,
+    sees or who is signed in (Recall, Release, Cancel recall, Override the delta threshold, Sign everyone out). Every
+    other button is outlined,
     Cancel and Back included. Plain text is only for links. Recalls' "Recall…" is outlined red: it only opens the
     form, whose "Recall <n> Media records" is the filled red one (Richard, October 14, 2026).
   - **A reason is never a disabled button** (Richard, October 14, 2026, for accessibility). In every dialog that needs
@@ -1150,14 +1171,15 @@ reachable only from campus networks.
     column's name (each click switches between ascending and descending; a table is always sorted) and pages them, 25 rows to start (10, 25, 50 or 100) (decided October 12, 2026, D91 to D94);
   - per-museum settings, on a Settings page (D86 to D90, D95): the watchdog deadline (one time a day, HH:MM Pacific),
     the ETL's poll interval (5 to 300 seconds) and step timeout (60 to 7,200 seconds), the delta threshold (0.1 to
-    100%), the size limits by kind (1 to 2,048 MB) and the audit retention (D97). Any admin of the museum may change
+    100%), the size limits by kind (1 to 2,048 MB), the audit retention (D97) and the placeholder image's Media record
+    (D169). Any admin of the museum may change
     one, with a reason; the audit log records the value before and after; a change to the delta threshold or the
     audit retention raises an emailed alert. Each setting shows its default value (the starting value in
     configuration), and "Use default" removes the admin's value. For the audit retention, the page says how many entries a shorter period would remove
     at the next daily removal;
   - the audit log's CSV export: every entry the museum keeps, oldest first (time, by, action, target, details),
     with any cell a spreadsheet could run as a formula made safe (D96); the export is audited;
-  - placeholder image upload;
+  - the placeholder image's Media record, a setting (see Placeholder image);
   - recalls: the Recalls page, recalling by Media or Blob CSID, and Release (see Recalls);
   - the Past requests page: what Serena served and couldn't serve (see The Past requests page, below);
   - "Media look up": why a file is or isn't served (see below);
@@ -1165,7 +1187,7 @@ reachable only from campus networks.
     description generated from the code (decided October 10, 2026);
   - an audit log of every admin action: sign-in, sign-out, signing everyone out, recall, release, cancel, a settings change
     (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, an
-    admin refresh, an audit export and the placeholder upload, each
+    admin refresh and an audit export (the placeholder image's Media record is a settings change), each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
     The ETL's calls that change something are there too (Richard, October 13, 2026, D150): starting a refresh,
     uploading a servable list and asking for the check, by "ETL (<museum>)", with which of the museum's two tokens it
@@ -1407,7 +1429,7 @@ The F numbers follow the team's list of follow-ups.
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
   lowest choice to match.
 
-Settled since October 8 and recorded above: the placeholder image (stored from an admin upload), 3D files (served),
+Settled since October 8 and recorded above: the placeholder image (from a Media record named in the admin app), 3D files (served),
 the delta threshold (5%, counting changed rows), admin sign-in (CollectionSpace account and role), restricted
 Cinefiles PDFs (signed links), admin actions on refreshes (F5).
 

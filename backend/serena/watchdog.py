@@ -6,7 +6,9 @@ saving included), and raises an alert when, for a museum:
 - its newest refresh is check_failed, update_failed or abandoned (the worker also raises the first two at once, when
   the step fails: see Watchdog.raise_failure);
 - it hasn't had a servability update in 24 hours. Only for a museum that has had one: before its first servability
-  update, a museum has nothing to be late with.
+  update, a museum has nothing to be late with;
+- its last servability update's servable list lists its placeholder image, but no Media record is named for it, so the
+  public sees Serena's generic picture (decided October 14, 2026, D173): once per refresh date.
 
 Every alert is raised on every pass while it holds and recorded once (see alerts.py)."""
 from __future__ import annotations
@@ -18,6 +20,7 @@ from .alerts import Alert, Alerts, Kind
 from .museum import Museum
 from .museum_settings import MuseumSettings
 from .refreshes import PACIFIC, Refresh, Refreshes, State
+from .store import Store
 
 FAILED = {State.CHECK_FAILED: Kind.CHECK_FAILED, State.UPDATE_FAILED: Kind.UPDATE_FAILED,
           State.ABANDONED: Kind.ABANDONED}
@@ -30,12 +33,13 @@ NOT_UPDATED_AFTER = timedelta(hours=24)
 class Watchdog:
     def __init__(self, museums: dict[str, Museum], museum_settings: MuseumSettings, refreshes: Refreshes,
                  alerts: Alerts,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)):
+                 clock: Callable[[], datetime] = lambda: datetime.now(UTC), store: Store | None = None):
         self.museums = museums
         self.museum_settings = museum_settings
         self.refreshes = refreshes
         self.alerts = alerts
         self.clock = clock
+        self.store = store
 
     def failure(self, refresh: Refresh) -> Alert | None:
         """The alert for a refresh that is check_failed, update_failed or abandoned; None otherwise."""
@@ -89,6 +93,14 @@ class Watchdog:
                 found.append(Alert(tenant, today, Kind.NOT_UPDATED, updated.refresh_id,
                                    f"The last servability update was on {updated.refresh_date} "
                                    f"({updated.refresh_id}, updated {updated.updated_at})."))
+            museum = self.museums[tenant]
+            blob = museum.placeholder_blob_csid
+            if (blob and self.store is not None and self.store.servability(tenant, blob) is not None
+                    and self.museum_settings.get(museum).placeholder_media_csid is None):
+                found.append(Alert(tenant, updated.refresh_date, Kind.PLACEHOLDER_NOT_SET, updated.refresh_id,
+                                   f"Refresh {updated.refresh_id}'s servable list lists {museum.name}'s placeholder "
+                                   f"image (Blob {blob}), but no Media record is named for it, so the public sees "
+                                   "Serena's generic picture. Name the record on the Settings page."))
         for alert in found:
             self.alerts.raise_(alert)
         return found

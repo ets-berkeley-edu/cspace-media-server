@@ -88,10 +88,10 @@ export interface Status {
 
 export interface SettingItem {
   name: string // a setting, or size_limit_mb.<kind>
-  group: string // watchdog, etl, check, size_limits or audit
+  group: string // watchdog, etl, check, size_limits, audit or placeholder
   label: string
-  value: string | number
-  default: string | number // the value in Serena's configuration
+  value: string | number | null // null: none (the placeholder image's Media CSID before one is named)
+  default: string | number | null // the value in Serena's configuration
   changed: boolean
 }
 
@@ -99,6 +99,10 @@ export interface SettingsResponse {
   settings: SettingItem[]
   // For each audit retention a museum may choose: how many of today's entries a change to it would remove (D98).
   audit_retention_choices: {days: number, entries_removed: number}[]
+  // The Blob the museum's ETL lists for its placeholder image (null: it lists none yet), and the named Media record's
+  // identification number (D169).
+  placeholder: {blob_csid: string | null, identification_number: string | null}
+  warning?: string // a saved placeholder record whose Blob isn't the one the ETL lists (D171)
 }
 
 export interface AlertItem {

@@ -38,6 +38,12 @@ class StartingSettings(BaseModel):
     delta_threshold_percent: float = Field(ge=0.1, le=100)
     size_limit_mb: dict[Kind, int]
     audit_retention_days: int = 90
+    # The Media record whose files Serena serves as the museum's placeholder image (decided October 14, 2026, D166 to
+    # D172). None: Serena's generic "Image restricted" picture.
+    placeholder_media_csid: str | None = None
+    # That record's identification number, read from CollectionSpace when the setting is saved, so the Settings page
+    # never waits for CollectionSpace. Not a setting admins change.
+    placeholder_identification_number: str | None = Field(default=None, max_length=200)
 
     @field_validator("watchdog_deadline")
     @classmethod
@@ -55,6 +61,13 @@ class StartingSettings(BaseModel):
         if any(not 1 <= limit <= 2048 for limit in limits.values()):
             raise ValueError("size limits must be 1 to 2,048 MB")
         return limits
+
+    @field_validator("placeholder_media_csid")
+    @classmethod
+    def _placeholder(cls, value: str | None) -> str | None:
+        if value is not None and not is_csid(value):
+            raise ValueError("the placeholder image's Media CSID isn't a CSID")
+        return value
 
     @field_validator("audit_retention_days")
     @classmethod

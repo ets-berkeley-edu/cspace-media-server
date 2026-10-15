@@ -122,7 +122,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
         store, app.state.fetcher.clients, audit, app_alerts, Refreshes(store, clock) if clock else Refreshes(store),
         app.state.museum_settings, s3, settings.buckets, *((clock,) if clock else ()))
     app.state.admin_settings = admin_settings.SettingsServices(
-        app.state.museum_settings, store, app_alerts, audit, *((clock,) if clock else ()))
+        app.state.museum_settings, store, app_alerts, audit, **({"clock": clock} if clock else {}),
+        fetcher=app.state.fetcher)
     admin_api.add_to(app, admin_api.AdminServices(
         settings, museums,
         Sessions(store, settings.admin_session_idle_minutes, settings.admin_session_hours), audit,

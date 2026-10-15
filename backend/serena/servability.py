@@ -7,7 +7,7 @@ and an image's original only where the museum serves originals."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .museum import SERVED_KINDS, Museum
 from .paths import BlobRequest
@@ -30,9 +30,13 @@ class Decision:
 
 
 def decide(museum: Museum, request: BlobRequest, store: Store,
-           vouch: Callable[[], Verdict] | None = None) -> Decision:
+           vouch: Callable[[], Verdict] | None = None, placeholder_media: str | None = None) -> Decision:
     """`vouch` checks the request's signed link (design: Signed links); it's called only for a restricted Blob of a
-    kind the museum allows signed access to. A valid link lets the rest of the checks run, so a recall still wins."""
+    kind the museum allows signed access to. A valid link lets the rest of the checks run, so a recall still wins.
+
+    `placeholder_media` is the Media record an admin named for the museum's placeholder image (D166): its files are
+    served for the placeholder's Blob, which the servable list lists without a Media CSID. Without one, the placeholder
+    gets Serena's generic picture (D168)."""
     record = store.servability(museum.key, request.blob_csid)
     if record is None:
         return Decision(Reason.NOT_LISTED)
@@ -55,6 +59,7 @@ def decide(museum: Museum, request: BlobRequest, store: Store,
         if recall is not None:
             return Decision(Reason.RECALLED, record)
     if request.blob_csid == museum.placeholder_blob_csid:
-        # Served from the files an admin uploads (pull request 14 in the plan); none yet.
-        return Decision(Reason.PLACEHOLDER_NOT_UPLOADED, record)
+        if placeholder_media is None:
+            return Decision(Reason.PLACEHOLDER_NOT_SET, record)
+        record = replace(record, media_csid=placeholder_media)  # fetched through the named Media record
     return Decision(None, record, signed_kid)

@@ -52,7 +52,8 @@ def test_the_settings_and_their_default_values(client: TestClient) -> None:
     settings = settings_of(body)
     assert list(settings) == ["watchdog_deadline", "etl_poll_interval_seconds", "etl_step_timeout_seconds",
                               "delta_threshold_percent", "size_limit_mb.image", "size_limit_mb.card",
-                              "size_limit_mb.3D", "size_limit_mb.pdf", "audit_retention_days"]
+                              "size_limit_mb.3D", "size_limit_mb.pdf", "audit_retention_days",
+                              "placeholder_media_csid"]
     assert settings["watchdog_deadline"] == {"name": "watchdog_deadline", "group": "watchdog",
                                              "label": "Deadline for today's refresh (HH:MM, Pacific)",
                                              "value": "08:00", "default": "08:00", "changed": False}
