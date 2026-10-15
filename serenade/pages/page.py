@@ -1,6 +1,7 @@
 """What every page object shares, as in the team's other Selenium suites: waits, clicks and typing by locator."""
 from __future__ import annotations
 
+from selenium.common.exceptions import ElementClickInterceptedException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -29,7 +30,18 @@ class Page:
         return self.wait_for(locator)
 
     def click(self, locator: Locator) -> None:
-        WebDriverWait(self.driver, TIMEOUT).until(ec.element_to_be_clickable(locator)).click()
+        """Clicks the element once it can take the click. Just after a page opens, its layout is still settling (the
+        side menu briefly covers the content), and Chrome refuses a click that would land on another element: then it
+        waits and tries again, until the timeout. A refused click clicks nothing, so trying again is safe."""
+        def clicked(driver: WebDriver) -> bool:
+            element = ec.element_to_be_clickable(locator)(driver)
+            if not element:
+                return False
+            element.click()
+            return True
+
+        WebDriverWait(self.driver, TIMEOUT, ignored_exceptions=(ElementClickInterceptedException,
+                                                                 StaleElementReferenceException)).until(clicked)
 
     def type(self, locator: Locator, text: str) -> None:
         element = self.wait_for(locator)
