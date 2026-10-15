@@ -211,7 +211,7 @@ def test_a_placeholder_image_no_record_is_named_for(store: Store, clock: Clock) 
     refreshes.transition(refresh, State.UPDATED)
     at(clock, 3, 40)
     assert dog.check() == []  # not listed: nothing to say
-    add_blob(store, "pahma", pahma.placeholder_blob_csid, None)
+    add_blob(store, "pahma", "59a733dd-d641-4e1a-8552", None)  # PAHMA's placeholder, from its configuration
     (alert,) = dog.check()
     assert (alert.kind, alert.refresh_date, alert.subject) == (Kind.PLACEHOLDER_NOT_SET, "2026-10-10",
                                                                refresh.refresh_id)

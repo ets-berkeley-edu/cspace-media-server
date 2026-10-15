@@ -21,8 +21,8 @@ from serena.refreshes import Refreshes
 from serena.store import Store
 
 PAHMA = load("pahma")
-PLACEHOLDER = PAHMA.placeholder_blob_csid
-assert PLACEHOLDER is not None
+PLACEHOLDER = "59a733dd-d641-4e1a-8552"
+assert PAHMA.placeholder_blob_csid == PLACEHOLDER
 RECORD = "3c4d5e6f-7081-4a92-8b3c-4d5e6f708192"
 OTHER_BLOB = "4d5e6f70-8192-4aa3-9c4d-5e6f70819203"
 URL = "/admin/v1/museums/pahma/settings/placeholder_media_csid"
