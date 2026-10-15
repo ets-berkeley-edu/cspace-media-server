@@ -19,9 +19,14 @@ class Page:
     def open(self, path: str = "") -> None:
         self.driver.get(self.base_url + path)
 
-    def wait_for(self, locator: Locator) -> WebElement:
-        element: WebElement = WebDriverWait(self.driver, TIMEOUT).until(ec.visibility_of_element_located(locator))
+    def wait_for(self, locator: Locator, timeout: float = TIMEOUT) -> WebElement:
+        element: WebElement = WebDriverWait(self.driver, timeout).until(ec.visibility_of_element_located(locator))
         return element
+
+    def wait_for_text(self, locator: Locator, text: str, timeout: float = TIMEOUT) -> WebElement:
+        """Waits until the element shows the text (pages fill in after their data arrives)."""
+        WebDriverWait(self.driver, timeout).until(ec.text_to_be_present_in_element(locator, text))
+        return self.wait_for(locator)
 
     def click(self, locator: Locator) -> None:
         WebDriverWait(self.driver, TIMEOUT).until(ec.element_to_be_clickable(locator)).click()

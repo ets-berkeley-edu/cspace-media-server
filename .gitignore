@@ -19,3 +19,5 @@ admin/node_modules/
 admin/dist/
 # serenade, the Selenium tests: its virtual environment
 serenade/.venv/
+# serenade's runs: the test dataset's summary, and failed tests' screenshots and page HTML
+serenade/.run/

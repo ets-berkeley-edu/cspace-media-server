@@ -1,18 +1,60 @@
-# serenade: Serena's Selenium tests
+# serenade: Serena's headless test suite
 
-Browser tests of the admin app, written as the team writes them for BOA (bea), Damien (mrsbaylock) and Diablo
-(xena): pytest, with a page object per screen in `pages/` and the tests in `tests/`.
+Automated checks of Serena on the local stack: plain HTTP checks of what Serena serves, and Selenium browser checks of
+the admin app, written as the team writes them for BOA (bea), Damien (mrsbaylock) and Diablo (xena): pytest, with a
+page object per screen in `pages/` and the tests in `tests/`. Never against QA or production: the tests sign in,
+recall files and switch the CollectionSpace simulator's outage on.
 
-They run against the local stack (`./serena up`), with the CollectionSpace simulator's synthetic accounts, in
-headless Chrome. Never against QA or production: the tests sign in, and later ones will change settings and recall
-files.
+## Running it
 
 ```
-./serena up        # the stack, with the admin app at http://localhost:5373/admin/
-./serena ui        # makes serenade/.venv on first use, then runs the tests
-./serena ui -k sign_in --headed     # one test, with the browser showing
+./serena test                  # starts the test stack afresh, builds the dataset, runs every test (headless)
+./serena test -k t3 --headed   # one test, with the browser showing
+./serena test-down             # stops the test stack
 ```
 
-Needs Chrome on your computer. Selenium Manager (part of Selenium) finds the matching chromedriver. The packages
-are pinned with hashes in `requirements.txt`; change `requirements.in` and run
-`pip-compile --generate-hashes --allow-unsafe --strip-extras -o requirements.txt requirements.in`.
+Needs Docker, Python 3.11 and Chrome. The first run makes `serenade/.venv`; Selenium Manager (part of Selenium) finds
+the matching chromedriver. A run takes the stack's start-up (a few minutes) plus the tests.
+
+- **Its own stack.** `./serena test` runs the Docker Compose project `serena-test` on its own ports (Serena 8400, the
+  admin app 5473, the simulator 8480, moto 9400), so it never touches the stack testers use (`./serena up`). Each run
+  starts it afresh, so every run begins from the same data. It's left running afterwards, to look at what a failed
+  test saw: the admin app at http://localhost:5473/admin/ (`admin` / `admin`).
+- **When a browser test fails,** its screenshot and the page's HTML are saved in `serenade/.run/failures/`, and the
+  test's report says so.
+- `./serena ui` runs the suite against the stack testers use, as before. The tests that need the dataset skip there
+  ("needs the test stack"), so only the sign-in tests run.
+
+## How the tests share one dataset
+
+The goal is the most tests per dataset, with the fewest resets (Richard, October 14, 2026).
+
+- **The dataset** (`dataset.py`) is one PAHMA daily refresh by the fake ETL, built once per run. Its CSIDs are the same
+  every run, and `dataset.py` checks the run built the records it expects.
+- **Records have roles.** A *shared* record may be looked at by any test, never changed. A *reserved* record is set
+  aside for the tests that change it, and they put it back where they can. Add a role in `dataset.py` when a test
+  needs a record of its own, and say which tests use it.
+- **Tests run in groups, by what they change:** looking only first, then changes to one record, then changes that
+  affect the whole museum (or every museum), last, each undoing itself (for example in a fixture's `finally`). A
+  reset falls only where a change can't be undone.
+- **A test that builds on an earlier one** says so with `@pytest.mark.after("test_name")`: if that test didn't pass,
+  it's skipped rather than failing for the same reason.
+- So the tests run in file order, never in parallel or shuffled.
+
+## Where the tests come from
+
+`docs/testing-checklist.md` says what to check; the test inventory (`serena-test-inventory.xlsx`, kept by Richard)
+lists each automated check, by feature, with the checklist section and step it comes from, whether it's HTTP or a
+browser check, its data effect, and whether the backend's own tests already cover it. Each test's name starts with
+its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
+
+| Tests | What |
+| --- | --- |
+| `tests/test_sign_in.py` | Signing in, and an account without the role (checklist section 12) |
+| `tests/test_lookup_and_recalls.py` | The pilot, T1 to T6: a served image, Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19) |
+
+## Packages
+
+Pinned with hashes in `requirements.txt`; change `requirements.in` and run
+`pip-compile --generate-hashes --allow-unsafe --strip-extras -o requirements.txt requirements.in`. The HTTP checks use
+Python's own `urllib`, so the suite needs nothing beyond pytest and Selenium.
