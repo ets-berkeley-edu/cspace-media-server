@@ -10,6 +10,8 @@
 #                                  (--file-only prints the servable list instead, for the admin app's upload page)
 #   ./serena smoke                 a whole daily refresh for PAHMA, then fetch and serve one of its images (what CI runs)
 #   ./serena ui [pytest options]   the admin app's Selenium tests (serenade/), in headless Chrome; --headed shows it
+#   ./serena test [pytest options] the headless test suite (serenade/) on its own stack, started afresh, with its dataset
+#   ./serena test-down             stop the test stack
 #   ./serena urls                  the addresses
 #
 # The stack is its own Docker Compose project (serena), on ports that don't clash with the BMU's. It needs Docker
@@ -67,6 +69,42 @@ case "$cmd" in
     esac
     curl -fsS -o /dev/null "$location"
     echo "Smoke test passed: a refresh updated, and $path fetched, stored and served." ;;
+  test)
+    # The suite's own stack (Docker Compose project serena-test, its own ports), so a run never touches the stack
+    # testers use by hand. Started afresh each run, so every run begins from the same data (serenade/dataset.py); left
+    # running afterwards, to look at what a failed test saw. serenade/README.md explains the suite.
+    export SERENA_PORT=8400 SERENA_ADMIN_PORT=5473 SERENA_SIM_PORT=8480 SERENA_MOTO_PORT=9400
+    tcompose() { docker compose -p serena-test "$@"; }
+    py="$(command -v python3.11 || true)"
+    [ -n "$py" ] || { echo "./serena test needs python3.11 (the repository's Python)." >&2; exit 1; }
+    if [ ! -x serenade/.venv/bin/python ]; then
+      "$py" -m venv serenade/.venv
+      serenade/.venv/bin/pip install -q --require-hashes -r serenade/requirements.txt
+    fi
+    SERENA_BUILD="test · $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown) @ $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    export SERENA_BUILD
+    echo "Starting the test stack afresh ($SERENA_BUILD)"
+    tcompose down >/dev/null 2>&1 || true
+    tcompose up -d --build
+    printf 'Waiting for Serena '
+    for _ in $(seq 1 90); do curl -fs -o /dev/null "http://localhost:8400/health" && break; printf '.'; sleep 2; done
+    curl -fs -o /dev/null "http://localhost:8400/health" || { echo; echo "Not up: docker compose -p serena-test logs web" >&2; exit 1; }
+    for _ in $(seq 1 30); do [ -n "$(tcompose ps -q --status running worker)" ] && break; sleep 1; done
+    printf '\nWaiting for the admin app (it installs its packages first) '
+    for _ in $(seq 1 120); do curl -fs -o /dev/null "http://localhost:5473/admin/" && break; printf '.'; sleep 2; done
+    curl -fs -o /dev/null "http://localhost:5473/admin/" || { echo; echo "Not up: docker compose -p serena-test logs admin" >&2; exit 1; }
+    echo
+    echo "Building the dataset: a daily refresh for PAHMA"
+    mkdir -p serenade/.run
+    tcompose exec -T worker python -m devtools.fake_etl --museum pahma --json > serenade/.run/dataset.json
+    rm -rf serenade/.run/failures
+    SERENADE_STACK=test SERENADE_DATASET=serenade/.run/dataset.json SERENADE_BASE_URL="http://localhost:5473/admin/" \
+      SERENADE_SERENA_URL="http://localhost:8400" SERENADE_SIM_URL="http://localhost:8480" \
+      serenade/.venv/bin/python -m pytest serenade -p no:cacheprovider "$@" || status=$?
+    echo "The test stack is still running (./serena test-down stops it). Failed tests' screenshots: serenade/.run/failures/"
+    exit "${status:-0}" ;;
+  test-down)
+    docker compose -p serena-test down ;;
   ui)
     # Python 3.11 (.python-version), the version serenade/requirements.txt is pinned for.
     py="$(command -v python3.11 || true)"
@@ -84,6 +122,6 @@ case "$cmd" in
     echo "Simulator:   http://localhost:${SERENA_SIM_PORT:-8380}   (calls it received: /_fake/calls)"
     echo "moto:        http://localhost:${SERENA_MOTO_PORT:-9300}/moto-api/" ;;
   help|-h|--help)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' ;;
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) echo "Unknown command '$cmd'. ./serena help lists them." >&2; exit 2 ;;
 esac
