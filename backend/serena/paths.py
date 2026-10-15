@@ -6,6 +6,8 @@ Serena accepts only these shapes under …/<tenant>/imageserver/:
     blobs/<blob CSID>/content
     blobs/<blob CSID>/content/linked_pdf:<suffix>     Cinefiles only
     blobs/<blob CSID>/content/inline_pdf:<suffix>     Cinefiles only
+    media/<media CSID>/blob/derivatives/<derivative>/content     (pull request 15: answered as its listed Blob's)
+    media/<media CSID>/blob/content
 
 The PDF link suffix carries the signed-in visitor's email address: it is accepted, thrown away here, and never logged,
 recorded or forwarded. Use log_path() for anything that records a path."""
@@ -25,6 +27,8 @@ PDF_MUSEUMS = frozenset({"cinefiles"})
 
 _DERIVATIVE = re.compile(r"blobs/(?P<csid>[^/]+)/derivatives/(?P<name>[^/]+)/content")
 _ORIGINAL = re.compile(r"blobs/(?P<csid>[^/]+)/content")
+_MEDIA_DERIVATIVE = re.compile(r"media/(?P<csid>[^/]+)/blob/derivatives/(?P<name>[^/]+)/content")
+_MEDIA_ORIGINAL = re.compile(r"media/(?P<csid>[^/]+)/blob/content")
 _PDF = re.compile(rf"blobs/(?P<csid>[^/]+)/content/(?:linked_pdf|inline_pdf):[^/]{{0,{SUFFIX_MAX}}}")
 # Anything that looks like the PDF link suffix, anywhere in a path, raw or percent-encoded.
 _SUFFIX_ANYWHERE = re.compile(r"(?i)\b(linked_pdf|inline_pdf)(:|%3A)[^/?#]*")
@@ -39,12 +43,29 @@ class BlobRequest:
 
 
 @dataclass(frozen=True)
+class MediaRequest:
+    """A request by Media CSID (decided October 14, 2026, D174 to D177): answered as a request for the Media record's
+    Blob in the last servability update's servable list (servability.resolve), public files only."""
+    tenant: str
+    media_csid: str
+    derivative: str | None  # None: the original file
+
+
+@dataclass(frozen=True)
 class Refused:
     reason: Reason
 
 
-def parse(museum: Museum, rest: str) -> BlobRequest | Refused:
+def parse(museum: Museum, rest: str) -> BlobRequest | MediaRequest | Refused:
     """`rest` is the path after …/<tenant>/imageserver/. The museum is already known to be one Serena serves."""
+    media = _MEDIA_DERIVATIVE.fullmatch(rest) or _MEDIA_ORIGINAL.fullmatch(rest)
+    if media:
+        derivative = media.groupdict().get("name")
+        if not is_csid(media["csid"]):
+            return Refused(Reason.BAD_CSID)
+        if derivative is not None and derivative not in museum.derivatives:
+            return Refused(Reason.DERIVATIVE_NOT_SERVED)
+        return MediaRequest(museum.key, media["csid"], derivative)
     if m := _DERIVATIVE.fullmatch(rest):
         csid, derivative = m["csid"], m["name"]
     elif m := _ORIGINAL.fullmatch(rest):

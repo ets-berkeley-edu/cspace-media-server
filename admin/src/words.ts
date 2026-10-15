@@ -80,6 +80,15 @@ export function whenParts(iso: string | null | undefined): [string, string] {
  * path (a /media/ URL, a bare /blobs/<CSID>) is null: the page shows it whole, shortened in the middle, with "(not a
  * Blob path)". The size is the name asked for: sizeOf() says whether it's one of the museum's.
  */
+/**
+ * A Media URL's Media CSID and size (pull request 15, D179): …/media/<Media CSID>/blob/content or
+ * …/blob/derivatives/<size>/content. Past requests shows it as "Media <CSID…>" with its size.
+ */
+export function mediaPathOf(path: string): {media: string, size: string} | null {
+  const m = /^\/[^/]+\/imageserver\/media\/([A-Za-z0-9-]{1,64})\/blob\/(?:derivatives\/([^/]+)\/)?content$/.exec(path)
+  return m ? {media: m[1], size: m[2] || 'original'} : null
+}
+
 export function blobPathOf(path: string): {blob: string, size: string} | null {
   const m = /^\/[^/]+\/imageserver\/blobs\/([A-Za-z0-9-]{1,64})\/(?:derivatives\/([^/]+)\/)?content$/.exec(path)
   return m ? {blob: m[1], size: m[2] || 'original'} : null

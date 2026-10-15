@@ -62,7 +62,8 @@ def test_well_formed_requests_not_listed(client: TestClient, recorder: MemoryRec
         (f"/cinefiles/imageserver/blobs/{CSID}/content/other_pdf:x", Reason.UNKNOWN_PATH),
         (f"/pahma/imageserver/blobs/{CSID}/derivatives/Medium", Reason.UNKNOWN_PATH),
         (f"/pahma/imageserver/blobs/{CSID}/content/", Reason.UNKNOWN_PATH),
-        (f"/pahma/imageserver/media/{CSID}/blob/content", Reason.UNKNOWN_PATH),  # the Media-CSID URLs come later
+        (f"/pahma/imageserver/media/{CSID}/blob/content", Reason.NOT_LISTED),  # by Media CSID (D174): not listed
+        (f"/pahma/imageserver/media/{CSID}/content", Reason.UNKNOWN_PATH),  # not a shape Serena serves
         ("/pahma/imageserver/", Reason.UNKNOWN_PATH),
         ("/pahma/imageserver/blobs/../content", Reason.UNKNOWN_PATH),
     ],

@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
+from . import tables
 from .museum import SERVED_KINDS, Museum
-from .paths import BlobRequest
+from .paths import BlobRequest, MediaRequest
 from .signed_links import Verdict
 from .store import ServabilityRecord, Store
 from .unserved import Reason
@@ -63,3 +64,30 @@ def decide(museum: Museum, request: BlobRequest, store: Store,
             return Decision(Reason.PLACEHOLDER_NOT_SET, record)
         record = replace(record, media_csid=placeholder_media)  # fetched through the named Media record
     return Decision(None, record, signed_kid)
+
+
+def listed_blobs(store: Store, tenant: str, media_csid: str) -> list[str]:
+    """A Media record's Blobs in the servability table, the one listed most recently first (D175); rows written before
+    `listed_at` was recorded come last, by Blob CSID."""
+    page = store.client.query(TableName=store.table(tables.SERVABILITY), IndexName="by_media",
+                              KeyConditionExpression="media_key = :m",
+                              ExpressionAttributeValues={":m": {"S": f"{tenant}#{media_csid}"}})
+    found = [(item.get("listed_at", {}).get("S", ""), item["pk"]["S"].partition("#")[2]) for item in page["Items"]]
+    return [blob for _, blob in sorted(found, key=lambda pair: (pair[0], pair[1]), reverse=True)]
+
+
+def resolve(museum: Museum, request: MediaRequest, store: Store) -> tuple[BlobRequest | None, Decision]:
+    """A request by Media CSID, answered as one for its listed Blob (decided October 14, 2026, D174 to D177): the first
+    of its Blobs, newest first, that passes every check a Blob request gets; if none passes, the newest one's reason.
+    No signed link: a Media URL serves public files only (D177)."""
+    blobs = listed_blobs(store, museum.key, request.media_csid)
+    if not blobs:
+        return None, Decision(Reason.NOT_LISTED)
+    tried = []
+    for blob in blobs:
+        as_blob = BlobRequest(museum.key, blob, request.derivative)
+        decision = decide(museum, as_blob, store)
+        if decision.servable:
+            return as_blob, decision
+        tried.append((as_blob, decision))
+    return tried[0]

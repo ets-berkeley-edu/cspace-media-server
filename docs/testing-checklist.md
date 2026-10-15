@@ -598,7 +598,8 @@ http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 CSID (in its URL) and `<MEDIA>` its Media CSID (on Media look up).
 
 - [ ] In Chrome, also open the same URL with `Thumbnial` in place of `Medium`, and
-  `http://localhost:8300/pahma/imageserver/media/<MEDIA>/blob/content`.
+  `http://localhost:8300/pahma/imageserver/media/<MEDIA>/content` (a /media/ shape Serena doesn't serve; section 23
+  checks the ones it does).
 - [ ] On "Past requests", expect a "Served" card with a count and "by size: Medium 1", and an "Unserved" card with its
   reasons. In the table, expect the column "Blob CSID" (not "Path") with each Blob path's CSID shortened and ⧉, and a
   "Size" column: "Medium", and "Thumbnial (invalid)" with "(invalid)" in grey. The /media/ request shows its path,
@@ -630,8 +631,9 @@ CSID (in its URL) and `<MEDIA>` its Media CSID (on Media look up).
 - [ ] Look up `pahma/imageserver/blobs/<BLOB>/derivatives/Medium/content` (no leading slash), then
   `blobs/<BLOB>/derivatives/Medium/content`: expect each looked up as `/pahma/imageserver/blobs/<BLOB>/derivatives/Medium/content`,
   with one size and no box. Look up `/cinefiles/imageserver/blobs/<BLOB>/content`: expect "That's a Cinefiles path;
-  you're looking up PAHMA's files." Look up the /media/ URL you opened above: expect "Serena doesn't serve /media/ URLs
-  yet …", reason "unknown path", then the record's answer with every size.
+  you're looking up PAHMA's files." Look up the /media/ URL you opened above: expect "This URL isn't one Serena serves
+  (it needs /blob/content or /blob/derivatives/<size>/content) …", reason "unknown path", then the record's answer
+  with every size.
 - [ ] Stop the backend (`docker compose -p serena stop web`), then click "Media look up" again: expect "Serena can't be
   reached right now. Try again in a minute. (502)" (or 503 or 504, from the dev server). Start it again (`docker
   compose -p serena start web`).
@@ -670,3 +672,27 @@ request's branch, run `./serena etl pahma`, then open http://localhost:5373/admi
   named the record, naming the refresh and the Blob and saying the public sees the generic picture. Acknowledge it.
   It comes again only for a later refresh date while no record is named.
 
+## 23. Media URLs, locally (15 minutes, before merging a pull request that changes them)
+
+What it checks: decisions D174 to D180 of October 14, 2026. A request for `…/media/<Media CSID>/blob/content` or
+`…/blob/derivatives/<size>/content` is answered as a request for the Media record's listed Blob, with the same checks,
+shares that Blob's cache entries, serves public files only, and is logged as requested. Start afresh from the pull
+request's branch, run `./serena etl pahma`, then open http://localhost:5373/admin/ and sign in to PAHMA as `admin`
+(password `admin`). Below, `<BLOB>` is the image's Blob CSID (in the Medium URL `./serena etl pahma` printed) and
+`<MEDIA>` its Media CSID (Media look up on `<BLOB>` shows it).
+
+- [ ] In Chrome, open http://localhost:8300/pahma/imageserver/media/<MEDIA>/blob/derivatives/Medium/content: expect
+  the image. Then open the Blob's Medium URL: expect the same image. On "Media look up", look up `<BLOB>`: expect
+  Medium cached once (one fetch for both URLs).
+- [ ] Open http://localhost:8300/pahma/imageserver/media/<MEDIA>/blob/content: expect the original file, or the
+  unavailable image with reason "original not served" if PAHMA doesn't serve originals of its kind (as for the Blob URL).
+- [ ] Open the Medium URL with an unknown Media CSID, `9f9f9f9f-0000-4000-8000-000000000000` (synthetic): expect the
+  unavailable image, and on "Past requests" reason "not listed".
+- [ ] On "Past requests", expect the Media URLs in the "Blob CSID" column as "Media <shortened Media CSID>" with ⧉,
+  their sizes ("Medium", "original") in the "Size" column, and no "(not a Blob path)"; hover: the whole path as
+  requested (`/media/…`, not rewritten to `/blobs/…`). Click "Media …" on the Medium line: expect the file in a
+  dialog, titled "Medium", with the request's outcome. Export the CSV: the paths are as requested.
+- [ ] On "Media look up", paste the Media URL for Medium: expect it answered like the Blob's URL (one size, "Served"),
+  with no note about /media/ URLs, and the Media record beside CollectionSpace.
+- [ ] On "Recalls", recall `<MEDIA>` with a reason. Open the Media Medium URL again: expect the unavailable image,
+  and on "Past requests" reason "recalled". Cancel the recall with a reason; within a minute the URL serves again.

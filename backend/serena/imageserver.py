@@ -1,4 +1,4 @@
-"""The legacy imageserver paths (design: Serving a request).
+"""The legacy imageserver paths, and the same keyed by Media CSID (design: Serving a request).
 
 Every request is answered with a 302: to a signed URL when the file may be served, otherwise to the museum's
 unavailable image with Cache-Control: no-store. Never an error page: when Serena can't decide, it doesn't serve."""
@@ -102,12 +102,20 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
         parsed = paths.parse(museum, rest)
         if isinstance(parsed, paths.Refused):
             return _unavailable(request, tenant, parsed.reason)
-        placeholder = request.app.state.museum_settings.get(museum).placeholder_media_csid
-        decision = servability.decide(museum, parsed, request.app.state.store,
-                                      _vouch(request, tenant, parsed.blob_csid), placeholder)
-        kind = decision.record.kind if decision.record is not None else None
-        if decision.reason is not None:
-            return _unavailable(request, tenant, decision.reason, kind)
+        if isinstance(parsed, paths.MediaRequest):
+            # By Media CSID (D174 to D177): its listed Blob, with the Blob request's checks; public files only.
+            resolved, decision = servability.resolve(museum, parsed, request.app.state.store)
+            kind = decision.record.kind if decision.record is not None else None
+            if resolved is None or decision.reason is not None:
+                return _unavailable(request, tenant, decision.reason or Reason.NOT_LISTED, kind)
+            parsed = resolved  # the same cache entries as the Blob's own URL (D176)
+        else:
+            placeholder = request.app.state.museum_settings.get(museum).placeholder_media_csid
+            decision = servability.decide(museum, parsed, request.app.state.store,
+                                          _vouch(request, tenant, parsed.blob_csid), placeholder)
+            kind = decision.record.kind if decision.record is not None else None
+            if decision.reason is not None:
+                return _unavailable(request, tenant, decision.reason, kind)
         if parsed.derivative in museum.watermark_sizes:
             # Never an unwatermarked copy of a size the museum watermarks (design: Watermarks).
             return _unavailable(request, tenant, Reason.WATERMARK_NOT_BUILT, kind)

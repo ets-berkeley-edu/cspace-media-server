@@ -12,7 +12,7 @@ import {routes} from '@/router'
 import {session} from '@/session'
 import AuditLog from '@/views/AuditLog.vue'
 import Requests from '@/views/Requests.vue'
-import {blobPathOf, csidOfPath, csidsOfText, middlePath, shortPath, sizeRank} from '@/words'
+import {blobPathOf, csidOfPath, csidsOfText, mediaPathOf, middlePath, shortPath, sizeRank} from '@/words'
 
 const BLOB = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b'
 const MEDIA = '20349bfa-cad6-5f47-9acd-dcd34e3f0b98'
@@ -30,6 +30,13 @@ describe('Past requests paths', () => {
     expect(blobPathOf(`/pahma/imageserver/media/${MEDIA}/blob/derivatives/Medium/content`)).toBeNull()
     expect(blobPathOf(`/pahma/imageserver/blobs/${BLOB}`)).toBeNull()
     expect(blobPathOf('/pahma/imageserver/blobs/not.a.csid/content')).toBeNull()
+  })
+
+  it('splits a Media URL into its Media CSID and size (pull request 15, D179)', () => {
+    expect(mediaPathOf(`/pahma/imageserver/media/${MEDIA}/blob/derivatives/Medium/content`)).toEqual({media: MEDIA, size: 'Medium'})
+    expect(mediaPathOf(`/pahma/imageserver/media/${MEDIA}/blob/content`)).toEqual({media: MEDIA, size: 'original'})
+    expect(mediaPathOf(`/pahma/imageserver/media/${MEDIA}/content`)).toBeNull()
+    expect(mediaPathOf(`/pahma/imageserver/blobs/${BLOB}/content`)).toBeNull()
   })
 
   it('sorts sizes smallest to largest, then any other name, then no size', () => {

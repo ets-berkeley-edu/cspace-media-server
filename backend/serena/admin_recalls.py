@@ -153,11 +153,12 @@ def create_router() -> APIRouter:
 
     @router.get("/media/{media_csid}/preview")
     def preview(request: Request, session: SignedIn, t: Recalls_, media_csid: MediaCsid,
-                size: Annotated[str, Query(pattern="^(thumbnail|full)$")] = "thumbnail",
+                size: Annotated[str, Query(pattern="^[A-Za-z]{1,20}$")] = "thumbnail",
                 source: Annotated[str, Query(pattern="^(any|cspace)$")] = "any") -> Response:
-        """A Media record's thumbnail or full-size view, for the recall form (D129): Serena's stored copy if it has
-        one, otherwise CollectionSpace's, not stored. source=cspace skips Serena's copy: Media look up's view of
-        CollectionSpace's file now (D144). Never cached."""
+        """A Media record's thumbnail or full-size view, for the recall form (D129), or one size of it (Past requests'
+        file dialog for a Media URL, D179): Serena's stored copy if it has one, otherwise CollectionSpace's, not
+        stored. source=cspace skips Serena's copy: Media look up's view of CollectionSpace's file now (D144). Never
+        cached."""
         museum = museum_of(request, session.tenant)
         if not is_csid(media_csid):
             raise HTTPException(404, "No such Media record.")
@@ -168,6 +169,12 @@ def create_router() -> APIRouter:
         derivative: str | None = "Thumbnail" if "Thumbnail" in museum.derivatives else museum.derivatives[0]
         if size == "full":
             derivative = None if kind == "pdf" else museum.derivatives[-1]
+        elif size == "original":
+            derivative = None
+        elif size in museum.derivatives:
+            derivative = None if kind == "pdf" else size  # one size: Past requests' file dialog for a Media URL (D179)
+        elif size != "thumbnail":
+            raise HTTPException(422, f"Not one of {museum.name}'s sizes.")
         limit = t.museum_settings.get(museum).size_limit_mb.get(kind or "image", 0) * 1024 * 1024  # type: ignore[call-overload]
         for row in rows if source == "any" else []:
             entry = cache_index.lookup(t.store, museum.key, row.blob_csid, derivative)

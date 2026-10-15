@@ -34,8 +34,9 @@
       class="mb-4"
     >
       <template v-if="mediaUrl">
-        Serena doesn't serve /media/ URLs yet (pull request 15): a request for one gets the unavailable image, reason
-        "{{ reasonOf(result.refused) }}". Below, its Media record, looked up on its own.
+        This URL isn't one Serena serves (it needs /blob/content or /blob/derivatives/&lt;size&gt;/content): a request for
+        it gets the unavailable image, reason "{{ reasonOf(result.refused) }}". Below, its Media record, looked up on its
+        own.
       </template>
       <template v-else>
         This URL isn't one Serena serves (it needs /content or /derivatives/&lt;size&gt;/content): a request for it gets
@@ -307,7 +308,8 @@ const heading = computed<{prefix: string, name: string, csid?: string} | null>((
   const number = cs.value.identification_number
   return number ? {prefix: 'Media ', name: number, csid: media} : {prefix: 'Media ', name: media}
 })
-// A /media/ URL, which Serena serves from pull request 15: its Media record is looked up on its own.
+// A /media/ URL Serena doesn't serve (a wrong shape): its Media record is looked up on its own. One it serves (pull
+// request 15, D180) is answered as its listed Blob's, with no note.
 const mediaUrl = computed(() => /\/imageserver\/media\//.test(result.value?.input || ''))
 
 // The sizes box's line, for example "Sizes (6): none served (recalled) · cached: Medium".

@@ -112,4 +112,23 @@ describe('the Past requests page', () => {
     await flushPromises()
     wrapper.unmount()
   })
+
+  it('shows a Media URL as "Media <CSID…>" with its size, and opens its file (pull request 15, D179)', async () => {
+    const media = '20349bfa-cad6-5f47-9acd-dcd34e3f0b98'
+    const asked = {...line('2026-10-12T17:06:00.000+00:00', 'served'), path: `/pahma/imageserver/media/${media}/blob/derivatives/Small/content`}
+    fakeApi({'GET /museums/pahma/requests?range=24h': {body: {...REPORT, lines: [asked]}}})
+    const wrapper = await open()
+    await flushPromises()
+    const links = wrapper.findAll('#requests-table .file-link')
+    expect(links.map(l => l.text())).toEqual(['Media 20349bfa…3f0b98'])
+    expect(wrapper.find('#requests-table tbody').text()).toContain('Small')
+    expect(wrapper.find('#requests-table tbody').text()).not.toContain('not a Blob path')
+    await links[0].trigger('click')
+    await flushPromises()
+    const dialog = document.querySelector('#file-dialog')
+    expect(dialog?.querySelector('img')?.getAttribute('src')).toBe(`/admin/v1/museums/pahma/media/${media}/preview?size=Small`)
+    ;(document.querySelector('#file-dialog-dismiss') as HTMLElement).click()
+    await flushPromises()
+    wrapper.unmount()
+  })
 })

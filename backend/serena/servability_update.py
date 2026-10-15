@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from . import tables
@@ -57,13 +58,18 @@ def _write(store: Store, requests: list[dict[str, Any]], sleep: Callable[[float]
             raise RuntimeError("DynamoDB kept leaving writes unprocessed")
 
 
-def update(store: Store, tenant: str, rows: dict[str, Row], sleep: Callable[[float], None] = time.sleep) -> Counts:
+def update(store: Store, tenant: str, rows: dict[str, Row], sleep: Callable[[float], None] = time.sleep,
+           listed_at: str | None = None) -> Counts:
+    """`listed_at` is written on each new or changed row: of a Media record listed with several Blobs (a replaced
+    image's old one beside the new), a Media URL uses the one listed most recently (decided October 14, 2026, D175)."""
+    listed_at = listed_at or datetime.now(UTC).isoformat(timespec="seconds")
     now = current_rows(store, tenant)
     counts = Counts()
     deletes = [{"DeleteRequest": {"Key": {"pk": {"S": f"{tenant}#{blob}"}}}} for blob in now if blob not in rows]
     _write(store, deletes, sleep)
     counts.deleted = len(deletes)
-    puts = [{"PutRequest": {"Item": item(tenant, blob, row)}} for blob, row in rows.items() if now.get(blob) != row]
+    puts = [{"PutRequest": {"Item": {**item(tenant, blob, row), "listed_at": {"S": listed_at}}}}
+            for blob, row in rows.items() if now.get(blob) != row]
     _write(store, puts, sleep)
     counts.written = len(puts)
     counts.unchanged = len(rows) - len(puts)

@@ -164,7 +164,7 @@ import LoadError from '@/components/LoadError.vue'
 import RequestPath from '@/components/RequestPath.vue'
 import SizeName from '@/components/SizeName.vue'
 import WhenText from '@/components/WhenText.vue'
-import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, blobPathOf, kindWord, reasonOf, sizeRank, when} from '@/words'
+import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, blobPathOf, kindWord, mediaPathOf, reasonOf, sizeRank, when} from '@/words'
 import {useQueryValue, useTableState} from '@/tableState'
 
 const OUTCOMES = [{value: '', title: 'All'}, {value: 'served', title: 'Served'}, {value: 'unserved', title: 'Unserved'}]
@@ -203,22 +203,25 @@ const file = ref<ShownFile | null>(null)
 // A path opens its file in a dialog, with "Media look up" and "Dismiss" (D145).
 function openPath(path: string, line?: RequestLine) {
   const found = blobOfPath(path)
-  if (!found) {
+  const media = mediaPathOf(path)
+  if (!found && !media) {
     return
   }
+  const size = found ? found.size : media!.size
   const outcome = line ? (line.outcome === 'served' ? 'served' : `unserved, ${reasonOf(line.reason)}`) : ''
   file.value = {
-    title: found.size === 'original' ? `Original ${kindWord(line?.kind)}` : found.size,
+    title: size === 'original' ? `Original ${kindWord(line?.kind)}` : size,
     name: path,
-    url: api.blobPreviewUrl(museum.value, found.blob, found.size),
+    // A Media URL (pull request 15, D179): the Media record's listed Blob at that size.
+    url: found ? api.blobPreviewUrl(museum.value, found.blob, size) : api.previewUrl(museum.value, media!.media, size),
     lookup: path,
     note: line ? `This request, ${when(line.at)}: ${outcome}.` : undefined
   }
 }
 
-/** A path's size: the name asked for, or '' for a path that isn't a Blob path. */
+/** A path's size: the name asked for, or '' for a path that isn't a Blob or Media path. */
 function sizeOf(path: string): string {
-  return blobPathOf(path)?.size || ''
+  return blobPathOf(path)?.size || mediaPathOf(path)?.size || ''
 }
 
 function sizeKey(path: string): string {
