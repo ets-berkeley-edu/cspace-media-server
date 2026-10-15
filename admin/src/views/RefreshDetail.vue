@@ -29,7 +29,7 @@
       <v-btn
         v-if="refresh.actions.includes('override_threshold')"
         id="override-threshold"
-        color="warning"
+        color="error"
         variant="flat"
         @click="open('override_threshold')"
       >
@@ -107,7 +107,7 @@
           <v-btn variant="outlined" @click="dialog = false">Cancel</v-btn>
           <v-btn
             id="confirm-action"
-            color="primary"
+            :color="action === 'override_threshold' ? 'error' : 'primary'"
             variant="flat"
             :loading="busy"
             @click="act"

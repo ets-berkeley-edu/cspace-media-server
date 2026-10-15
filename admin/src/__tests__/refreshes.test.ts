@@ -65,6 +65,7 @@ describe('overriding the delta threshold', () => {
     })
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     expect(wrapper.find('#override-threshold').text()).toBe('Override the delta threshold')
+    expect(wrapper.find('#override-threshold').classes()).toContain('bg-error') // red: it changes what the public sees (D156)
     await wrapper.find('#override-threshold').trigger('click')
     await flushPromises()
     const reason = document.querySelector('#reason') as HTMLTextAreaElement

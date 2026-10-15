@@ -256,13 +256,13 @@ go once every alert is acknowledged on the Alerts page (the bell opens it).
 - [ ] In a terminal: `./serena etl pahma --rows 3`. Expect `check_failed` and `servable list: 4 rows; 0 added, 17
   removed, 0 changed (80.95% of the last servability update's 21 rows)`. In the app, open "Past refreshes", then the
   refresh: expect "Servable list check failed", the problem (80.95% of the rows would change; the threshold is 5%), and
-  an orange button, "Override the delta threshold". Within a minute, expect the banner, and the Alerts page (the bell), to show
+  a red button, "Override the delta threshold". Within a minute, expect the banner, and the Alerts page (the bell), to show
   "A servable list check failed" for that refresh.
-- [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", says "Give
+- [ ] Click that button. A dialog opens with a Reason box. Its red button, "Override the delta threshold", says "Give
   a reason first." under the Reason box if you click it without one (section 21). Type one and click it. Expect:
   - the banner, with "2 alerts: An admin overrode the delta threshold" ("A servable list check failed" stays until
     acknowledged), and the bell's badge showing 2 (or one more, if the deadline alert is still waiting);
-  - after reloading the page, the same refresh `Updated`, with no orange button, its reasons naming the override and
+  - after reloading the page, the same refresh `Updated`, with no red button, its reasons naming the override and
     its check's warnings saying the delta threshold was skipped.
 - [ ] Click "Open alerts" in the banner and acknowledge each alert. Expect the banner and the badge gone once none is
   left, and the alerts with your name and the time.

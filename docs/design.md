@@ -1083,7 +1083,8 @@ reachable only from campus networks.
     click selects rather than opens, an opened Recalls row's CSIDs are plain text, each followed by "View file".
     Refresh IDs, short and shown whole, are links.
   - **Buttons** (D156). A dialog's or page's main action is filled: blue, or red when it changes what the public
-    sees or who is signed in (Recall, Release, Cancel recall, Sign everyone out). Every other button is outlined,
+    sees or who is signed in (Recall, Release, Cancel recall, Override the delta threshold, Sign everyone out). Every
+    other button is outlined,
     Cancel and Back included. Plain text is only for links. Recalls' "Recall…" is outlined red: it only opens the
     form, whose "Recall <n> Media records" is the filled red one (Richard, October 14, 2026).
   - **A reason is never a disabled button** (Richard, October 14, 2026, for accessibility). In every dialog that needs
