@@ -152,7 +152,12 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: {file
     body: raw?.file ? raw.file : body === undefined ? undefined : JSON.stringify(body)
   })
   const text = await response.text()
-  const data = text ? JSON.parse(text) : null
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = null // not Serena's JSON: a proxy's error page, say
+  }
   if (response.status === 401 && sessionEnded) {
     const museum = museumOfPath(path)
     if (museum) {
@@ -160,10 +165,20 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: {file
     }
   }
   if (!response.ok) {
-    const detail = data && typeof data.detail === 'string' ? data.detail : `Serena answered ${response.status}.`
+    const detail = data && typeof data.detail === 'string' ? data.detail : unexplained(response.status)
     throw new ApiError(response.status, detail)
   }
   return data as T
+}
+
+/**
+ * An error without Serena's own explanation (Richard, October 14, 2026): what it means, with the code kept for anyone
+ * reporting it. 502, 503 and 504 come from what stands in front of Serena when it's down or slow.
+ */
+export function unexplained(status: number): string {
+  return [502, 503, 504].includes(status)
+    ? `Serena can't be reached right now. Try again in a minute. (${status})`
+    : `Serena gave an unexpected answer. (${status})`
 }
 
 /** One request in the log: served, or unserved with its reason (D103). */
@@ -188,6 +203,8 @@ export interface RequestsReport {
   signed_links: boolean // the museum has signed access (Cinefiles): only its page shows the Signed link column
   days: {day: string, served: number, unserved: Record<string, number>, unserved_total: number}[]
   top_paths: {path: string, requests: number}[]
+  sizes: string[] // the museum's sizes, smallest to largest: its derivatives, then "original" (October 14, 2026)
+  served_by_size: {size: string, requests: number}[] // every served request in the range, in that order
   lines: RequestLine[]
 }
 

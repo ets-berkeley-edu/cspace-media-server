@@ -16,6 +16,8 @@ const REPORT = {
   truncated: false,
   days: [{day: '2026-10-12', served: 2, unserved: {not_listed: 1, too_large: 1}, unserved_total: 2}],
   top_paths: [{path: '/pahma/imageserver/blobs/b1/content', requests: 3}],
+  sizes: ['Thumbnail', 'Small', 'Medium', 'FullHD', 'OriginalJpeg', 'original'],
+  served_by_size: [{size: 'Medium', requests: 2}, {size: 'original', requests: 1}],
   lines: [
     line('2026-10-12T17:00:00.000+00:00', 'served'),
     line('2026-10-12T17:01:00.000+00:00', 'unserved', 'not_listed', 2),
@@ -42,7 +44,9 @@ describe('the Past requests page', () => {
     expect(wrapper.find('#requests-loading').exists()).toBe(false)
     expect(wrapper.find('#page-title').text()).toBe('PAHMA Past requests')
     expect(wrapper.find('#requests-by-day').text()).toContain('not listed 1, too large 1')
-    expect(wrapper.find('#requests-top-paths').text()).toContain('b1 · original') // the part that differs (October 14)
+    expect(wrapper.find('#requests-top-paths').text()).toContain('b1original') // its Blob CSID, then its size (October 14)
+    // The Served card counts every served request in the range by size, smallest to largest (October 14, 2026).
+    expect(wrapper.find('#requests-by-size').text()).toBe('by size: Medium\u00a02 · original\u00a01')
     expect(wrapper.find('#requests-top-paths [title="/pahma/imageserver/blobs/b1/content"]').exists()).toBe(true)
     const times = () => wrapper.findAll('#requests-table tbody tr').map(row => row.find('td').text())
     expect(times()[0]).toBe('2026-10-12 17:03:00 UTC') // newest first
@@ -94,9 +98,11 @@ describe('the Past requests page', () => {
     await flushPromises()
     const links = wrapper.findAll('#requests-table .file-link')
     // One line, shortened in the middle; the whole path on hover (D152).
-    expect(links.map(l => l.text())).toEqual(['0f1e2d3c…3f4a5b · Medium'])
+    expect(links.map(l => l.text())).toEqual(['0f1e2d3c…3f4a5b']) // the Blob CSID; the size has its own column
     expect(links[0].attributes('title')).toMatch(/^View this file: \/pahma\/imageserver\/blobs\/[0-9a-f-]{36}\//) // whole
-    expect(wrapper.findAll('#requests-table .request-path').map(p => p.attributes('title'))).toContain(good.path)
+    // A bad CSID stays text: its shortened CSID, the path on hover (October 14, 2026).
+    expect(wrapper.findAll('#requests-table .request-path [title]').map(p => p.attributes('title'))).toContain(bad.path)
+    expect(wrapper.find('#requests-table tbody').text()).toContain('Medium')
     await links[0].trigger('click')
     await flushPromises()
     const dialog = document.querySelector('#file-dialog')

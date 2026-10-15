@@ -3,3 +3,10 @@
   $color-pack: true,
   $body-font-family: (Verdana, "Open Sans", Roboto, Helvetica, Arial, sans-serif)
 );
+
+// A value shown whole (an identification number, a whole CSID): one click selects all of it, so a CSID isn't copied
+// in pieces at its hyphens (Richard, October 14, 2026). Values shortened with an ellipsis have ⧉ instead.
+.sel-all {
+  -webkit-user-select: all;
+  user-select: all;
+}

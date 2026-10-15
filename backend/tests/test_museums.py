@@ -67,7 +67,7 @@ def _config(**changes: Any) -> dict[str, Any]:
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
-        ({"derivatives": ["Huge"]}, "unknown derivatives"),
+        ({"derivatives": ["Thumbnial"]}, "unknown derivatives"),
         ({"derivatives": []}, "at least one"),
         ({"derivatives": ["Thumbnail", "Thumbnail"]}, "twice"),
         ({"placeholder_blob_csid": "not/a/csid"}, "isn't a CSID"),

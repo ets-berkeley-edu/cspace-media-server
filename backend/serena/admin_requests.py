@@ -37,9 +37,15 @@ def create_router() -> APIRouter:
 
     @router.get("/requests")
     def requests_report(request: Request, session: SignedIn, range_: Range = "24h") -> dict[str, Any]:
-        """Counts by day (served; unserved by reason) and the most-requested paths cover every request in the range;
-        the lines are the newest MAX_LINES, newest first (D105 to D107). The app sorts, filters and pages them."""
+        """Counts by day (served; unserved by reason), served counts by size and the most-requested paths cover every
+        request in the range; the lines are the newest MAX_LINES, newest first (D105 to D107). The app sorts, filters
+        and pages them."""
         report = _report(request, session.tenant, range_)
+        # The museum's sizes, smallest to largest: its derivatives in their configured order, then the original file
+        # (Richard, October 14, 2026). The page sorts its Size columns by them; any other name is "(invalid)".
+        sizes = [*request.app.state.museums[session.tenant].derivatives, "original"]
+        rank = {size: i for i, size in enumerate(sizes)}
+        by_size = sorted(report.by_size.items(), key=lambda pair: (rank.get(pair[0], len(sizes)), pair[0]))
         return {
             "range": report.range,
             "start": report.start.isoformat(),
@@ -52,6 +58,9 @@ def create_router() -> APIRouter:
             "days": [{"day": d.day, "served": d.served, "unserved": d.unserved,
                       "unserved_total": sum(d.unserved.values())} for d in report.days],
             "top_paths": [{"path": path, "requests": n} for path, n in report.top_paths],
+            "sizes": sizes,
+            # The Served card's "by size" (Richard, October 14, 2026): every served request in the range.
+            "served_by_size": [{"size": size, "requests": n} for size, n in by_size],
             "lines": [{"at": line.at, "outcome": line.outcome, "reason": line.reason, "path": line.path,
                        "kind": line.kind, "cache": line.cache, "signed": line.signed} for line in report.lines],
         }

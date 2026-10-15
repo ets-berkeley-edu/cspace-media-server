@@ -35,7 +35,13 @@ describe('a refresh', () => {
     await wrapper.find('#retry-update').trigger('click')
     await flushPromises()
     const confirm = () => document.querySelector('#confirm-action') as HTMLButtonElement
-    expect(confirm().disabled).toBe(true) // no reason yet
+    // Never disabled (October 14, 2026): without a reason it sends nothing and says why, with focus on the field.
+    expect(confirm().disabled).toBe(false)
+    confirm().click()
+    await flushPromises()
+    expect(document.body.textContent).toContain('Give a reason first.')
+    expect(document.activeElement?.id).toBe('reason')
+    expect(calls.filter(c => c.method === 'POST')).toHaveLength(0)
     const reason = document.querySelector('#reason') as HTMLTextAreaElement
     reason.value = 'DynamoDB is back'
     reason.dispatchEvent(new Event('input'))

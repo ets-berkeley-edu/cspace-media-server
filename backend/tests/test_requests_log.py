@@ -38,8 +38,8 @@ def line(at: datetime, message: str, museum: str = "pahma", **fields: Any) -> di
 
 
 def served(at: datetime, n: int = 1, museum: str = "pahma", **fields: Any) -> dict[str, Any]:
-    return line(at, "served", museum, **{"path": f"/pahma/imageserver/blobs/b{n}/content", "kind": "image",
-                                         "cache": "hit", "signed": False, **fields})
+    return line(at, "served", museum, **{"path": f"/pahma/imageserver/blobs/b{n}/content", "size": "original",
+                                         "kind": "image", "cache": "hit", "signed": False, **fields})
 
 
 def unserved(at: datetime, reason: str = "not_listed", n: int = 9) -> dict[str, Any]:
@@ -74,11 +74,12 @@ def test_a_museum_that_isnt_a_key_never_reaches_a_query(museum: str) -> None:
 
 # --- the local stand-in, and the report
 
-def test_the_file_reader_answers_the_four_queries(tmp_path: Path) -> None:
+def test_the_file_reader_answers_the_five_queries(tmp_path: Path) -> None:
     log_file = tmp_path / "serena.log"
     write(Path(f"{log_file}.1"), [served(NOW - timedelta(days=1, hours=2), 1)])  # the rotated copy is read too
     write(log_file, [
-        served(NOW - timedelta(hours=3), 1), served(NOW - timedelta(hours=2), 2, cache="miss"),
+        served(NOW - timedelta(hours=3), 1), served(NOW - timedelta(hours=2), 2, cache="miss", size="Medium",
+                                                     path="/pahma/imageserver/blobs/b2/derivatives/Medium/content"),
         unserved(NOW - timedelta(hours=1), "too_large"), unserved(NOW - timedelta(minutes=5), "not_listed"),
         served(NOW - timedelta(hours=1), 1, museum="bampfa"),  # another museum
         line(NOW - timedelta(hours=1), "fetched", logger="serena.fetch"),  # another line
@@ -91,14 +92,15 @@ def test_the_file_reader_answers_the_four_queries(tmp_path: Path) -> None:
     assert [(ln.outcome, ln.reason, ln.path, ln.cache) for ln in report.lines] == [
         ("unserved", "not_listed", "/pahma/imageserver/blobs/b9/content", ""),
         ("unserved", "too_large", "/pahma/imageserver/blobs/b9/content", ""),
-        ("served", "", "/pahma/imageserver/blobs/b2/content", "miss"),
+        ("served", "", "/pahma/imageserver/blobs/b2/derivatives/Medium/content", "miss"),
         ("served", "", "/pahma/imageserver/blobs/b1/content", "hit"),
         ("served", "", "/pahma/imageserver/blobs/b1/content", "hit"),
     ]
     assert [(d.day, d.served, d.unserved) for d in report.days] == [
         ("2026-10-12", 2, {"not_listed": 1, "too_large": 1}), ("2026-10-11", 1, {})]
     assert report.top_paths == [("/pahma/imageserver/blobs/b1/content", 2), ("/pahma/imageserver/blobs/b9/content", 2),
-                                ("/pahma/imageserver/blobs/b2/content", 1)]
+                                ("/pahma/imageserver/blobs/b2/derivatives/Medium/content", 1)]
+    assert report.by_size == {"original": 2, "Medium": 1}  # served requests only
     assert not report.truncated
     last_hour = Requests(FileReader(log_file), clock=lambda: NOW).report("pahma", "1h")
     assert len(last_hour.lines) == 2  # from exactly an hour ago
@@ -164,6 +166,8 @@ class FakeLogs:
             rows = [cells(day="2026-10-12 00:00:00.000", reason="recalled", requests="4")]
         elif "by datefloor" in text:
             rows = [cells(day="2026-10-12 00:00:00.000", requests="7")]
+        elif text.endswith("by size"):
+            rows = [cells(size="Medium", requests="5"), cells(size="original", requests="2")]
         else:
             rows = [cells(path="/pahma/imageserver/blobs/b1/content", requests="7")]
         return {"status": self.status, "results": rows}
@@ -179,24 +183,25 @@ def reader(client: FakeLogs, wait: float = 30) -> CloudWatchReader:
                             monotonic=lambda: float(next(ticks)))
 
 
-def test_cloudwatch_runs_the_four_queries_on_the_app_log_group() -> None:
+def test_cloudwatch_runs_the_five_queries_on_the_app_log_group() -> None:
     client = FakeLogs(polls=2)
     report = Requests(reader(client), clock=lambda: NOW).report("pahma", "24h")
     assert {q["logGroupName"] for q in client.started} == {"/serena/app"}
     assert {(q["startTime"], q["endTime"]) for q in client.started} == {
         (int((NOW - timedelta(hours=24)).timestamp()), int(NOW.timestamp()))}
-    assert len(client.started) == 4
+    assert len(client.started) == 5
     assert [(ln.outcome, ln.path, ln.signed) for ln in report.lines] == [
         ("served", "/pahma/imageserver/blobs/b1/content", True)]
     assert [(d.day, d.served, d.unserved) for d in report.days] == [("2026-10-12", 7, {"recalled": 4})]
     assert report.top_paths == [("/pahma/imageserver/blobs/b1/content", 7)]
+    assert report.by_size == {"Medium": 5, "original": 2}
 
 
 def test_a_slow_query_is_stopped() -> None:
     client = FakeLogs(polls=1000)
     with pytest.raises(TooSlow):
         reader(client, wait=5).run("pahma", NOW - timedelta(hours=1), NOW)
-    assert sorted(client.stopped) == ["q1", "q2", "q3", "q4"]
+    assert sorted(client.stopped) == ["q1", "q2", "q3", "q4", "q5"]
 
 
 @pytest.mark.parametrize("client", [FakeLogs(status="Failed"), FakeLogs(fail_start=True)])
@@ -223,16 +228,22 @@ def client(store: Store, s3: Any, secretsmanager: Any, log_file: Path) -> TestCl
 def test_the_report(client: TestClient, log_file: Path) -> None:
     now = datetime.now(UTC)
     write(log_file, [served(now - timedelta(minutes=2), 1), unserved(now - timedelta(minutes=1), "too_large"),
-                     served(now - timedelta(minutes=1), 1, museum="bampfa")])
+                     served(now - timedelta(minutes=1), 1, museum="bampfa"),
+                     served(now - timedelta(minutes=3), 3, size="Thumbnail"),
+                     served(now - timedelta(minutes=4), 4, size="FullHD")])
     assert client.get(URL).status_code == 401
     sign_in(client)
     body = client.get(URL).json()
     assert body["range"] == "24h"  # to start (D106)
     assert (body["max_lines"], body["truncated"]) == (MAX_LINES, False)
     assert body["signed_links"] is False  # only Cinefiles has signed access: its page alone has the column
-    assert [(ln["outcome"], ln["reason"]) for ln in body["lines"]] == [("unserved", "too_large"), ("served", "")]
-    assert body["days"] == [{"day": now.date().isoformat(), "served": 1, "unserved": {"too_large": 1},
+    assert [(ln["outcome"], ln["reason"]) for ln in body["lines"]][:2] == [("unserved", "too_large"), ("served", "")]
+    assert body["days"] == [{"day": now.date().isoformat(), "served": 3, "unserved": {"too_large": 1},
                              "unserved_total": 1}]
+    # The museum's sizes, smallest to largest, and the served requests by size in that order (Richard, October 14).
+    assert body["sizes"] == ["Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg", "original"]
+    assert body["served_by_size"] == [{"size": "Thumbnail", "requests": 1}, {"size": "FullHD", "requests": 1},
+                                      {"size": "original", "requests": 1}]
     assert body["top_paths"][0] == {"path": "/pahma/imageserver/blobs/b1/content", "requests": 1}
     assert client.get(URL, params={"range": "7d"}).status_code == 200
     assert client.get(URL, params={"range": "30d"}).status_code == 422
@@ -300,4 +311,5 @@ def test_requests_reach_the_page(local_app: Any, store: Store, log_file: Path) -
         ("unserved", "/pahma/imageserver/blobs/not-a-csid/content", "", "", False, "not_listed"),
         ("served", f"/pahma/imageserver/blobs/{BLOB}/derivatives/Medium/content", "image", "hit", False, ""),
     ]
+    assert answer.json()["served_by_size"] == [{"size": "Medium", "requests": 1}]  # the "served" line has its size
     assert "uid" not in log_file.read_text() and "12345" not in log_file.read_text()

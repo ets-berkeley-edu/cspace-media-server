@@ -32,7 +32,14 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn id="file-dialog-lookup" variant="outlined" @click="lookUp">Media look up</v-btn>
+        <v-btn
+          v-if="file.lookup"
+          id="file-dialog-lookup"
+          variant="outlined"
+          @click="lookUp"
+        >
+          Media look up
+        </v-btn>
         <v-btn
           id="file-dialog-dismiss"
           color="primary"
@@ -49,15 +56,18 @@
 <script setup lang="ts">
 import {ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
-import {museumOfPath, sessionEndedFor} from '@/api'
+import {museumOfPath, sessionEndedFor, unexplained} from '@/api'
 import CopyButton from '@/components/CopyButton.vue'
 
-/** A file to show: its picture's URL (through the admin API), what to look up, and how to name it (D145). */
+/**
+ * A file to show: its picture's URL (through the admin API), what to look up, and how to name it (D145). Without
+ * `lookup` there's no "Media look up" button: Media look up's own size links (Richard, October 14, 2026).
+ */
 export interface ShownFile {
   title: string
   name: string
   url: string
-  lookup: string
+  lookup?: string
   note?: string
 }
 
@@ -97,7 +107,7 @@ async function explain() {
       }
     } else {
       const body = await response.json().catch(() => null) // the admin API's problem: {detail}
-      why.value = {text: body && typeof body.detail === 'string' ? body.detail : `Nothing to show: Serena answered ${response.status}.`, open: false}
+      why.value = {text: body && typeof body.detail === 'string' ? body.detail : `Nothing to show: ${unexplained(response.status)}`, open: false}
     }
   } catch {
     why.value = {text: 'Nothing to show: Serena couldn\'t be reached.', open: false}

@@ -30,6 +30,20 @@ async function at(path: string, component: unknown) {
   return wrapper
 }
 
+/**
+ * The confirm button is never disabled (October 14, 2026): pressed without a reason, it sends nothing, says why under
+ * the Reason field and moves focus there.
+ */
+async function noReasonYet(button: HTMLButtonElement, reason: string) {
+  expect(button.disabled).toBe(false)
+  const before = (globalThis.fetch as unknown as {mock?: {calls: unknown[]}}).mock?.calls.length
+  button.click()
+  await flushPromises()
+  expect(document.body.textContent).toContain('Give a reason first.')
+  expect(document.activeElement?.id).toBe(reason.slice(1))
+  expect((globalThis.fetch as unknown as {mock?: {calls: unknown[]}}).mock?.calls.length).toBe(before)
+}
+
 function type(selector: string, value: string) {
   const field = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement
   field.value = value
@@ -52,7 +66,7 @@ describe('the Recalls page', () => {
     await wrapper.find('#active-recalls .release').trigger('click')
     await flushPromises()
     const confirm = () => document.querySelector('#release-confirm') as HTMLButtonElement
-    expect(confirm().disabled).toBe(true) // a reason first
+    await noReasonYet(confirm(), '#release-reason')
     type('#release-reason', 'CollectionSpace is right')
     await flushPromises()
     confirm().click()
@@ -76,7 +90,7 @@ describe('the Recalls page', () => {
     await wrapper.find('#active-recalls .cancel-recall').trigger('click')
     await flushPromises()
     const confirm = () => document.querySelector('#cancel-confirm') as HTMLButtonElement
-    expect(confirm().disabled).toBe(true) // a reason first
+    await noReasonYet(confirm(), '#cancel-reason')
     type('#cancel-reason', 'wrong CSID')
     await flushPromises()
     confirm().click()
@@ -99,25 +113,31 @@ describe('the Recalls page', () => {
     (document.querySelector('#recall-summarize') as HTMLButtonElement).click()
     await vi.waitFor(() => expect(document.body.textContent).toContain('More than 12 CSIDs: use a text file instead.'))
     expect(calls.filter(c => c.method === 'POST')).toHaveLength(0)
-    type('#recall-csids', `${BLOB}, typo`)
-    await flushPromises();
+    // A pasted URL is cut down to its CSID at once (October 14, 2026); its PDF link suffix never stays in the box.
+    type('#recall-csids', `https://example.edu/pahma/imageserver/blobs/${BLOB}/derivatives/Medium/content?x=1, typo`)
+    document.querySelector('#recall-csids')?.dispatchEvent(new Event('paste', {bubbles: true}))
+    await new Promise(resolve => setTimeout(resolve))
+    await flushPromises()
+    expect((document.querySelector('#recall-csids') as HTMLTextAreaElement).value).toBe(`${BLOB}\ntypo`);
     (document.querySelector('#recall-summarize') as HTMLButtonElement).click()
     await vi.waitFor(() => expect(document.querySelector('#recall-summary')).not.toBeNull())
     expect(document.querySelector('#recall-summary')?.textContent).toContain('1a2b3c4d…3b4c50') // shortened (D154)
     expect(document.querySelector(`#recall-summary [title="${MEDIA}"]`)).not.toBeNull() // whole on hover
     expect(document.querySelector('#recall-summary .copy-button')?.getAttribute('aria-label')).toBe('Copy Media CSID')
     expect(document.querySelector('#recall-not-found')?.textContent).toContain('typo: Not a CSID.')
+    // "You gave": the path the CSID came from, shortened, with ⧉ (October 14, 2026).
+    expect(document.querySelector('#recall-summary')?.textContent).toContain('/pahma/imageserver/blobs/0…Medium/content')
     const thumbnail = document.querySelector('#recall-summary img') as HTMLImageElement
     expect(thumbnail.getAttribute('src')).toBe(`/admin/v1/museums/pahma/media/${MEDIA}/preview?size=thumbnail`)
     const confirm = () => document.querySelector('#recall-confirm') as HTMLButtonElement
     expect(confirm().textContent).toContain('Recall 1 Media record')
-    expect(confirm().disabled).toBe(true)
+    await noReasonYet(confirm(), '#recall-reason')
     type('#recall-reason', 'A complaint from a community')
     await flushPromises()
     confirm().click()
     await vi.waitFor(() => expect(calls.some(c => c.method === 'POST' && c.path === '/museums/pahma/recalls')).toBe(true))
     expect(calls.find(c => c.path === '/museums/pahma/recalls' && c.method === 'POST')?.body).toEqual(
-      {text: `${BLOB}, typo`, reason: 'A complaint from a community'})
+      {text: `${BLOB}\ntypo`, reason: 'A complaint from a community'})
     wrapper.unmount()
   })
 })
@@ -144,12 +164,23 @@ describe('Media look up', () => {
     expect(wrapper.find('#page-title').text()).toBe('PAHMA Media look up')
     await wrapper.find('#lookup-input').setValue(MEDIA)
     await wrapper.find('form').trigger('submit')
+    await vi.waitFor(() => expect(calls.map(c => c.path)).toEqual([`/museums/pahma/lookup?q=${MEDIA}`]))
     await flushPromises()
-    expect(calls.map(c => c.path)).toEqual([`/museums/pahma/lookup?q=${MEDIA}`])
     expect(wrapper.find('#lookup-verdict').text()).toContain('Not served: recalled')
     expect(wrapper.find('#lookup-heading').text()).toContain('Media 9-12345') // D153
     expect(wrapper.find('#lookup-heading').text()).toContain(`Media CSID ${MEDIA}`)
-    expect(wrapper.find('#lookup-heading .copy-button').attributes('aria-label')).toBe('Copy identification number') // D165
+    // Shown whole: one click selects it, and no ⧉ (October 14, 2026, replacing D165).
+    expect(wrapper.find('#lookup-heading .copy-button').exists()).toBe(false)
+    expect(wrapper.findAll('#lookup-heading .sel-all').map(s => s.text())).toEqual(['9-12345', MEDIA])
+    // The sizes fold away under a line that says what they'd say; closed, since they don't differ (October 14, 2026).
+    expect(wrapper.find('#lookup-sizes-box summary').text()).toBe('Sizes (2): none served (recalled) · cached: Medium')
+    expect(wrapper.find('#lookup-sizes-box').attributes('open')).toBeUndefined()
+    await wrapper.find('#lookup-sizes .size-link').trigger('click') // a size opens its file, without "Media look up"
+    await flushPromises()
+    expect(document.querySelector('#file-dialog img')?.getAttribute('src')).toBe(`/admin/v1/museums/pahma/blobs/${BLOB}/preview?size=Thumbnail`)
+    expect(document.querySelector('#file-dialog-lookup')).toBeNull()
+    ;(document.querySelector('#file-dialog-dismiss') as HTMLElement).click()
+    await flushPromises()
     expect(wrapper.find('#lookup-sync').text()).toBe('⚠ (1 difference: As of)') // D162
     expect(wrapper.find('#lookup-next').text()).toContain('Open Recalls')
     expect(wrapper.find('#lookup-sizes').text()).toContain('image/jpeg, 96 KB')
@@ -185,9 +216,11 @@ describe('the file dialogs', () => {
     await wrapper.find('#active-recalls .row-expand').trigger('click') // ▸ shows its CSIDs
     await flushPromises()
     expect(wrapper.find('#active-recalls .row-expand').attributes('aria-expanded')).toBe('true')
-    const links = wrapper.findAll('#active-recalls .recall-csid')
-    expect(links.map(l => l.text())).toEqual([MEDIA, BLOB]) // whole, each with ⧉
-    expect(wrapper.findAll('#active-recalls .row-detail .copy-button')).toHaveLength(2)
+    // Whole, as plain text selected with one click, each followed by "View file"; no ⧉ (October 14, 2026).
+    expect(wrapper.findAll('#active-recalls .row-detail .sel-all').map(l => l.text())).toEqual([MEDIA, BLOB])
+    expect(wrapper.findAll('#active-recalls .row-detail .copy-button')).toHaveLength(0)
+    const links = wrapper.findAll('#active-recalls .view-file')
+    expect(links.map(l => l.text())).toEqual(['View file', 'View file'])
     await links[1].trigger('click')
     await flushPromises()
     const dialog = document.querySelector('#file-dialog')

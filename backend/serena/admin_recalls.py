@@ -59,7 +59,8 @@ MediaCsid = Annotated[str, Path(pattern=r"^[A-Za-z0-9-]{1,64}$")]
 
 
 class Csids(BaseModel):
-    text: str = Field(max_length=80_000)  # up to 1,000 CSIDs of up to 64 characters, with separators
+    # Up to 1,000 CSIDs, paths or URLs (Richard, October 14, 2026), with separators.
+    text: str = Field(max_length=400_000)
 
 
 class RecallBody(Csids):
@@ -109,13 +110,15 @@ def create_router() -> APIRouter:
     def summary(request: Request, session: SignedIn, t: Recalls_, body: Csids) -> dict[str, Any]:
         """What a recall of these CSIDs would recall; nothing changes (D116, D117)."""
         museum = museum_of(request, session.tenant)
-        return recalls.identify(museum, _parse(body.text), t.store, t.cspace).json()
+        return recalls.identify(museum, _parse(body.text), t.store, t.cspace,
+                                 services(request).museums).json()
 
     @router.post("/recalls", dependencies=[Depends(changes)])
     def recall(request: Request, session: SignedIn, t: Recalls_, body: RecallBody) -> dict[str, Any]:
         """Takes down the Media records the CSIDs name, finding them again rather than trusting the page (D118)."""
         museum = museum_of(request, session.tenant)
-        found = recalls.identify(museum, _parse(body.text), t.store, t.cspace)
+        found = recalls.identify(museum, _parse(body.text), t.store, t.cspace,
+                                 services(request).museums)
         numbers = recalls.identification_numbers(museum.key, [r.media_csid for r in found.records if not r.recalled],
                                                  t.cspace)
         done = recalls.recall(museum, found, _clean(body.reason), session.user, t.store, t.audit, t.alerts,
@@ -223,7 +226,8 @@ def create_router() -> APIRouter:
         """Why a file is or isn't served (D121), beside what CollectionSpace says now (D139); not audited (D123)."""
         museum = museum_of(request, session.tenant)
         try:
-            return explain(museum, q, t.store, t.refreshes, t.cspace.get(museum.key) if t.cspace else None)
+            return explain(museum, q, t.store, t.refreshes, t.cspace.get(museum.key) if t.cspace else None,
+                           services(request).museums)
         except LookupProblem as problem:
             raise HTTPException(422, str(problem)) from problem
 

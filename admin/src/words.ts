@@ -43,6 +43,14 @@ export function middlePath(path: string): string {
   return path.length > 72 ? `${path.slice(0, 40)}…${path.slice(-28)}` : path
 }
 
+/**
+ * A path that isn't a Blob path, as Past requests and the recall form show it (Richard, October 14, 2026, mockup
+ * version 34): its first 26 and last 14 characters, so it fits a table's column; the whole path on hover and in ⧉.
+ */
+export function shortPath(path: string): string {
+  return path.length > 44 ? `${path.slice(0, 26)}…${path.slice(-14)}` : path
+}
+
 /** A CSID shortened to both ends, for a table or a line (D154: every shortened CSID gets a copy button). */
 export function short(csid: string): string {
   return csid.length > 20 ? `${csid.slice(0, 8)}…${csid.slice(-6)}` : csid
@@ -67,20 +75,26 @@ export function whenParts(iso: string | null | undefined): [string, string] {
 }
 
 /**
- * A logged path as Past requests shows it (Richard, October 14, 2026): what's the same on every row (the museum and
- * /imageserver/blobs/) left out, so the column fits: "0f1e2d3c…3f4a5b · Medium", "… · original", or "Media 20349bfa…3f0b98
- * · Medium" for a Media-CSID URL. Any other shape, middlePath(). The whole path is on hover, in the file dialog and the
- * CSV export, and ⧉ copies it.
+ * A logged path's Blob CSID and size, for Past requests' Blob CSID and Size columns (Richard, October 14, 2026): only a
+ * Blob path in a shape Serena serves, with a CSID in Serena's format (1 to 64 letters, digits and hyphens). Any other
+ * path (a /media/ URL, a bare /blobs/<CSID>) is null: the page shows it whole, shortened in the middle, with "(not a
+ * Blob path)". The size is the name asked for: sizeOf() says whether it's one of the museum's.
  */
-export function shortPath(path: string): string {
-  const m = /^\/[^/]+\/imageserver\/(blobs|media)\/([^/]+)(\/.*)?$/.exec(path)
-  if (!m) {
-    return middlePath(path)
+export function blobPathOf(path: string): {blob: string, size: string} | null {
+  const m = /^\/[^/]+\/imageserver\/blobs\/([A-Za-z0-9-]{1,64})\/(?:derivatives\/([^/]+)\/)?content$/.exec(path)
+  return m ? {blob: m[1], size: m[2] || 'original'} : null
+}
+
+/**
+ * Where a size sorts (Richard, October 14, 2026): the museum's sizes, smallest to largest (its derivatives in their
+ * configured order, then the original file), then any other name ("(invalid)"), then a path with no size.
+ */
+export function sizeRank(size: string, sizes: string[]): number {
+  if (!size) {
+    return sizes.length + 1
   }
-  const rest = m[3] || ''
-  const size = /^(?:\/blob)?\/derivatives\/([^/]+)\/content$/.exec(rest)?.[1] || (/^(?:\/blob)?\/content$/.test(rest) ? 'original' : null)
-  const name = `${m[1] === 'media' ? 'Media ' : ''}${short(m[2])}`
-  return size ? `${name} · ${size}` : `${name}${rest ? ` ${middlePath(rest)}` : ''}`
+  const i = sizes.indexOf(size)
+  return i < 0 ? sizes.length : i
 }
 
 /** An unserved request's reason, readable: not_listed → "not listed". */
@@ -150,4 +164,51 @@ export function isCsid(value: string): boolean {
 export function blobOfPath(path: string): {blob: string, size: string} | null {
   const found = PATH.exec(path)
   return found && CSID.test(found[2]) ? {blob: found[2], size: found[3] || 'original'} : null
+}
+
+const SERENA_CSID = /^[A-Za-z0-9-]{1,64}$/ // a CSID in Serena's format (design: URLs)
+
+/**
+ * A path or URL as the recall form reads it (Richard, October 14, 2026), with Media look up's forgiving rules: no host,
+ * query string or PDF link suffix (a visitor's email address, which never leaves the browser); a missing leading slash
+ * or museum is the signed-in museum's. A Blob path gives its Blob CSID, a /media/ path its Media CSID. Another museum's
+ * path, or one without a valid CSID, has no CSID: the form sends the cleaned path and Serena says why.
+ */
+export function csidOfPath(token: string, museum: string): {csid: string | null, path: string} {
+  let path = token.trim()
+  if (path.includes('://')) {
+    try {
+      path = new URL(path).pathname
+    } catch {
+      path = path.replace(/^[a-z]+:\/\/[^/]*/i, '')
+    }
+  }
+  path = path.split(/[?#]/)[0].replace(/\b(linked_pdf|inline_pdf)(:|%3A)[^/]*/gi, '$1:')
+  let parts = path.replace(/^\/+/, '').split('/')
+  if (parts[0] === 'imageserver') {
+    parts = [museum, ...parts]
+  } else if (parts[0] === 'blobs' || parts[0] === 'media') {
+    parts = [museum, 'imageserver', ...parts]
+  }
+  const cleaned = `/${parts.join('/')}`
+  const own = parts[0] === museum && parts[1] === 'imageserver' && (parts[2] === 'blobs' || parts[2] === 'media')
+  return {csid: own && SERENA_CSID.test(parts[3] || '') ? parts[3] : null, path: cleaned}
+}
+
+/**
+ * The recall form's text with each path or URL cut down to its CSID (csidOfPath), one per line. `cameFrom` records the
+ * path each CSID came from, for the summary's "You gave".
+ */
+export function csidsOfText(text: string, museum: string, cameFrom: Record<string, string>): string {
+  return text.split(/[\s,]+/).filter(Boolean).map(token => {
+    if (!token.includes('/')) {
+      return token.replace(/\b(linked_pdf|inline_pdf)(:|%3A).*/gi, '$1:') // never an email address
+    }
+    const found = csidOfPath(token, museum)
+    if (found.csid) {
+      cameFrom[found.csid] = found.path
+      return found.csid
+    }
+    return found.path
+  }).join('\n')
 }

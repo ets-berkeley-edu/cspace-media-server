@@ -393,7 +393,10 @@ app's recall covers the urgent case.
 | CollectionSpace failed or timed out on a miss | 302 to the unavailable image; `no-store`; counted and logged as an upstream error |
 | Serena itself failing (DynamoDB unreachable and so on) | 302 to the unavailable image; logged as an internal error. Serena fails closed: when it can't check, it doesn't serve |
 
-Serena never returns an error page or a stack trace to the browser.
+Serena never returns an error page or a stack trace to the browser. An address outside `imageserver/`, the admin app
+and Serena's two APIs that matches nothing gets a short plain-text 404, "Not found.", with `Cache-Control: no-store`
+(Richard, October 14, 2026): never JSON, and never a list of Serena's addresses. `/admin/v1/` and `/etl/v1/` keep their
+JSON errors.
 
 ### Requests Serena doesn't serve
 
@@ -796,6 +799,13 @@ the plan, D127); until then, its requests are logged as `placeholder_not_uploade
 - **What the admin gives.** Up to 12 CSIDs in one box (separated by new lines, commas or spaces), or a plain-text file
   of up to 1,000, one per line, blank lines ignored. Each may be a Media CSID or a Blob CSID; a Media record has one
   Blob, so either names the same record. A Media CSID and its own Blob CSID listed together count once.
+- **Paths and URLs** (Richard, October 14, 2026). A file's path or URL works too, with Media look up's forgiving rules
+  (see Admin web app): a Blob path gives its Blob CSID, a `/media/` path its Media CSID. The browser cuts a pasted path
+  down to its CSID at once, and again on "Preview recall" (for typed text and a file), so the Cinefiles PDF link
+  suffix, which carries a visitor's email address, never reaches Serena; the admin API accepts the same shapes and
+  drops any suffix too. Another museum's path ("That's a Cinefiles path; you're recalling PAHMA's files.") or one
+  without a valid CSID is listed under "Not recalled" with its reason. "You gave" shows the path a CSID came from,
+  shortened in the middle.
 - **How Serena finds each one.** First in its servability table: a Blob CSID is a record's key, which gives its Media
   CSID; a Media CSID is found through the `by_media` index, which gives its Blob (or Blobs, while a replaced image's
   old Blob is still listed). Only for CSIDs the table doesn't know (a file not yet published, or one the ETL withholds)
@@ -815,7 +825,10 @@ the plan, D127); until then, its requests are logged as `placeholder_not_uploade
   a placeholder.
 - **Confirming.** The admin gives one reason for the whole list. Each Media record's recall stores its Media CSID, the
   Blob CSID it has, who, when and why, and is audited on its own (`recall`), so each record's history stands alone.
-  The team gets one emailed alert per recall, "An admin recalled Media records", naming how many (D118).
+  The team gets one emailed alert per recall, "An admin recalled Media records" (D118). For one record it names the
+  record, "An admin recalled Media record <identification number> (<shortened Media CSID>) for PAHMA", and is about
+  its Media CSID, which opens Media look up; for several it names how many, and its About, "<n> Media records", opens
+  Recalls (Richard, October 14, 2026).
 
 #### How a recall ends
 
@@ -873,11 +886,14 @@ staff must change CollectionSpace for that.
 
 #### The Recalls page
 
-Every active recall however old (Media CSID, Blob CSID, who, when, why, and its state: "Waiting for a later refresh"
-with a "Cancel recall" button, or, for one a refresh kept, "Still public in CollectionSpace" with a Release button),
-and the last 30 days' ended, released and cancelled recalls (by which refresh or admin, and why), from the audit log. Sorted and paged like the other tables; a "Recall…" button opens the form above
-(D120). Each Media and Blob CSID reads as text until hovered or focused, then as a link that opens the file in a dialog
-(the largest size the museum serves, through the admin API, never cached), with "Media look up" and "Dismiss" (D145).
+Every active recall however old (the Media record's identification number, who, when, why, and its state: "Waiting
+for a later refresh" with a "Cancel recall" button, or, for one a refresh kept, "Still public in CollectionSpace" with
+a Release button), and the last 30 days' ended, released and cancelled recalls (by which refresh or admin, and why),
+from the audit log. Sorted and paged like the other tables (D120). "Recall…", under the page's explanation and
+before the tables, opens the form above; it's outlined red, since it only opens the form (Richard, October 14, 2026).
+Each row opens to its Media CSID and Blob CSID, shown whole, each followed by "View file", which opens the file in a
+dialog (the largest size the museum serves, through the admin API, never cached), with "Media look up" and "Dismiss"
+(D145).
 
 ### Placeholder image
 
@@ -1032,17 +1048,32 @@ reachable only from campus networks.
   - The recall dialog's first button is "Preview recall".
   - Where Serena knows a file's kind, the app names it: image "image", card "catalog card", pdf "PDF", 3D "3D model",
     audio "audio file", video "video"; "file" only when the kind isn't known (not listed).
-  - Past requests shows each path on one line, shortened in the middle (the museum, the first 8 and last 6 characters
-    of the CSID, and the size), the whole path on hover and in the file dialog; the CSV export keeps whole paths.
-- **The UI review's rules** (Richard, October 13, 2026, D154 to D165; the mockup's version 24 in `docs/mockup/`):
-  - **Copy buttons** (D154, D165). Every CSID or path the app shortens with an ellipsis has ⧉ beside it, on the same
-    line, which copies the whole value and says "Copied" for a moment; the whole value is also on hover. Always
-    shown, not only on hover, so it works with a keyboard and a touch screen. A shortened CSID keeps its first 8 and
-    last 6 characters. ⧉ also follows an identification number (Media look up's heading) and a SHA-256 (the Audit
-    log's details), which admins paste elsewhere; refresh IDs, short and shown whole, are links instead.
+  - Past requests shows each request on one line: a Blob path as its Blob CSID and size, in their own columns, and
+    any other path shortened in the middle (October 14, 2026, below); the path is on hover and in the file dialog,
+    and the CSV export keeps whole paths.
+  - "Path" means a request's URL without its host (`/pahma/imageserver/blobs/…/content`): ⧉ copies the path, not a
+    full URL (Richard, October 14, 2026: no configured public address).
+- **The UI review's rules** (Richard, October 13, 2026, D154 to D165, and his follow-ups of October 14, 2026). The
+  mockup, `docs/mockup/serena-admin-mockup.html` (version 37), shows the app's pages as they are; its "Mockup settings"
+  panel is the mockup's own:
+  - **Copy buttons** (D154; Richard, October 14, 2026, which replaces D165). Every value the app shortens with an
+    ellipsis (a CSID, a path, the Audit log's SHA-256) has ⧉ beside it, on the same line, which copies the whole value
+    and says "Copied" for a moment; the whole value is also on hover. Always shown, not only on hover, so it works with
+    a keyboard and a touch screen. A shortened CSID keeps its first 8 and last 6 characters. A value shown whole (an
+    identification number, the whole CSIDs in an opened Recalls row, Media look up's heading and Details) has no ⧉:
+    one click selects all of it (`user-select: all`), so a CSID isn't copied in pieces at its hyphens. So that the
+    click selects rather than opens, an opened Recalls row's CSIDs are plain text, each followed by "View file".
+    Refresh IDs, short and shown whole, are links.
   - **Buttons** (D156). A dialog's or page's main action is filled: blue, or red when it changes what the public
     sees or who is signed in (Recall, Release, Cancel recall, Sign everyone out). Every other button is outlined,
-    Cancel and Back included. Plain text is only for links.
+    Cancel and Back included. Plain text is only for links. Recalls' "Recall…" is outlined red: it only opens the
+    form, whose "Recall <n> Media records" is the filled red one (Richard, October 14, 2026).
+  - **A reason is never a disabled button** (Richard, October 14, 2026, for accessibility). In every dialog that needs
+    a reason (Recall, Release, Cancel recall, a Settings change, Retry the servability update, Override the delta
+    threshold, Start a refresh), the action's button stays enabled. Pressed without a reason, it sends nothing, says
+    "Give a reason first." under the Reason field and moves focus there; a hint under the field says it's required
+    and where it's recorded. Start a refresh does the same for its file, its refresh date and its confirmation, and a
+    Settings change for its value.
   - **Column help** (D164). A column's name with a dotted underline has a description, shown on hover or keyboard
     focus (a Vuetify tooltip): every column of the Past refreshes, Alerts, Past requests, Recalls and Audit log
     tables.
@@ -1057,7 +1088,7 @@ reachable only from campus networks.
     page and the CSV export, as by Serena, with the refresh as the target or in the details. Recalls says the same.
   - **Recalls** (D155). The state is a tag (Waiting for a later refresh; Still public in CollectionSpace, kept by
     <refresh>), and the one action a recall allows ("Cancel recall…" or "Release…") has its own column at the right.
-    The Media CSID is on one line with its Blob CSID beneath. The recall summary's thumbnails are all one size.
+    The record is named by its identification number (below). The recall summary's thumbnails are all one size.
   - **Times** (D160). A time in a table breaks only between its date and its clock time.
   - **A session that ended** (D161). When the admin API answers 401 for a museum the app thinks it's signed in to (the
     session timed out, or everyone was signed out), the app drops that museum and goes to the sign-in page, which
@@ -1066,17 +1097,38 @@ reachable only from campus networks.
   - **Media look up** (D162, D163). "Serena and CollectionSpace" says "✓ (No differences)" in green, or "⚠ (2
     differences: Access, As of)" in amber, naming the highlighted rows. A Blob's URL with nothing after its CSID
     (`…/blobs/<CSID>`, no `/content`) isn't one Serena serves: the page says so, with the reason a request gets
-    ("unknown path"), then looks the Blob up anyway, every size.
+    ("unknown path"), then looks the Blob up anyway, every size. A `/media/` URL, which Serena serves from pull
+    request 15, is treated the same way: the reason, then its Media record, every size (Richard, October 14, 2026).
   - **Recalls by identification number** (Richard, October 14, 2026). The Recalls tables' first column is the Media
     record's identification number, read from CollectionSpace (one call per record, four at a time, for at most 100
     records of a recall) when it's recalled and kept with the recall and its audit entries, so the page doesn't call
     CollectionSpace for every row; a record without one shows its shortened Media CSID. Each row opens (▸, a button
-    with aria-expanded) to its Media CSID and Blob CSID, whole, each with ⧉, and "Media look up". The recall dialog's
-    second step offers "Change CSIDs" (the form again, with the CSIDs kept) beside "Cancel".
-  - **Past requests' paths** (Richard, October 14, 2026). A path shows only what differs from row to row: its CSID,
-    shortened, and its size ("0f1e2d3c…3f4a5b · Medium", "Media 20349bfa…3f0b98 · Medium" for a Media-CSID URL); the
-    whole path is on hover, in ⧉, in the file dialog and in the CSV export. The "Signed link" column appears only for
-    a museum with signed access (Cinefiles), which the report says (`signed_links`).
+    with aria-expanded) to its Media CSID and Blob CSID, whole (one click selects each), each followed by "View
+    file", and "Media look up". The recall dialog's second step offers "Change CSIDs" (the form again, with the CSIDs
+    kept) beside "Cancel".
+  - **Past requests' Blob CSID and Size columns** (Richard, October 14, 2026). A Blob path in a shape Serena serves,
+    with a CSID in Serena's format, shows only what differs from row to row: its Blob CSID, shortened, in the "Blob
+    CSID" column, and its size in its own "Size" column (both tables); the path is on hover, in ⧉, in the file dialog
+    and in the CSV export. Any other path (a `/media/` URL, a bare `/blobs/<CSID>`) shows the path itself, shortened
+    in the middle to its first 26 and last 14 characters, with "(not a Blob path)" and no size; ⧉ only when it's
+    shortened. The Size column sorts by size, smallest to largest: the
+    museum's derivatives in their configured order, then the original file, then anything else. A size that isn't
+    one of the museum's shows the name asked for and a muted "(invalid)" (a mistake, or a size only other museums
+    serve), and sorts last. The "Signed link" column appears only for a museum with signed access (Cinefiles), which
+    the report says (`signed_links`).
+  - **Media look up forgives a path's shape** (Richard, October 14, 2026), as the recall form does: a URL or a path,
+    with or without its leading slash (`pahma/imageserver/…`), or with no museum (`imageserver/blobs/…`,
+    `blobs/<CSID>/…`), read as the signed-in museum's. Another museum's path says which museum it is: "That's a
+    Cinefiles path; you're looking up PAHMA's files."
+  - **Media look up's sizes** (Richard, October 14, 2026). The sizes table folds away under one line that says what its
+    rows would, "Sizes (6): none served (recalled) · cached: Medium". It starts open only when the sizes differ (some
+    served, some not), then stays as the admin leaves it, like Details; a path's look up (one size) shows its row with
+    no box. Each size is a link that opens that size's file in the file dialog, without the dialog's "Media look up"
+    button (this is that page).
+  - **Errors without Serena's explanation** (Richard, October 14, 2026). When the admin API's answer has no
+    explanation of its own (a proxy's error page, say), the app says what it means and keeps the code: 502, 503 or
+    504, "Serena can't be reached right now. Try again in a minute. (502)"; any other code, "Serena gave an unexpected
+    answer. (<code>)".
   - **Keeping an admin's place** (Richard, October 14, 2026). The list pages (Past requests, Recalls, Alerts, the
     Audit log, Past refreshes) keep their filters and each table's sort, page and page size in the address, defaults
     left out, and are kept alive (one per museum), so Back, "← Back to …" or a shared address finds the same view,
@@ -1157,29 +1209,32 @@ reachable only from campus networks.
     files too.
 - **The Past requests page** (decided October 12, 2026, D100 to D113). What Serena served and couldn't serve for the
   museum, from the app's log:
-  - **Lines.** The app logs one line per request (D103): "served", with the path, the kind, the cache (`hit`, or
-    `miss` when the file was just fetched) and whether a signed link was used; or "unserved", with the reason, the
+  - **Lines.** The app logs one line per request (D103): "served", with the path, the size (a derivative, or
+    `original`; October 14, 2026), the kind, the cache (`hit`, or `miss` when the file was just fetched) and whether a
+    signed link was used; or "unserved", with the reason, the
     path and, when Serena found the Blob in its servable list (a recalled or restricted file, say), the kind, so the
     Kind column is blank only for a file Serena doesn't know (see Requests Serena doesn't serve). Paths come without the PDF link suffix or a query string; no line holds
     an IP address, a signed link's `uid` or `sig`, or an email address. The page reads these two lines only, not the
     fetch lines: a failed fetch ends in an unserved request with its reason (D104).
-  - **Layout** (D105). At the top, counts by day (served; unserved by reason) and the 20 most-requested paths; below,
-    a table of lines, newest first, sorted by a column's name and paged like the other tables, filtered by outcome and
-    by reason. Times are UTC. A path (in the table and the most-requested list) reads as text until hovered or
-    focused, then as a link that opens that size of the file in a dialog, with the request's outcome, "Media look up"
-    (on that path) and "Dismiss"; a path whose CSID isn't one stays text (D145).
+  - **Layout** (D105). At the top, the range's totals: "Served", with the served requests by size, smallest to largest
+    ("by size: Thumbnail 9 · Medium 4 · original 1"; Richard, October 14, 2026), and "Unserved", with its reasons;
+    then counts by day (served; unserved by reason) and the 20 most-requested paths; below, a table of lines, newest
+    first, sorted by a column's name and paged like the other tables, filtered by outcome and by reason. Times are
+    UTC. A Blob CSID (in the table and the most-requested list) reads as text until hovered or focused, then as a link
+    that opens that size of the file in a dialog, with the request's outcome, "Media look up" (on that path) and
+    "Dismiss"; a path whose CSID isn't one CollectionSpace makes stays text (D145).
   - **Range** (D106). The last hour, 24 hours or 7 days; 24 hours to start.
   - **More than 10,000 lines** (D107). A Logs Insights query returns at most 10,000 rows: the table lists the newest
     10,000 and says so; the counts and the most-requested paths cover every request.
-  - **Queries** (D108). The admin API runs four fixed queries (lines, served by day, unserved by day and reason, most
-    requested) with CloudWatch Logs Insights on the app's log group, at the same time, and waits for them, polling
+  - **Queries** (D108). The admin API runs five fixed queries (lines, served by day, unserved by day and reason, most
+    requested, and served by size, from the "served" line's size) with CloudWatch Logs Insights on the app's log group, at the same time, and waits for them, polling
     every second, for up to 30 seconds; past that it stops them and asks the admin for a shorter range (504). Each
     report is kept a minute per museum and range, so reloads don't start new queries. The page shows a spinner while
     it waits. Logs Insights can't limit a query to one museum: every query filters on the signed-in museum, which comes
     from Serena's list of museums and is checked to be lowercase letters before it goes into the query, so nothing an
     admin types reaches a query.
   - **Locally** (D109). With `SERENA_LOG_FILE` (allowed only with a local DynamoDB endpoint), the app also writes its
-    log lines to that file (20 MB and one rotated copy), and the admin API runs the same four queries in Python over
+    log lines to that file (20 MB and one rotated copy), and the admin API runs the same five queries in Python over
     it, in place of CloudWatch. Tests use the same stand-in; a separate test checks the Logs Insights query text.
   - **Who** (D111). Any admin of the museum; reading the page isn't audited (it holds no personal data).
   - **CSV export** (D112, D113). "Export CSV" saves the lines matching the page's range and filters (at most
@@ -1345,8 +1400,8 @@ The F numbers follow the team's list of follow-ups.
 - **The Media record behind a Blob.** Confirm against a real museum's CollectionSpace how the recall form finds the
   Media record whose `blobCsid` is a given Blob CSID (a search on the Media service), and whether CollectionSpace makes
   a thumbnail for a PDF.
-- **Past requests page queries in AWS.** The Logs Insights query text is tested only as text: run the four queries
-  against the QA environment's log group before production, to confirm the JSON fields (`message`, `logger`,
+- **Past requests page queries in AWS.** The Logs Insights query text is tested only as text: run the five queries
+  against the QA environment's log group before production, to confirm the JSON fields (`message`, `logger`, `size`,
   `museum`) and `datefloor` behave as expected.
 - **Audit retention policy (D99).** Before production, ask the campus information security office (and records
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the

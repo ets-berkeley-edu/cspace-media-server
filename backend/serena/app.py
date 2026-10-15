@@ -9,8 +9,10 @@ from typing import Any
 
 import boto3
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import PlainTextResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import (
     admin_api,
@@ -100,6 +102,15 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     def health() -> PlainTextResponse:
         """For the load balancer: answers "ok" and nothing else about Serena."""
         return PlainTextResponse("ok", headers={"Cache-Control": "no-store"})
+
+    @app.exception_handler(StarletteHTTPException)
+    async def not_found(request: Request, error: StarletteHTTPException) -> Response:
+        """An address outside Serena's APIs that matches nothing gets a short plain-text 404 (Richard, October 14,
+        2026), never JSON and never a list of Serena's addresses; the admin API keeps its JSON errors (the ETL API,
+        mounted on its own, has its own)."""
+        if error.status_code == 404 and not request.url.path.startswith(admin_api.PREFIX + "/"):
+            return PlainTextResponse("Not found.", status_code=404, headers={"Cache-Control": "no-store"})
+        return await http_exception_handler(request, error)
 
     # The app records alerts (an admin's override or setting change, D62, D89) but doesn't email them: the worker does.
     app_alerts = Alerts(store, None, "")
