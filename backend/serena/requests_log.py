@@ -3,9 +3,9 @@ Past requests page; decided October 12, 2026, D100 to D113).
 
 The app logs one line per request: "served" (with the path, kind, cache hit or miss and whether a signed link was
 used) or "unserved" (with the reason and the path). Paths never carry the PDF link suffix or a query string, and no
-line holds an IP address, a signed link's uid or sig, or an email address. A report runs four fixed queries for one
+line holds an IP address, a signed link's uid or sig, or an email address. A report runs five fixed queries for one
 museum over one range: the lines, newest first (at most MAX_LINES), served requests by day, unserved requests by day
-and reason, and the most-requested paths.
+and reason, the most-requested paths, and served requests by size (Richard, October 14, 2026).
 
 In AWS, CloudWatchReader runs them with CloudWatch Logs Insights on the app's log group. Locally and in tests,
 FileReader runs the same queries in Python over the JSON lines the app also writes to a file (SERENA_LOG_FILE).
@@ -43,6 +43,7 @@ class QueryKind(StrEnum):
     SERVED_BY_DAY = "served_by_day"
     UNSERVED_BY_DAY = "unserved_by_day"
     TOP_PATHS = "top_paths"
+    SERVED_BY_SIZE = "served_by_size"
 
 
 class LogUnavailable(Exception):
@@ -80,6 +81,7 @@ class Report:
     days: list[Day]
     top_paths: list[tuple[str, int]]
     lines: list[Line]
+    by_size: dict[str, int] = field(default_factory=dict)  # served requests; "" for a line logged without its size
 
     @property
     def truncated(self) -> bool:
@@ -113,11 +115,13 @@ def query_text(kind: QueryKind, museum: str) -> str:
     if kind is QueryKind.UNSERVED_BY_DAY:
         return (f'{base} | filter message = "unserved" '
                 "| stats count(*) as requests by datefloor(@timestamp, 1d) as day, reason")
+    if kind is QueryKind.SERVED_BY_SIZE:
+        return f'{base} | filter message = "served" | stats count(*) as requests by size'
     return f"{base} | stats count(*) as requests by path | sort requests desc | limit {TOP_PATHS}"
 
 
 class CloudWatchReader:
-    """Runs the four queries with CloudWatch Logs Insights, at the same time, and waits for them (D108)."""
+    """Runs the five queries with CloudWatch Logs Insights, at the same time, and waits for them (D108)."""
 
     def __init__(self, client: Any, log_group: str, wait_seconds: float = WAIT_SECONDS, poll_seconds: float = 1.0,
                  sleep: Callable[[float], None] = time.sleep, monotonic: Callable[[], float] = time.monotonic):
@@ -173,7 +177,7 @@ class CloudWatchReader:
 
 
 class FileReader:
-    """Local development and tests (D109): the same four queries, in Python, over the JSON lines the app writes to
+    """Local development and tests (D109): the same five queries, in Python, over the JSON lines the app writes to
     a file (and its one rotated copy, <file>.1)."""
 
     def __init__(self, path: str | Path):
@@ -212,10 +216,12 @@ class FileReader:
         served: Counter[str] = Counter()
         unserved: Counter[tuple[str, str]] = Counter()
         paths: Counter[str] = Counter()
+        sizes: Counter[str] = Counter()
         for at, entry in chosen:
             day = f"{at.astimezone(UTC).date().isoformat()} 00:00:00.000"
             if entry["message"] == "served":
                 served[day] += 1
+                sizes[_text(entry.get("size"))] += 1
             else:
                 unserved[(day, _text(entry.get("reason")))] += 1
             paths[_text(entry.get("path"))] += 1
@@ -226,6 +232,7 @@ class FileReader:
                                         for (day, reason), n in unserved.items()],
             QueryKind.TOP_PATHS: [{"path": path, "requests": str(n)}
                                   for path, n in sorted(paths.items(), key=lambda p: (-p[1], p[0]))[:TOP_PATHS]],
+            QueryKind.SERVED_BY_SIZE: [{"size": size, "requests": str(n)} for size, n in sizes.items()],
         }
 
 
@@ -262,7 +269,8 @@ def build(museum: str, range_: str, start: datetime, end: datetime, rows: dict[Q
         days=[Day(day, served, dict(sorted(unserved.items()))) for day, (served, unserved) in sorted(days.items(),
                                                                                                    reverse=True)],
         top_paths=[(row.get("path", ""), int(row.get("requests", "0"))) for row in rows[QueryKind.TOP_PATHS]],
-        lines=lines)
+        lines=lines,
+        by_size={row.get("size", ""): int(row.get("requests", "0")) for row in rows.get(QueryKind.SERVED_BY_SIZE, [])})
 
 
 @dataclass

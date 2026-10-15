@@ -156,7 +156,7 @@ describe('links and copy buttons', () => {
   it('copies the whole path on Past requests (D154)', async () => {
     const path = `/pahma/imageserver/blobs/${BLOB}/derivatives/Medium/content`
     fakeApi({'GET /museums/pahma/requests?range=24h': {body: {range: '24h', start: '', end: '', max_lines: 10000,
-      truncated: false, days: [], top_paths: [{path, requests: 2}],
+      truncated: false, days: [], top_paths: [{path, requests: 2}], sizes: ['Thumbnail', 'Medium', 'original'], served_by_size: [],
       lines: [{at: '2026-10-13T10:00:00Z', outcome: 'unserved', reason: 'recalled', path, kind: 'card', cache: '', signed: false}]}}})
     const writeText = vi.fn(async () => undefined)
     vi.stubGlobal('navigator', {...navigator, clipboard: {writeText}})

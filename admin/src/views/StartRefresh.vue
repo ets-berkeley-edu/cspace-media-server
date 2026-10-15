@@ -19,38 +19,40 @@
     <v-form id="start-refresh-form" style="max-width: 640px" @submit.prevent="start">
       <v-file-input
         id="file"
+        ref="fileField"
         v-model="file"
         label="The servable list (.tsv or .tsv.gz)"
         accept=".tsv,.gz,.txt"
+        :error-messages="problems.file ? [problems.file] : []"
       />
       <v-text-field
         id="refresh-date"
+        ref="dateField"
         v-model="refreshDate"
         type="date"
         :max="today"
         label="The refresh date the servable list is for"
+        :error-messages="problems.date ? [problems.date] : []"
       />
-      <v-textarea
-        id="reason"
+      <ReasonField
+        ref="reasonField"
         v-model="reason"
-        label="Reason"
-        hint="Recorded in the refresh and the audit log. No personal data, please."
-        persistent-hint
-        rows="2"
-        counter="500"
         class="mb-2"
+        recorded="the refresh and the audit log"
       />
       <v-checkbox
         id="confirm-live-core"
+        ref="confirmField"
         v-model="confirmed"
         label="This servable list was made from the live public core: I ran the servable list script on the ETL server."
+        :error-messages="problems.confirmed ? [problems.confirmed] : []"
       />
+      <!-- Never disabled (Richard, October 14, 2026): pressing it says what's missing, under its field. -->
       <v-btn
         id="start-refresh-button"
         type="submit"
         color="primary"
         variant="flat"
-        :disabled="!ready"
         :loading="busy"
       >
         Start the refresh
@@ -60,10 +62,11 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from 'vue'
+import {computed, reactive, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {museumName} from '@/session'
 import {ApiError, api} from '@/api'
+import ReasonField from '@/components/ReasonField.vue'
 import {pacificDate} from '@/words'
 
 const route = useRoute()
@@ -77,11 +80,33 @@ const busy = ref(false)
 const error = ref('')
 
 const chosen = computed(() => (Array.isArray(file.value) ? file.value[0] : file.value) || null)
-const ready = computed(() => !!chosen.value && confirmed.value && /^\d{4}-\d{2}-\d{2}$/.test(refreshDate.value) &&
-  refreshDate.value <= today && reason.value.trim().length > 0 && reason.value.length <= 500) // D62
+// What's missing, under each field, once "Start the refresh" is pressed; a field's message goes when it's filled in.
+const problems = reactive({file: '', date: '', confirmed: ''})
+type Focusable = {focus: () => void} | null
+const fileField = ref<Focusable>(null)
+const dateField = ref<Focusable>(null)
+const confirmField = ref<Focusable>(null)
+const reasonField = ref<InstanceType<typeof ReasonField> | null>(null)
+watch(chosen, () => { problems.file = '' })
+watch(refreshDate, () => { problems.date = '' })
+watch(confirmed, () => { problems.confirmed = '' })
+
+/** Every field that's missing says so; focus goes to the first. The reason is required (D62). */
+function complete(): boolean {
+  problems.file = chosen.value ? '' : 'Choose the servable list first.'
+  problems.date = /^\d{4}-\d{2}-\d{2}$/.test(refreshDate.value) && refreshDate.value <= today
+    ? '' : `Give a refresh date of today (${today}) or earlier.`
+  const reasonGiven = reasonField.value?.check() ?? false
+  problems.confirmed = confirmed.value ? '' : 'Confirm the list was made from the live public core.'
+  // check() moved focus to the reason if it's missing; an earlier missing field takes it, a later one only without that.
+  const first = problems.file ? fileField.value : problems.date ? dateField.value
+    : reasonGiven && problems.confirmed ? confirmField.value : null
+  first?.focus()
+  return !problems.file && !problems.date && reasonGiven && !problems.confirmed
+}
 
 async function start() {
-  if (!chosen.value) {
+  if (!complete() || !chosen.value) {
     return
   }
   busy.value = true

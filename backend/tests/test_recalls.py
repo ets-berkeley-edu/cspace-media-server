@@ -98,7 +98,7 @@ def test_serenas_table_first_then_collectionspace(client: TestClient, store: Sto
                                           "kind": None, "served_today": False, "recalled": False,
                                           "source": "collectionspace", "entered": [UNPUBLISHED_BLOB]}
     assert {n["csid"]: n["why"] for n in body["not_found"]} == {
-        "not/a/csid": "not_a_csid", PAHMA.placeholder_blob_csid: "placeholder", UNKNOWN: "not_found"}
+        "/not/a/csid": "path", PAHMA.placeholder_blob_csid: "placeholder", UNKNOWN: "not_found"}
     asked = fake.calls
     assert f"/cspace-services/media/{BLOB}" not in asked  # the table knew it: CollectionSpace isn't asked
     assert f"/cspace-services/blobs/{UNPUBLISHED_BLOB}" in asked
@@ -131,6 +131,31 @@ def test_the_form_needs_a_signed_in_admin_and_the_header(client: TestClient) -> 
     assert "At most 1,000" in client.post(f"{URL}/summary", headers=CHANGES, json={"text": many}).json()["detail"]
 
 
+@pytest.mark.usefixtures("listed")
+def test_paths_and_urls_stand_for_their_csids(client: TestClient) -> None:
+    """The recall form takes a Blob path or URL for its Blob CSID, a /media/ path for its Media CSID, with Media look
+    up's forgiving rules (Richard, October 14, 2026); "You gave" shows the path, never a PDF link suffix."""
+    sign_in(client)
+    pdf = f"https://example.edu/pahma/imageserver/blobs/{BLOB_2}/content/linked_pdf:someone@example.edu?uid=1"
+    body = summary(client, "\n".join([
+        f"/pahma/imageserver/blobs/{BLOB}/derivatives/Medium/content",
+        f"imageserver/media/{MEDIA}/blob/content",  # no museum: the signed-in museum's
+        pdf,
+        f"/cinefiles/imageserver/blobs/{UNKNOWN}/content",  # another museum's
+        "/pahma/imageserver/blobs/not.a.csid/content",
+        "linked_pdf:someone@example.edu",
+    ]))
+    records = {r["media_csid"]: r for r in body["records"]}
+    assert records[MEDIA]["entered"] == [f"/pahma/imageserver/blobs/{BLOB}/derivatives/Medium/content",
+                                         f"/pahma/imageserver/media/{MEDIA}/blob/content"]
+    assert records[MEDIA_2]["entered"] == [f"/pahma/imageserver/blobs/{BLOB_2}/content/linked_pdf:"]
+    reasons = {n["csid"]: n["message"] for n in body["not_found"]}
+    assert reasons[f"/cinefiles/imageserver/blobs/{UNKNOWN}/content"] == (
+        "That's a Cinefiles path; you're recalling PAHMA's files.")
+    assert reasons["/pahma/imageserver/blobs/not.a.csid/content"] == "No valid Blob or Media CSID in this path."
+    assert "someone" not in json.dumps(body)
+
+
 # --- recalling (D118)
 
 @pytest.mark.usefixtures("listed")
@@ -147,7 +172,8 @@ def test_taking_down(client: TestClient, store: Store) -> None:
     entries = [e for e in Audit(store).since("pahma", datetime(2026, 1, 1, tzinfo=UTC)) if e.action == "recall"]
     assert sorted(e.target for e in entries) == sorted([MEDIA, MEDIA_2, UNPUBLISHED_MEDIA])  # one per Media record
     (alert,) = alerts_of(store, "recall")
-    assert "recalled 3 Media records for PAHMA. Reason: A complaint" in alert["message"]["S"]
+    assert alert["message"]["S"] == "An admin recalled 3 Media records for PAHMA. Reason: A complaint"
+    assert alert["subject"]["S"] == "3 Media records"  # About: links to Recalls (Richard, October 14, 2026)
     again = client.post(URL, headers=CHANGES, json={"text": MEDIA, "reason": "again"}).json()
     assert again["recalled"] == [] and again["records"][0]["recalled"] is True
     assert len(alerts_of(store, "recall")) == 1  # nothing new recalled: no alert
@@ -160,6 +186,11 @@ def test_taking_down(client: TestClient, store: Store) -> None:
     assert store.recall("pahma", MEDIA).identification_number is None  # type: ignore[union-attr]
     active = {r["media_csid"]: r for r in client.get(URL).json()["active"]}
     assert active[UNPUBLISHED_MEDIA]["identification_number"] == number
+    # One record: the alert names it, by its identification number and shortened Media CSID, and is about it.
+    fake.add(UNKNOWN, blob=None, identification_number="9-1")
+    client.post(URL, headers=CHANGES, json={"text": UNKNOWN, "reason": "one"})
+    one = next(a for a in alerts_of(store, "recall") if a["subject"]["S"] == UNKNOWN)
+    assert one["message"]["S"] == "An admin recalled Media record 9-1 (9f9f9f9f…000000) for PAHMA. Reason: one"
     cancelled = client.post(f"{URL}/{UNPUBLISHED_MEDIA}/cancel", headers=CHANGES, json={"reason": "a test"})
     assert cancelled.status_code == 200
     (ended,) = client.get(URL).json()["ended"]
@@ -314,6 +345,18 @@ def test_look_up_a_file(client: TestClient, store: Store) -> None:
     assert [s["size"] for s in bare["items"][0]["sizes"]] == ["original", *PAHMA.derivatives]
     nothing = client.get(lookup, params={"q": "/pahma/imageserver/blobs/not.a.csid"}).json()
     assert nothing["items"] == [] and nothing["refused"] == "unknown_path"
+    # The path's shape is forgiven (Richard, October 14, 2026): no leading slash, or no museum.
+    for forgiven in (f"pahma/imageserver/blobs/{BLOB}/derivatives/Medium/content",
+                     f"imageserver/blobs/{BLOB}/derivatives/Medium/content",
+                     f"blobs/{BLOB}/derivatives/Medium/content"):
+        body = client.get(lookup, params={"q": forgiven}).json()
+        assert body["input"] == f"/pahma/imageserver/blobs/{BLOB}/derivatives/Medium/content", forgiven
+        assert [s["size"] for s in body["items"][0]["sizes"]] == ["Medium"]
+    other = client.get(lookup, params={"q": f"/cinefiles/imageserver/blobs/{BLOB}/content"})
+    assert other.json()["detail"] == "That's a Cinefiles path; you're looking up PAHMA's files."
+    # A /media/ URL (served from pull request 15): refused, but its Media record is looked up anyway.
+    media = client.get(lookup, params={"q": f"/pahma/imageserver/media/{MEDIA}/blob/content"}).json()
+    assert media["refused"] == "unknown_path" and [i["blob_csid"] for i in media["items"]] == [BLOB]
 
 
 # --- Media look up beside CollectionSpace (D139 to D143)
@@ -426,7 +469,7 @@ def test_a_blobs_file_at_one_size(client: TestClient, store: Store, s3: Any) -> 
     cache_index.record(store, "pahma", BLOB, "Medium", cache_index.Entry("d" * 64, "image/jpeg", 6, "2026-10-12"))
     assert client.get(f"{preview}?size=Medium").content == b"stored"
     assert client.get(f"{preview}?size=full").status_code == 200  # the largest size: OriginalJpeg
-    assert client.get(f"{preview}?size=Huge").status_code == 422
+    assert client.get(f"{preview}?size=Thumbnial").status_code == 422
     assert client.get(f"/admin/v1/museums/pahma/media/{MEDIA}/preview?size=thumbnail&source=cspace").status_code == 200
     unlisted = client.get(f"/admin/v1/museums/pahma/blobs/{UNPUBLISHED_BLOB}/preview?size=Thumbnail")
     assert unlisted.status_code == 200  # not listed: its Media record found in CollectionSpace

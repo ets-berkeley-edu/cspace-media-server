@@ -55,6 +55,9 @@
   button:hover:not(:disabled) { background: var(--surface-1); }
   button:disabled { cursor: not-allowed; opacity: 0.45; }
   button.primary { background: var(--text-accent); border-color: var(--text-accent); color: var(--surface-2); font-weight: 600; }
+  .err-text { color: var(--text-danger); font-size: 12px; min-height: 0; margin: 0 0 8px; }
+  .err-text:empty { margin: 0; }
+  button.danger-outline { background: var(--surface-2); border-color: var(--text-danger); color: var(--text-danger); font-weight: 600; }
   button.danger { background: var(--text-danger); border-color: var(--text-danger); color: var(--surface-2); font-weight: 600; }
   button.link { border: 0; background: none; padding: 0; height: auto; color: var(--text-accent); text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--text-accent); outline-offset: 2px; }
@@ -141,6 +144,10 @@
   .pager .nav button { height: 26px; min-width: 26px; padding: 0 6px; border-color: transparent; background: none; font-size: 14px; line-height: 1; }
   .copy { height: 24px; padding: 0 7px; font-size: 11px; margin-left: 4px; }
   .nowrap { white-space: nowrap; }
+  .by-size { margin: 0 0 8px; font-size: 13px; line-height: 1.8; }
+  .by-size .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-right: 8px; }
+  .sel-all { user-select: all; -webkit-user-select: all; }
+  details.sizes-box > summary { font-weight: 600; margin: 4px 0 6px; }
   .back-link { margin: 0 0 6px; font-size: 14px; }
   th.expander, td.expander { width: 28px; padding-right: 0; }
   button.expand { border: 1px solid var(--border); background: var(--surface, transparent); color: inherit; width: 24px; height: 24px; padding: 0; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; }
@@ -295,6 +302,16 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 37 (October 14, 2026, in the pull request that builds versions 27 to 36 into the app):</strong> the mockup and the app agree on these pages. <strong>Times</strong> are UTC everywhere, as the app shows them ("2026-10-13 17:00:00 UTC"). <strong>Past requests</strong> has the app's words, its By day table, the 20 most requested, the Outcome and Reason filters, and a "Signed link" column only for Cinefiles. <strong>Recalls</strong>: "Recall…" under the explanation, outlined red, with no switch; the app's explanation and column names. <strong>The recall form</strong> takes paths and URLs too: a pasted one is cut down to its CSID at once, and again on "Preview recall"; another museum's path is listed under "Not recalled" with its reason; "You gave" shows the path. <strong>A reason is never a disabled button:</strong> Recall, Release, Cancel recall, a Settings change ("Change" and "Use default" on Settings now open the dialog) and Start a refresh say what's missing under the field and move focus there; a hint says where the reason is recorded. <strong>Alerts</strong> have Serena's own words: "An admin recalled Media record &lt;identification number&gt; (&lt;shortened Media CSID&gt;) for PAHMA. Reason: …" for one record, "&lt;n&gt; Media records" for several. <strong>Media look up</strong> reads a path as the app does: no leading slash or no museum is this museum's ("blobs/&lt;CSID&gt;/content"), another museum's path says which ("That's a Cinefiles path; you're looking up PAHMA's files."), and a /media/ URL is refused but its Media record is looked up; layout C only, as decided (D139). Not shown here: an error from Serena itself, which the app shows with its code ("Serena can't be reached right now. Try again in a minute. (502)"), and the plain "Not found." for an address outside Serena's APIs. Mockup only: the "Mockup settings" panel.</li>
+      <li><strong>Version 36:</strong> Recalls opens with "Recall…" under the explanation, outlined red (Richard's choice).</li>
+      <li><strong>Version 35 (October 14, 2026, Richard):</strong> on Recalls, a dashed switch (mockup only) moves the "Recall…" button: A beside the title (as in the app now), B at the right of the "Active" heading, beside the list it adds to, C under the explanation. "Look" switches it between solid red (as now), outlined red and blue: "Recall…" only opens the form, so the red, filled button can be kept for the one that recalls ("Recall 1 Media record"). Richard chose C, outlined red (October 14, 2026); version 37 removes the switch.</li>
+      <li><strong>Version 34 (October 14, 2026, Richard):</strong> on Past requests, only a Blob path Serena serves is split into Blob CSID and Size. Any other path (here a /media/ URL, which Serena doesn't serve yet, and the bad CSID) shows the path itself, shortened in the middle, with "(not a Blob path)" and no size; hover and ⧉ give the whole path.</li>
+      <li><strong>Version 33 (October 14, 2026, Richard):</strong> a size that isn't one of the museum's (the sample's misspelled "Thumbnial", which replaces the made-up "Huge") shows as "Thumbnial (invalid)" and sorts last; the Size help says what "(invalid)" means. The name asked for stays visible, since it's what shows the mistake.</li>
+      <li><strong>Version 32 (October 14, 2026, Richard):</strong> the Served card counts the served requests by size ("by size: Thumbnail 9 · Small 1 · Medium 4 · original …"), smallest to largest; the Size columns sort the same way (Thumbnail, Small, Medium, FullHD, OriginalJpeg, original, then anything else); the Path columns are now "Blob CSID" (hover for the request's path; ⧉ copies the path).</li>
+      <li><strong>Version 30 (October 14, 2026, Richard):</strong> Past requests has a "Size" column (Thumbnail, Medium, …, or original), in both tables, which sorts like the others; the Path column shows just the shortened Blob CSID (the path on hover and in ⧉).</li>
+      <li><strong>Version 29 (October 14, 2026, Richard):</strong> ⧉ only where a value is shortened with an ellipsis (shortened CSIDs and paths, the Audit log's SHA-256). A value shown whole has none (the identification number on Recalls and in Media look up's heading, the whole CSIDs in an opened Recalls row); one click selects all of it (so a CSID isn't copied in pieces at its hyphens), ready to copy. So that the click selects rather than opens, an opened Recalls row's CSIDs are plain text, each followed by "View file". The same goes for the Media CSID in Media look up's heading and the whole CSIDs in its Details panels.</li>
+      <li><strong>Version 28 (October 14, 2026, Richard):</strong> on Media look up, each size in the sizes table is a link that opens that size's file in a dialog: the path (with ⧉), the picture (or why there's none) and "Dismiss"; Esc or a click outside the dialog closes it too. There's no "Media look up" button in it, since that's this page. The picture is Serena's cached copy, or CollectionSpace's file when there's none, as in the other file dialogs.</li>
+      <li><strong>Version 27 (October 14, 2026, Richard):</strong> on Media look up, the sizes table folds away under one line that says what its rows would, for example "Sizes (6): none served (recalled) · cached: Medium". It starts open only when the sizes differ (some served, some not) and then stays as you leave it, like Details. A path's look up (one size) shows its row with no box. Try "The recalled image" and "A Media record with two Blobs".</li>
       <li><strong>Version 26 (October 14, 2026, Richard):</strong> <strong>Past requests</strong> shows only what differs from row to row: "<CSID…> · <size>" (the whole path on hover, in ⧉ and in the file dialog), so the table fits; the app shows "Signed link" only for Cinefiles, the one museum with signed access. <strong>"← Back to …"</strong>: open a path's file from Past requests (or a CSID, or a refresh ID), then "Media look up": the page starts with "← Back to Past requests", which returns there as it was. The menu starts a new task, so there's no link after it. In the app, the list pages also keep their filters, sort and page in the address, so the browser's Back does the same. The recall dialog's "Back" is "Change CSIDs".</li>
       <li><strong>Version 25 (October 14, 2026, Richard):</strong> on Recalls, each row has ▸ (a button, so the keyboard reaches it) that shows the row's details beneath it: the Media CSID and Blob CSID in full, each opening the file and with ⧉, and "Media look up". The first column is the Media record's identification number (D153's), with ⧉; a record without one shows its shortened Media CSID. In the app the number would be kept with the recall when it's made, so the page doesn't call CollectionSpace for every row.</li>
       <li><strong>Version 24 (October 13, 2026 review, from Richard's testing; D154–D165 accepted):</strong>
@@ -310,12 +327,10 @@
       <li><strong>Last served and First cached (layout C):</strong> under the verdict, when Serena last served the file (any size) and when it first cached it in its S3 bucket; the sizes table has both for each size, and "In Serena" Details has them too. In the app, "first cached" is the cache index's fetched-at time, which Serena already keeps. "Last served" would come from Serena's log (the "served" lines Past requests reads), so it reaches back 30 days, the log's retention; a time kept per size in Serena's tables instead would mean a write on every request, which Serena avoids.</li>
       <li><strong>Media look up, side panels (layout C):</strong> two panels on the left, "In Serena" and "In CollectionSpace now", each with its picture (Serena's cached copy; CollectionSpace's file now, which Serena doesn't keep), captioned only when there's no picture (why not) or the file is soft-deleted and a collapsible "Details": Serena's Blob, Media record, kind, access and checks; CollectionSpace's state, Blob, Media fields and when it last changed. Details start collapsed; each stays as you leave it while you look up other files. When the Media record now has a different Blob, the two pictures differ.</li>
       <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no cached copy, the preview is CollectionSpace's thumbnail, which Serena doesn't keep. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (taken off the web since: "Approved for web" No) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
-      <li><strong>Media look up, three layouts to compare:</strong> the dashed switch at the top of the page (mockup only) shows the same answer three ways, with any example. <strong>A. Verdict first:</strong> a large coloured verdict, the file's identity, the checks as a row of cards, the sizes as cards. <strong>B. Decision path:</strong> the checks as the path a request takes, top to bottom, stopping at the check that decides it, with the explanation and what to do next right there; sizes as one compact table. <strong>C. Inspector:</strong> a side panel with the file's facts (a preview of the cached copy, if there is one, Blob, Media record, kind, access, and the checks), and beside it the answer and a table of sizes; it reads like a property sheet and suits admins comparing details. Below, the notes describe A.</li>
-      <li><strong>Media look up (A):</strong> the answer comes first, as a coloured verdict: Served, Not served, or Depends (a restricted file served only on a portal's signed link), with the one reason that decides it and what an admin can do next. Below it, the file's Blob and Media record (with Copy buttons) and its kind and access as chips, then the checks as a row of cards in the order Serena makes them: the one that decides the verdict is outlined, and checks after it are greyed, since they didn't change the outcome. Sizes are cards: when every size has the same verdict, one line says so and the cards show only what differs (which sizes have a cached copy). Times are Pacific, in words, with UTC in the tooltip. The page still never calls CollectionSpace.</li>
       <li><strong>Sample data:</strong> one consistent set. "Now" is Oct 13, 2026, 10:00 AM PDT; the last refresh is pahma-2026-10-12-1. Every page draws on the same Media records, and each Past requests line's outcome comes from Serena's rules at its time, so a path, a CSID on Recalls, an example button or a typed CSID all land on the same answer in Media look up. Older lines can differ from today's answer when something changed since (a recall, a deletion). Recalling, releasing and acknowledging update Recalls, Alerts, the Audit log and Media look up together.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image, a recall a refresh kept, a file not in the servable list, files replaced or deleted in CollectionSpace today, a Media record with two Blobs, the placeholder image, a recall a refresh ended, and a path Serena refuses; Cinefiles' restricted PDF is under Cinefiles (Sign in to another museum). Typed CSIDs work too: an unknown one, the replaced image's new Blob (61f0e9d8-c7b6-4a59-8e4d-3c2b1a0f9e8d) or the unlisted file's Media record (7c1d9e20-3b4a-4f5e-8a6b-9c0d1e2f3a4b).</li>
       <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
-      <li><strong>Recalls:</strong> "Cancel recall…" undoes a recall still waiting for a later refresh (D148); "Recall…" opens the form; "Preview recall" shows the summary with thumbnails (click one for the full size); a reason enables the button. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
+      <li><strong>Recalls:</strong> "Cancel recall…" undoes a recall still waiting for a later refresh (D148); "Recall…" opens the form; "Preview recall" shows the summary with thumbnails (click one for the full size); the button that recalls is never disabled: without a reason it says so under the field. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
       <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, a "Media look up" button (opens Media look up on that path) and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
       <li><strong>Recalls:</strong> the Media record and Blob CSIDs work like Past requests' paths: plain text until hovered, then a link that opens the file in a dialog, with "Media look up" and Dismiss.</li>
       <li><strong>Simulated:</strong> sign-in (any username and password; "wrong" is refused), every table, the thumbnails (drawn stand-ins), the CSV exports and the API documentation page.</li>
@@ -337,12 +352,12 @@
   const typed = el => clean(el.value);
   const name = () => MUSEUMS[S.museum];
 
-  // Pacific time, in words; UTC in the tooltip.
+  // A time as the app shows it: UTC, "2026-10-13 17:00:00 UTC", breaking only between its date and its clock time.
   function when(iso) {
-    const d = new Date(iso);
-    const text = d.toLocaleString("en-US", {timeZone: "America/Los_Angeles", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"});
-    return `<span title="${esc(iso.replace("T", " ").replace(/(\.\d+)?(\+00:00|Z)$/, "") + " UTC")}">${esc(text).replace(/^(.*?\d{4},) (.*)$/, '<span class="nowrap">$1</span> <span class="nowrap">$2</span>')}</span>`;
+    const [d, c] = new Date(iso).toISOString().replace("T", " ").slice(0, 19).split(" ");
+    return `<span class="nowrap">${d}</span> <span class="nowrap">${c} UTC</span>`;
   }
+
   // How the admin app names each kind (D151): "file" only when the kind isn't known.
   const KIND_WORDS = {image: "image", card: "catalog card", pdf: "PDF", "3D": "3D model", audio: "audio file", video: "video"};
   const kindWord = kind => KIND_WORDS[kind] || "file";
@@ -354,7 +369,8 @@
   const refreshLink = id => `<button type="button" class="link mono nowrap" data-refresh="${esc(id)}">${esc(id)}</button>`;
   const REFRESH_ID = /\b([a-z]+-\d{4}-\d{2}-\d{2}-\d+)\b/g;
   const linkRefreshes = text => esc(text).replace(REFRESH_ID, (m, id) => refreshLink(id));
-  const csidHtml = csid => `<span class="mono" title="${esc(csid)}">${esc(csid)}</span><button type="button" class="copy" data-copy="${esc(csid)}">Copy</button>`;
+  // A CSID shown whole: no ⧉ (Richard, Oct 14); one click selects all of it.
+  const csidHtml = csid => `<span class="mono sel-all" title="${esc(csid)}">${esc(csid)}</span>`;
 
   function thumbSvg(seed, kind) {
     if (kind === "pdf") return `<svg viewBox="0 0 56 56" aria-hidden="true"><rect width="56" height="56" fill="var(--surface-1)"/><rect x="14" y="8" width="28" height="38" rx="2" fill="var(--surface-2)" stroke="var(--border-strong)"/><text x="28" y="31" text-anchor="middle" font-size="9" font-weight="700" fill="var(--text-danger)">PDF</text></svg>`;
@@ -420,7 +436,7 @@
       cs: {blob: BP, fields: [["Access code override (document)", "Glimmer readers only"]], updated: "2026-10-01T16:00:00Z"}},
   ];
   const EXAMPLES = [...RECORDS.filter(r => r.ex).map(r => ({label: r.ex, input: r.input, museum: r.museum})),
-    {label: "A path Serena refuses", input: `/pahma/imageserver/blobs/${B1}/derivatives/Huge/content`, museum: "pahma"}];
+    {label: "A path Serena refuses", input: `/pahma/imageserver/blobs/${B1}/derivatives/Thumbnial/content`, museum: "pahma"}];
 
   // The log's sample lines, the last 7 days: [time, museum, Blob CSID, size, on a signed link]. Each line's outcome
   // comes from Serena's rules (decide, below) at its time, so the lines, the counts, Most requested, Last served and
@@ -433,7 +449,7 @@
     ["2026-10-12T22:10:00Z", "pahma", B1, "Thumbnail"], ["2026-10-13T05:48:00Z", "pahma", BR, "Medium"], ["2026-10-13T05:59:30Z", "pahma", BR, "Medium"],
     ["2026-10-13T05:59:31Z", "pahma", "not-a-csid", "original"], ["2026-10-13T06:01:57Z", "pahma", BT, "Small"], ["2026-10-13T06:03:11Z", "pahma", BN, "original"],
     ["2026-10-13T06:05:02Z", "pahma", BR, "Medium"], ["2026-10-13T06:05:03Z", "pahma", BR, "Thumbnail"], ["2026-10-13T09:30:00Z", "pahma", B1, "Thumbnail"],
-    ["2026-10-13T11:00:00Z", "pahma", B1, "Huge"], ["2026-10-13T12:00:00Z", "pahma", PLACEHOLDER, "original"], ["2026-10-13T13:00:00Z", "pahma", BL, "Thumbnail"],
+    ["2026-10-13T11:00:00Z", "pahma", B1, "Thumbnial"], ["2026-10-13T11:30:00Z", "pahma", "media:9f9f9f9f-0000-4000-8000-000000000000", "Medium"], ["2026-10-13T12:00:00Z", "pahma", PLACEHOLDER, "original"], ["2026-10-13T13:00:00Z", "pahma", BL, "Thumbnail"],
     ["2026-10-13T14:20:00Z", "pahma", BN, "original"], ["2026-10-13T14:30:00Z", "cinefiles", BP, "original", true], ["2026-10-13T15:00:00Z", "cinefiles", BP, "original"],
     ["2026-10-13T15:12:44Z", "pahma", B1, "Thumbnail"], ["2026-10-13T15:58:00Z", "pahma", B1, "Medium"], ["2026-10-13T16:02:00Z", "pahma", BT, "Thumbnail"],
     ["2026-10-13T16:30:00Z", "pahma", BR, "Medium"], ["2026-10-13T16:40:03Z", "pahma", B1, "Thumbnail"], ["2026-10-13T16:40:30Z", "pahma", BX, "Medium"],
@@ -441,8 +457,9 @@
   ];
 
   // ---- Serena's rules, as servability.decide and the fetch apply them
-  const REASON = {not_listed: "not listed", restricted: "restricted", no_derivatives: "no derivatives for a PDF", recalled: "recalled",
-    placeholder: "placeholder not uploaded", media_deleted: "media deleted", bad_csid: "bad CSID", unknown_size: "not a size served"};
+  // Each reason as the app shows it: Serena's reason with its underscores as spaces.
+  const REASON = {unknown_path: "unknown path", not_listed: "not listed", restricted: "restricted", no_derivatives: "no derivatives for kind", recalled: "recalled",
+    placeholder: "placeholder not uploaded", media_deleted: "media deleted", bad_csid: "bad csid", unknown_size: "derivative not served"};
   const STORE = {};  // Blob CSID → size → {at, type, bytes}: Serena's cached copies (the cache index)
   RECORDS.forEach(r => Object.entries(r.stored || {}).forEach(([blob, sizes]) => Object.entries(sizes).forEach(([size, at]) => {
     (STORE[blob] ||= {})[size] = {at, type: COPY[size][0], bytes: COPY[size][1]};
@@ -455,6 +472,7 @@
   const storedAt = (blob, size, t) => { const c = (STORE[blob] || {})[size]; return c && ms(c.at) <= ms(t) ? c : null; };
 
   function decide(museum, csid, size, t, signed) {
+    if (csid.startsWith("media:")) return {reason: "unknown_path"}; // a /media/ URL: not served yet (PR 15)
     if (!CSID_RE.test(csid)) return {reason: "bad_csid"};
     if (!SIZES.includes(size)) return {reason: "unknown_size"};
     const [r, b] = findBlob(museum, csid);
@@ -468,7 +486,7 @@
     return {r, b, cache: "miss"};
   }
 
-  const pathOf = (museum, csid, size) => `/${museum}/imageserver/blobs/${csid}/${size === "original" ? "" : `derivatives/${size}/`}content`;
+  const pathOf = (museum, csid, size) => `/${museum}/imageserver/${csid.startsWith("media:") ? `media/${csid.slice(6)}` : `blobs/${csid}`}/${size === "original" ? "" : `derivatives/${size}/`}content`;
   const LOG = EVENTS.slice().sort((x, y) => ms(x[0]) - ms(y[0])).map(([at, museum, csid, size, signed]) => {
     const d = decide(museum, csid, size, at, signed);
     if (!d.reason && d.cache === "miss") (STORE[csid] ||= {})[size] = {at, type: d.b.kind === "pdf" ? "PDF" : COPY[size][0], bytes: d.b.kind === "pdf" ? "2.4 MB" : COPY[size][1]};
@@ -490,33 +508,47 @@
   // ---- Media look up: Serena's answer for one input, now
   function lookupFor(input) {
     const q = input.trim();
-    const m = /^(?:https?:\/\/[^/]+)?\/([a-z]+)\/imageserver\/blobs\/([^/]+)\/(?:derivatives\/([^/]+)\/)?content\/?$/.exec(q);
-    let csid = q, size = null;
-    if (m) {
-      if (m[1] !== S.museum) return {input: q, refused: {head: "Not looked up: another museum's path", why: `This path is ${esc(MUSEUMS[m[1]] || m[1])}'s.`, next: "Switch museums in the menu at the top right to look it up."}};
-      csid = m[2]; size = m[3] || "original";
-      if (!CSID_RE.test(csid)) return {input: q, refused: {head: "Not served: not a CSID", why: `“${esc(csid)}” isn't a CSID.`, next: "No CSID was looked up."}};
-      if (!SIZES.includes(size)) return {input: q, refused: {head: `Not served: not a size ${esc(name())} serves`, why: `“${esc(size)}” isn't one of ${esc(name())}'s sizes: Thumbnail, Small, Medium, FullHD and OriginalJpeg, and the original.`, next: "No CSID was looked up."}};
-    } else if (/\/imageserver\/blobs\/([^/?#]+)/.test(q) && CSID_RE.test(q.match(/\/imageserver\/blobs\/([^/?#]+)/)[1])) {
-      // Not a URL Serena serves (no /content, say), but it names a Blob: say so, then look the Blob up (Richard, Oct 13).
-      const blob = q.match(/\/imageserver\/blobs\/([^/?#]+)/)[1];
-      const found = lookupFor(blob);
-      found.input = q;
-      found.note = "This URL isn't one Serena serves (it needs /content or /derivatives/<size>/content): a request for it gets the unavailable image, reason \"unknown path\". Below, its Blob CSID, looked up on its own.";
-      return found;
+    let csid = q, size = null, display = q;
+    if (q.includes("/")) {
+      let parts = q.replace(/^[a-z]+:\/\/[^/]*/i, "").split(/[?#]/)[0].replace(/^\/+/, "").split("/");
+      if (parts[0] === "imageserver") parts = [S.museum, ...parts];
+      else if (parts[0] === "blobs" || parts[0] === "media") parts = [S.museum, "imageserver", ...parts];
+      const shown = ("/" + parts.join("/")).replace(/\b(linked_pdf|inline_pdf)(:|%3A)[^/]*/gi, "$1:");
+      if (parts[1] !== "imageserver" || !MUSEUMS[parts[0]]) return {input: shown, problem: `Not one of ${name()}'s file paths: they start with /${S.museum}/imageserver/`};
+      if (parts[0] !== S.museum) return {input: shown, problem: `That's a ${MUSEUMS[parts[0]]} path; you're looking up ${name()}'s files.`};
+      const rest = parts.slice(2).join("/");
+      const m = /^blobs\/([^/]+)\/(?:derivatives\/([^/]+)\/)?content$/.exec(rest);
+      if (m) {
+        if (!/^[A-Za-z0-9-]{1,64}$/.test(m[1])) return {input: shown, refused: REASON.bad_csid};
+        if (m[2] && !SIZES.includes(m[2])) return {input: shown, refused: REASON.unknown_size};
+        csid = m[1]; size = m[2] || "original"; display = shown;
+      } else {
+        // Not a URL Serena serves, but it names a Blob (no /content) or a Media record (a /media/ URL, served from
+        // pull request 15): say so, then look that up on its own, every size (Richard, Oct 13 and 14).
+        const named = /^(blobs|media)\/([^/]+)(\/.*)?$/.exec(rest);
+        if (named && CSID_RE.test(named[2]) && (named[1] === "media" || !named[3] || named[3] === "/")) {
+          const found = lookupFor(named[2]);
+          found.input = shown;
+          found.note = named[1] === "media"
+            ? "Serena doesn't serve /media/ URLs yet (pull request 15): a request for one gets the unavailable image, reason \"unknown path\". Below, its Media record, looked up on its own."
+            : "This URL isn't one Serena serves (it needs /content or /derivatives/<size>/content): a request for it gets the unavailable image, reason \"unknown path\". Below, its Blob CSID, looked up on its own.";
+          return found;
+        }
+        return {input: shown, refused: REASON.unknown_path};
+      }
     } else if (!CSID_RE.test(q)) {
-      return {input: q, refused: {head: "Not looked up", why: "That isn't a file's URL or path, a Blob CSID or a Media CSID.", next: "Paste one of those."}};
+      return {input: q, problem: "That isn't a CSID, a URL or a path."};
     }
     const r = findRecord(S.museum, csid);
     const listed = r ? r.blobs.filter(b => listedAt(b, NOW)) : [];
     if (listed.length && (r.media === csid || listed.some(b => b.blob === csid))) {
-      return {input: q, index: Math.max(0, listed.findIndex(b => b.blob === csid)), blobs: listed.map(b => explain(r, b, size))};
+      return {input: display, index: Math.max(0, listed.findIndex(b => b.blob === csid)), blobs: listed.map(b => explain(r, b, size))};
     }
     const blob = !r || r.media !== csid ? csid : r.cs.blob;
-    return {input: q, index: 0, blobs: [explain(r, {blob, unlisted: true}, size)]};
+    return {input: display, index: 0, blobs: [explain(r, {blob, unlisted: true}, size)]};
   }
 
-  const plain = iso => new Date(iso).toLocaleString("en-US", {timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"});
+  const plain = iso => new Date(iso).toISOString().replace("T", " ").slice(0, 19) + " UTC";
   const fieldsOf = r => r.cs.fields || [["Approved for web", r.cs.publish === "None" ? "No" : "Yes"]];
 
   function explain(r, b, size) {
@@ -605,16 +637,22 @@
   ];
   const stillPublic = (at, date, refresh, media, blob, ack) => ({at, date, title: "Recalled in Serena, but still public in CollectionSpace", about: media,
     msg: `Refresh ${refresh} still lists Media record ${media} of PAHMA as public (Blob ${blob}), so its recall in Serena stays. Change the record in CollectionSpace, or, if the recall was a mistake, release it in the admin app.`, ack});
-  const recalledAlert = (at, date, media, reason, by, ack) => ({at, date, title: "An admin recalled Media records", about: media, msg: `${by} recalled 1 Media record for PAHMA. Reason: ${reason}.`, ack});
+  // A recall of one record names it, and is about its Media CSID; several: "<n> Media records" (Richard, Oct 14).
+  const recalledText = (media, n) => {
+    if (n > 1) return `${n} Media records`;
+    const i = RECORDS.findIndex(x => x.media === media);
+    return i >= 0 ? `Media record 2026.1.${i + 1} (${short(media)})` : `Media record ${media}`;
+  };
+  const recalledAlert = (at, date, media, reason, by, ack) => ({at, date, title: "An admin recalled Media records", about: media, msg: `An admin recalled ${recalledText(media, 1)} for PAHMA. Reason: ${reason}`, ack});
   const ALERTS = [
     recalledAlert("2026-10-13T06:02:16Z", "2026-10-12", MEDIA, "Testing", "admin", null),
     stillPublic("2026-10-12T10:41:13Z", "2026-10-12", "pahma-2026-10-12-1", "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", BK, {by: "admin", at: "2026-10-12T16:00:00Z"}),
     stillPublic("2026-10-11T10:39:53Z", "2026-10-11", "pahma-2026-10-11-1", "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", BK, {by: "pahma-admin", at: "2026-10-11T15:00:00Z"}),
-    {at: "2026-10-11T10:39:53Z", date: "2026-10-11", title: "A refresh ended recalls", about: "pahma-2026-10-11-1", msg: "Refresh pahma-2026-10-11-1 ended 1 recall: the servable list no longer lists its Media record as public.", ack: {by: "pahma-admin", at: "2026-10-11T15:00:30Z"}},
+    {at: "2026-10-11T10:39:53Z", date: "2026-10-11", title: "A refresh ended recalls", about: "pahma-2026-10-11-1", msg: "Refresh pahma-2026-10-11-1 ended 1 recall for PAHMA: its servable list no longer has their files as public.", ack: {by: "pahma-admin", at: "2026-10-11T15:00:30Z"}},
     recalledAlert("2026-10-10T16:05:01Z", "2026-10-10", "91f2c3d4-1a2b-4c5d-8e9f-0a1b2c3d4e5f", "Wrong image on the record", "admin", {by: "admin", at: "2026-10-10T16:10:00Z"}),
-    {at: "2026-10-10T10:36:05Z", date: "2026-10-10", title: "A servable list check failed", about: "pahma-2026-10-10-1", msg: "Refresh pahma-2026-10-10-1: 35,387 rows removed, 18.9% of the last servability update's rows, more than the 5% delta threshold.", ack: {by: "admin", at: "2026-10-10T15:20:00Z"}},
+    {at: "2026-10-10T10:36:05Z", date: "2026-10-10", title: "A servable list check failed", about: "pahma-2026-10-10-1", msg: "Refresh pahma-2026-10-10-1 failed its servable list check: 35,387 rows removed (18.9%), more than the 5% delta threshold. Its page says more.", ack: {by: "admin", at: "2026-10-10T15:20:00Z"}},
     recalledAlert("2026-10-09T21:14:04Z", "2026-10-09", "6c0e8a71-3f2b-4d1e-9a55-0b7e2c9d41a3", "Request from the community: culturally sensitive", "pahma-admin", {by: "pahma-admin", at: "2026-10-09T21:20:00Z"}),
-    {at: "2026-10-06T17:30:01Z", date: "2026-10-06", title: "An admin released a recall", about: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", msg: "admin released the recall of Media record 4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21, which refresh pahma-2026-10-05-1 kept. Reason: Complaint withdrawn; CollectionSpace is right.", ack: {by: "admin", at: "2026-10-06T17:31:00Z"}},
+    {at: "2026-10-06T17:30:01Z", date: "2026-10-06", title: "An admin released a recall", about: "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", msg: "An admin released the recall of Media record 4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21 for PAHMA, which refresh pahma-2026-10-05-1 kept. Reason: Complaint withdrawn; CollectionSpace is right", ack: {by: "admin", at: "2026-10-06T17:31:00Z"}},
     ...["05", "04", "03"].map(d => stillPublic(`2026-10-${d}T10:40:30Z`, `2026-10-${d}`, `pahma-2026-10-${d}-1`, "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", BL, {by: "admin", at: `2026-10-${d}T16:00:00Z`})),
     recalledAlert("2026-10-02T18:30:01Z", "2026-10-02", "4b7e9a10-2c3d-4e5f-9a8b-7c6d5e4f3a21", "Complaint about the caption", "admin", {by: "admin", at: "2026-10-02T18:35:00Z"}),
   ];
@@ -653,7 +691,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 26</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 37</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -670,7 +708,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 26</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 37</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -740,61 +778,70 @@
     refreshes: () => `${title(`${esc(name())} Past refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it; click again to reverse.</p>
       ${S.focus ? `<p class="secondary">Opened from a link: refresh <span class="mono">${esc(S.focus)}</span> is marked. (In the app the link opens the refresh's own page.)</p>` : ""}
       ${table("refreshes", [
-        {key: "id", title: "Refresh", help: "The refresh's ID: the museum, its refresh date and its number that day.", html: r => `<button class="link mono">${S.museum}-${r.id}</button>`},
-        {key: "date", title: "Refresh date", help: "The Pacific date the refresh started. A recall made that day isn't decided by it.", html: r => `${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}`},
-        {key: "state", title: "State", help: "Where the refresh is: started, received, checking, check failed, updating, updated, update failed or abandoned.", html: r => `<span class="pill t-${r.tone}">${r.state}</span>`},
-        {key: "rows", title: "Rows", num: true, help: "Data rows in the refresh's servable list (one per Blob).", html: r => r.rows ? r.rows.toLocaleString("en-US") : "—"},
-        {key: "at", title: "Last change", help: "When the refresh last changed state.", html: r => when(r.at)}], REFRESHES.map(r => ({...r, focus: S.focus === `${S.museum}-${r.id}`})), {key: "at", dir: "desc"})}`,
+        {key: "id", title: "Refresh", help: "The refresh's ID: <museum>-<refresh date>-<number>. Opens its page.", html: r => `<button class="link mono">${S.museum}-${r.id}</button>`},
+        {key: "date", title: "Refresh date", help: "The day, in Pacific time, whose servable list it brings in. An admin refresh says which day's list it used.", html: r => `${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}`},
+        {key: "state", title: "State", help: "How far it got: Updated is done; a failed check or update says so, and its page says what an admin can do.", html: r => `<span class="pill t-${r.tone}">${r.state}</span>`},
+        {key: "rows", title: "Rows", num: true, help: "Rows in its servable list: one per Blob the ETL lists.", html: r => r.rows ? r.rows.toLocaleString("en-US") : "—"},
+        {key: "at", title: "Last change", help: "When its state last changed (UTC).", html: r => when(r.at)}], REFRESHES.map(r => ({...r, focus: S.focus === `${S.museum}-${r.id}`})), {key: "at", dir: "desc"})}`,
 
-    start: () => `${title(`${esc(name())}: Start a refresh`)}<p class="lead">An admin refresh: use when the ETL made the servable list but Serena's refresh failed. The list must come from the live public core.</p>
-      <label class="field" style="max-width:420px">Servable list (.tsv or .tsv.gz) <input type="file" id="startFile"></label>
-      <label class="field" style="max-width:220px">Refresh date <input type="text" value="2026-10-12"></label>
-      <label style="display:flex;gap:8px;margin-bottom:12px"><input type="checkbox"> I confirm this list was made from the live public core.</label>
-      <label class="field" style="max-width:560px">Reason (required) <textarea rows="2"></textarea></label><button class="primary" disabled>Start the refresh</button>`,
+    start: () => `${title(`${esc(name())}: Start a refresh`)}<p class="lead">An admin refresh, for a failed refresh: when the servable list didn't reach Serena, or needs replacing. Run the servable list script on the ETL server, then choose the list it makes. Serena closes the museum's open refresh, if there is one, starts a new refresh with the list, checks it as it checks every servable list and, if it passes, runs the servability update. If it fails, nothing changes and the refresh shows why.</p>
+      <form id="startForm" style="max-width:640px" novalidate>
+      <label class="field">The servable list (.tsv or .tsv.gz) <input type="file" id="startFile" accept=".tsv,.gz,.txt"></label><div class="err-text" id="startFileMsg" role="alert"></div>
+      <label class="field" style="max-width:260px">The refresh date the servable list is for <input type="date" id="startDate" value="2026-10-13" max="2026-10-13"></label><div class="err-text" id="startDateMsg" role="alert"></div>
+      ${reasonField("startReason", "the refresh and the audit log")}
+      <label style="display:flex;gap:8px;margin-bottom:4px"><input type="checkbox" id="startConfirm"> This servable list was made from the live public core: I ran the servable list script on the ETL server.</label><div class="err-text" id="startConfirmMsg" role="alert"></div>
+      <button class="primary" type="submit">Start the refresh</button></form>`,
 
     alerts: () => `${title(`${esc(name())} Alerts`)}<p class="lead">The last 30 days' alerts, newest first. Each is emailed to the team once; acknowledge it here when it's handled. Click a column's name to sort by it.</p>
       ${table("alerts", [
-        {key: "at", title: "Raised", help: "When Serena raised the alert and emailed it to the team.", html: a => when(a.at)},
-        {key: "date", title: "Refresh date", help: "The refresh date the alert is about. The watchdog raises it again on a later date if the problem is still there."},
-        {key: "title", title: "Alert", help: "What happened, and what to do about it.", html: a => `<strong>${esc(a.title)}</strong><div class="secondary">${linkRefreshes(a.msg)}</div>`},
-        {key: "about", title: "About", help: "The refresh, Media record or date the alert is about. A refresh ID opens that refresh; a Media CSID opens Media look up.", html: a => targetHtml({target: a.about})},
-        {key: "ack", title: "Acknowledged", help: "Who acknowledged it, and when. Acknowledging doesn't fix anything: it says someone is on it.", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}], here(ALERTS), {key: "at", dir: "desc"})}`,
+        {key: "at", title: "Raised", help: "When Serena raised it (UTC). Each alert is emailed to the team once.", html: a => when(a.at)},
+        {key: "date", title: "Refresh date", help: "The refresh date it belongs to: the day, in Pacific time, of the refresh it's about or that was due."},
+        {key: "title", title: "Alert", help: "What happened, and what to do. A refresh ID in it opens that refresh.", html: a => `<strong>${esc(a.title)}</strong><div class="secondary">${linkRefreshes(a.msg)}</div>`},
+        {key: "about", title: "About", help: "The refresh, Media record or date the alert is about. A refresh opens its page; a Media CSID opens Media look up, and ⧉ copies it; a recall's \"<n> Media records\" opens Recalls.", html: a => targetHtml({target: a.about})},
+        {key: "ack", title: "Acknowledged", help: "Who acknowledged it and when, or a button to acknowledge it once it's handled.", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}], here(ALERTS), {key: "at", dir: "desc"})}`,
 
     requests: () => {
       const lines = inRange(), served = lines.filter(l => l.outcome === "served").length;
-      const reasons = Object.entries(lines.filter(l => l.outcome !== "served").reduce((o, l) => ({...o, [l.reason]: (o[l.reason] || 0) + 1}), {})).sort((x, y) => y[1] - x[1]);
-      const top = Object.values(lines.reduce((o, l) => { (o[l.path] ||= {path: l.path, n: 0}).n++; return o; }, {})).sort((x, y) => y.n - x.n).slice(0, 10);
+      const reasons = Object.entries(lines.filter(l => l.outcome !== "served").reduce((o, l) => ({...o, [l.reason]: (o[l.reason] || 0) + 1}), {})).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+      const top = Object.values(lines.reduce((o, l) => { (o[l.path] ||= {path: l.path, n: 0}).n++; return o; }, {})).sort((x, y) => y.n - x.n || x.path.localeCompare(y.path)).slice(0, 20);
+      // By day (UTC): served, unserved and unserved by reason, newest first.
+      const days = Object.values(lines.reduce((o, l) => { const d = (o[l.at.slice(0, 10)] ||= {day: l.at.slice(0, 10), served: 0, unserved: 0, why: {}}); if (l.outcome === "served") d.served++; else { d.unserved++; d.why[l.reason] = (d.why[l.reason] || 0) + 1; } return o; }, {})).sort((x, y) => y.day.localeCompare(x.day));
       const shown = lines.filter(l => (!S.outcome || l.outcome === S.outcome) && (!S.reason || l.reason === S.reason));
-      return `${title(`${esc(name())} Past requests`)}<div class="toolbar"><span class="lead" style="margin:0">What Serena served and couldn't serve, from its log. Times are Pacific. Click a column's name to sort by it.</span><span class="spacer"></span>
+      const signedCol = S.museum === "cinefiles"; // only a museum with signed access has the column (October 14, 2026)
+      return `<div class="toolbar">${title(`${esc(name())} Past requests`)}<span class="spacer"></span>
       <div role="group" aria-label="Range">${[["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"]].map(([k, v]) => `<button type="button" data-range="${k}" class="${S.range === k ? "primary" : ""}" aria-pressed="${S.range === k}">${v}</button>`).join(" ")}</div></div>
-      <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
-      <h3>Most requested</h3>${table("top", [
-        {key: "path", title: "Path", help: "The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). Hover for the whole path; ⧉ copies it.", html: r => pathCell(r)},
-        {key: "n", title: "Requests", num: true, help: "How many requests asked for this path in the range.", html: r => r.n.toLocaleString("en-US")}], top, {key: "n", dir: "desc"})}
-      <h3>Requests</h3><div class="toolbar"><select id="reqOutcome" aria-label="Outcome"><option value="">All outcomes</option>${["served", "unserved"].map(o => `<option ${S.outcome === o ? "selected" : ""}>${o}</option>`).join("")}</select>
-        <select id="reqReason" aria-label="Reason"><option value="">Any reason</option>${reasons.map(([k]) => `<option ${S.reason === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select><span class="spacer"></span><button>Export CSV</button></div>
+      <p class="lead">What Serena served and couldn't serve for this museum, read from its log. Times are UTC. The counts cover every request in the range; the table below lists the newest requests. Click a column's name to sort by it; hover over it for what it holds.</p>
+      <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div><div class="secondary">${bySizeHtml(lines.filter(l => l.outcome === "served"))}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
+      <div class="cards" style="grid-template-columns:repeat(auto-fit, minmax(440px, 1fr))">
+      <div class="card"><div class="label">By day</div><div class="tw"><table><thead><tr><th>Day (UTC)</th><th>Served</th><th>Unserved</th><th>Unserved, by reason</th></tr></thead><tbody>${days.map(d => `<tr><td class="nowrap">${d.day}</td><td>${d.served}</td><td>${d.unserved}</td><td>${Object.entries(d.why).sort().map(([k, n]) => `${esc(k)} ${n}`).join(", ")}</td></tr>`).join("") || '<tr><td colspan="4">No requests in this range.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><div class="label">Most requested</div><div class="tw"><table><thead><tr><th>Blob CSID</th><th>Size</th><th>Requests</th></tr></thead><tbody>${top.map(r => `<tr><td>${pathCell(r)}</td><td>${sizeHtml(sizeOfPath(r.path))}</td><td class="num">${r.n.toLocaleString("en-US")}</td></tr>`).join("") || '<tr><td colspan="3">No requests in this range.</td></tr>'}</tbody></table></div></div>
+      </div>
+      <div class="toolbar"><label>Outcome <select id="reqOutcome"><option value="">All</option>${[["served", "Served"], ["unserved", "Unserved"]].map(([o, t]) => `<option value="${o}" ${S.outcome === o ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label>Reason <select id="reqReason" ${S.outcome === "served" ? "disabled" : ""}><option value="">Any</option>${reasons.map(([k]) => k).sort().map(k => `<option ${S.reason === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></label><span class="spacer"></span><button>Export CSV</button></div>
       ${table("lines", [
-        {key: "at", title: "Time", help: "When the request reached Serena.", html: r => when(r.at)},
-        {key: "outcome", title: "Outcome", help: "Served: Serena answered with the file. Unserved: the visitor got the unavailable image.", html: r => `<span class="pill ${r.outcome === "served" ? "t-success" : "t-danger"}">${r.outcome}</span>`},
-        {key: "reason", title: "Reason", help: "Why an unserved request wasn't served (recalled, not listed, bad CSID, …)."},
-        {key: "path", title: "Path", help: "The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). Hover for the whole path, ⧉ copies it, click it to see the file.", html: r => pathCell(r)},
-        {key: "kind", title: "Kind", help: "The file's kind from the servable list (image, catalog card, PDF, 3D model); blank when Serena doesn't know the file.", html: r => (r.kind ? esc(kindWord(r.kind)) : "") + (r.signed ? ' <span class="muted">· signed link</span>' : "")},
-        {key: "cache", title: "Cache", help: "Hit: served from Serena's cached copy. Miss: fetched from CollectionSpace first, then cached."}], shown, {key: "at", dir: "desc"})}`;
+        {key: "at", title: "Time", help: "When the request reached Serena (UTC).", html: r => when(r.at)},
+        {key: "outcome", title: "Outcome", help: "Served: Serena sent the file. Unserved: it sent the unavailable image instead, for the reason beside it."},
+        {key: "reason", title: "Reason", help: "Why an unserved request wasn't served. Media look up says more for any one file."},
+        {key: "path", title: "Blob CSID", help: BLOB_CSID_HELP, html: r => pathCell(r)},
+        {key: "size", title: "Size", help: SIZE_HELP, val: r => sizeRank(sizeOfPath(r.path)), html: r => sizeHtml(sizeOfPath(r.path))},
+        {key: "kind", title: "Kind", help: "The file's kind, from the servable list: blank only when Serena doesn't know the file.", html: r => r.kind ? esc(kindWord(r.kind)) : ""},
+        {key: "cache", title: "Cache", help: "Hit: served from Serena's cached copy. Miss: fetched from CollectionSpace just then, and cached."},
+        ...(signedCol ? [{key: "signed", title: "Signed link", help: "Yes: a restricted file served on a portal's signed link.", val: r => r.signed ? "1" : "0", html: r => r.signed ? "yes" : ""}] : [])], shown, {key: "at", dir: "desc"})}`;
     },
 
     lookup: lookupPage,
     recalls: recallsPage,
 
     settings: () => `${title(`${esc(name())} Settings`)}<p class="lead">Each setting starts at its default value. A change needs a reason and is in the audit log; changes to the delta threshold and the audit retention also raise an alert.</p>
-      <div class="cards">${[["Watchdog", [["Deadline for today's refresh", "08:00 Pacific", false]]], ["The ETL job", [["Poll interval", "15 seconds", false], ["Step timeout", "900 seconds", true]]], ["Servable list check", [["Delta threshold", "5%", false]]], ["Audit log", [["Kept for", "90 days", false]]]].map(([g, rows]) => `<div class="card"><div class="label">${g}</div>${rows.map(([k, v, c]) => `<div style="margin-top:8px"><strong>${k}</strong><div class="num">${v} <span class="muted">${c ? "· changed; default value 1800" : "· default value"}</span></div><div style="display:flex;gap:6px;margin-top:4px"><button>Change</button>${c ? "<button>Use default</button>" : ""}</div></div>`).join("")}</div>`).join("")}</div>`,
+      <div class="cards">${[["Watchdog", [["Deadline for today's refresh", "08:00 Pacific", false]]], ["The ETL job", [["Poll interval", "15 seconds", false], ["Step timeout", "900 seconds", true]]], ["Servable list check", [["Delta threshold", "5%", false]]], ["Audit log", [["Kept for", "90 days", false]]]].map(([g, rows]) => `<div class="card"><div class="label">${g}</div>${rows.map(([k, v, c]) => `<div style="margin-top:8px"><strong>${k}</strong><div class="num">${v} <span class="muted">${c ? "· changed; default value 1800" : "· default value"}</span></div><div style="display:flex;gap:6px;margin-top:4px"><button type="button" data-setting="${esc(k)}" data-setting-value="${esc(v)}">Change</button>${c ? `<button type="button" data-setting="${esc(k)}" data-setting-default="1800 seconds">Use default</button>` : ""}</div></div>`).join("")}</div>`).join("")}</div>`,
 
     audit: () => `${title(`${esc(name())} Audit log`)}<div class="toolbar"><span class="lead" style="margin:0">Every admin action, the ETL's calls that change something and each refresh's outcome, of the last 30 days, newest first. Click a column's name to sort by it (Details doesn't sort).</span><span class="spacer"></span><button>Export CSV</button></div>
       ${table("audit", [
-        {key: "at", title: "When", help: "When it happened.", html: e => when(e.at)},
-        {key: "admin", title: "By", help: "Who did it: an admin (their CollectionSpace username), the ETL (with the museum), or Serena (a refresh's outcome, or a recall a refresh ended)."},
+        {key: "at", title: "When (UTC)", help: "When it happened, in UTC.", html: e => when(e.at)},
+        {key: "admin", title: "By", help: "Who did it: an admin (their CollectionSpace username), the ETL, or Serena (a refresh's outcome, or a recall a refresh ended)."},
         {key: "action", title: "Action", help: "What was done."},
-        {key: "target", title: "Target", help: "What it was done to. A Media CSID opens Media look up, a refresh ID the refresh, a setting the Settings page, an alert the Alerts page (last 30 days).", html: e => targetHtml(e)},
-        {key: "details", title: "Details", sortable: false, help: "The rest: reasons, counts, before and after. ⧉ copies a whole SHA-256.", html: e => esc(e.details || "").replace(/SHA-256: ([0-9a-f]{64})/, (_, h) => `SHA-256: ${shortCopy(h)}`)}], here(AUDIT), {key: "at", dir: "desc"})}`,
+        {key: "target", title: "Target", help: "What it was done to: a Media CSID (opens Media look up; ⧉ copies it), a refresh (opens it), a setting, or an alert (opens Alerts while it's there, for 30 days).", html: e => targetHtml(e)},
+        {key: "details", title: "Details", sortable: false, help: "The rest: reasons, counts, values before and after. ⧉ copies a whole SHA-256.", html: e => esc(e.details || "").replace(/SHA-256: ([0-9a-f]{64})/, (_, h) => `SHA-256: ${shortCopy(h)}`)}], here(AUDIT), {key: "at", dir: "desc"})}`,
 
     api: () => `${title(`${esc(name())} ETL API documentation`)}<p class="lead">The ETL API's description, generated from the code, read-only (Swagger UI in the app; not shown in the mockup).</p>`,
   };
@@ -804,6 +851,7 @@
     const t = e.target || "";
     if (CSID_RE.test(t) && t.length > 20) return `<span class="nowrap"><button type="button" class="link mono" data-lookup="${esc(t)}" title="Media look up: ${esc(t)}">${esc(short(t))}</button>${copyBtn(t)}</span>`;
     if (/^[a-z]+-\d{4}-\d{2}-\d{2}-\d+$/.test(t)) return refreshLink(t);
+    if (/^[\d,]+ Media records$/.test(t)) return `<button type="button" class="link" data-go="recalls">${esc(t)}</button>`; // a recall of several (Richard, Oct 14)
     if (e.action === "settings change") return `<button type="button" class="link mono" data-go="settings">${esc(t)}</button>`;
     if (e.action === "alert acknowledge" && ms(e.at) > ms(NOW) - 30 * DAY) return `<button type="button" class="link" data-go="alerts">${esc(t)}</button>`;
     return `<span class="mono">${esc(t)}</span>`;
@@ -819,20 +867,20 @@
     if (!media) return "";
     const i = RECORDS.findIndex(x => x.media === media);
     const number = !S.cspaceDown && i >= 0 && !(b.cs && b.cs.state === "gone") ? `2026.1.${i + 1}` : null;
-    return `<h2 class="lookup-heading">Media ${esc(number || media)}${number ? copyBtn(number) : ""}${number ? `<span class="secondary" style="font-size:13px;font-weight:400;margin-left:10px">Media CSID <span class="mono">${esc(media)}</span></span>` : ""}</h2>`;
+    return `<h2 class="lookup-heading">Media <span class="sel-all">${esc(number || media)}</span>${number ? `<span class="secondary" style="font-size:13px;font-weight:400;margin-left:10px">Media CSID <span class="mono sel-all">${esc(media)}</span></span>` : ""}</h2>`;
   }
 
   function lookupPage() {
     const r = S.lookup;
     const ex = EXAMPLES.map((v, i) => [i, v]).filter(([, v]) => v.museum === S.museum);
     let out = `${title(`${esc(name())} Media look up`)}
-      <p class="lead">Why Serena serves a file or not. Paste a file's URL or path, a Blob CSID or a Media CSID. Serena's answer comes from its own records; below it, layout C also shows what CollectionSpace says now, for comparison.</p>
+      <p class="lead">Why Serena serves a file or not. Give a file's URL or path, a Blob CSID or a Media CSID. Serena's answer comes from its own records, as a request without a signed link gets it; beside it, what CollectionSpace says now, for comparison.</p>
       <form class="lookup-form" id="lookupForm" role="search"><input type="search" id="lookupInput" placeholder="URL, path, Blob CSID or Media CSID" value="${esc(r ? r.input : "")}" aria-label="URL, path, Blob CSID or Media CSID"><button class="primary" type="submit">Look up</button></form>
       <div class="examples">${ex.length ? "Examples: " : `No examples for ${esc(name())}; switch to PAHMA or Cinefiles in the menu at the top right. `}${ex.map(([k, v]) => `<button type="button" data-example="${k}">${esc(v.label)}</button>`).join("")}${S.museum !== "cinefiles" ? '<span>(the restricted PDF is under Cinefiles)</span>' : ""}</div>`;
-    out += `<div class="layout-switch" role="group" aria-label="Mockup only: layout to review"><span>Mockup only, layout to review:</span>${Object.entries(LAYOUTS).map(([k, v]) => `<button type="button" data-layout="${k}" aria-pressed="${S.layout === k}">${k}. ${v}</button>`).join("")}</div>`;
     if (!r) return out + `<p class="muted">No file looked up yet.</p>`;
+    if (r.problem) return out + `<div class="err">${esc(r.problem)}</div>`; // the admin API's 422, as the app shows it
     if (r.refused) {
-      return out + verdictHtml({tone: "not", ...r.refused}) + `<p class="meta-line">Looked up ${esc(r.input)}</p>`;
+      return out + `<div class="cs-down" style="margin-bottom:12px">Not served: ${esc(r.refused)}. No CSID was looked up.</div><p class="meta-line">Looked up ${esc(r.input)} · last servability update: refresh ${lastRefresh()} (refresh date 2026-10-12)</p>`;
     }
     out += headingHtml(r.blobs[Math.min(S.blobIndex, r.blobs.length - 1)]);
     if (r.note) out += `<div class="cs-down" style="margin-bottom:12px">${esc(r.note)}</div>`;
@@ -841,42 +889,12 @@
     }
     const b = r.blobs[Math.min(S.blobIndex, r.blobs.length - 1)];
     const meta = `<p class="meta-line">Looked up ${esc(r.input)} · last servability update: refresh ${lastRefresh()} (refresh date 2026-10-12)</p>`;
-    if (S.layout === "B") return out + layoutPath(b) + meta;
-    if (S.layout === "C") return out + layoutInspector(b) + meta;
-    out += verdictHtml(b.verdict);
-    out += `<div class="ident">${b.media ? `<div><span class="k">Media CSID</span>${csidHtml(b.media)}</div>` : ""}<div><span class="k">Blob CSID</span>${csidHtml(b.blob)}</div>
-      ${b.kind ? `<div><span class="k">Kind</span><span class="pill t-neutral">${esc(kindWord(b.kind))}</span></div>` : ""}${b.access ? `<div><span class="k">Access</span><span class="pill ${b.access === "public" ? "t-success" : "t-warning"}">${esc(b.access)}</span></div>` : ""}</div>`;
-    out += `<h3 style="margin-top:0">Checks, in the order Serena makes them</h3><ol class="checks">${b.checks.map(([st, t, d]) => `<li class="${st}"><span class="ic" aria-hidden="true">${{ok: "✓", no: "✕", maybe: "!", skip: "–"}[st]}</span><span class="t">${esc(t)} <span class="visually-hidden">${{ok: "passes", no: "fails", maybe: "depends", skip: "not reached"}[st]}</span></span><span class="d">${esc(d)}</span></li>`).join("")}</ol>`;
-    out += sizesHtml(b);
-    out += meta;
-    return out;
+    return out + layoutInspector(b) + meta; // layout C (D139)
   }
 
-  const LAYOUTS = {A: "Verdict first", B: "Decision path", C: "Inspector"};
   const MARK = {ok: "✓", no: "✕", maybe: "!", skip: "–"};
   const SAY = {ok: "passes", no: "fails", maybe: "depends", skip: "not reached"};
 
-  // B. Decision path: the checks as the path a request takes, top to bottom; the path stops where the verdict is
-  // decided, with the explanation right there; the sizes are one compact table.
-  function layoutPath(b) {
-    const v = b.verdict;
-    let out = `<div class="path-head ${v.tone}"><span class="pill ${v.tone === "served" ? "t-success" : v.tone === "depends" ? "t-warning" : "t-danger"}">${esc(v.head)}</span>
-      <span class="secondary">Blob ${csidHtml(b.blob)}${b.media ? ` · Media record ${csidHtml(b.media)}` : ""}</span></div>
-      <ol class="path">`;
-    const stop = b.checks.findIndex(([st]) => st === "no" || st === "maybe");
-    b.checks.forEach(([st, t, d], i) => {
-      out += `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><div><div class="t">${esc(t)}<span class="visually-hidden"> ${SAY[st]}</span></div><div class="d">${esc(d)}</div>
-        ${i === stop ? `<div class="callout ${v.tone}"><div>${v.why}</div><div class="secondary" style="margin-top:4px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</div></div>` : ""}</div></li>`;
-    });
-    if (stop < 0) out += `<li class="end"><span class="dot" aria-hidden="true">✓</span><div><div class="t">Served</div><div class="d">${esc(v.why)} ${esc(v.next)}</div></div></li>`;
-    out += `</ol>`;
-    out += `<h3>Sizes</h3><div class="tw"><table><thead><tr><th>Size</th><th>Result</th><th>Cached copy</th></tr></thead><tbody>${b.sizes.map(s => `<tr><td>${esc(s.size)}</td><td>${s.served ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">not served</span> <span class="secondary">${esc(s.reason)}</span>`}</td><td class="secondary">${s.stored ? esc(s.stored) : (s.served ? "none yet: fetched on its first request" : "none")}</td></tr>`).join("")}</tbody></table></div>`;
-    if (b.note) out += `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>`;
-    return out;
-  }
-
-  // C. Inspector: the file's facts in a side panel (with its cached copy, if any), and the answer and the sizes beside
-  // them, as in a property sheet.
   function layoutInspector(b) {
     const v = b.verdict;
     const stored = b.sizes.find(s => s.stored);
@@ -897,7 +915,7 @@
     const facts = [["Media CSID", b.media ? csidHtml(b.media) : '<span class="muted">none</span>'], ["Blob CSID", csidHtml(b.blob)],
       ["Kind", b.kind ? esc(kindWord(b.kind)) : '<span class="muted">not known</span>'], ["Access", b.access ? esc(b.access) : '<span class="muted">not known</span>'],
       ["First cached", earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : '<span class="muted">never</span>'],
-      ["Last served", latest(b, "lastServed") ? when(latest(b, "lastServed")) : '<span class="muted">not in the last 30 days</span>']];
+      ["Last served", latest(b, "lastServed") ? when(latest(b, "lastServed")) : '<span class="muted">never</span>']];
     const checks = b.checks.map(([st, t, d]) => `<li class="${st}"><span class="dot" aria-hidden="true">${MARK[st]}</span><span><strong>${esc(t)}</strong><span class="visually-hidden"> ${SAY[st]}</span><br><span class="secondary">${esc(d)}</span></span></li>`).join("");
     return `<div class="inspector">
       <aside class="inspect-side" aria-label="The file in Serena and in CollectionSpace">
@@ -919,12 +937,29 @@
       <div class="answer">
         <div class="answer-head ${v.tone}"><span class="mark" aria-hidden="true">${{served: "✓", not: "✕", depends: "!"}[v.tone]}</span><div><div class="head">${esc(v.head)}</div><div>${v.why}</div></div></div>
         <p class="secondary" style="margin:6px 0 6px">${esc(v.next)}${v.link ? ` <button type="button" class="link" data-go="${v.link}">Open Recalls</button>` : ""}</p>
-        <p class="stamps"><span><span class="k">Last served</span> ${latest(b, "lastServed") ? when(latest(b, "lastServed")) : "not in the last 30 days"}</span><span><span class="k">First cached in Serena</span> ${earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : "never"}</span></p>
-        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Cached copy</th><th>Last served</th><th>First cached</th></tr></thead><tbody>${b.sizes.map(s => `<tr${s.asked ? ' class="asked"' : ""}><td>${esc(s.size)}${s.asked ? ' <span class="pill t-info">this path</span>' : ""}</td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? when(s.lastServed) : "—"}</td><td class="secondary">${s.firstStored ? when(s.firstStored) : "—"}</td></tr>`).join("")}</tbody></table></div>
-        <p class="muted" style="margin:6px 0 0;font-size:12px">Last served: Serena's last answer with the file (from its log; "—" if not in the last 30 days). First cached: when Serena fetched that size and cached it in its S3 bucket.</p>
+        <p class="stamps"><span><span class="k">Last served</span> ${latest(b, "lastServed") ? when(latest(b, "lastServed")) : "never"}</span><span><span class="k">First cached in Serena</span> ${earliest(b, "firstStored") ? when(earliest(b, "firstStored")) : "never"}</span></p>
+        ${sizesOpen(b) === null ? "" : `<details class="more sizes-box" data-details="sizes" ${sizesOpen(b) ? "open" : ""}><summary>${esc(sizesSummary(b))}</summary>`}
+        <div class="tw"><table><thead><tr><th>Size</th><th>Served</th><th>Why not</th><th>Cached copy</th><th>Last served</th><th>First cached</th></tr></thead><tbody>${b.sizes.map(s => `<tr${s.asked ? ' class="asked"' : ""}><td><button type="button" class="link" data-size-view="${esc(s.size)}" data-size-blob="${esc(b.blob)}" title="View the ${esc(s.size)} file">${esc(s.size)}</button></td><td>${s.served ? "Yes" : "No"}</td><td>${s.served ? "" : esc(s.reason)}</td><td class="secondary">${s.stored ? esc(s.stored) : "—"}</td><td class="secondary"${s.lastServed ? "" : ' title="Not served in the last 30 days"'}>${s.lastServed ? when(s.lastServed) : "—"}</td><td class="secondary">${s.firstStored ? when(s.firstStored) : "—"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="muted" style="margin:6px 0 0;font-size:12px">Last served: the day Serena last answered a request with its cached copy (recorded at most once a day). First cached: when Serena fetched that size and cached it.</p>
+        ${sizesOpen(b) === null ? "" : "</details>"}
         ${b.note ? `<p class="secondary" style="margin:8px 0 0">${esc(b.note)}</p>` : ""}
         ${compareHtml(b)}
       </div></div>`;
+  }
+
+  // The sizes table, collapsible (Richard, Oct 14): its summary line says what the rows would; open to start only when
+  // the sizes differ (some served, some not), and then as the admin leaves it. One size (a path's): no box, just the row.
+  function sizesSummary(b) {
+    const n = b.sizes.length, served = b.sizes.filter(x => x.served).length, cached = b.sizes.filter(x => x.stored).map(x => x.size);
+    const reasons = [...new Set(b.sizes.filter(x => !x.served).map(x => x.reason))];
+    const what = served === n ? "all served" : served === 0 ? `none served (${reasons.join(", ")})` : `${served} of ${n} served`;
+    return `Sizes (${n}): ${what} · ${cached.length ? `cached: ${cached.join(", ")}` : "none cached"}`;
+  }
+  function sizesOpen(b) {
+    if (b.sizes.length < 2) return null;
+    if (S.open.sizes !== undefined) return S.open.sizes;
+    const served = b.sizes.filter(x => x.served).length;
+    return served > 0 && served < b.sizes.length;
   }
 
   // Serena's records beside what CollectionSpace says now, for the Inspector.
@@ -973,35 +1008,50 @@
   // A recalled Media record's identification number, as staff know it (Richard, Oct 14; D153's number). In the app it
   // would be kept with the recall, read from CollectionSpace when it's made; without one, the shortened Media CSID.
   const idNumber = media => { const i = RECORDS.findIndex(x => x.media === media); return i >= 0 ? `2026.1.${i + 1}` : null; };
-  const idCell = media => { const n = idNumber(media); return n ? `<span class="nowrap">${esc(n)}${copyBtn(n)}</span>` : `<span class="nowrap"><span class="mono" title="${esc(media)}">${esc(short(media))}</span>${copyBtn(media)}</span>`; };
-  const recallDetail = (media, blobs) => `<dl class="row-detail"><dt>Media CSID</dt><dd><span class="nowrap">${csidLink(media, "Media CSID")}${copyBtn(media)}</span></dd>
-    ${blobs.map(b => `<dt>Blob CSID</dt><dd><span class="nowrap">${csidLink(b, "Blob CSID")}${copyBtn(b)}</span></dd>`).join("")}
+  const idCell = media => { const n = idNumber(media); return n ? `<span class="nowrap sel-all">${esc(n)}</span>` : `<span class="nowrap"><span class="mono" title="${esc(media)}">${esc(short(media))}</span>${copyBtn(media)}</span>`; };
+  const recallDetail = (media, blobs) => `<dl class="row-detail"><dt>Media CSID</dt><dd><span class="nowrap"><span class="mono sel-all">${esc(media)}</span> · <button type="button" class="link" data-csid="${esc(media)}" data-what="Media CSID">View file</button></span></dd>
+    ${blobs.map(b => `<dt>Blob CSID</dt><dd><span class="nowrap"><span class="mono sel-all">${esc(b)}</span> · <button type="button" class="link" data-csid="${esc(b)}" data-what="Blob CSID">View file</button></span></dd>`).join("")}
     <dt></dt><dd><button type="button" class="link" data-lookup="${esc(media)}">Media look up</button></dd></dl>`;
   const recallRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && !r.recall.ended)
     .map(r => ({r, media: r.media, blobs: r.blobs.map(b => b.blob), by: r.recall.by, at: r.recall.at, reason: r.recall.reason, kept: r.recall.kept}));
   const endedRows = () => RECORDS.filter(r => r.museum === S.museum && r.recall && r.recall.ended && ms(r.recall.ended.at) > ms(NOW) - 30 * DAY)
     .map(r => ({r, media: r.media, blob: r.blobs[0].blob, ...r.recall.ended}));
 
+  const NUMBER_HELP = "The Media record's identification number in CollectionSpace, read when it was recalled (its shortened Media CSID if it has none). ▸ shows its Media CSID and Blob CSID.";
   function recallsPage() {
     const active = recallRows();
-    return `${title(`${esc(name())} Recalls`)}<div class="toolbar"><span class="lead" style="margin:0;flex:1 1 400px">A recall stops Serena serving a Media record's file at once. Change the record in CollectionSpace too: a refresh on a later day ends the recall once the file is no longer public there. Until a refresh decides a recall, "Cancel recall…" undoes a mistake. Click a column's name to sort by it.</span><button class="danger" type="button" id="recallBtn">Recall…</button></div>
-      <h3>Active</h3>${table("active", [
-        {key: "thumb", title: "", sortable: false, html: t => `<button class="thumb" data-full="${imageSeed(S.museum, t.blobs[0])}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, t.blobs[0]), "image")}</button>`},
-        {key: "media", title: "Identification number", help: "The recalled Media record's identification number in CollectionSpace (its shortened Media CSID if it has none). ▸ shows its Media CSID and Blob CSID.", val: t => idNumber(t.media) || t.media, html: t => idCell(t.media)},
-        {key: "at", title: "Recalled", help: "When the admin recalled it.", html: t => when(t.at)},
+    // "Recall…" under the explanation, before the tables, outlined red (Richard, Oct 14: option C).
+    const lead = `A recall stops Serena serving a Media record's file at once, until CollectionSpace and a later refresh catch up. Change the record in CollectionSpace too: a refresh, on a later day, ends the recall once its servable list no longer has the file as public. If the list still has it as public, the recall stays and Serena raises an alert, and an admin can release it if CollectionSpace is right. Until a refresh decides it, an admin can cancel a recall made by mistake.`;
+    return `${title(`${esc(name())} Recalls`)}<p class="lead">${lead}</p><p style="margin:0 0 14px"><button class="danger-outline" type="button" id="recallBtn">Recall…</button></p>
+      <h3>Active recalls</h3>${table("active", [
+        {key: "media", title: "Identification number", help: NUMBER_HELP, val: t => idNumber(t.media) || t.media, html: t => idCell(t.media)},
+        {key: "at", title: "Recalled (UTC)", help: "When the admin recalled it.", html: t => when(t.at)},
         {key: "by", title: "By", help: "The admin who recalled it."},
         {key: "reason", title: "Reason", help: "The reason the admin gave."},
-        {key: "state", title: "State", help: "Waiting for a later refresh: no refresh has decided it yet. Still public in CollectionSpace: a refresh on a later day still listed the file as public, so the recall stays.", val: t => t.kept ? "0" : "1", html: t => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${refreshLink(t.kept.refresh)}</div>` : `<span class="pill t-info">Waiting for a later refresh</span>`},
+        {key: "state", title: "State", help: "Waiting for a later refresh: no refresh has decided it yet, so it can be cancelled. Still public in CollectionSpace: a refresh on a later day still listed the file as public, so the recall stays until it's released.", val: t => t.kept ? "0" : "1", html: t => t.kept ? `<span class="pill t-danger">Still public in CollectionSpace</span><div class="muted">kept by ${refreshLink(t.kept.refresh)}</div>` : `<span class="pill t-info">Waiting for a later refresh</span>`},
         {key: "act", title: "", sortable: false, cls: "actions", html: (t, i) => t.kept ? `<button type="button" data-release="${i}">Release…</button>` : `<button type="button" data-cancel="${i}">Cancel recall…</button>`}], active, {key: "at", dir: "desc"},
         {key: t => t.media, detail: t => recallDetail(t.media, t.blobs)})}
       <h3>Ended in the last 30 days</h3>${table("ended", [
-        {key: "media", title: "Identification number", help: "The Media record whose recall ended: its identification number in CollectionSpace. ▸ shows its Media CSID and Blob CSID.", val: e => idNumber(e.media) || e.media, html: e => idCell(e.media)},
-        {key: "at", title: "Ended", help: "When the recall ended.", html: e => when(e.at)},
-        {key: "how", title: "How", help: "Ended by a refresh (CollectionSpace caught up), Released (an admin, after a refresh kept it) or Cancelled (an admin, before a refresh decided it)."},
-        {key: "by", title: "By", help: "The admin, or Serena for a refresh.", html: e => /^refresh /.test(e.by) ? "Serena" : esc(e.by)},
-        {key: "why", title: "Why", help: "The reason given, or why the refresh ended it."}], endedRows(), {key: "at", dir: "desc"},
+        {key: "media", title: "Identification number", help: NUMBER_HELP, val: e => idNumber(e.media) || e.media, html: e => idCell(e.media)},
+        {key: "at", title: "Ended (UTC)", help: "When the recall ended.", html: e => when(e.at)},
+        {key: "how", title: "How", help: "Ended by a refresh (its servable list no longer had the file as public), released, or cancelled.", html: e => /^refresh /.test(e.by) ? `Ended by refresh ${refreshLink(e.by.slice(8))}` : esc(e.how)},
+        {key: "by", title: "By", help: "The admin who released or cancelled it, or Serena for a refresh.", html: e => /^refresh /.test(e.by) ? "Serena" : esc(e.by)},
+        {key: "why", title: "Why", sortable: false, help: "The admin's reason, or why the refresh ended it."}], endedRows(), {key: "at", dir: "desc"},
         {key: e => e.media, detail: e => recallDetail(e.media, [e.blob])})}`;
   }
+
+  // The Reason field every action that changes something has (D62): never a disabled button (Richard, Oct 14); a hint
+  // says it's required and where it's recorded, and pressing the button without a reason says so here and moves focus.
+  const reasonField = (id, recorded) => `<label class="field">Reason (required) <textarea id="${id}" rows="2" aria-describedby="${id}Hint ${id}Msg"></textarea></label><div class="muted" id="${id}Hint" style="margin:-6px 0 4px;font-size:12px">Required. Recorded in ${recorded}. No personal data, please.</div><div class="err-text" id="${id}Msg" role="alert"></div>`;
+  // Whether the reason is given; if not, the message under the field, and focus there.
+  function reasonGiven(id) {
+    const box = $("#" + id), msg = $("#" + id + "Msg");
+    const ok = !!box && !!box.value.trim();
+    if (msg) msg.textContent = ok ? "" : "Give a reason first.";
+    if (!ok && box) box.focus();
+    return ok;
+  }
+  const TO_TEAM = "the audit log and the alert emailed to the team";
 
   function dialog(head, body, foot) {
     $("#dlgHead").innerHTML = head; $("#dlgBody").innerHTML = body; $("#dlgFoot").innerHTML = foot;
@@ -1010,37 +1060,65 @@
   const close = () => $("#dlg").close();
 
   function recallForm() {
-    dialog("Recall Media records", `<p class="secondary" style="margin-top:0">Up to 12 Media or Blob CSIDs, separated by new lines, commas or spaces, or a text file of up to 1,000. Nothing is recalled until you confirm.</p>
-      <div id="tdErr"></div><label class="field">Media or Blob CSIDs <textarea id="tdBox" rows="4">${S.museum === "pahma" ? `${BLOB}\n6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d\ne7d6c5b4-a392-4817-9e0d-c1b2a3948576\nnot-a/csid` : ""}</textarea></label>
-      <label class="field">Or a text file of CSIDs <input type="file" id="tdFile" accept=".txt"></label>`,
+    dialog("Recall Media records", `<p class="secondary" style="margin-top:0">Give up to 12 Media or Blob CSIDs, separated by new lines, commas or spaces, or a text file of up to 1,000, one per line. A file's path or URL works too: it's cut down to its CSID as you paste it. Nothing is recalled until you confirm.</p>
+      <div id="tdErr"></div><label class="field">Media or Blob CSIDs, paths or URLs <textarea id="tdBox" rows="4">${S.museum === "pahma" ? `${BLOB}\n6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d\ne7d6c5b4-a392-4817-9e0d-c1b2a3948576\n/cinefiles/imageserver/blobs/${BLOB}/content\nnot-a-csid` : ""}</textarea></label>
+      <label class="field">Or a text file of CSIDs, paths or URLs <input type="file" id="tdFile" accept=".txt"></label>`,
       `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="tdSummary">Preview recall</button>`);
   }
+
+  // A path or URL in the recall form, as the app reads it (Richard, Oct 14): no host, query string or PDF link suffix
+  // (a visitor's email address, which never leaves the browser); a missing leading slash or museum is this museum's.
+  // A Blob path gives its Blob CSID, a /media/ path its Media CSID; another museum's path, or one without a CSID, is
+  // kept (cleaned) for Serena to explain.
+  const CAME_FROM = {};
+  function csidOfPath(token) {
+    let path = token.replace(/^[a-z]+:\/\/[^/]*/i, "").split(/[?#]/)[0].replace(/\b(linked_pdf|inline_pdf)(:|%3A)[^/]*/gi, "$1:");
+    let parts = path.replace(/^\/+/, "").split("/");
+    if (parts[0] === "imageserver") parts = [S.museum, ...parts];
+    else if (parts[0] === "blobs" || parts[0] === "media") parts = [S.museum, "imageserver", ...parts];
+    const cleaned = "/" + parts.join("/");
+    const own = parts[0] === S.museum && parts[1] === "imageserver" && (parts[2] === "blobs" || parts[2] === "media");
+    return {csid: own && /^[A-Za-z0-9-]{1,64}$/.test(parts[3] || "") ? parts[3] : null, path: cleaned, museum: parts[1] === "imageserver" ? parts[0] : null};
+  }
+  const csidsOfText = text => text.split(/[\s,]+/).filter(Boolean).map(t => {
+    if (!t.includes("/")) return t.replace(/\b(linked_pdf|inline_pdf)(:|%3A).*/gi, "$1:");
+    const f = csidOfPath(t);
+    if (f.csid) { CAME_FROM[f.csid] = f.path; return f.csid; }
+    return f.path;
+  }).join("\n");
 
   // What the form's CSIDs would recall: each found in Serena's servable list first, else in CollectionSpace.
   function recallSummary(tokens) {
     const rows = [], skipped = [], seen = new Set();
     for (const tok of tokens) {
+      if (tok.includes("/")) {
+        const f = csidOfPath(tok);
+        skipped.push([tok, f.museum && f.museum !== S.museum && MUSEUMS[f.museum] ? `That's a ${MUSEUMS[f.museum]} path; you're recalling ${name()}'s files.` : f.museum === S.museum ? "No valid Blob or Media CSID in this path." : `Not one of ${name()}'s file paths: they start with /${S.museum}/imageserver/`]);
+        continue;
+      }
       if (!CSID_RE.test(tok)) { skipped.push([tok, "Not a CSID."]); continue; }
       const [lr] = findBlob(S.museum, tok);
       const listed = lr || RECORDS.find(r => r.museum === S.museum && r.media === tok && r.blobs.some(b => listedAt(b, NOW)));
       const r = listed || (S.cspaceDown ? null : findRecord(S.museum, tok));
-      if (!r) { skipped.push([tok, S.cspaceDown ? "Not known to Serena, and CollectionSpace can't be reached: not served today. Try again later." : "Neither Serena nor CollectionSpace has this CSID: not served."]); continue; }
-      if (!r.media) { skipped.push([tok, "The placeholder image has no Media record: it can't be recalled."]); continue; }
+      if (!r) { skipped.push([tok, S.cspaceDown ? "Not known to Serena, and CollectionSpace can't be reached: not served today. Try again later." : "Not found: neither Serena nor CollectionSpace knows it as a Media record or a Blob."]); continue; }
+      if (!r.media) { skipped.push([tok, "The museum's placeholder image: it has no Media record to recall."]); continue; }
       if (seen.has(r.media)) continue;
       seen.add(r.media);
       const blob = r.blobs.length ? r.blobs[0].blob : r.cs.blob;
       const d = decide(S.museum, blob, "Medium", NOW, false);
-      rows.push({r, media: r.media, blob, kind: r.blobs.length ? r.blobs[0].kind : "image", found: listed ? "Serena" : "CollectionSpace", gave: tok,
-        served: recallAt(r, NOW) ? "already recalled" : d.reason ? `no (${REASON[d.reason]})` : "yes", done: !!recallAt(r, NOW)});
+      rows.push({r, media: r.media, blob, kind: r.blobs.length ? r.blobs[0].kind : "image", found: listed ? "Serena" : "CollectionSpace (not served today)", gave: CAME_FROM[tok] || tok,
+        served: recallAt(r, NOW) ? "already recalled" : d.reason ? "no" : "yes", done: !!recallAt(r, NOW)});
     }
     S.pendingRecall = rows.filter(x => !x.done).map(x => x.r);
     const todo = S.pendingRecall.length, what = `${todo} Media record${todo === 1 ? "" : "s"}`;
-    dialog("Recall Media records", `<p style="margin-top:0">${what} to recall. Click a thumbnail for the full size.</p>
-      <div class="tw"><table><thead><tr><th></th><th>Media CSID</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
-      ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td>${shortCopy(x.media)}<div class="muted">Blob CSID ${shortCopy(x.blob)}</div></td><td>${x.kind === "not known" ? "not known" : esc(kindWord(x.kind))}</td><td>${esc(x.served)}</td><td>${x.found}</td><td>${x.gave.length > 20 ? shortCopy(x.gave) : `<span class="mono">${esc(x.gave)}</span>`}</td></tr>`).join("")}</tbody></table></div>
-      ${skipped.length ? `<p style="margin:12px 0 4px"><strong>Not recalled</strong></p><ul style="margin:0 0 12px">${skipped.map(([c, m]) => `<li><span class="mono">${esc(c)}</span>: ${esc(m)}</li>`).join("")}</ul>` : ""}
-      <label class="field">Reason (required) <textarea id="tdReason" rows="2"></textarea></label>`,
-      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Change CSIDs</button><button type="button" class="danger" id="tdConfirm" disabled>Recall ${what}</button>`);
+    // "You gave": a path a CSID came from, shortened in the middle (⧉ when shortened); a CSID, shortened with ⧉.
+    const gave = g => g.includes("/") ? (middle(g) === g ? `<span class="mono sel-all">${esc(g)}</span>` : `<span class="nowrap"><span class="mono" title="${esc(g)}">${esc(middle(g))}</span>${copyBtn(g)}</span>`) : g.length > 20 ? shortCopy(g) : `<span class="mono">${esc(g)}</span>`;
+    dialog("Recall Media records", `<p style="margin-top:0">${what} to recall. Click a thumbnail to see the full size.</p>
+      <div class="tw"><table><thead><tr><th></th><th>Media CSID</th><th>Blob CSID</th><th>Kind</th><th>Served today</th><th>Found in</th><th>You gave</th></tr></thead><tbody>
+      ${rows.map(x => `<tr style="${x.done ? "opacity:.55" : ""}"><td><button class="thumb" data-full="${imageSeed(S.museum, x.blob)}" aria-label="Full size">${thumbSvg(imageSeed(S.museum, x.blob), x.kind)}</button></td><td>${shortCopy(x.media)}</td><td>${shortCopy(x.blob)}</td><td>${x.kind === "not known" ? "not known" : esc(kindWord(x.kind))}</td><td>${esc(x.served)}</td><td>${x.found}</td><td>${gave(x.gave)}</td></tr>`).join("")}</tbody></table></div>
+      ${skipped.length ? `<p style="margin:12px 0 4px">Not recalled:</p><ul style="margin:0 0 12px">${skipped.map(([c, m]) => `<li><span class="mono" title="${esc(c)}">${esc(middle(c))}</span>: ${esc(m)}</li>`).join("")}</ul>` : ""}
+      ${todo ? reasonField("tdReason", TO_TEAM) : ""}`,
+      `<button type="button" data-close>Cancel</button><button type="button" id="tdBack">Change CSIDs</button>${todo ? `<button type="button" class="danger" id="tdConfirm">Recall ${what}</button>` : ""}`);
   }
 
   // Opens Media look up on an input (a path, a URL or a CSID).
@@ -1081,51 +1159,106 @@
     const rr = $("#reqReason"); if (rr) rr.onchange = () => { S.reason = clean(rr.value); render(); };
     document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => openLookup(EXAMPLES[+clean(b.dataset.example)].input));
     document.querySelectorAll("details[data-details]").forEach(d => d.ontoggle = () => { S.open[clean(d.dataset.details)] = d.open; });
-    document.querySelectorAll("[data-layout]").forEach(b => b.onclick = () => { S.layout = clean(b.dataset.layout); render(); });
     document.querySelectorAll("[data-blob]").forEach(b => b.onclick = () => { S.blobIndex = +clean(b.dataset.blob); render(); });
     const lk = $("#lookupForm");
     if (lk) lk.onsubmit = e => { e.preventDefault(); const q = typed($("#lookupInput")).trim(); if (q) openLookup(q); };
     document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = clean(b.dataset.copy); Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { const was = b.textContent; b.textContent = "Copied"; setTimeout(() => { b.textContent = was; }, 1500); }, () => { b.textContent = "Select it"; }); });
     const tb = $("#recallBtn"); if (tb) tb.onclick = () => { recallForm(); bindDialog(); };
+    // Start a refresh: pressed too soon, it says what's missing under each field, focus on the first (Richard, Oct 14).
+    const sf = $("#startForm");
+    if (sf) sf.onsubmit = e => {
+      e.preventDefault();
+      const missing = [];
+      const say = (id, ok, text) => { $("#" + id + "Msg").textContent = ok ? "" : text; if (!ok) missing.push(id); };
+      say("startFile", $("#startFile").files.length > 0, "Choose the servable list first.");
+      say("startDate", /^\d{4}-\d{2}-\d{2}$/.test($("#startDate").value) && $("#startDate").value <= "2026-10-13", "Give a refresh date of today (2026-10-13) or earlier.");
+      const reasonOk = reasonGiven("startReason");
+      say("startConfirm", $("#startConfirm").checked, "Confirm the list was made from the live public core.");
+      const first = missing.find(id => id !== "startConfirm" || reasonOk);
+      if (first && (first !== "startConfirm" || reasonOk)) $("#" + first).focus();
+      if (!missing.length && reasonOk) { $("#startFileMsg").textContent = "(Mockup: in the app, the refresh starts and its page opens.)"; }
+    };
+    // A Settings change: its value and a reason; "Save" (or "Use default") is never disabled (Richard, Oct 14).
+    document.querySelectorAll("[data-setting]").forEach(b => b.onclick = () => {
+      const label = clean(b.dataset.setting), toDefault = b.dataset.settingDefault !== undefined;
+      dialog(`${toDefault ? "Use default" : "Change"}: ${esc(label)}`, toDefault
+        ? `<p style="margin-top:0">Back to the default value, ${esc(clean(b.dataset.settingDefault))}.</p>${reasonField("setReason", "the audit log")}`
+        : `<label class="field">${esc(label)} <input type="text" id="setValue" value="${esc(clean(b.dataset.settingValue).replace(/ .*/, ""))}"></label><div class="err-text" id="setValueMsg" role="alert"></div>${reasonField("setReason", /Delta|Kept/.test(label) ? TO_TEAM : "the audit log")}`,
+        `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="setSave">${toDefault ? "Use default" : "Save"}</button>`);
+      bindDialog();
+      $("#setSave").onclick = () => {
+        const v = $("#setValue");
+        if (v && !v.value.trim()) { $("#setValueMsg").textContent = "Give a value first."; v.focus(); return; }
+        if (v) $("#setValueMsg").textContent = "";
+        if (!reasonGiven("setReason")) return;
+        close();
+      };
+    });
     document.querySelectorAll("[data-release]").forEach(b => b.onclick = () => {
       const t = recallRows()[+clean(b.dataset.release)];
-      dialog("Release a recall", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the recall only if CollectionSpace is right and the file should be served again.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
-        `<button type="button" data-close>Keep the recall</button><button type="button" class="danger" id="relConfirm" disabled>Release</button>`);
+      dialog("Release a recall", `<p style="margin-top:0">Refresh ${esc(t.kept.refresh)} still lists Media record <span class="mono">${esc(t.media)}</span> as public. Release the recall only if CollectionSpace is right and the file should be served again.</p>${reasonField("relReason", TO_TEAM)}`,
+        `<button type="button" data-close>Keep the recall</button><button type="button" class="danger" id="relConfirm">Release</button>`);
       bindDialog(() => {
         const why = typed($("#relReason")).trim();
         t.r.recall.ended = {at: NOW, by: S.user, how: "Released", why};
         AUDIT.unshift({at: NOW, admin: S.user, action: "recall release", target: t.media, details: `Kept by ${t.kept.refresh} · Reason: ${why}`});
-        ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin released a recall", about: t.media, msg: `${S.user} released the recall of Media record ${t.media}, which refresh ${t.kept.refresh} kept. Reason: ${why}.`, ack: null});
+        ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin released a recall", about: t.media, msg: `An admin released the recall of Media record ${t.media} for ${name()}, which refresh ${t.kept.refresh} kept. Reason: ${why}`, ack: null});
       });
     });
     // Cancel recall (D148): only while no refresh has decided the recall; served again at once.
     document.querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => {
       const t = recallRows()[+clean(b.dataset.cancel)];
-      dialog("Cancel a recall", `<p style="margin-top:0">No refresh has decided the recall of Media record <span class="mono">${esc(t.media)}</span> yet. Cancel it only if it was a mistake: Serena serves its files again at once.</p><label class="field">Reason (required) <textarea id="relReason" rows="2"></textarea></label>`,
-        `<button type="button" data-close>Keep the recall</button><button type="button" class="danger" id="relConfirm" disabled>Cancel recall</button>`);
+      dialog("Cancel a recall", `<p style="margin-top:0">No refresh has decided the recall of Media record <span class="mono">${esc(t.media)}</span> yet. Cancel it only if it was a mistake: Serena serves its files again at once.</p>${reasonField("relReason", TO_TEAM)}`,
+        `<button type="button" data-close>Keep the recall</button><button type="button" class="danger" id="relConfirm">Cancel recall</button>`);
       bindDialog(() => {
         const why = typed($("#relReason")).trim();
         t.r.recall.ended = {at: NOW, by: S.user, how: "Cancelled", why};
         AUDIT.unshift({at: NOW, admin: S.user, action: "recall cancel", target: t.media, details: `Recalled by ${t.by} · Reason: ${why}`});
-        ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin cancelled a recall", about: t.media, msg: `${S.user} cancelled the recall of Media record ${t.media}, before a refresh decided it. Reason: ${why}.`, ack: null});
+        ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin cancelled a recall", about: t.media, msg: `An admin cancelled the recall of Media record ${t.media} for ${name()}, before a refresh decided it. Reason: ${why}`, ack: null});
       });
     });
     document.querySelectorAll("[data-csid]").forEach(b => b.onclick = () => showCsid(clean(b.dataset.csid), clean(b.dataset.what)));
     document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => showPath(clean(b.dataset.view)));
+    document.querySelectorAll("[data-size-view]").forEach(b => b.onclick = () => showSize(clean(b.dataset.sizeBlob), clean(b.dataset.sizeView)));
     document.querySelectorAll("main [data-full]").forEach(b => b.onclick = () => showFull(+clean(b.dataset.full)));
   }
 
   // A path on Past requests: plain text until hovered, then a link that opens the file in a dialog (through the admin
   // API, as the recall form's previews: admins only, never cached). The path shows with its CSID shortened; a path
   // with no CSID Serena could look up (a bad CSID) stays plain text.
-  function pathCell(r) {
-    const m = /\/blobs\/([^/]+)\//.exec(r.path);
-    // Only what differs from row to row (Richard, Oct 14): "<CSID…> · <size>"; the whole path on hover and in ⧉.
-    const size = (/\/derivatives\/([^/]+)\/content$/.exec(r.path) || [])[1] || (/\/content$/.test(r.path) ? "original" : "");
-    const text = m ? `${short(m[1])}${size ? ` · ${size}` : ""}` : r.path;
-    if (!m || !CSID_RE.test(m[1])) return `<span class="nowrap req-path"><span class="mono" title="${esc(r.path)}">${esc(text)}</span>${m ? copyBtn(r.path) : ""}</span>`;
-    return `<span class="nowrap req-path"><button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">${esc(text)}</button>${copyBtn(r.path)}</span>`;
+  // The served requests counted by size, in the Served card (Richard, Oct 14), smallest to largest: the museum's
+  // derivatives in its configured order, then the original file; then anything else: a name that isn't one of the museum's sizes, shown with "(invalid)".
+  const SIZE_ORDER = ["Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg", "original"];
+  const SIZE_HELP = "The size asked for: a derivative (Thumbnail, Medium, …) or the original file; sorts smallest to largest. (invalid): not one of this museum's sizes, either a mistake or a size only other museums serve.";
+  const BLOB_CSID_HELP = "The file asked for, by its Blob CSID, shortened. Hover for the request's path; click it to see the file; ⧉ copies the path. A path that isn't a Blob path Serena serves shows the path itself, with \"(not a Blob path)\".";
+  // A size as the request asked for it; a name that isn't one of the museum's sizes is followed by "(invalid)".
+  const sizeHtml = z => !z ? "" : SIZE_ORDER.includes(z) ? esc(z) : `${esc(z)} <span class="muted">(invalid)</span>`;
+  const sizeRank = z => { if (!z) return 100; const i = SIZE_ORDER.indexOf(z); return i < 0 ? 99 : i; }; // no size (not a Blob path) last
+  function bySizeHtml(lines) {
+    const counts = {};
+    for (const l of lines) { const z = sizeOfPath(l.path) || "other"; counts[z] = (counts[z] || 0) + 1; }
+    const sizes = Object.keys(counts).sort((a, b) => sizeRank(a) - sizeRank(b) || a.localeCompare(b));
+    return sizes.length ? `by size: ${sizes.map(z => `<span class="nowrap">${esc(z)} ${counts[z].toLocaleString("en-US")}</span>`).join(" · ")}` : "";
   }
+
+
+  // A path's size: a derivative's name, or "original" for …/content (Richard, Oct 14: its own column).
+  const sizeOfPath = path => !blobOfLogPath(path) ? "" : (/\/derivatives\/([^/]+)\/content$/.exec(path) || [])[1] || "original";
+
+  // A Blob path in a shape Serena serves (…/blobs/<CSID>/content or …/derivatives/<size>/content, with a good CSID):
+  // its Blob CSID, shortened; the size has its own column (Richard, Oct 14). Any other path (a /media/ URL, a bare
+  // /blobs/<CSID>, a bad CSID) shows the path itself, shortened in the middle, "(not a Blob path)", and no size.
+  const BLOB_PATH = /^\/[^/]+\/imageserver\/blobs\/([^/]+)\/(?:derivatives\/[^/]+\/)?content$/;
+  const blobOfLogPath = path => { const m = BLOB_PATH.exec(path); return m && (CSID_RE.test(m[1]) || m[1] === PLACEHOLDER) ? m[1] : null; };
+  const middle = path => path.length > 44 ? `${path.slice(0, 26)}…${path.slice(-14)}` : path;
+
+  function pathCell(r) {
+    const blob = blobOfLogPath(r.path);
+    if (!blob) return `<span class="nowrap req-path"><span class="mono${middle(r.path) === r.path ? " sel-all" : ""}" title="${esc(r.path)}">${esc(middle(r.path))}</span>${middle(r.path) === r.path ? "" : copyBtn(r.path)} <span class="muted">(not a Blob path)</span></span>`;
+    if (!CSID_RE.test(blob)) return `<span class="nowrap req-path"><span class="mono" title="${esc(r.path)}">${esc(short(blob))}</span>${copyBtn(r.path)}</span>`;
+    return `<span class="nowrap req-path"><button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">${esc(short(blob))}</button>${copyBtn(r.path)}</span>`;
+  }
+
 
   // A CSID on the Recalls page: plain text until hovered, then a link that opens the file in the same dialog.
   function csidLink(csid, what, label) {
@@ -1145,7 +1278,11 @@
     $("#viewLookup").onclick = () => { close(); leaving(); openLookup(csid); };
   }
 
-  function showPath(path) {
+  // A size on Media look up opens that size's file (Richard, Oct 14): the same dialog as a path's, without "Media look
+  // up" (it's this page); "Dismiss", Esc or a click outside closes it.
+  function showSize(blob, size) { showPath(pathOf(S.museum, blob, size), true); }
+
+  function showPath(path, onLookup) {
     const l = LOG.find(x => x.path === path && x.museum === S.museum);
     const csid = (/\/blobs\/([^/]+)\//.exec(path) || [])[1], size = (/\/derivatives\/([^/]+)\//.exec(path) || [, "original"])[1];
     const last = [...LOG].reverse().find(x => x.path === path && x.museum === S.museum);
@@ -1164,7 +1301,8 @@
       ${picture}
       <p class="secondary" style="margin-bottom:0">${result ? `The last request for it (${when(last.at)}): ${result}. ` : ""}Shown to you through the admin app, from Serena's cached copy or, without one, CollectionSpace (Serena doesn't keep that), whether or not Serena serves it to the public. Never cached.</p>`, foot);
     bindDialog();
-    $("#viewLookup").onclick = () => { close(); leaving(); openLookup(path); };
+    if (onLookup) $("#viewLookup").remove();
+    else $("#viewLookup").onclick = () => { close(); leaving(); openLookup(path); };
     return l;
   }
 
@@ -1175,27 +1313,31 @@
 
   function bindDialog(onConfirm) {
     document.querySelectorAll("#dlg [data-close]").forEach(b => b.onclick = close);
+    const box = $("#tdBox");
+    if (box) box.onpaste = () => setTimeout(() => { box.value = csidsOfText(box.value); });
     const s = $("#tdSummary"); if (s) s.onclick = () => {
-      const tokens = typed($("#tdBox")).split(/[\s,]+/).filter(Boolean);
+      box.value = csidsOfText(box.value);
+      const tokens = typed(box).split(/[\s,]+/).filter(Boolean);
       if (tokens.length > 12) { $("#tdErr").innerHTML = '<div class="err">More than 12 CSIDs: use a text file instead.</div>'; return; }
       S.recallText = typed($("#tdBox")); recallSummary(tokens); bindDialog();
     };
     const back = $("#tdBack"); if (back) back.onclick = () => { recallForm(); if (S.recallText !== undefined) $("#tdBox").value = S.recallText; bindDialog(); };
     const reason = $("#tdReason"), confirm = $("#tdConfirm");
-    if (reason) reason.oninput = () => { confirm.disabled = !reason.value.trim() || !S.pendingRecall.length; };
+    if (reason) reason.oninput = () => { if (reason.value.trim()) $("#tdReasonMsg").textContent = ""; };
     if (confirm) confirm.onclick = () => {
+      if (!reasonGiven("tdReason")) return;
       const why = typed(reason).trim();
       S.pendingRecall.forEach(r => {
         r.recall = {by: S.user, at: NOW, reason: why};
         AUDIT.unshift({at: NOW, admin: S.user, action: "recall", target: r.media, details: `Blob ${r.blobs.length ? r.blobs[0].blob : r.cs.blob} · Reason: ${why}`});
       });
       const n = S.pendingRecall.length;
-      ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin recalled Media records", about: n === 1 ? S.pendingRecall[0].media : `${n} Media records`, msg: `${S.user} recalled ${n} Media record${n === 1 ? "" : "s"} for ${name()}. Reason: ${why}.`, ack: null});
+      ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin recalled Media records", about: n === 1 ? S.pendingRecall[0].media : `${n} Media records`, msg: `An admin recalled ${recalledText(S.pendingRecall[0].media, n)} for ${name()}. Reason: ${why}`, ack: null});
       S.pendingRecall = []; S.recallText = undefined; close(); render();
     };
     const rr = $("#relReason"), rc = $("#relConfirm");
-    if (rr) rr.oninput = () => { rc.disabled = !rr.value.trim(); };
-    if (rc) rc.onclick = () => { onConfirm && onConfirm(); close(); render(); };
+    if (rr) rr.oninput = () => { if (rr.value.trim()) $("#relReasonMsg").textContent = ""; };
+    if (rc) rc.onclick = () => { if (!reasonGiven("relReason")) return; onConfirm && onConfirm(); close(); render(); };
     document.querySelectorAll("#dlg [data-full]").forEach(b => b.onclick = () => showFull(+clean(b.dataset.full)));
   }
 

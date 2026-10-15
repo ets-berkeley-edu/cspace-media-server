@@ -96,14 +96,10 @@
         <v-card-title>{{ titles[action] }}</v-card-title>
         <v-card-text>
           <p class="mb-4">{{ explanations[action] }}</p>
-          <v-textarea
-            id="reason"
+          <ReasonField
+            ref="reasonField"
             v-model="reason"
-            label="Reason"
-            hint="Recorded in the refresh and the audit log. No personal data, please."
-            persistent-hint
-            rows="2"
-            counter="500"
+            :recorded="action === 'override_threshold' ? 'the refresh, the audit log and the alert emailed to the team' : 'the refresh and the audit log'"
           />
         </v-card-text>
         <v-card-actions>
@@ -113,7 +109,6 @@
             id="confirm-action"
             color="primary"
             variant="flat"
-            :disabled="!ready"
             :loading="busy"
             @click="act"
           >
@@ -130,6 +125,7 @@ import {computed, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import type {Refresh, RefreshAction} from '@/api'
 import {ApiError, api, problem as failure} from '@/api'
+import ReasonField from '@/components/ReasonField.vue'
 import {alertsChanged, museumName} from '@/session'
 import {stateOf, when} from '@/words'
 
@@ -153,8 +149,8 @@ const reason = ref('')
 const busy = ref(false)
 
 const museum = computed(() => String(route.params.museum))
-// Every action needs a reason (D62).
-const ready = computed(() => reason.value.length <= 500 && reason.value.trim().length > 0)
+// Every action needs a reason (D62): its button stays enabled, and ReasonField says what's missing.
+const reasonField = ref<InstanceType<typeof ReasonField> | null>(null)
 
 async function load() {
   try {
@@ -167,12 +163,13 @@ async function load() {
 function open(which: RefreshAction) {
   action.value = which
   reason.value = ''
+  reasonField.value?.reset()
   error.value = ''
   dialog.value = true
 }
 
 async function act() {
-  if (!refresh.value) {
+  if (!refresh.value || !reasonField.value?.check()) {
     return
   }
   busy.value = true

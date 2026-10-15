@@ -77,8 +77,10 @@
           <v-text-field
             v-else
             id="setting-value"
+            ref="valueField"
             v-model="value"
             :label="editing.label"
+            :error-messages="valueProblem ? [valueProblem] : []"
             :hint="hints[editing.name] || hints[editing.group]"
             persistent-hint
           />
@@ -86,15 +88,11 @@
             {{ removing }} audit {{ removing === 1 ? 'entry is' : 'entries are' }} older than that: the next daily
             removal deletes {{ removing === 1 ? 'it' : 'them' }}. Export the audit log first if you need {{ removing === 1 ? 'it' : 'them' }}.
           </p>
-          <v-textarea
-            id="reason"
+          <ReasonField
+            ref="reasonField"
             v-model="reason"
             class="mt-4"
-            label="Reason"
-            hint="Recorded in the audit log. No personal data, please."
-            persistent-hint
-            rows="2"
-            counter="500"
+            :recorded="alerting ? 'the audit log and the alert emailed to the team' : 'the audit log'"
           />
         </v-card-text>
         <v-card-actions>
@@ -104,7 +102,6 @@
             id="save-setting"
             color="primary"
             variant="flat"
-            :disabled="!ready"
             :loading="busy"
             @click="save"
           >
@@ -122,6 +119,7 @@ import {useRoute} from 'vue-router'
 import type {SettingItem, SettingsResponse} from '@/api'
 import {ApiError, api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
+import ReasonField from '@/components/ReasonField.vue'
 import {alertsChanged, museumName} from '@/session'
 import {RETENTION_LABELS} from '@/words'
 
@@ -167,8 +165,13 @@ const removing = computed(() => {
   const days = toDefault.value ? Number(editing.value.default) : Number(value.value)
   return data.value?.audit_retention_choices.find(c => c.days === days)?.entries_removed || 0
 })
-const ready = computed(() => reason.value.trim().length > 0 && reason.value.length <= 500 &&
-  (toDefault.value || String(value.value).trim() !== ''))
+// The button stays enabled (Richard, October 14, 2026): save() says what's missing, under its field.
+const reasonField = ref<InstanceType<typeof ReasonField> | null>(null)
+const valueField = ref<{focus: () => void} | null>(null)
+const valueProblem = ref('')
+// A change to the delta threshold or the audit retention raises an alert (D89, D97).
+const alerting = computed(() => ['delta_threshold_percent', 'audit_retention_days'].includes(editing.value?.name || ''))
+watch(value, () => { valueProblem.value = '' })
 
 function shown(setting: SettingItem, v: string | number): string {
   return setting.name === 'audit_retention_days' ? (RETENTION_LABELS[Number(v)] || `${v} days`) : String(v)
@@ -188,12 +191,22 @@ function open(setting: SettingItem, toTheDefault: boolean) {
   toDefault.value = toTheDefault
   value.value = setting.value
   reason.value = ''
+  reasonField.value?.reset()
   saveError.value = ''
   dialog.value = true
+  valueProblem.value = ''
 }
 
 async function save() {
   if (!editing.value) {
+    return
+  }
+  if (!toDefault.value && String(value.value).trim() === '') {
+    valueProblem.value = 'Give a value first.'
+    valueField.value?.focus()
+    return
+  }
+  if (!reasonField.value?.check()) {
     return
   }
   busy.value = true

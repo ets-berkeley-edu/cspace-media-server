@@ -26,6 +26,25 @@
     </div>
     <template v-if="report && !loading">
       <div class="d-flex flex-wrap ga-4 mb-4">
+        <v-card id="requests-served" variant="outlined" class="summary-card">
+          <v-card-title class="text-subtitle-1">Served</v-card-title>
+          <v-card-text>
+            <div class="text-h5">{{ servedTotal.toLocaleString('en-US') }}</div>
+            <!-- Every served request in the range, by size, smallest to largest (Richard, October 14, 2026). -->
+            <div v-if="report.served_by_size.length" id="requests-by-size" class="text-medium-emphasis">
+              by size: {{ bySize }}
+            </div>
+          </v-card-text>
+        </v-card>
+        <v-card id="requests-unserved" variant="outlined" class="summary-card">
+          <v-card-title class="text-subtitle-1">Unserved</v-card-title>
+          <v-card-text>
+            <div class="text-h5">{{ unservedTotal.toLocaleString('en-US') }}</div>
+            <div class="text-medium-emphasis">{{ unservedReasons || 'none' }}</div>
+          </v-card-text>
+        </v-card>
+      </div>
+      <div class="d-flex flex-wrap ga-4 mb-4">
         <v-card variant="outlined" class="flex-grow-1">
           <v-card-title class="text-subtitle-1">By day</v-card-title>
           <v-card-text>
@@ -49,24 +68,14 @@
           <v-card-title class="text-subtitle-1">Most requested</v-card-title>
           <v-card-text>
             <v-table id="requests-top-paths" density="compact">
-              <thead><tr><th>Path</th><th>Requests</th></tr></thead>
+              <thead><tr><th>Blob CSID</th><th>Size</th><th>Requests</th></tr></thead>
               <tbody>
-                <tr v-for="p in report.top_paths" :key="p.path">
-                  <td>
-                    <span class="request-path" :title="p.path">
-                      <FileLink
-                        v-if="blobOfPath(p.path)"
-                        :title="`View this file: ${p.path}`"
-                        :aria-label="`View this file: ${p.path}`"
-                        @open="openPath(p.path)"
-                      >{{ shortPath(p.path) }}</FileLink>
-                      <template v-else>{{ shortPath(p.path) }}</template>
-                      <CopyButton v-if="shortPath(p.path) !== p.path" :value="p.path" label="path" />
-                    </span>
-                  </td>
+                <tr v-for="p in topPaths" :key="p.path">
+                  <td><RequestPath :path="p.path" @open="openPath(p.path)" /></td>
+                  <td><SizeName :size="sizeOf(p.path)" :sizes="report.sizes" /></td>
                   <td>{{ p.requests }}</td>
                 </tr>
-                <tr v-if="!report.top_paths.length"><td colspan="2">No requests in this range.</td></tr>
+                <tr v-if="!report.top_paths.length"><td colspan="3">No requests in this range.</td></tr>
               </tbody>
             </v-table>
           </v-card-text>
@@ -132,18 +141,8 @@
         </template>
         <template #[`item.at`]="{item}"><WhenText :at="item.at" /></template>
         <template #[`item.reason`]="{item}">{{ reasonOf(item.reason) }}</template>
-        <template #[`item.path`]="{item}">
-          <span class="request-path" :title="item.path">
-            <FileLink
-              v-if="blobOfPath(item.path)"
-              :title="`View this file: ${item.path}`"
-              :aria-label="`View this file: ${item.path}`"
-              @open="openPath(item.path, item)"
-            >{{ shortPath(item.path) }}</FileLink>
-            <template v-else>{{ shortPath(item.path) }}</template>
-            <CopyButton v-if="shortPath(item.path) !== item.path" :value="item.path" label="path" />
-          </span>
-        </template>
+        <template #[`item.path`]="{item}"><RequestPath :path="item.path" @open="openPath(item.path, item)" /></template>
+        <template #[`item.size`]="{item}"><SizeName :size="sizeOf(item.path)" :sizes="report.sizes" /></template>
         <template #[`item.kind`]="{item}">{{ item.kind ? kindWord(item.kind) : '' }}</template>
         <template #[`item.signed`]="{item}">{{ item.signed ? 'yes' : '' }}</template>
       </v-data-table>
@@ -161,20 +160,23 @@ import {api, problem} from '@/api'
 import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
 import ColumnHeader from '@/components/ColumnHeader.vue'
-import CopyButton from '@/components/CopyButton.vue'
-import FileLink from '@/components/FileLink.vue'
 import LoadError from '@/components/LoadError.vue'
+import RequestPath from '@/components/RequestPath.vue'
+import SizeName from '@/components/SizeName.vue'
 import WhenText from '@/components/WhenText.vue'
-import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, kindWord, reasonOf, shortPath, when} from '@/words'
+import {PAGE_SIZES, REQUEST_RANGES, blobOfPath, blobPathOf, kindWord, reasonOf, sizeRank, when} from '@/words'
 import {useQueryValue, useTableState} from '@/tableState'
 
 const OUTCOMES = [{value: '', title: 'All'}, {value: 'served', title: 'Served'}, {value: 'unserved', title: 'Unserved'}]
+
+const SIZE_HELP = 'The size asked for: a derivative (Thumbnail, Medium, …) or the original file; sorts smallest to largest. (invalid): not one of this museum\'s sizes, either a mistake or a size only other museums serve.'
 
 const HEADERS = [
   {title: 'Time', key: 'at', help: 'When the request reached Serena (UTC).'},
   {title: 'Outcome', key: 'outcome', help: 'Served: Serena sent the file. Unserved: it sent the unavailable image instead, for the reason beside it.'},
   {title: 'Reason', key: 'reason', help: 'Why an unserved request wasn\'t served. Media look up says more for any one file.'},
-  {title: 'Path', key: 'path', help: 'The file asked for: its Blob CSID, shortened, and its size (every path starts with the museum and /imageserver/blobs/). The whole path on hover; click it to see the file; ⧉ copies the whole path.'},
+  {title: 'Blob CSID', key: 'path', help: 'The file asked for, by its Blob CSID, shortened. Hover for the request\'s path; click it to see the file; ⧉ copies the path. A path that isn\'t a Blob path Serena serves shows the path itself, with "(not a Blob path)".'},
+  {title: 'Size', key: 'size', help: SIZE_HELP},
   {title: 'Kind', key: 'kind', help: 'The file\'s kind, from the servable list: blank only when Serena doesn\'t know the file.'},
   {title: 'Cache', key: 'cache', help: 'Hit: served from Serena\'s cached copy. Miss: fetched from CollectionSpace just then, and cached.'},
   {title: 'Signed link', key: 'signed', help: 'Yes: a restricted file served on a portal\'s signed link.'}
@@ -191,7 +193,9 @@ const outcome = useQueryValue<string>('outcome', '')
 const reason = useQueryValue<string>('reason', '')
 const report = ref<RequestsReport | null>(null)
 // The Signed link column only where a request can have one: a museum with signed access, Cinefiles (October 14, 2026).
-const headers = computed(() => HEADERS.filter(h => h.key !== 'signed' || report.value?.signed_links))
+// The Size column sorts by size, smallest to largest, then any other name (Richard, October 14, 2026).
+const headers = computed(() => HEADERS.filter(h => h.key !== 'signed' || report.value?.signed_links).map(h => h.key === 'size'
+  ? {...h, value: (line: RequestLine) => sizeKey(line.path)} : h))
 const loading = ref(false)
 const error = ref('')
 const file = ref<ShownFile | null>(null)
@@ -211,6 +215,34 @@ function openPath(path: string, line?: RequestLine) {
     note: line ? `This request, ${when(line.at)}: ${outcome}.` : undefined
   }
 }
+
+/** A path's size: the name asked for, or '' for a path that isn't a Blob path. */
+function sizeOf(path: string): string {
+  return blobPathOf(path)?.size || ''
+}
+
+function sizeKey(path: string): string {
+  const size = sizeOf(path)
+  return `${String(sizeRank(size, report.value?.sizes || [])).padStart(3, '0')} ${size}`
+}
+
+// "Thumbnail 9 · Medium 4 · original 1": each size and its count kept together on a line.
+const bySize = computed(() => (report.value?.served_by_size || [])
+  .map(s => `${s.size || 'not recorded'}\u00a0${s.requests.toLocaleString('en-US')}`).join(' · '))
+const topPaths = computed(() => report.value?.top_paths || [])
+const servedTotal = computed(() => (report.value?.days || []).reduce((n, d) => n + d.served, 0))
+const unservedTotal = computed(() => (report.value?.days || []).reduce((n, d) => n + d.unserved_total, 0))
+// The range's unserved requests by reason, most first.
+const unservedReasons = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const day of report.value?.days || []) {
+    for (const [r, n] of Object.entries(day.unserved)) {
+      counts[r] = (counts[r] || 0) + n
+    }
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([r, n]) => `${reasonOf(r)} ${n.toLocaleString('en-US')}`).join(' · ')
+})
 
 const reasons = computed(() => {
   const found = new Set((report.value?.lines || []).filter(l => l.reason).map(l => l.reason))
@@ -244,7 +276,7 @@ watch([museum, range], async ([m, r], before) => {
 </script>
 
 <style scoped>
-.request-path {
-  white-space: nowrap;
+.summary-card {
+  min-width: 240px;
 }
 </style>

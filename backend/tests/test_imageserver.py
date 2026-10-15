@@ -52,7 +52,7 @@ def test_well_formed_requests_not_listed(client: TestClient, recorder: MemoryRec
 @pytest.mark.parametrize(
     ("path", "reason"),
     [
-        (f"/pahma/imageserver/blobs/{CSID}/derivatives/Huge/content", Reason.DERIVATIVE_NOT_SERVED),
+        (f"/pahma/imageserver/blobs/{CSID}/derivatives/Thumbnial/content", Reason.DERIVATIVE_NOT_SERVED),
         (f"/pahma/imageserver/blobs/{CSID}/derivatives/medium/content", Reason.DERIVATIVE_NOT_SERVED),  # exact names
         (f"/bampfa/imageserver/blobs/{CSID}/derivatives/FullHD/content", Reason.DERIVATIVE_NOT_SERVED),
         ("/pahma/imageserver/blobs/not.a.csid/content", Reason.BAD_CSID),

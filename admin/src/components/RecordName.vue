@@ -1,13 +1,13 @@
 <template>
-  <span v-if="number" class="record-name">{{ number }}<CopyButton :value="number" label="identification number" /></span>
+  <span v-if="number" class="record-name sel-all">{{ number }}</span>
   <ShortCsid v-else :csid="csid" label="Media CSID" />
 </template>
 
 <script setup lang="ts">
-import CopyButton from '@/components/CopyButton.vue'
 import ShortCsid from '@/components/ShortCsid.vue'
 
-// A Media record as staff know it: its identification number (D153), or its shortened Media CSID without one.
+// A Media record as staff know it: its identification number (D153), shown whole, so one click selects it and there's
+// no ⧉ (Richard, October 14, 2026); or its shortened Media CSID, with ⧉, without one.
 defineProps<{number: string | null | undefined, csid: string}>()
 </script>
 

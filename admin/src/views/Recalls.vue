@@ -1,24 +1,24 @@
 <template>
   <v-container fluid>
-    <div class="d-flex align-center flex-wrap ga-4 mb-4">
-      <h1 id="page-title" class="text-h5">{{ museumName(museum) }} Recalls</h1>
-      <v-spacer />
-      <v-btn
-        id="recall"
-        color="error"
-        variant="flat"
-        @click="openForm"
-      >
-        Recall…
-      </v-btn>
-    </div>
-    <p class="mb-4">
+    <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Recalls</h1>
+    <p class="mb-3">
       A recall stops Serena serving a Media record's file at once, until CollectionSpace and a later refresh catch up.
       Change the record in CollectionSpace too: a refresh, on a later day, ends the recall once its servable list
       no longer has the file as public. If the list still has it as public, the recall stays and Serena raises an
       alert, and an admin can release it if CollectionSpace is right. Until a refresh decides it, an admin can cancel a
       recall made by mistake.
     </p>
+    <!-- Under the explanation, before the tables, outlined red (Richard, October 14, 2026): it only opens the form;
+         solid red is kept for the form's own "Recall <n> Media records", which recalls. -->
+    <v-btn
+      id="recall"
+      class="mb-5"
+      color="error"
+      variant="outlined"
+      @click="openForm"
+    >
+      Recall…
+    </v-btn>
     <LoadError :message="error" />
 
     <h2 class="text-h6 mb-2">Active recalls</h2>
@@ -65,17 +65,11 @@
           <td :colspan="columns.length">
             <dl class="row-detail">
               <dt>Media CSID</dt>
-              <dd>
-                <FileLink class="mono recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
-                <CopyButton :value="item.media_csid" label="Media CSID" />
-              </dd>
+              <dd><CsidLine :csid="item.media_csid" what="Media CSID" @open="openCsid(item.media_csid, 'Media CSID')" /></dd>
               <!-- eslint-disable-next-line vue/no-v-for-template-key -->
               <template v-for="blob in item.blob_csids" :key="blob">
                 <dt>Blob CSID</dt>
-                <dd>
-                  <FileLink class="mono recall-csid" @open="openCsid(blob, 'Blob CSID')">{{ blob }}</FileLink>
-                  <CopyButton :value="blob" label="Blob CSID" />
-                </dd>
+                <dd><CsidLine :csid="blob" what="Blob CSID" @open="openCsid(blob, 'Blob CSID')" /></dd>
               </template>
               <dt />
               <dd><router-link :to="{name: 'lookup', params: {museum}, query: {q: item.media_csid}}">Media look up</router-link></dd>
@@ -171,17 +165,11 @@
           <td :colspan="columns.length">
             <dl class="row-detail">
               <dt>Media CSID</dt>
-              <dd>
-                <FileLink class="mono recall-csid" @open="openCsid(item.media_csid, 'Media CSID')">{{ item.media_csid }}</FileLink>
-                <CopyButton :value="item.media_csid" label="Media CSID" />
-              </dd>
+              <dd><CsidLine :csid="item.media_csid" what="Media CSID" @open="openCsid(item.media_csid, 'Media CSID')" /></dd>
               <!-- eslint-disable-next-line vue/no-v-for-template-key -->
               <template v-for="blob in blobsOf(item)" :key="blob">
                 <dt>Blob CSID</dt>
-                <dd>
-                  <FileLink class="mono recall-csid" @open="openCsid(blob, 'Blob CSID')">{{ blob }}</FileLink>
-                  <CopyButton :value="blob" label="Blob CSID" />
-                </dd>
+                <dd><CsidLine :csid="blob" what="Blob CSID" @open="openCsid(blob, 'Blob CSID')" /></dd>
               </template>
               <dt />
               <dd><router-link :to="{name: 'lookup', params: {museum}, query: {q: item.media_csid}}">Media look up</router-link></dd>
@@ -200,20 +188,21 @@
           <template v-if="!summary">
             <p class="mb-3">
               Give up to {{ page?.max_in_box || 12 }} Media or Blob CSIDs, separated by new lines, commas or spaces, or a
-              text file of up to {{ (page?.max_in_file || 1000).toLocaleString('en-US') }}, one per line. Nothing is recalled
-              until you confirm.
+              text file of up to {{ (page?.max_in_file || 1000).toLocaleString('en-US') }}, one per line. A file's path
+              or URL works too: it's cut down to its CSID as you paste it. Nothing is recalled until you confirm.
             </p>
             <v-textarea
               id="recall-csids"
               v-model="box"
-              label="Media or Blob CSIDs"
+              label="Media or Blob CSIDs, paths or URLs"
               rows="4"
               :disabled="!!file"
+              @paste="pasted"
             />
             <v-file-input
               id="recall-file"
               v-model="file"
-              label="Or a text file of CSIDs"
+              label="Or a text file of CSIDs, paths or URLs"
               accept=".txt,text/plain"
               show-size
             />
@@ -264,8 +253,13 @@
                   <td>{{ r.recalled ? 'already recalled' : r.served_today ? 'yes' : 'no' }}</td>
                   <td>{{ r.source === 'serena' ? 'Serena' : 'CollectionSpace (not served today)' }}</td>
                   <td>
+                    <!-- The path a CSID came from, shortened, when the admin gave one (Richard, October 14, 2026). -->
                     <div v-for="given in r.entered" :key="given">
-                      <ShortCsid v-if="isCsid(given)" :csid="given" label="CSID" />
+                      <span v-if="cameFrom[given] || given.includes('/')" class="text-no-wrap">
+                        <span class="mono" :title="cameFrom[given] || given">{{ shortPath(cameFrom[given] || given) }}</span>
+                        <CopyButton v-if="shortPath(cameFrom[given] || given) !== (cameFrom[given] || given)" :value="cameFrom[given] || given" label="path" />
+                      </span>
+                      <ShortCsid v-else-if="isCsid(given)" :csid="given" label="CSID" />
                       <template v-else>{{ given }}</template>
                     </div>
                   </td>
@@ -275,15 +269,15 @@
             <template v-if="summary.not_found.length">
               <p class="mb-1">Not recalled:</p>
               <ul id="recall-not-found" class="mb-4 ml-6">
-                <li v-for="n in summary.not_found" :key="n.csid">{{ n.csid }}: {{ n.message }}</li>
+                <li v-for="n in summary.not_found" :key="n.csid"><span :title="n.csid">{{ shortPath(n.csid) }}</span>: {{ n.message }}</li>
               </ul>
             </template>
-            <v-textarea
+            <ReasonField
               v-if="toRecall.length"
               id="recall-reason"
+              ref="recallReason"
               v-model="reason"
-              label="Reason (required)"
-              rows="2"
+              recorded="the audit log and the alert emailed to the team"
             />
             <v-alert
               v-if="formError"
@@ -322,7 +316,6 @@
             color="error"
             variant="flat"
             :loading="busy"
-            :disabled="!reason.trim()"
             @click="confirm"
           >
             Recall {{ toRecall.length }} Media record{{ toRecall.length === 1 ? '' : 's' }}
@@ -367,11 +360,11 @@
             No refresh has decided the recall of Media record {{ endOf?.media_csid }} yet. Cancel it only if it was a
             mistake: Serena serves its files again at once.
           </p>
-          <v-textarea
+          <ReasonField
             :id="`${endMode}-reason`"
+            ref="endReasonField"
             v-model="endReason"
-            label="Reason (required)"
-            rows="2"
+            recorded="the audit log and the alert emailed to the team"
           />
           <v-alert v-if="formError" type="error" density="compact">{{ formError }}</v-alert>
         </v-card-text>
@@ -383,7 +376,6 @@
             color="error"
             variant="flat"
             :loading="busy"
-            :disabled="!endReason.trim()"
             @click="confirmEnd"
           >
             {{ endMode === 'release' ? 'Release' : 'Cancel recall' }}
@@ -404,13 +396,14 @@ import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import CopyButton from '@/components/CopyButton.vue'
-import FileLink from '@/components/FileLink.vue'
+import CsidLine from '@/components/CsidLine.vue'
 import LoadError from '@/components/LoadError.vue'
+import ReasonField from '@/components/ReasonField.vue'
 import RecordName from '@/components/RecordName.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import ShortCsid from '@/components/ShortCsid.vue'
 import WhenText from '@/components/WhenText.vue'
-import {PAGE_SIZES, actorOf, isCsid, kindWord} from '@/words'
+import {PAGE_SIZES, actorOf, csidsOfText, isCsid, kindWord, shortPath} from '@/words'
 import {useTableState} from '@/tableState'
 
 // The state as a tag, and the one action a recall allows in its own column at the right (D155).
@@ -493,6 +486,10 @@ const endMode = ref<'release' | 'cancel'>('release')
 const endOf = ref<Recall | null>(null)
 const endReason = ref('')
 let sent = ''
+// Each CSID the form cut out of a path or URL, and that path (without its host, query string or PDF link suffix).
+const cameFrom = reactive<Record<string, string>>({})
+const recallReason = ref<InstanceType<typeof ReasonField> | null>(null)
+const endReasonField = ref<InstanceType<typeof ReasonField> | null>(null)
 
 const toRecall = computed(() => (summary.value?.records || []).filter(r => !r.recalled))
 
@@ -511,6 +508,10 @@ async function load() {
 watch(museum, load, {immediate: true})
 
 function openForm() {
+  recallReason.value?.reset()
+  for (const csid of Object.keys(cameFrom)) {
+    delete cameFrom[csid]
+  }
   box.value = ''
   file.value = null
   summary.value = null
@@ -519,11 +520,18 @@ function openForm() {
   form.value = true
 }
 
+// A pasted path or URL is cut down to its CSID at once, so the PDF link suffix (a visitor's email) never stays in the box.
+function pasted() {
+  setTimeout(() => { box.value = csidsOfText(box.value, museum.value, cameFrom) })
+}
+
+// Paths and URLs are cut down again before anything is sent: typed ones and a file's.
 async function textToSend(): Promise<string | null> {
   const chosen = Array.isArray(file.value) ? file.value[0] : file.value
   if (chosen) {
-    return chosen.text()
+    return csidsOfText(await chosen.text(), museum.value, cameFrom)
   }
+  box.value = csidsOfText(box.value, museum.value, cameFrom)
   const count = box.value.split(/[\s,]+/).filter(Boolean).length
   const most = page.value?.max_in_box || 12
   if (count > most) {
@@ -555,6 +563,9 @@ async function summarize() {
 }
 
 async function confirm() {
+  if (!recallReason.value?.check()) {
+    return
+  }
   busy.value = true
   formError.value = ''
   try {
@@ -577,12 +588,13 @@ function openEnd(recall: Recall, mode: 'release' | 'cancel') {
   endMode.value = mode
   endOf.value = recall
   endReason.value = ''
+  endReasonField.value?.reset()
   formError.value = ''
   ending.value = true
 }
 
 async function confirmEnd() {
-  if (!endOf.value) {
+  if (!endOf.value || !endReasonField.value?.check()) {
     return
   }
   busy.value = true

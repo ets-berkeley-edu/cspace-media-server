@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from .csid import is_csid
 from .museum import Museum
@@ -59,6 +60,51 @@ def parse(museum: Museum, rest: str) -> BlobRequest | Refused:
     # Whether the original file may be served depends on the Blob's kind (design: Kinds): decided with the
     # servability record.
     return BlobRequest(museum.key, csid, derivative)
+
+
+@dataclass(frozen=True)
+class Given:
+    """A path or URL an admin gave (Media look up, the recall form), read as the signed-in museum's (Richard, October
+    14, 2026): `rest` is what follows …/imageserver/ (for paths.parse(); it may hold the PDF link suffix, so it's never
+    logged or shown), or `problem` says why it can't be read. `shown` is the path as it may be shown and recorded
+    (log_path: no host, query string or PDF link suffix)."""
+    shown: str
+    rest: str = ""
+    problem: str | None = None
+
+    @property
+    def csid(self) -> tuple[str, str] | None:
+        """("blob" or "media", the CSID) the path names, whatever follows it; None without a valid one."""
+        m = _NAMED.match(self.rest)
+        if self.problem is not None or m is None or not is_csid(m["csid"]):
+            return None
+        return ("blob" if m["which"] == "blobs" else "media"), m["csid"]
+
+
+_NAMED = re.compile(r"^(?P<which>blobs|media)/(?P<csid>[^/]+)(?:/|$)")
+_STARTS = ("imageserver", "blobs", "media")
+
+
+def given(museum: Museum, museums: dict[str, Museum], text: str, verb: str = "looking up") -> Given:
+    """Forgives a path's shape: a URL or a path, with or without its leading slash, and with no museum
+    (`imageserver/blobs/…`, `blobs/<CSID>/…`) for the signed-in museum's. Another museum's path says which museum it
+    is. Any query string is dropped, and `shown` never has the PDF link suffix."""
+    text = text.strip()
+    path = urlsplit(text).path if "://" in text else text.split("?", 1)[0].split("#", 1)[0]
+    parts = path.lstrip("/").split("/")
+    if parts[0] in _STARTS:
+        parts = [museum.key, *parts] if parts[0] == "imageserver" else [museum.key, "imageserver", *parts]
+    shown = log_path("/" + "/".join(parts))
+    if len(parts) < 2 or parts[1] != "imageserver":
+        return Given(shown, problem=f"Not one of {museum.name}'s file paths: they start with "
+                                    f"/{museum.key}/imageserver/")
+    if parts[0] != museum.key:
+        other = museums.get(parts[0])
+        if other is None:
+            return Given(shown, problem=f"Not one of {museum.name}'s file paths: they start with "
+                                        f"/{museum.key}/imageserver/")
+        return Given(shown, problem=f"That's a {other.name} path; you're {verb} {museum.name}'s files.")
+    return Given(shown, rest="/".join(parts[2:]))
 
 
 def log_path(path: str) -> str:

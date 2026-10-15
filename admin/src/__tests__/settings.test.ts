@@ -41,7 +41,13 @@ describe('the Settings page', () => {
     field.value = '12.5'
     field.dispatchEvent(new Event('input'))
     await flushPromises()
-    expect(save().disabled).toBe(true) // no reason yet
+    // Never disabled (October 14, 2026): without a reason it sends nothing and says why, with focus on the field.
+    expect(save().disabled).toBe(false)
+    save().click()
+    await flushPromises()
+    expect(document.body.textContent).toContain('Give a reason first.')
+    expect(document.activeElement?.id).toBe('reason')
+    expect(calls.filter(c => c.method === 'PUT')).toHaveLength(0)
     const reason = document.querySelector('#reason') as HTMLTextAreaElement
     reason.value = 'PAHMA republishes its images this week'
     reason.dispatchEvent(new Event('input'))

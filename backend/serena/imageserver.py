@@ -9,7 +9,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from importlib import resources
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
 from . import cache_index, paths, servability, signed_links, signing
@@ -37,13 +37,13 @@ def _unavailable(request: Request, tenant: str | None, reason: Reason, kind: str
 
 
 def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_kid: str | None = None,
-              kind: str | None = None, cache: str = "hit") -> Response:
+              kind: str | None = None, cache: str = "hit", size: str = "original") -> Response:
     """302 to a signed URL for the stored object (design: Signed URLs, Responses). The URL is never logged. A restricted
     file served on a portal's signed link gets Cache-Control: no-store, so the browser asks again next time.
 
     The "served" line is what the admin app's Past requests page reads (D103): the path (from paths.log_path(), so
-    without the PDF link suffix or a query string), the kind, the cache (hit, or miss when it was just fetched) and
-    whether a signed link was used."""
+    without the PDF link suffix or a query string), the size (a derivative, or "original"), the kind, the cache (hit,
+    or miss when it was just fetched) and whether a signed link was used."""
     signer: signing.Signer | None = request.app.state.signer
     if signer is None:
         log.error("no signer configured: set SERENA_CDN_BASE_URL and SERENA_CLOUDFRONT_KEY_SECRET_ID")
@@ -51,8 +51,8 @@ def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_ki
     now = datetime.now(UTC)
     expires = signing.expiry(now)
     url = signer.url(tenant, entry.key, expires)
-    served = {"museum": tenant, "path": paths.log_path(request.url.path), "kind": kind, "cache": cache,
-              "signed": signed_kid is not None}
+    served = {"museum": tenant, "path": paths.log_path(request.url.path), "size": size, "kind": kind,
+              "cache": cache, "signed": signed_kid is not None}
     if signed_kid is not None:
         log.info("served", extra={**served, "kid": signed_kid})
         return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
@@ -108,7 +108,7 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
         if cache == "hit":
             cache_index.served(request.app.state.store, tenant, parsed.blob_csid, parsed.derivative, entry,
                                datetime.now(UTC))
-        return _redirect(request, tenant, entry, decision.signed_kid, kind, cache)
+        return _redirect(request, tenant, entry, decision.signed_kid, kind, cache, parsed.derivative or "original")
     except signed_links.SigningKeysUnavailable:
         # Already logged, with the museum; fail closed (design: Signed links).
         return _unavailable(request, tenant, Reason.INTERNAL_ERROR)
@@ -121,7 +121,7 @@ def imageserver(request: Request, tenant: str, rest: str) -> Response:
 def unavailable_image(request: Request, name: str) -> Response:
     """The unavailable image, for local development and tests only: in AWS, CloudFront serves it."""
     if name != DEFAULT and name not in request.app.state.museums:
-        return Response(status_code=404)
+        raise HTTPException(404)
     return Response(_SVG, media_type="image/svg+xml", headers={
         "Cache-Control": "public, max-age=300",
         "X-Content-Type-Options": "nosniff",
@@ -136,7 +136,7 @@ def local_cdn(request: Request, tenant: str, sha256: str, Expires: int = 0, Sign
     the local signature and serving the object from the museum's bucket. In AWS this route answers 404."""
     signer = request.app.state.signer
     if not isinstance(signer, signing.LocalSigner) or tenant not in request.app.state.museums:
-        return Response(status_code=404)
+        raise HTTPException(404)
     key = f"objects/{sha256}"
     if not signer.valid(tenant, key, Expires, Signature, datetime.now(UTC)):
         return Response(status_code=403)

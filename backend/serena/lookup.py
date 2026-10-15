@@ -14,7 +14,6 @@ import logging
 import re
 from datetime import datetime
 from typing import Any
-from urllib.parse import urlsplit
 
 from . import cache_index, paths
 from .csid import is_csid
@@ -42,28 +41,29 @@ def _step(check: str, outcome: str, ok: bool | None) -> dict[str, Any]:
 
 
 def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
-            cspace: CSpaceClient | None = None) -> dict[str, Any]:
+            cspace: CSpaceClient | None = None, museums: dict[str, Museum] | None = None) -> dict[str, Any]:
     text = text.strip()
     if not text:
         raise LookupProblem("Give a file's URL or path, a Blob CSID or a Media CSID.")
     sizes: list[str | None] = [None, *museum.derivatives]
     shown = text
     if "/" in text:
-        path = urlsplit(text).path if "://" in text else text.split("?", 1)[0].split("#", 1)[0]
-        shown = paths.log_path(path)
-        prefix = f"/{museum.key}/imageserver/"
-        if not path.startswith(prefix):
-            raise LookupProblem(f"Not one of {museum.name}'s file paths: they start with {prefix}")
-        parsed = paths.parse(museum, path[len(prefix):])
+        # The path's shape is forgiven (Richard, October 14, 2026): no leading slash, or no museum.
+        found = paths.given(museum, museums or {museum.key: museum}, text)
+        shown = found.shown
+        if found.problem is not None:
+            raise LookupProblem(found.problem)
+        parsed = paths.parse(museum, found.rest)
         if isinstance(parsed, paths.Refused):
-            # A Blob's URL without /content (D163): Serena doesn't serve that URL, but its Blob CSID is good, so the
-            # page says why the URL fails and then looks the Blob up on its own, every size.
-            bare = BARE_BLOB.match(path[len(prefix):])
-            if bare is None or not is_csid(bare.group(1)):
+            # A Blob's URL without /content (D163), or a /media/ URL (served from pull request 15): Serena doesn't
+            # serve that URL, but its CSID is good, so the page says why the URL fails and then looks the Blob or
+            # the Media record up on its own, every size.
+            named = found.csid
+            if named is None or (named[0] == "blob" and BARE_BLOB.match(found.rest) is None):
                 return {"input": shown, "refused": parsed.reason.value, "items": [],
                         "refresh": _refresh(refreshes.latest_updated(museum.key))}
             refused: str | None = parsed.reason.value
-            blobs = [bare.group(1)]
+            blobs = _blobs_of(store, museum, named[1])
         else:
             refused = None
             blobs = [parsed.blob_csid]
@@ -72,16 +72,20 @@ def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
         refused = None
         if not is_csid(text):
             raise LookupProblem("That isn't a CSID, a URL or a path.")
-        if store.servability(museum.key, text) is not None:
-            blobs = [text]
-        else:
-            blobs = [r.blob_csid for r in rows_of_media(store, museum.key, text)] or [text]
+        blobs = _blobs_of(store, museum, text)
     latest = refreshes.latest_updated(museum.key)
     items = [_blob(museum, blob, sizes, store) for blob in blobs]
     asked: dict[str, MediaRecord] = {}
     for item in items:
         item["cspace"] = _cspace(museum, item, store, cspace, latest, asked)
     return {"input": shown, "refused": refused, "refresh": _refresh(latest), "items": items}
+
+
+def _blobs_of(store: Store, museum: Museum, csid: str) -> list[str]:
+    """A Blob CSID's Blob, or a Media CSID's Blobs; a CSID Serena doesn't know is looked up as it is."""
+    if store.servability(museum.key, csid) is not None:
+        return [csid]
+    return [r.blob_csid for r in rows_of_media(store, museum.key, csid)] or [csid]
 
 
 def _refresh(latest: Refresh | None) -> dict[str, str] | None:

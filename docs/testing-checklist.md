@@ -518,23 +518,25 @@ What it checks: the mockup review of October 13, 2026 (D154 to D165): copy butto
 layout, the button rule, Media look up's sync heading and `/blobs/<CSID>` URLs, the file dialog's reasons, the Audit
 log's "By", and what happens when a session ends; and Richard's review of October 14, 2026: Recalls by identification
 number with rows that open, Past requests' shorter paths, "← Back to …", list pages that keep their place, and the
-failed check's alert in words. The mockup, `docs/mockup/serena-admin-mockup.html` (version 26), shows the same pages. Start afresh from the pull request's branch, run `./serena etl pahma`, open the image's Medium URL
+failed check's alert in words. The mockup, `docs/mockup/serena-admin-mockup.html`, shows the same pages. A few steps
+were updated for Richard's later changes of October 14, 2026 (section 21): Past requests' Blob CSID and Size columns,
+and no ⧉ on values shown whole. Start afresh from the pull request's branch, run `./serena etl pahma`, open the image's Medium URL
 it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 
 - [ ] On "Overview", expect "Past requests" and "Media look up" in the sentence as links; click each.
 - [ ] On "Past requests", hover over a column's name (they have a dotted underline): expect a description, which
   stays while you move the pointer onto it and closes with Esc. Tab to one with the keyboard: expect the same. Expect
-  each path as only what differs, "<CSID start…end> · <size>" (for example `0f1e2d3c…3f4a5b · Medium`), with ⧉ at its
-  end; hover over it: the whole path; click ⧉, expect "Copied" for a moment, and paste somewhere: expect the whole
+  each Blob path as its Blob CSID, shortened (for example `0f1e2d3c…3f4a5b`), with ⧉ at its end, and its size in the
+  Size column; hover over the CSID: the path; click ⧉, expect "Copied" for a moment, and paste somewhere: expect the
   path. Expect no "Signed link" column (only Cinefiles has one), and the table within the window. Expect a time to
   break only between its date and its clock time when the window is narrow.
 - [ ] Recall your image's Media record on "Recalls": expect "Preview recall" and "Cancel" both as buttons with
   outlines ("Preview recall" filled blue), the summary's Media CSID and Blob CSID shortened with ⧉, and its thumbnail
   a fixed size. Click "Change CSIDs": expect the form again, with your CSID still in it; "Preview recall" again, then
   confirm with a reason ("Recall 1 Media record" is filled red). In "Active recalls", expect the first column,
-  "Identification number", to show the record's number (`2026.1.<n>`) with ⧉, a blue tag "Waiting for a later
+  "Identification number", to show the record's number (`2026.1.<n>`) without ⧉, a blue tag "Waiting for a later
   refresh", and "Cancel recall…" in its own column at the right. Click the row's ▸: expect its Media CSID and Blob
-  CSID, whole, each with ⧉ (click one: its file), and "Media look up"; ▾ closes it. Click "Cancel recall…": expect
+  CSID, whole, each followed by "View file" (click it: its file), and "Media look up"; ▾ closes it. Click "Cancel recall…": expect
   "Keep the recall" outlined and "Cancel recall" filled red. Keep the recall.
 - [ ] Request the recalled image again in Chrome, then on "Past requests" expect its line's Kind "image" (an unserved
   line has the kind when Serena knows the file); an unknown file's Kind stays blank.
@@ -551,7 +553,8 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
   Media CSID target shortened with ⧉ (it opens Media look up), refresh IDs as links, an acknowledged alert's target
   linking to "Alerts", and the servable list upload's SHA-256 shortened with ⧉. "Export CSV": expect the column `by`.
 - [ ] On "Media look up", look up your image's Medium URL (the failed check above didn't change the simulator's records:
-  it keeps a record it already has): expect "Serena and CollectionSpace ✓ (No differences)" in green, ⧉ after the identification number in the heading, and the comparison's CSIDs shortened with ⧉. Take the
+  it keeps a record it already has): expect "Serena and CollectionSpace ✓ (No differences)" in green, the
+  identification number in the heading without ⧉, and the comparison's CSIDs shortened with ⧉. Take the
   record off the web (section 19's `curl`) and look it up again: expect "⚠ (1 difference: As of)" in amber.
 - [ ] Look up the same URL without `/derivatives/Medium/content` (it ends with the Blob CSID): expect "This URL isn't
   one Serena serves …", reason "unknown path", then the Blob's answer with every size.
@@ -579,3 +582,56 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
   About column to show the Media CSID shortened (`20349bfa…3f0b98`) with ⧉ beside it:
   - click ⧉, then paste somewhere: you get the whole CSID;
   - click the CSID: it opens Media look up for that record.
+
+## 21. Richard's follow-ups of October 14, 2026, locally (25 minutes, before merging a pull request that changes them)
+
+What it checks: the changes Richard asked for while testing section 20, as mockup version 36
+(`docs/mockup/serena-admin-mockup.html`) shows them: Past requests' Blob CSID and Size columns and the served
+requests by size; ⧉ only on shortened values; the Recalls page's "Recall…" button; paths and URLs in the recall form;
+a recall alert that names its record; buttons that need a reason are never disabled; Media look up's forgiving paths,
+folding sizes table and size links; errors that keep their code; and the plain "Not found.". Start afresh from the
+pull request's branch, run `./serena etl pahma`, and open the image's Medium URL it printed once in Chrome. Then open
+http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`). Below, `<BLOB>` is that image's Blob
+CSID (in its URL) and `<MEDIA>` its Media CSID (on Media look up).
+
+- [ ] In Chrome, also open the same URL with `Thumbnial` in place of `Medium`, and
+  `http://localhost:8300/pahma/imageserver/media/<MEDIA>/blob/content`.
+- [ ] On "Past requests", expect a "Served" card with a count and "by size: Medium 1", and an "Unserved" card with its
+  reasons. In the table, expect the column "Blob CSID" (not "Path") with each Blob path's CSID shortened and ⧉, and a
+  "Size" column: "Medium", and "Thumbnial (invalid)" with "(invalid)" in grey. The /media/ request shows its path,
+  shortened in the middle, with ⧉ and "(not a Blob path)", and no size. Click "Size" to sort: expect Medium before
+  Thumbnial (invalid), and the /media/ line last; hover over "Size": its help says what "(invalid)" means. Hover over
+  "Blob CSID": its help says "path", not "whole path". "Most requested" has the same two columns.
+- [ ] On "Recalls", expect "Recall…" under the page's explanation, on the left, before the tables, outlined in red.
+  Click it. Paste the image's whole Medium URL (with `http://localhost:8300`) into the box: expect it replaced by
+  `<BLOB>` at once. Type, on a new line, `/cinefiles/imageserver/blobs/<BLOB>/content`, then click "Preview recall".
+  Expect your image's record, "You gave" showing its path shortened in the middle, and under "Not recalled" the
+  Cinefiles path with "That's a Cinefiles path; you're recalling PAHMA's files."
+- [ ] Click "Recall 1 Media record" without a reason: expect nothing recalled, "Give a reason first." under the Reason
+  field, the cursor in it, and the hint "Required. Recorded in the audit log and the alert emailed to the team. No
+  personal data, please." Give a reason and click it again: expect the recall.
+- [ ] Open "Alerts": expect "An admin recalled Media records" with the text "An admin recalled Media record 2026.1.<n>
+  (<Media CSID start…end>) for PAHMA. Reason: …", and its About the shortened Media CSID with ⧉, which opens Media
+  look up.
+- [ ] Back on "Recalls", expect the identification number without ⧉; click it once: the whole number is selected.
+  Open the row (▸): expect its Media CSID and Blob CSID, whole, each followed by "View file"; click a CSID once: all of
+  it is selected (not just the part between hyphens). Click "View file": its file. Click "Cancel recall…" and then
+  "Cancel recall" without a reason: expect the same message under the field. Keep the recall.
+- [ ] On "Settings", click "Change" on any setting, then "Save" without a reason: expect "Give a reason first." and the
+  cursor in the Reason field; click "Cancel". On "Start a refresh", click "Start the refresh" with nothing filled in:
+  expect a message under the file, the Reason field and the confirmation, and nothing started.
+- [ ] On "Media look up", look up `<MEDIA>`: expect "Media 2026.1.<n>" with no ⧉ (one click selects the number; the
+  Media CSID beside it too), and under the stamps one line, "Sizes (6): none served (recalled) · cached: Medium",
+  closed. Open it: expect the sizes table. Click "Medium": expect its file in a dialog with its path and ⧉, "Dismiss"
+  and no "Media look up" button; press Esc to close it. Look up another record and back: the box stays open.
+- [ ] Look up `pahma/imageserver/blobs/<BLOB>/derivatives/Medium/content` (no leading slash), then
+  `blobs/<BLOB>/derivatives/Medium/content`: expect each looked up as `/pahma/imageserver/blobs/<BLOB>/derivatives/Medium/content`,
+  with one size and no box. Look up `/cinefiles/imageserver/blobs/<BLOB>/content`: expect "That's a Cinefiles path;
+  you're looking up PAHMA's files." Look up the /media/ URL you opened above: expect "Serena doesn't serve /media/ URLs
+  yet …", reason "unknown path", then the record's answer with every size.
+- [ ] Stop the backend (`docker compose -p serena stop web`), then click "Media look up" again: expect "Serena can't be
+  reached right now. Try again in a minute. (502)" (or 503 or 504, from the dev server). Start it again (`docker
+  compose -p serena start web`).
+- [ ] Open http://localhost:8300/nowhere and http://localhost:8300/local-cdn/pahma: expect the plain text "Not found."
+  (not JSON). http://localhost:8300/admin/v1/nowhere still answers JSON.
+- [ ] Last: on "Recalls", cancel your recall with a reason.

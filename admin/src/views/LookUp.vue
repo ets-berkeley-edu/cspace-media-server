@@ -33,12 +33,19 @@
       variant="tonal"
       class="mb-4"
     >
-      This URL isn't one Serena serves (it needs /content or /derivatives/&lt;size&gt;/content): a request for it gets
-      the unavailable image, reason "{{ reasonOf(result.refused) }}". Below, its Blob CSID, looked up on its own.
+      <template v-if="mediaUrl">
+        Serena doesn't serve /media/ URLs yet (pull request 15): a request for one gets the unavailable image, reason
+        "{{ reasonOf(result.refused) }}". Below, its Media record, looked up on its own.
+      </template>
+      <template v-else>
+        This URL isn't one Serena serves (it needs /content or /derivatives/&lt;size&gt;/content): a request for it gets
+        the unavailable image, reason "{{ reasonOf(result.refused) }}". Below, its Blob CSID, looked up on its own.
+      </template>
     </v-alert>
     <h2 v-if="heading" id="lookup-heading" class="text-h6 mb-3">
-      {{ heading.title }}<CopyButton v-if="heading.number" :value="heading.number" label="identification number" />
-      <span v-if="heading.csid" class="text-body-2 text-medium-emphasis ml-2">Media CSID <span class="mono">{{ heading.csid }}</span></span>
+      <!-- Shown whole: one click selects it, and there's no ⧉ (Richard, October 14, 2026). -->
+      {{ heading.prefix }}<span class="sel-all">{{ heading.name }}</span>
+      <span v-if="heading.csid" class="text-body-2 text-medium-emphasis ml-2">Media CSID <span class="mono sel-all">{{ heading.csid }}</span></span>
     </h2>
     <template v-if="result">
       <v-alert
@@ -87,8 +94,8 @@
               <details id="serena-details" :open="open.serena" @toggle="open.serena = ($event.target as HTMLDetailsElement).open">
                 <summary>Details</summary>
                 <dl>
-                  <dt>Media CSID</dt><dd class="mono">{{ item.media_csid || 'none' }}</dd>
-                  <dt>Blob CSID</dt><dd class="mono">{{ item.blob_csid }}</dd>
+                  <dt>Media CSID</dt><dd class="mono" :class="{'sel-all': item.media_csid}">{{ item.media_csid || 'none' }}</dd>
+                  <dt>Blob CSID</dt><dd class="mono sel-all">{{ item.blob_csid }}</dd>
                   <dt>Kind</dt><dd>{{ item.kind ? kindWord(item.kind) : 'not known' }}</dd>
                   <dt>Access</dt><dd>{{ item.access || 'not known' }}</dd>
                   <dt>First cached</dt><dd>{{ firstStored ? when(firstStored) : 'never' }}</dd>
@@ -122,11 +129,11 @@
               >
                 <summary>Details</summary>
                 <dl>
-                  <dt>Media CSID</dt><dd class="mono">{{ cs.media_csid }}</dd>
+                  <dt>Media CSID</dt><dd class="mono sel-all">{{ cs.media_csid }}</dd>
                   <dt>State</dt><dd>{{ cs.state === 'deleted' ? 'Soft-deleted' : 'Exists' }}</dd>
                   <dt>Blob CSID</dt>
                   <dd class="mono">
-                    {{ cs.blob_csid || 'none' }}
+                    <span :class="{'sel-all': cs.blob_csid}">{{ cs.blob_csid || 'none' }}</span>
                     <v-chip
                       v-if="blobDiffers"
                       size="x-small"
@@ -157,23 +164,19 @@
               <span><span class="k">Last served</span> {{ lastServed ? when(lastServed) : 'never' }}</span>
               <span><span class="k">First cached in Serena</span> {{ firstStored ? when(firstStored) : 'never' }}</span>
             </p>
-            <v-table id="lookup-sizes" density="compact" class="mb-1">
-              <thead>
-                <tr class="text-no-wrap">
-                  <th>Size</th><th>Served</th><th>Why not</th><th>Cached copy</th><th>Last served</th><th>First cached</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="size in item.sizes" :key="size.size">
-                  <td>{{ size.size }}</td>
-                  <td>{{ size.served ? 'Yes' : 'No' }}</td>
-                  <td>{{ size.reason ? reasonOf(size.reason) : '' }}</td>
-                  <td>{{ size.stored ? `${size.stored.content_type}, ${bytes(size.stored.size)}` : '—' }}</td>
-                  <td>{{ size.stored?.last_served ? when(size.stored.last_served) : '—' }}</td>
-                  <td>{{ size.stored ? when(size.stored.fetched_at) : '—' }}</td>
-                </tr>
-              </tbody>
-            </v-table>
+            <!-- The sizes fold away under a line that says what their rows would (Richard, October 14, 2026): open to
+                 start only when the sizes differ, then as the admin leaves it. One size (a path's) has no box. -->
+            <details
+              v-if="item.sizes.length > 1"
+              id="lookup-sizes-box"
+              class="sizes-box"
+              :open="sizesOpen"
+              @toggle="sizesToggled(($event.target as HTMLDetailsElement).open)"
+            >
+              <summary>{{ sizesSummary }}</summary>
+              <SizesTable :sizes="item.sizes" @open="openSize" />
+            </details>
+            <SizesTable v-else :sizes="item.sizes" @open="openSize" />
             <p class="text-caption text-medium-emphasis mb-4">
               Last served: the day Serena last answered a request with its cached copy (recorded at most once a day).
               First cached: when Serena fetched that size and cached it.
@@ -253,6 +256,7 @@
         <template v-else>no servability update yet</template>
       </p>
     </template>
+    <FileDialog :file="file" @close="file = null" />
   </v-container>
 </template>
 
@@ -262,9 +266,11 @@ import {useRoute, useRouter} from 'vue-router'
 import {museumName} from '@/session'
 import type {Lookup, LookupCSpace, LookupItem} from '@/api'
 import {api, problem} from '@/api'
-import CopyButton from '@/components/CopyButton.vue'
+import FileDialog from '@/components/FileDialog.vue'
+import type {ShownFile} from '@/components/FileDialog.vue'
 import LoadError from '@/components/LoadError.vue'
 import ShortCsid from '@/components/ShortCsid.vue'
+import SizesTable from '@/components/SizesTable.vue'
 import {kindWord, reasonOf, short, when} from '@/words'
 
 // Media look up, layout C from the UI review (decided October 13, 2026, D139 to D145): Serena's answer, with the file
@@ -277,28 +283,70 @@ const result = ref<Lookup | null>(null)
 const index = ref(0)
 const loading = ref(false)
 const error = ref('')
-const open = reactive({serena: false, cspace: false}) // each Details stays as the admin leaves it
+// Each Details stays as the admin leaves it; the sizes box too, once opened or closed (undefined: as it starts).
+const open = reactive<{serena: boolean, cspace: boolean, sizes?: boolean}>({serena: false, cspace: false})
+const file = ref<ShownFile | null>(null)
 const broken = reactive({serena: false, cspace: false})
 
 const item = computed<LookupItem | null>(() => result.value?.items[Math.min(index.value, result.value.items.length - 1)] || null)
 const cs = computed<LookupCSpace>(() => item.value?.cspace || {state: 'unavailable'})
 // Which Media record this is, as staff know it (D153): "Media <identification number>", with its CSID beside;
 // without a number (none, CollectionSpace can't be reached, or no such record), "Media <Media CSID>".
-const heading = computed<{title: string, csid?: string, number?: string} | null>(() => {
+const heading = computed<{prefix: string, name: string, csid?: string} | null>(() => {
   const it = item.value
   if (!it) {
     return null
   }
   if (cs.value.state === 'no_media') {
-    return {title: 'Placeholder image'}
+    return {prefix: '', name: 'Placeholder image'}
   }
   const media = cs.value.media_csid || it.media_csid
   if (!media) {
     return null
   }
   const number = cs.value.identification_number
-  return number ? {title: `Media ${number}`, csid: media, number} : {title: `Media ${media}`}
+  return number ? {prefix: 'Media ', name: number, csid: media} : {prefix: 'Media ', name: media}
 })
+// A /media/ URL, which Serena serves from pull request 15: its Media record is looked up on its own.
+const mediaUrl = computed(() => /\/imageserver\/media\//.test(result.value?.input || ''))
+
+// The sizes box's line, for example "Sizes (6): none served (recalled) · cached: Medium".
+const sizesSummary = computed(() => {
+  const sizes = item.value?.sizes || []
+  const served = sizes.filter(s => s.served).length
+  const reasons = [...new Set(sizes.filter(s => !s.served && s.reason).map(s => reasonOf(s.reason!)))]
+  const cached = sizes.filter(s => s.stored).map(s => s.size)
+  const what = served === sizes.length ? 'all served' : served === 0 ? `none served (${reasons.join(', ')})` : `${served} of ${sizes.length} served`
+  return `Sizes (${sizes.length}): ${what} · ${cached.length ? `cached: ${cached.join(', ')}` : 'none cached'}`
+})
+const sizesOpen = computed(() => {
+  if (open.sizes !== undefined) {
+    return open.sizes
+  }
+  const served = (item.value?.sizes || []).filter(s => s.served).length
+  return served > 0 && served < (item.value?.sizes.length || 0)
+})
+
+// Only the admin's own opening or closing is kept: the toggle that follows the page's own :open is ignored.
+function sizesToggled(now: boolean) {
+  if (now !== sizesOpen.value) {
+    open.sizes = now
+  }
+}
+
+// A size opens that size's file in the file dialog (Richard, October 14, 2026), without "Media look up": this is it.
+function openSize(size: string) {
+  const it = item.value
+  if (!it) {
+    return
+  }
+  const path = `/${museum.value}/imageserver/blobs/${it.blob_csid}/${size === 'original' ? '' : `derivatives/${size}/`}content`
+  file.value = {
+    title: size === 'original' ? `Original ${noun.value}` : size,
+    name: path,
+    url: api.blobPreviewUrl(museum.value, it.blob_csid, size)
+  }
+}
 const hasRecord = computed(() => cs.value.state === 'exists' || cs.value.state === 'deleted')
 const blobDiffers = computed(() => !!item.value?.kind && !!cs.value.blob_csid && cs.value.blob_csid !== item.value.blob_csid)
 const stored = computed(() => (item.value?.sizes || []).filter(s => s.stored))
@@ -424,10 +472,6 @@ const verdict = computed<Verdict>(() => {
           why: first ? first.verdict : '', next: cs.value.next || ''}
 })
 
-function bytes(n: number): string {
-  return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} bytes`
-}
-
 watch(museum, () => {
   result.value = null
   error.value = ''
@@ -515,6 +559,7 @@ async function look(asked: string) {
   white-space: nowrap;
 }
 details summary { cursor: pointer; margin-top: 8px; color: rgb(var(--v-theme-primary)); }
+.sizes-box > summary { font-weight: 600; margin: 4px 0 6px; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-top: 6px; font-size: 0.85rem; }
 .pair { display: contents; }
 dt { color: rgba(var(--v-theme-on-surface), 0.6); }

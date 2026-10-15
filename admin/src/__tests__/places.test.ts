@@ -12,7 +12,7 @@ import {routes} from '@/router'
 import {session} from '@/session'
 import AuditLog from '@/views/AuditLog.vue'
 import Requests from '@/views/Requests.vue'
-import {middlePath, shortPath} from '@/words'
+import {blobPathOf, csidOfPath, csidsOfText, middlePath, shortPath, sizeRank} from '@/words'
 
 const BLOB = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b'
 const MEDIA = '20349bfa-cad6-5f47-9acd-dcd34e3f0b98'
@@ -22,18 +22,45 @@ function at(name: string, museum = 'pahma', extra: Record<string, unknown> = {})
 }
 
 describe('Past requests paths', () => {
-  it('leaves out what every row shares', () => {
-    expect(shortPath(`/pahma/imageserver/blobs/${BLOB}/derivatives/Medium/content`)).toBe('0f1e2d3c…3f4a5b · Medium')
-    expect(shortPath(`/pahma/imageserver/blobs/${BLOB}/content`)).toBe('0f1e2d3c…3f4a5b · original')
-    expect(shortPath(`/pahma/imageserver/media/${MEDIA}/blob/derivatives/Medium/content`)).toBe('Media 20349bfa…3f0b98 · Medium')
-    expect(shortPath(`/pahma/imageserver/blobs/${BLOB}`)).toBe('0f1e2d3c…3f4a5b')
-    expect(shortPath('/pahma/imageserver/blobs/not-a-csid/content')).toBe('not-a-csid · original')
-    expect(shortPath('/pahma/other')).toBe('/pahma/other')
+  it('splits a Blob path into its Blob CSID and size, and nothing else (October 14, 2026)', () => {
+    expect(blobPathOf(`/pahma/imageserver/blobs/${BLOB}/derivatives/Medium/content`)).toEqual({blob: BLOB, size: 'Medium'})
+    expect(blobPathOf(`/pahma/imageserver/blobs/${BLOB}/content`)).toEqual({blob: BLOB, size: 'original'})
+    expect(blobPathOf(`/pahma/imageserver/blobs/${BLOB}/derivatives/Thumbnial/content`)?.size).toBe('Thumbnial')
+    expect(blobPathOf('/pahma/imageserver/blobs/not-a-csid/content')).toEqual({blob: 'not-a-csid', size: 'original'})
+    expect(blobPathOf(`/pahma/imageserver/media/${MEDIA}/blob/derivatives/Medium/content`)).toBeNull()
+    expect(blobPathOf(`/pahma/imageserver/blobs/${BLOB}`)).toBeNull()
+    expect(blobPathOf('/pahma/imageserver/blobs/not.a.csid/content')).toBeNull()
+  })
+
+  it('sorts sizes smallest to largest, then any other name, then no size', () => {
+    const sizes = ['Thumbnail', 'Small', 'Medium', 'FullHD', 'OriginalJpeg', 'original']
+    const sorted = ['', 'Thumbnial', 'original', 'Medium', 'Thumbnail'].sort((a, b) => sizeRank(a, sizes) - sizeRank(b, sizes))
+    expect(sorted).toEqual(['Thumbnail', 'Medium', 'original', 'Thumbnial', ''])
+  })
+
+  it('shortens a path that isn\'t a Blob path to its two ends', () => {
+    expect(shortPath(`/pahma/imageserver/media/${MEDIA}/blob/content`)).toBe('/pahma/imageserver/media/2…8/blob/content')
+    expect(shortPath('/pahma/imageserver/blobs/x')).toBe('/pahma/imageserver/blobs/x')
   })
 
   it('shortens a Media CSID in a path like a Blob CSID', () => {
     expect(middlePath(`/pahma/imageserver/media/${MEDIA}/derivatives/Medium/content`))
       .toBe('/pahma/imageserver/media/20349bfa…3f0b98/derivatives/Medium/content')
+  })
+})
+
+describe('the recall form\'s paths and URLs (October 14, 2026)', () => {
+  it('cuts a path or URL down to its CSID, forgiving its shape, and drops the PDF link suffix', () => {
+    expect(csidOfPath(`https://example.edu/pahma/imageserver/blobs/${BLOB}/content?uid=1`, 'pahma').csid).toBe(BLOB)
+    expect(csidOfPath(`pahma/imageserver/blobs/${BLOB}/derivatives/Medium/content`, 'pahma').csid).toBe(BLOB)
+    expect(csidOfPath(`blobs/${BLOB}/content`, 'pahma')).toEqual({csid: BLOB, path: `/pahma/imageserver/blobs/${BLOB}/content`})
+    expect(csidOfPath(`imageserver/media/${MEDIA}/blob/content`, 'pahma').csid).toBe(MEDIA)
+    const other = csidOfPath(`/cinefiles/imageserver/blobs/${BLOB}/content/linked_pdf:someone@example.edu`, 'pahma')
+    expect(other).toEqual({csid: null, path: `/cinefiles/imageserver/blobs/${BLOB}/content/linked_pdf:`})
+    const from: Record<string, string> = {}
+    const text = csidsOfText(`${MEDIA}, /pahma/imageserver/blobs/${BLOB}/content/inline_pdf:a@b.c\nlinked_pdf:x@y.z`, 'pahma', from)
+    expect(text).toBe(`${MEDIA}\n${BLOB}\nlinked_pdf:`)
+    expect(from).toEqual({[BLOB]: `/pahma/imageserver/blobs/${BLOB}/content/inline_pdf:`})
   })
 })
 
@@ -72,7 +99,7 @@ describe('a list page in the address', () => {
   it('keeps Past requests\' range and filters in the address', async () => {
     session.signedIn = [{museum: 'pahma', name: 'PAHMA', user: 'admin'}] as never
     const report = {range: '7d', start: '', end: '', max_lines: 10000, truncated: false, signed_links: false, days: [],
-      top_paths: [], lines: [{at: '2026-10-13T10:00:00Z', outcome: 'unserved', reason: 'recalled', path: '/p', kind: '',
+      top_paths: [], sizes: ['Thumbnail', 'Medium', 'original'], served_by_size: [], lines: [{at: '2026-10-13T10:00:00Z', outcome: 'unserved', reason: 'recalled', path: '/p', kind: '',
         cache: '', signed: false}]}
     const calls = fakeApi({'GET /museums/pahma/requests?range=7d': {body: report}})
     const router = createRouter({history: createMemoryHistory('/admin/'), routes})

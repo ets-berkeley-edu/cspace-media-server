@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from . import tables
+from . import paths, tables
 from .alerts import Alert, Alerts, Kind
 from .audit import Action, Audit
 from .csid import is_csid
@@ -64,8 +64,9 @@ class Found:
 
 @dataclass
 class NotFound:
-    csid: str
-    why: str  # not_a_csid, not_found, collectionspace_unreachable, placeholder
+    csid: str  # as the admin gave it; a path as paths.log_path() shows it
+    why: str  # not_a_csid, not_found, collectionspace_unreachable, placeholder, path
+    message: str = ""  # a path's own reason (another museum's, say); otherwise WHY's
 
 
 WHY = {
@@ -74,6 +75,7 @@ WHY = {
     "collectionspace_unreachable": "Not known to Serena, and CollectionSpace can't be reached: not served today. "
                                    "Try again later.",
     "placeholder": "The museum's placeholder image: it has no Media record to recall.",
+    "path": "No valid Blob or Media CSID in this path.",
 }
 
 
@@ -84,7 +86,8 @@ class Summary:
 
     def json(self) -> dict[str, Any]:
         return {"records": [vars(r) for r in self.records],
-                "not_found": [{"csid": n.csid, "why": n.why, "message": WHY[n.why]} for n in self.not_found]}
+                "not_found": [{"csid": n.csid, "why": n.why, "message": n.message or WHY[n.why]}
+                              for n in self.not_found]}
 
 
 def _servable(museum: Museum, record: ServabilityRecord) -> bool:
@@ -105,12 +108,15 @@ def rows_of_media(store: Store, tenant: str, media_csid: str) -> list[Servabilit
     return found
 
 
-def identify(museum: Museum, csids: list[str], store: Store, cspace: CSpaceClients | None) -> Summary:
-    """Each CSID as a Media record to recall (D116, D117): Serena's table first, CollectionSpace for the rest."""
+def identify(museum: Museum, csids: list[str], store: Store, cspace: CSpaceClients | None,
+             museums: dict[str, Museum] | None = None) -> Summary:
+    """Each CSID as a Media record to recall (D116, D117): Serena's table first, CollectionSpace for the rest. A path
+    or URL stands for the CSID in it (Richard, October 14, 2026): a Blob path its Blob CSID, a /media/ path its Media
+    CSID, with the same forgiving rules as Media look up; "You gave" shows the path, without any PDF link suffix."""
     tenant = museum.key
     records: dict[str, Found] = {}
     not_found: list[NotFound] = []
-    unknown: list[str] = []
+    unknown: list[tuple[str, str]] = []  # (CSID, as the admin gave it)
 
     def add(media: str, blobs: list[str], entered: str, source: str = "serena") -> Found:
         found = records.setdefault(media, Found(media, source=source))
@@ -121,30 +127,41 @@ def identify(museum: Museum, csids: list[str], store: Store, cspace: CSpaceClien
             found.entered.append(entered)
         return found
 
-    for csid in csids:
-        if not is_csid(csid):
-            not_found.append(NotFound(csid, "not_a_csid"))
+    for token in csids:
+        csid = entered = token
+        if "/" in token:
+            path = paths.given(museum, museums or {museum.key: museum}, token, "recalling")
+            named = path.csid
+            if path.problem is not None or named is None:
+                not_found.append(NotFound(path.shown, "path", path.problem or ""))
+                continue
+            csid, entered = named[1], path.shown
+        elif not is_csid(csid):
+            not_found.append(NotFound(paths.log_path(csid), "not_a_csid"))
             continue
         record = store.servability(tenant, csid)
         if csid == museum.placeholder_blob_csid or (record is not None and record.media_csid is None):
-            not_found.append(NotFound(csid, "placeholder"))
+            not_found.append(NotFound(entered, "placeholder"))
             continue
         if record is not None and record.media_csid is not None:
-            add(record.media_csid, [csid], csid)
+            add(record.media_csid, [csid], entered)
             continue
         rows = rows_of_media(store, tenant, csid)
         if rows:
-            add(csid, [r.blob_csid for r in rows], csid)
+            add(csid, [r.blob_csid for r in rows], entered)
         else:
-            unknown.append(csid)
+            unknown.append((csid, entered))
 
     if unknown:
-        for csid, answer in zip(unknown, _ask_collectionspace(tenant, unknown, cspace), strict=True):
+        asked = list(dict.fromkeys(c for c, _ in unknown))
+        answers = dict(zip(asked, _ask_collectionspace(tenant, asked, cspace), strict=True))
+        for csid, entered in unknown:
+            answer = answers[csid]
             if isinstance(answer, NotFound):
-                not_found.append(answer)
+                not_found.append(NotFound(entered, answer.why))
             else:
                 media, blob = answer
-                add(media, [blob] if blob else [], csid, "collectionspace")
+                add(media, [blob] if blob else [], entered, "collectionspace")
 
     for found in records.values():
         rows = [r for r in (store.servability(tenant, b) for b in found.blob_csids) if r is not None]
@@ -206,6 +223,11 @@ def identification_numbers(tenant: str, media_csids: list[str], cspace: CSpaceCl
         return {media: number for media, number in pool.map(one, media_csids[:MAX_NUMBERS]) if number}
 
 
+def short(csid: str) -> str:
+    """A CSID shortened to both ends, as the admin app shows it."""
+    return f"{csid[:8]}…{csid[-6:]}" if len(csid) > 20 else csid
+
+
 def _today(clock: Callable[[], datetime]) -> str:
     return clock().astimezone(PACIFIC).date().isoformat()
 
@@ -229,8 +251,15 @@ def recall(museum: Museum, summary: Summary, reason: str, admin: str, store: Sto
                           **({"identification_number": number} if number else {})})
             done.append(found.media_csid)
     if done:
-        what = "1 Media record" if len(done) == 1 else f"{len(done)} Media records"
-        alerts.raise_(Alert(museum.key, _today(clock), Kind.RECALL, "recall",
+        # One record: the alert names it, and its About is the Media CSID; several: About is "<n> Media records"
+        # (Richard, October 14, 2026).
+        if len(done) == 1:
+            media = done[0]
+            number = numbers.get(media)
+            subject, what = media, (f"Media record {number} ({short(media)})" if number else f"Media record {media}")
+        else:
+            subject = what = f"{len(done):,} Media records"
+        alerts.raise_(Alert(museum.key, _today(clock), Kind.RECALL, subject,
                             f"An admin recalled {what} for {museum.name}. Reason: {reason}", instance=at))
         log.info("recall", extra={"museum": museum.key, "media_records": len(done)})
     return done

@@ -20,9 +20,10 @@
 import {mdiContentCopy} from '@mdi/js'
 import {onBeforeUnmount, ref} from 'vue'
 
-// ⧉ beside a value the page shortens (a CSID, a path, a SHA-256) or one an admin pastes elsewhere (an
-// identification number): it copies the whole value, and says "Copied" for a moment (D154, D165). Always shown, so it's
-// found without hovering and works with a keyboard or a touch screen.
+// ⧉ beside a value the page shortens with an ellipsis (a CSID, a path, a SHA-256): it copies the whole value, and says
+// "Copied" for a moment (D154). A value shown whole has none: one click selects it (the sel-all class), ready to copy
+// (Richard, October 14, 2026, which replaces D165). Always shown, so it's found without hovering and works with a
+// keyboard or a touch screen.
 const props = defineProps<{value: string, label?: string}>()
 const copied = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined

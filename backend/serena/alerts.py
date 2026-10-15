@@ -55,7 +55,7 @@ class Alert:
     tenant: str
     refresh_date: str
     kind: Kind
-    subject: str  # the refresh ID, or the refresh date
+    subject: str  # the refresh ID, the refresh date, a Media CSID or "<n> Media records" (a recall)
     message: str
     instance: str = ""  # for an alert raised for each event, not once per subject: an admin's override each time
 

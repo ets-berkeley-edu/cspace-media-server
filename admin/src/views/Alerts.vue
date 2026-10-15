@@ -42,6 +42,8 @@
           <router-link class="mono" :to="{name: 'lookup', params: {museum}, query: {q: item.subject}}" :title="`Media look up: ${item.subject}`">{{ short(item.subject) }}</router-link>
           <CopyButton :value="item.subject" label="CSID" />
         </span>
+        <!-- A recall of several records is about "<n> Media records": it opens Recalls (Richard, October 14, 2026). -->
+        <router-link v-else-if="/^[\d,]+ Media records$/.test(item.subject)" :to="{name: 'recalls', params: {museum}}">{{ item.subject }}</router-link>
         <template v-else>{{ item.subject }}</template>
       </template>
       <template #[`item.acknowledged_at`]="{item}">
@@ -78,7 +80,7 @@ const headers = [
   {title: 'Raised', key: 'created_at', help: 'When Serena raised it (UTC). Each alert is emailed to the team once.'},
   {title: 'Refresh date', key: 'refresh_date', help: 'The refresh date it belongs to: the day, in Pacific time, of the refresh it\'s about or that was due.'},
   {title: 'Alert', key: 'title', help: 'What happened, and what to do. A refresh ID in it opens that refresh.'},
-  {title: 'About', key: 'subject', help: 'The refresh, Media record or date the alert is about. A refresh opens its page; a Media CSID opens Media look up, and ⧉ copies it.'},
+  {title: 'About', key: 'subject', help: 'The refresh, Media record or date the alert is about. A refresh opens its page; a Media CSID opens Media look up, and ⧉ copies it; a recall\'s "<n> Media records" opens Recalls.'},
   {title: 'Acknowledged', key: 'acknowledged_at', help: 'Who acknowledged it and when, or a button to acknowledge it once it\'s handled.'}
 ]
 
