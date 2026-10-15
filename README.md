@@ -4,11 +4,15 @@ Serena is the new media server for UC Berkeley's CollectionSpace museums: BAMPFA
 PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
-It's being built, one pull request at a time. So far it parses the legacy imageserver paths, decides from its records in
-DynamoDB whether each file may be served, and takes each day's servable list through its ETL API: its worker
-checks it and updates servability from it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file
-from CollectionSpace, checks it and stores it; every file is served through a signed CloudFront link, and restricted
-PDFs only on a portal's signed link. The design is `docs/design.md`.
+It's being built, one pull request at a time, and runs locally today; the AWS deployment comes next. It answers the
+legacy imageserver's addresses (by Blob CSID or by Media CSID) and decides from its records whether each file may be
+served. It takes each day's servable list through its ETL API: its worker checks the list and updates servability from
+it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file from CollectionSpace,
+checks it and stores it; every file is served through a signed CloudFront link, and restricted PDFs only on a portal's
+signed link. The admin app follows the daily refreshes and alerts, shows what Serena served and couldn't serve
+(Past requests), explains any one file (Media look up), recalls files, and changes each museum's settings, the
+placeholder image's Media record among them. Watermarking (the Botanical Garden) is not built yet. The design is
+`docs/design.md`.
 
 ## What it will do
 
@@ -44,13 +48,84 @@ PDFs only on a portal's signed link. The design is `docs/design.md`.
 
 ## Run it locally
 
-With Docker installed: `./serena up`, then `./serena etl pahma` to run a daily refresh through the ETL API. The command prints
-a few files to open in your browser, at http://localhost:8300. The admin app is at http://localhost:5373/admin/:
-sign in as `admin`, password `admin` (the simulator's synthetic account). The stack uses a CollectionSpace simulator and
-moto in place of AWS, so it needs no accounts or keys. `docs/testing-checklist.md` walks through the admin app's
-pages locally (the Past requests page reads a log file inside the app's container, in place of CloudWatch; the recall
-form's lookups and thumbnails, and Media look up's view of CollectionSpace, come from the CollectionSpace simulator). In the admin app, the bell at the top right
-opens the alerts and the gear opens the museum's settings. `./serena help` lists the rest.
+You need a Mac (or Linux) with [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and
+running, and `git`. Nothing else: the stack uses a CollectionSpace simulator and [moto](https://github.com/getmoto/moto)
+in place of AWS, so it needs no accounts, keys or `.env` file, and it never talks to AWS or a real CollectionSpace.
+
+```
+git clone https://github.com/ets-berkeley-edu/cspace-media-server.git
+cd cspace-media-server
+./serena up
+./serena etl pahma
+```
+
+- `./serena up` builds and starts the stack, which takes a few minutes the first time. It prints the branch and commit
+  it built; the admin app shows them in its header.
+- `./serena etl pahma` runs a daily refresh for PAHMA through the ETL API, with synthetic records, and prints a few
+  file addresses to open in your browser, at http://localhost:8300. Any museum works: `bampfa`, `botgarden`,
+  `cinefiles`, `ucjeps`.
+- The admin app is at http://localhost:5373/admin/. It's ready about a minute after `./serena up` finishes (its
+  container installs its packages first): if the page doesn't load, wait and reload. Sign in with one of the
+  simulator's synthetic accounts, each with its name as its password:
+
+  | Account | Password | Serena admin of |
+  | --- | --- | --- |
+  | `admin` | `admin` | every museum |
+  | `pahma-admin` | `pahma-admin` | PAHMA only |
+  | `viewer` | `viewer` | none (sign-in is refused) |
+
+  In the admin app, the bell at the top right opens the alerts and the gear opens the museum's settings.
+- `./serena down` stops it and forgets everything (moto keeps nothing). `./serena down && ./serena up` starts afresh.
+- `./serena help` lists the other commands (`logs`, `status`, `smoke`, `urls`, `ui`).
+
+**If something's in the way.**
+- *A port is taken.* The stack uses ports 8300 (Serena), 5373 (the admin app), 8380 (the simulator) and 9300 (moto).
+  Set `SERENA_PORT`, `SERENA_ADMIN_PORT`, `SERENA_SIM_PORT` or `SERENA_MOTO_PORT` to move one, for example
+  `SERENA_ADMIN_PORT=5374 ./serena up`. It runs beside the BMU's stack.
+- *`./serena etl` says the servable list check failed on the delta threshold.* A refresh with different `--rows`
+  changed too many rows at once, which is the check doing its job. Start afresh: `./serena down && ./serena up`.
+- *It isn't up.* `./serena logs web` (or `worker`, `admin`, `fakecspace`) shows why.
+- `./serena ui` (the admin app's Selenium tests) also needs Python 3.11 and Chrome.
+
+## Trying it out
+
+`docs/testing-checklist.md` holds the checks done by hand. Many need the AWS QA environment ("in QA" in their title),
+which doesn't exist yet. These run on the local stack and make a tour of what Serena does today; each section says how
+to start:
+
+| Section | What |
+| --- | --- |
+| 11 | The local stack: refreshes for several museums, a PDF, a restricted PDF, a failed refresh (skip its last step, the image digests) |
+| 12 | Signing in to the admin app, and the sign-ins it refuses |
+| 14 | Refreshes and alerts |
+| 15 | Settings, sorting and the audit log |
+| 16 | Past requests |
+| 17 | Recalls and Media look up |
+| 19 | Media look up beside CollectionSpace, and the file dialogs |
+| 22 | The placeholder image's Media record |
+| 23 | Media URLs |
+
+Sections 18, 20 and 21 check later changes to the same pages, step by step.
+
+**Reporting a problem.** Open a [GitHub issue](https://github.com/ets-berkeley-edu/cspace-media-server/issues) with:
+the checklist section and step (or what you were doing), what you expected, what happened, and the branch and commit
+from the admin app's header (or `./serena up`'s output). A screenshot helps. The stack holds only synthetic data, so a
+screenshot or log lines from it are safe to attach; never attach anything from a real CollectionSpace.
+
+## Changing the code
+
+Each change is a pull request from a feature branch; CI runs the checks below. With Python 3.11 and Node 22:
+
+```
+cd backend && python3.11 -m venv .venv && source .venv/bin/activate
+pip install --require-hashes -r requirements-dev.txt && pip install --no-deps --no-build-isolation -e .
+ruff check . && mypy && pytest -q
+
+cd admin && npm ci && npm run lint && npm run typecheck && npm test
+```
+
+A pull request that changes what someone could check by hand adds a section to `docs/testing-checklist.md`, and one
+that changes a decision updates `docs/design.md`.
 
 ## License
 
