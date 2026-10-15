@@ -258,8 +258,8 @@ go once every alert is acknowledged on the Alerts page (the bell opens it).
   refresh: expect "Servable list check failed", the problem (80.95% of the rows would change; the threshold is 5%), and
   an orange button, "Override the delta threshold". Within a minute, expect the banner, and the Alerts page (the bell), to show
   "A servable list check failed" for that refresh.
-- [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", is greyed
-  out until you type a reason. Type one and click it. Expect:
+- [ ] Click that button. A dialog opens with a Reason box. Its blue button, "Override the delta threshold", says "Give
+  a reason first." under the Reason box if you click it without one (section 21). Type one and click it. Expect:
   - the banner, with "2 alerts: An admin overrode the delta threshold" ("A servable list check failed" stays until
     acknowledged), and the bell's badge showing 2 (or one more, if the deadline alert is still waiting);
   - after reloading the page, the same refresh `Updated`, with no orange button, its reasons naming the override and
@@ -274,7 +274,7 @@ go once every alert is acknowledged on the Alerts page (the bell opens it).
   the servable list script on the ETL server). In the app, open "Start a refresh". Choose the file (in the Mac
   file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and press Return). The refresh date starts as
   today, with a calendar picker; leave it. Type a reason, tick "This servable list was made from the live public core"
-  and click "Start the refresh" (greyed out until all are done). Expect the new refresh's page, "an admin refresh, with
+  and click "Start the refresh" (clicked too soon, it says what's missing under each field: section 21). Expect the new refresh's page, "an admin refresh, with
   the servable list for <today>", and, after reloading the page, `Updated`. On "Past refreshes", expect the `check_failed`
   refresh now `Abandoned`, its reasons naming the admin refresh.
 - [ ] Open "Audit log". Expect the override, each acknowledgement and the admin refresh, each with `admin`. Expect the
@@ -293,9 +293,9 @@ The API's tests cover each setting, its bounds, the alerts, the export and the d
 checks the pages in Chrome. Start afresh from the pull request's branch (see the top of this file), open
 http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 
-- [ ] Open Settings (the gear at the top right, left of the museum menu). Expect the title "PAHMA Settings", and five cards: Watchdog (deadline 08:00), The ETL job (poll
+- [ ] Open Settings (the gear at the top right, left of the museum menu). Expect the title "PAHMA Settings", and six cards: Watchdog (deadline 08:00), The ETL job (poll
   interval 15, step timeout 1800), Servable list check (delta threshold 5), Size limits (image 500, card 500, 3D 1024,
-  pdf 200) and Audit log (90 days), each "default value".
+  pdf 200), Audit log (90 days) and Placeholder image ("none: the generic picture"; section 22), each "default value".
 - [ ] Click "Change" beside the step timeout. Type `10` and a reason, and click "Save". Expect a red message that it
   must be greater than or equal to 60, and the value unchanged. Click "Change" again, type `900` and a reason, and save. Expect 900, "changed; default value
   1800", and a "Use default" button.
@@ -350,8 +350,8 @@ Start afresh from the pull request's branch (see the top of this file).
 - [ ] In the table, expect four lines, newest first: two "unserved" with the reason "not listed" (their paths with no
   `?uid=…` or `sig=…`), then your path twice, "served", kind "image", cache "hit" (newer) and "miss" (older: the
   smoke test's first fetch).
-- [ ] Expect each path on one line, shortened in the middle (`/pahma/imageserver/blobs/<first 8>…<last 6>/derivatives/
-  Medium/content`). Hover over one: expect the whole path.
+- [ ] Expect each path as its Blob CSID, shortened (`<first 8>…<last 6>`), with its size in the Size column. Hover
+  over the CSID: expect the path.
 - [ ] Click "Time" in the header: expect the oldest first; click again for newest first.
 - [ ] Choose Outcome "Unserved": expect the two unserved lines. Choose Reason "not listed": still two. Choose Outcome
   "Served": expect your two lines, and the Reason filter cleared and greyed out.
@@ -361,7 +361,8 @@ Start afresh from the pull request's branch (see the top of this file).
 - [ ] Open "Overview": expect "What Serena served and couldn't serve is on the Past requests page; "Media look up" says
   why for any one file."
 - [ ] Sign in to BAMPFA as well (the menu at the top, "Sign in to another museum") and open its "Past requests": expect "No
-  requests in this range." in both cards and "No requests match." in the table; PAHMA's requests never appear.
+  requests in this range." under By day and Most requested, 0 served and 0 unserved, and "No requests match." in the
+  table; PAHMA's requests never appear.
 
 ## 17. Recalls and Media look up, locally (25 minutes, before merging a pull request that changes them)
 
@@ -388,15 +389,17 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
 - [ ] Open "Recalls". Expect the title "PAHMA Recalls", no active recalls, and nothing ended. Click "Recall…".
   In the box, paste four lines: your image's Blob CSID (from the URL in the first step), your image's Media CSID (you
   copied it in the second step), `0f1e2d3c-0000-4000-8000-000000000001` (the Blob of the Media record you just added)
-  and `not-a/csid`. Click "Preview recall". Expect two Media records:
+  and `not-a-csid!`. Click "Preview recall". Expect two Media records:
   - yours, with both CSIDs under "You gave" (they're the same record), kind image, served today "yes", found in Serena;
   - `1a2b3c4d-0000-4000-8000-000000000001`, kind "not known", served today "no", found in "CollectionSpace (not served
     today)";
 
-  each with a thumbnail. Below them, "Not recalled: not-a/csid: Not a CSID." (The slash makes it one. Any 1 to 64
-  letters, digits and hyphens have a CSID's shape and are looked up, so a word such as `cow` is "Not found" instead.)
+  each with a thumbnail. Below them, "Not recalled: not-a-csid!: Not a CSID." (The "!" makes it one. Any 1 to 64
+  letters, digits and hyphens have a CSID's shape and are looked up, so a word such as `cow` is "Not found" instead;
+  anything with a slash is read as a path, section 21.)
 - [ ] Click your record's thumbnail: expect the full-size image in a window. Close it.
-- [ ] Expect "Recall 2 Media records" greyed out until you type a reason. Type one and click it. Expect both in
+- [ ] Click "Recall 2 Media records" without a reason: expect nothing recalled and "Give a reason first." under the
+  Reason field (section 21). Type a reason and click it again. Expect both in
   "Active recalls", by `admin`, with your reason, and "Waiting for a later refresh". Within a minute, expect the
   bell's badge and the banner, "An admin recalled Media records"; click "Open alerts": expect the alert naming 2 and
   your reason.
@@ -417,8 +420,8 @@ this file), open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (p
   today (Pacific), the same day as your recalls. Its servable list was made from CollectionSpace before staff could act
   on a recall, so Serena doesn't use it to end one.
 - [ ] **Cancel a recall made by mistake.** Click "Cancel recall" for the simulator's record
-  (`1a2b3c4d-0000-4000-8000-000000000001`). Expect the dialog "Cancel a recall", with "Cancel recall" greyed out until
-  you type a reason. Type one and click "Cancel recall". Expect the record gone from "Active recalls" and listed under
+  (`1a2b3c4d-0000-4000-8000-000000000001`). Expect the dialog "Cancel a recall"; "Cancel recall" without a reason says "Give a
+  reason first." under the Reason box. Type one and click "Cancel recall". Expect the record gone from "Active recalls" and listed under
   "Ended in the last 30 days" as "Cancelled", by `admin`, with your reason; within a minute, the alert "An admin
   cancelled a recall"; and on "Audit log", a `recall_cancel` entry. Your image's recall stays.
 - [ ] **Optional, tomorrow: a later refresh keeps your image's recall.** Leave the stack running overnight. Tomorrow
@@ -503,14 +506,14 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   notice "CollectionSpace can't be reached, so there's nothing to compare with", "CollectionSpace can't be reached" in
   the right-hand panel, and the heading "Media <Media CSID>" (no identification number without CollectionSpace).
   Switch the outage off with `{"on": false}` in the same command.
-- [ ] Open "Past requests" with "Last hour". Hover over a path: expect it underlined, as a link. Click your image's
-  Medium path: expect a dialog with the path, the picture, "This request, <time>: served.", "Media look up" and
-  "Dismiss". Click "Media look up": expect Media look up on that path. Back on Past requests, expect the path with a
-  bad CSID (if any) not to be a link.
-- [ ] On "Recalls", recall your image's Media record (with a reason). Hover over its Media CSID and its Blob CSID in
-  "Active recalls": each becomes a link. Click the Blob CSID: expect the dialog, titled "Blob CSID", with the picture
-  (admins see a recalled file), "Media look up" and "Dismiss"; click "Dismiss". Click the Media CSID, then "Media look up": expect "Not
-  served: recalled".
+- [ ] Open "Past requests" with "Last hour". Hover over a Blob CSID: expect it underlined, as a link. Click your
+  image's Medium request: expect a dialog with the path, the picture, "This request, <time>: served.", "Media look up"
+  and "Dismiss". Click "Media look up": expect Media look up on that path. Back on Past requests, expect a bad CSID
+  (if any) not to be a link.
+- [ ] On "Recalls", recall your image's Media record (with a reason). Open its row in "Active recalls" (▸): its Media
+  CSID and Blob CSID, each followed by "View file". Click "View file" after the Blob CSID: expect the dialog, titled
+  "Blob CSID", with the picture (admins see a recalled file), "Media look up" and "Dismiss"; click "Dismiss". Click
+  "View file" after the Media CSID, then "Media look up": expect "Not served: recalled".
 
 ## 20. The UI review's changes, locally (20 minutes, before merging a pull request that changes them)
 
@@ -560,12 +563,12 @@ it printed once in Chrome, then open http://localhost:5373/admin/ and sign in to
   one Serena serves …", reason "unknown path", then the Blob's answer with every size.
 - [ ] On "Past requests", click a path whose file Serena can't show: look up `9f9f9f9f-0000-4000-8000-000000000000`
   first on Media look up, then request `/pahma/imageserver/blobs/9f9f9f9f-0000-4000-8000-000000000000/content` in
-  Chrome and click its path: expect "Nothing to show: Serena has no cached copy, and CollectionSpace has no file with
+  Chrome and click its Blob CSID: expect "Nothing to show: Serena has no cached copy, and CollectionSpace has no file with
   this CSID." and no "Open it in a new tab". The dialog's path has ⧉.
 - [ ] **Keeping your place.** On "Past requests", choose "Last 7 days" and the outcome "Unserved", click "Reason" to
   sort by it, and scroll down. Expect the address to hold them (`?range=7d&outcome=unserved&sort=reason.asc`). Click a
-  path, then "Media look up" in its dialog: expect "← Back to Past requests" above the title. Click it: expect Past
-  requests as you left it, the same range, filter, sort and scroll position, without the spinner. Open the path
+  Blob CSID, then "Media look up" in its dialog: expect "← Back to Past requests" above the title. Click it: expect
+  Past requests as you left it, the same range, filter, sort and scroll position, without the spinner. Open the file
   again, then use the browser's Back button instead: expect the same. Copy the address into a new tab: expect the same
   range, filter and sort.
 - [ ] From "Alerts", click a refresh ID: expect "← Back to Alerts" on the refresh's page. From the "Audit log", click a

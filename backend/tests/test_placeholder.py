@@ -60,6 +60,9 @@ def test_until_a_record_is_named_the_generic_picture(client: TestClient, store: 
     answer = client.get(f"/pahma/imageserver/blobs/{PLACEHOLDER}/derivatives/Medium/content")
     assert (answer.status_code, answer.headers["location"]) == (302, "/placeholder.svg")
     assert answer.headers["cache-control"] == "no-store"  # a museum's own picture shows as soon as it's named
+    sign_in(client)
+    dialog = client.get(f"/admin/v1/museums/pahma/blobs/{PLACEHOLDER}/preview?size=Medium")
+    assert dialog.status_code == 404 and "no Media record is named" in dialog.json()["detail"]  # the file dialog
     picture = client.get("/placeholder.svg")
     assert picture.headers["content-type"] == "image/svg+xml" and b"Image restricted" in picture.content
 

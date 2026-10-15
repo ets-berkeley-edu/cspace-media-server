@@ -216,6 +216,9 @@ def create_router() -> APIRouter:
                 log.warning("no preview from CollectionSpace", extra={"museum": museum.key,
                                                                        "error": type(error).__name__})
                 raise HTTPException(404, NO_CACHE_CSPACE_DOWN) from error
+        if media is None and blob_csid == museum.placeholder_blob_csid:
+            raise HTTPException(404, "Nothing to show: no Media record is named for the placeholder image on the "
+                                     "Settings page, so the public sees Serena's generic picture.")
         if media is None:
             raise HTTPException(404, "Nothing to show: Serena has no cached copy, and CollectionSpace has no file "
                                      "with this CSID.")
