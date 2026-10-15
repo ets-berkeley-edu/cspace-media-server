@@ -354,9 +354,9 @@ def test_look_up_a_file(client: TestClient, store: Store) -> None:
         assert [s["size"] for s in body["items"][0]["sizes"]] == ["Medium"]
     other = client.get(lookup, params={"q": f"/cinefiles/imageserver/blobs/{BLOB}/content"})
     assert other.json()["detail"] == "That's a Cinefiles path; you're looking up PAHMA's files."
-    # A /media/ URL (served from pull request 15): refused, but its Media record is looked up anyway.
+    # A /media/ URL (pull request 15, D180): looked up through its listed Blob, as it's served.
     media = client.get(lookup, params={"q": f"/pahma/imageserver/media/{MEDIA}/blob/content"}).json()
-    assert media["refused"] == "unknown_path" and [i["blob_csid"] for i in media["items"]] == [BLOB]
+    assert media["refused"] is None and [i["blob_csid"] for i in media["items"]] == [BLOB]
 
 
 # --- Media look up beside CollectionSpace (D139 to D143)

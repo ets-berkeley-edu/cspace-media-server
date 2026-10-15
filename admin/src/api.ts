@@ -324,9 +324,10 @@ export const api = {
   /** Undoes a recall no refresh has decided yet (D148). */
   cancelRecall: (museum: string, mediaCsid: string, reason: string) =>
     call<{cancelled: string}>('POST', `/museums/${museum}/recalls/${encodeURIComponent(mediaCsid)}/cancel`, {reason}),
-  // A Media record's thumbnail or full-size view, through the admin API only, never cached (D129).
-  previewUrl: (museum: string, mediaCsid: string, size: 'thumbnail' | 'full' = 'thumbnail', source: 'any' | 'cspace' = 'any') =>
-    `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${size}` +
+  // A Media record's thumbnail or full-size view, or one size the museum serves ("original" or a derivative, for a
+  // Media URL on Past requests, D179), through the admin API only, never cached (D129).
+  previewUrl: (museum: string, mediaCsid: string, size = 'thumbnail', source: 'any' | 'cspace' = 'any') =>
+    `${PREFIX}/museums/${museum}/media/${encodeURIComponent(mediaCsid)}/preview?size=${encodeURIComponent(size)}` +
     (source === 'cspace' ? '&source=cspace' : ''),
   /** A Blob's file at one size (a derivative, "original", or "full": the largest the museum serves), D144. */
   blobPreviewUrl: (museum: string, blobCsid: string, size = 'full') =>

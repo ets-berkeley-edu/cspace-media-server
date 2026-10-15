@@ -21,7 +21,7 @@ from .cspace.client import CSpaceClient, CSpaceError, MediaRecord, MediaState
 from .museum import SERVED_KINDS, Museum
 from .recalls import rows_of_media
 from .refreshes import Refresh, Refreshes
-from .servability import ORIGINAL_ONLY_KINDS, decide
+from .servability import ORIGINAL_ONLY_KINDS, decide, resolve
 from .servable_list import kind_word
 from .store import Store
 from .unserved import Reason
@@ -57,15 +57,21 @@ def explain(museum: Museum, text: str, store: Store, refreshes: Refreshes,
             raise LookupProblem(found.problem)
         parsed = paths.parse(museum, found.rest)
         if isinstance(parsed, paths.Refused):
-            # A Blob's URL without /content (D163), or a /media/ URL (served from pull request 15): Serena doesn't
-            # serve that URL, but its CSID is good, so the page says why the URL fails and then looks the Blob or
-            # the Media record up on its own, every size.
+            # A Blob's URL without /content (D163), or a /media/ URL in a shape Serena doesn't serve: its CSID is
+            # good, so the page says why the URL fails and then looks the Blob or the Media record up on its own,
+            # every size.
             named = found.csid
             if named is None or (named[0] == "blob" and BARE_BLOB.match(found.rest) is None):
                 return {"input": shown, "refused": parsed.reason.value, "items": [],
                         "refresh": _refresh(refreshes.latest_updated(museum.key))}
             refused: str | None = parsed.reason.value
             blobs = _blobs_of(store, museum, named[1])
+        elif isinstance(parsed, paths.MediaRequest):
+            # By Media CSID (D180): looked up as the request is answered, through its listed Blob.
+            refused = None
+            resolved, _ = resolve(museum, parsed, store)
+            blobs = [resolved.blob_csid] if resolved else [parsed.media_csid]
+            sizes = [parsed.derivative]
         else:
             refused = None
             blobs = [parsed.blob_csid]

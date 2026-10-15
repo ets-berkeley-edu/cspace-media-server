@@ -302,6 +302,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 39 (October 14, 2026, D174 to D180, pull request 15):</strong> Serena serves <strong>Media URLs</strong> (…/media/&lt;Media CSID&gt;/blob/content and …/blob/derivatives/&lt;size&gt;/content) as a request for the record's listed Blob, public files only. <strong>Past requests</strong> shows one as "Media &lt;shortened Media CSID&gt;" in the Blob CSID column, with its size, and opens its file like a Blob's; here, a served Media URL and one for an unknown record ("not listed"). <strong>Media look up</strong> answers a Media URL like its Blob's URL, with no note; …/media/&lt;CSID&gt;/content (without /blob/) is still refused, with the note, and its record looked up on its own.</li>
       <li><strong>Version 38 (October 14, 2026, D166 to D173):</strong> the placeholder image comes from a Media record named on <strong>Settings</strong> ("Placeholder image (Media CSID)"): Serena checks it with CollectionSpace and fetches every size when it's saved; the row then shows the record's CSID and identification number (in the app, its thumbnail too, and a warning if the record's Blob isn't the one the ETL lists). Try the unknown sample CSID 9f9f9f9f-0000-4000-8000-000000000000 (refused) and then any other CSID. Until one is named, Media look up's "The placeholder image" says the public gets Serena's generic "Image restricted" picture.</li>
       <li><strong>Version 37 (October 14, 2026, in the pull request that builds versions 27 to 36 into the app):</strong> the mockup and the app agree on these pages. <strong>Times</strong> are UTC everywhere, as the app shows them ("2026-10-13 17:00:00 UTC"). <strong>Past requests</strong> has the app's words, its By day table, the 20 most requested, the Outcome and Reason filters, and a "Signed link" column only for Cinefiles. <strong>Recalls</strong>: "Recall…" under the explanation, outlined red, with no switch; the app's explanation and column names. <strong>The recall form</strong> takes paths and URLs too: a pasted one is cut down to its CSID at once, and again on "Preview recall"; another museum's path is listed under "Not recalled" with its reason; "You gave" shows the path. <strong>A reason is never a disabled button:</strong> Recall, Release, Cancel recall, a Settings change ("Change" and "Use default" on Settings now open the dialog) and Start a refresh say what's missing under the field and move focus there; a hint says where the reason is recorded. <strong>Alerts</strong> have Serena's own words: "An admin recalled Media record &lt;identification number&gt; (&lt;shortened Media CSID&gt;) for PAHMA. Reason: …" for one record, "&lt;n&gt; Media records" for several. <strong>Media look up</strong> reads a path as the app does: no leading slash or no museum is this museum's ("blobs/&lt;CSID&gt;/content"), another museum's path says which ("That's a Cinefiles path; you're looking up PAHMA's files."), and a /media/ URL is refused but its Media record is looked up; layout C only, as decided (D139). Not shown here: an error from Serena itself, which the app shows with its code ("Serena can't be reached right now. Try again in a minute. (502)"), and the plain "Not found." for an address outside Serena's APIs. Mockup only: the "Mockup settings" panel.</li>
       <li><strong>Version 36:</strong> Recalls opens with "Recall…" under the explanation, outlined red (Richard's choice).</li>
@@ -450,7 +451,7 @@
     ["2026-10-12T22:10:00Z", "pahma", B1, "Thumbnail"], ["2026-10-13T05:48:00Z", "pahma", BR, "Medium"], ["2026-10-13T05:59:30Z", "pahma", BR, "Medium"],
     ["2026-10-13T05:59:31Z", "pahma", "not-a-csid", "original"], ["2026-10-13T06:01:57Z", "pahma", BT, "Small"], ["2026-10-13T06:03:11Z", "pahma", BN, "original"],
     ["2026-10-13T06:05:02Z", "pahma", BR, "Medium"], ["2026-10-13T06:05:03Z", "pahma", BR, "Thumbnail"], ["2026-10-13T09:30:00Z", "pahma", B1, "Thumbnail"],
-    ["2026-10-13T11:00:00Z", "pahma", B1, "Thumbnial"], ["2026-10-13T11:30:00Z", "pahma", "media:9f9f9f9f-0000-4000-8000-000000000000", "Medium"], ["2026-10-13T12:00:00Z", "pahma", PLACEHOLDER, "original"], ["2026-10-13T13:00:00Z", "pahma", BL, "Thumbnail"],
+    ["2026-10-13T11:00:00Z", "pahma", B1, "Thumbnial"], ["2026-10-13T11:30:00Z", "pahma", "media:1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "Medium"], ["2026-10-13T11:31:00Z", "pahma", "media:9f9f9f9f-0000-4000-8000-000000000000", "Medium"], ["2026-10-13T12:00:00Z", "pahma", PLACEHOLDER, "original"], ["2026-10-13T13:00:00Z", "pahma", BL, "Thumbnail"],
     ["2026-10-13T14:20:00Z", "pahma", BN, "original"], ["2026-10-13T14:30:00Z", "cinefiles", BP, "original", true], ["2026-10-13T15:00:00Z", "cinefiles", BP, "original"],
     ["2026-10-13T15:12:44Z", "pahma", B1, "Thumbnail"], ["2026-10-13T15:58:00Z", "pahma", B1, "Medium"], ["2026-10-13T16:02:00Z", "pahma", BT, "Thumbnail"],
     ["2026-10-13T16:30:00Z", "pahma", BR, "Medium"], ["2026-10-13T16:40:03Z", "pahma", B1, "Thumbnail"], ["2026-10-13T16:40:30Z", "pahma", BX, "Medium"],
@@ -473,7 +474,14 @@
   const storedAt = (blob, size, t) => { const c = (STORE[blob] || {})[size]; return c && ms(c.at) <= ms(t) ? c : null; };
 
   function decide(museum, csid, size, t, signed) {
-    if (csid.startsWith("media:")) return {reason: "unknown_path"}; // a /media/ URL: not served yet (PR 15)
+    // A Media URL (PR 15, D174, D175, D177): its listed Blobs, newest first; the first that passes, else the newest's
+    // reason, else "not listed". Public files only: never a signed link.
+    if (csid.startsWith("media:")) {
+      const r = RECORDS.find(x => x.museum === museum && x.media === csid.slice(6));
+      const listed = r ? r.blobs.filter(b => listedAt(b, t)) : []; // a record's blobs are newest first
+      const tried = listed.map(b => decide(museum, b.blob, size, t, false));
+      return tried.find(d => !d.reason) || tried[0] || {reason: "not_listed"};
+    }
     if (!CSID_RE.test(csid)) return {reason: "bad_csid"};
     if (!SIZES.includes(size)) return {reason: "unknown_size"};
     const [r, b] = findBlob(museum, csid);
@@ -487,15 +495,15 @@
     return {r, b, cache: "miss"};
   }
 
-  const pathOf = (museum, csid, size) => `/${museum}/imageserver/${csid.startsWith("media:") ? `media/${csid.slice(6)}` : `blobs/${csid}`}/${size === "original" ? "" : `derivatives/${size}/`}content`;
+  const pathOf = (museum, csid, size) => `/${museum}/imageserver/${csid.startsWith("media:") ? `media/${csid.slice(6)}/blob` : `blobs/${csid}`}/${size === "original" ? "" : `derivatives/${size}/`}content`;
   const LOG = EVENTS.slice().sort((x, y) => ms(x[0]) - ms(y[0])).map(([at, museum, csid, size, signed]) => {
     const d = decide(museum, csid, size, at, signed);
-    if (!d.reason && d.cache === "miss") (STORE[csid] ||= {})[size] = {at, type: d.b.kind === "pdf" ? "PDF" : COPY[size][0], bytes: d.b.kind === "pdf" ? "2.4 MB" : COPY[size][1]};
-    return {at, museum, csid, size, signed: !!signed, path: pathOf(museum, csid, size), outcome: d.reason ? "unserved" : "served",
+    if (!d.reason && d.cache === "miss") (STORE[d.b.blob] ||= {})[size] = {at, type: d.b.kind === "pdf" ? "PDF" : COPY[size][0], bytes: d.b.kind === "pdf" ? "2.4 MB" : COPY[size][1]};
+    return {at, museum, csid, blob: d.b ? d.b.blob : csid, size, signed: !!signed, path: pathOf(museum, csid, size), outcome: d.reason ? "unserved" : "served",
       reason: d.reason ? REASON[d.reason] : "", kind: d.b ? d.b.kind : "", cache: d.cache || ""};
   });
   const lastServed = (museum, csid, size) => {
-    const l = [...LOG].reverse().find(l => l.museum === museum && l.csid === csid && l.size === size && l.outcome === "served" && ms(l.at) > ms(NOW) - 30 * DAY);
+    const l = [...LOG].reverse().find(l => l.museum === museum && l.blob === csid && l.size === size && l.outcome === "served" && ms(l.at) > ms(NOW) - 30 * DAY);
     return l ? l.at : null;
   };
   // What a request for this file shows: Serena's cached copy, else CollectionSpace's current image.
@@ -509,7 +517,7 @@
   // ---- Media look up: Serena's answer for one input, now
   function lookupFor(input) {
     const q = input.trim();
-    let csid = q, size = null, display = q;
+    let csid = q, size = null, display = q, viaMedia = false;
     if (q.includes("/")) {
       let parts = q.replace(/^[a-z]+:\/\/[^/]*/i, "").split(/[?#]/)[0].replace(/^\/+/, "").split("/");
       if (parts[0] === "imageserver") parts = [S.museum, ...parts];
@@ -518,20 +526,22 @@
       if (parts[1] !== "imageserver" || !MUSEUMS[parts[0]]) return {input: shown, problem: `Not one of ${name()}'s file paths: they start with /${S.museum}/imageserver/`};
       if (parts[0] !== S.museum) return {input: shown, problem: `That's a ${MUSEUMS[parts[0]]} path; you're looking up ${name()}'s files.`};
       const rest = parts.slice(2).join("/");
-      const m = /^blobs\/([^/]+)\/(?:derivatives\/([^/]+)\/)?content$/.exec(rest);
-      if (m) {
+      const m = /^(?:blobs|media)\/([^/]+)\/(?:blob\/)?(?:derivatives\/([^/]+)\/)?content$/.exec(rest);
+      if (m && /^blobs\/[^/]+\/blob\//.test(rest)) return {input: shown, refused: REASON.unknown_path};
+      if (m && /^media\//.test(rest) && !/^media\/[^/]+\/blob\//.test(rest)) m.length = 0; // media/<CSID>/content: not a shape Serena serves
+      if (m && m.length) {
         if (!/^[A-Za-z0-9-]{1,64}$/.test(m[1])) return {input: shown, refused: REASON.bad_csid};
         if (m[2] && !SIZES.includes(m[2])) return {input: shown, refused: REASON.unknown_size};
-        csid = m[1]; size = m[2] || "original"; display = shown;
+        csid = m[1]; size = m[2] || "original"; display = shown; viaMedia = /^media\//.test(rest);
       } else {
-        // Not a URL Serena serves, but it names a Blob (no /content) or a Media record (a /media/ URL, served from
-        // pull request 15): say so, then look that up on its own, every size (Richard, Oct 13 and 14).
+        // Not a URL Serena serves, but it names a Blob (no /content) or a Media record (…/media/<CSID>/content, without
+        // /blob/): say so, then look that up on its own, every size (Richard, Oct 13 and 14; PR 15).
         const named = /^(blobs|media)\/([^/]+)(\/.*)?$/.exec(rest);
         if (named && CSID_RE.test(named[2]) && (named[1] === "media" || !named[3] || named[3] === "/")) {
           const found = lookupFor(named[2]);
           found.input = shown;
           found.note = named[1] === "media"
-            ? "Serena doesn't serve /media/ URLs yet (pull request 15): a request for one gets the unavailable image, reason \"unknown path\". Below, its Media record, looked up on its own."
+            ? "This URL isn't one Serena serves (it needs /blob/content or /blob/derivatives/<size>/content): a request for it gets the unavailable image, reason \"unknown path\". Below, its Media record, looked up on its own."
             : "This URL isn't one Serena serves (it needs /content or /derivatives/<size>/content): a request for it gets the unavailable image, reason \"unknown path\". Below, its Blob CSID, looked up on its own.";
           return found;
         }
@@ -542,6 +552,10 @@
     }
     const r = findRecord(S.museum, csid);
     const listed = r ? r.blobs.filter(b => listedAt(b, NOW)) : [];
+    if (listed.length && r.media === csid && viaMedia) {
+      const tried = listed, pick = tried.find(b => !decide(S.museum, b.blob, size, NOW, false).reason) || tried[0];
+      return {input: display, index: 0, blobs: [explain(r, pick, size)]}; // a Media URL: the Blob its request gets (D180)
+    }
     if (listed.length && (r.media === csid || listed.some(b => b.blob === csid))) {
       return {input: display, index: Math.max(0, listed.findIndex(b => b.blob === csid)), blobs: listed.map(b => explain(r, b, size))};
     }
@@ -692,7 +706,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 38</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 39</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -709,7 +723,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 38</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 39</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -1240,7 +1254,7 @@
   // derivatives in its configured order, then the original file; then anything else: a name that isn't one of the museum's sizes, shown with "(invalid)".
   const SIZE_ORDER = ["Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg", "original"];
   const SIZE_HELP = "The size asked for: a derivative (Thumbnail, Medium, …) or the original file; sorts smallest to largest. (invalid): not one of this museum's sizes, either a mistake or a size only other museums serve.";
-  const BLOB_CSID_HELP = "The file asked for, by its Blob CSID, shortened. Hover for the request's path; click it to see the file; ⧉ copies the path. A path that isn't a Blob path Serena serves shows the path itself, with \"(not a Blob path)\".";
+  const BLOB_CSID_HELP = "The file asked for, by its Blob CSID, shortened, or \"Media\" and its Media CSID for a Media URL. Hover for the request's path; click it to see the file; ⧉ copies the path. A path in a shape Serena doesn't serve shows the path itself, with \"(not a Blob path)\".";
   // A size as the request asked for it; a name that isn't one of the museum's sizes is followed by "(invalid)".
   const sizeHtml = z => !z ? "" : SIZE_ORDER.includes(z) ? esc(z) : `${esc(z)} <span class="muted">(invalid)</span>`;
   const sizeRank = z => { if (!z) return 100; const i = SIZE_ORDER.indexOf(z); return i < 0 ? 99 : i; }; // no size (not a Blob path) last
@@ -1253,17 +1267,22 @@
 
 
   // A path's size: a derivative's name, or "original" for …/content (Richard, Oct 14: its own column).
-  const sizeOfPath = path => !blobOfLogPath(path) ? "" : (/\/derivatives\/([^/]+)\/content$/.exec(path) || [])[1] || "original";
+  const sizeOfPath = path => !blobOfLogPath(path) && !mediaOfLogPath(path) ? "" : (/\/derivatives\/([^/]+)\/content$/.exec(path) || [])[1] || "original";
 
   // A Blob path in a shape Serena serves (…/blobs/<CSID>/content or …/derivatives/<size>/content, with a good CSID):
-  // its Blob CSID, shortened; the size has its own column (Richard, Oct 14). Any other path (a /media/ URL, a bare
-  // /blobs/<CSID>, a bad CSID) shows the path itself, shortened in the middle, "(not a Blob path)", and no size.
+  // its Blob CSID, shortened; the size has its own column (Richard, Oct 14). A Media URL shows "Media <CSID…>" (PR 15).
+  // Any other path (a bare /blobs/<CSID>, a bad CSID) shows the path itself, shortened in the middle, "(not a Blob
+  // path)", and no size.
   const BLOB_PATH = /^\/[^/]+\/imageserver\/blobs\/([^/]+)\/(?:derivatives\/[^/]+\/)?content$/;
   const blobOfLogPath = path => { const m = BLOB_PATH.exec(path); return m && (CSID_RE.test(m[1]) || m[1] === PLACEHOLDER) ? m[1] : null; };
+  // A Media URL (PR 15, D179): "Media <shortened Media CSID>", its size in the Size column.
+  const MEDIA_PATH = /^\/[^/]+\/imageserver\/media\/([A-Za-z0-9-]{1,64})\/blob\/(?:derivatives\/[^/]+\/)?content$/;
+  const mediaOfLogPath = path => (MEDIA_PATH.exec(path) || [])[1] || null;
   const middle = path => path.length > 44 ? `${path.slice(0, 26)}…${path.slice(-14)}` : path;
 
   function pathCell(r) {
-    const blob = blobOfLogPath(r.path);
+    const blob = blobOfLogPath(r.path), media = mediaOfLogPath(r.path);
+    if (media) return `<span class="nowrap req-path"><button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">Media ${esc(short(media))}</button>${copyBtn(r.path)}</span>`;
     if (!blob) return `<span class="nowrap req-path"><span class="mono${middle(r.path) === r.path ? " sel-all" : ""}" title="${esc(r.path)}">${esc(middle(r.path))}</span>${middle(r.path) === r.path ? "" : copyBtn(r.path)} <span class="muted">(not a Blob path)</span></span>`;
     if (!CSID_RE.test(blob)) return `<span class="nowrap req-path"><span class="mono" title="${esc(r.path)}">${esc(short(blob))}</span>${copyBtn(r.path)}</span>`;
     return `<span class="nowrap req-path"><button type="button" class="path-link mono" data-view="${esc(r.path)}" title="View this file: ${esc(r.path)}">${esc(short(blob))}</button>${copyBtn(r.path)}</span>`;
@@ -1294,7 +1313,9 @@
 
   function showPath(path, onLookup) {
     const l = LOG.find(x => x.path === path && x.museum === S.museum);
-    const csid = (/\/blobs\/([^/]+)\//.exec(path) || [])[1], size = (/\/derivatives\/([^/]+)\//.exec(path) || [, "original"])[1];
+    const viaMedia = (/\/media\/([^/]+)\//.exec(path) || [])[1];
+    const mediaRecord = viaMedia && RECORDS.find(x => x.museum === S.museum && x.media === viaMedia);
+    const csid = (/\/blobs\/([^/]+)\//.exec(path) || [])[1] || (mediaRecord ? ((mediaRecord.blobs.filter(b => listedAt(b, NOW))[0] || {blob: mediaRecord.cs && mediaRecord.cs.blob}).blob) : viaMedia), size = (/\/derivatives\/([^/]+)\//.exec(path) || [, "original"])[1];
     const last = [...LOG].reverse().find(x => x.path === path && x.museum === S.museum);
     const result = last ? (last.outcome === "served" ? '<span class="pill t-success">served</span>' : `<span class="pill t-danger">unserved</span> (${esc(last.reason)})`) : "";
     const known = findRecord(S.museum, csid);

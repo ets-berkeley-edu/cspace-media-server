@@ -179,9 +179,15 @@ Serena answers the paths its clients build today, under each museum's prefix:
   `…/content/inline_pdf:<suffix>`, which Glimmer builds for PDFs. The suffix is up to 512 characters with no slash
   (decided October 9, 2026); Serena accepts and ignores it, and never logs it, because it carries the signed-in
   visitor's email address. For a signed-in reader, Glimmer adds a signature as query parameters (see Restricted files).
-- Added for clients that use Media CSIDs (pull request 15 in the plan):
+- For clients that use Media CSIDs (pull request 15, decided October 14, 2026, D174 to D178):
   `…/<tenant>/imageserver/media/<media CSID>/blob/derivatives/<derivative>/content` and
-  `…/media/<media CSID>/blob/content`.
+  `…/media/<media CSID>/blob/content`. Such a request is answered as a request for the Media record's Blob in the
+  servable list of the last servability update (found through the `by_media` index), with every check a Blob request
+  gets: listed, kind, access, recall, size. While a replaced image's old Blob is still listed beside the new one, the
+  request is served if any of its listed Blobs passes, using the one listed most recently; when none passes, it gets
+  the most recently listed Blob's reason, and `not_listed` when the record has none. Media URLs serve public files
+  only: a restricted file, and the Cinefiles PDF link suffix, stay with the Blob URLs Glimmer signs. A Media URL uses
+  its Blob's cache entries (see Storage), and its "served" and "unserved" lines keep the path as requested.
 
 Anything else under `imageserver/` gets the unavailable image. Serena accepts only these shapes, with a CSID in
 CollectionSpace's format and a derivative name from the museum's list, matched exactly. It answers `GET` and `HEAD`,
@@ -526,7 +532,7 @@ where the table is read as a list, a sort key:
 
 | Table | Partition key | Sort key | Fields |
 | --- | --- | --- | --- |
-| Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access; indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
+| Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access, and when the row was last written new or changed (`listed_at`, so a Media URL can pick the Blob listed most recently, D175); indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
 | Recalls | `<tenant>#<media CSID>` | | indexed by museum (`by_tenant`, for the Recalls page and the servability update); the Blob CSID the Media record had when it was recalled; who, when, why; and, once a servability update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A recall that ends is deleted; its history is in the audit log (see How a recall ends) |
 | Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits, audit retention and the placeholder image's Media record (D169), over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
@@ -711,7 +717,7 @@ table, so a restart never loses a step.
   threshold for one refresh (below).
 - **The servability update** reads the museum's rows from the servability table itself, through its `by_tenant` index,
   so it is right even after a servability update that stopped partway (decided October 9, 2026). It first deletes the rows for Blobs no longer
-  listed, then writes the new and changed rows; unchanged rows aren't touched. Deleting before adding means a servability update
+  listed, then writes the new and changed rows, each with the time it was written (`listed_at`); unchanged rows aren't touched. Deleting before adding means a servability update
   that stops halfway never serves a Blob that the new servable list dropped. Writes are batched (25 at a time), and what
   DynamoDB leaves unprocessed is retried with backoff; a whole servability update that still fails is tried twice more
   before the refresh ends `update_failed` with the reason. The refresh shows the counts: deleted, written, unchanged.
@@ -997,9 +1003,10 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
   records its content type.
 - **Cache index.** `<tenant>#<blob CSID>#<derivative>` (`original` for the original file) → hash, content type,
   size, fetched-at, and last served, to the day (D142; see Admin web app, Media look up). Watermarked copies have
-  their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID are
-  indexed under the Media CSID and the Blob CSID listed for it in the servable list of the last servability update, so a replaced image is fetched
-  again after the next daily update. The placeholder image's copies, fetched through the Media record named for it,
+  their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID share
+  their Blob's entries (the Blob listed for the Media record in the servable list of the last servability update, D176),
+  so a file requested both ways is fetched and stored once, and a replaced image, which gets a new Blob in the next
+  servable list, is fetched again after the next daily update. The placeholder image's copies, fetched through the Media record named for it,
   are indexed under the Blob CSID in the museum's configuration (D172).
 - **Never deleted.** A recall leaves objects and index entries in place. When it ends (see How a recall ends), they
   are served again without another fetch.
@@ -1118,8 +1125,10 @@ reachable only from campus networks.
   - **Media look up** (D162, D163). "Serena and CollectionSpace" says "✓ (No differences)" in green, or "⚠ (2
     differences: Access, As of)" in amber, naming the highlighted rows. A Blob's URL with nothing after its CSID
     (`…/blobs/<CSID>`, no `/content`) isn't one Serena serves: the page says so, with the reason a request gets
-    ("unknown path"), then looks the Blob up anyway, every size. A `/media/` URL, which Serena serves from pull
-    request 15, is treated the same way: the reason, then its Media record, every size (Richard, October 14, 2026).
+    ("unknown path"), then looks the Blob up anyway, every size. A `/media/` URL in a shape Serena serves is
+    looked up like its Blob's URL: the verdict for that size, and the Media record beside CollectionSpace (pull
+    request 15, D180). One in another shape (`…/media/<CSID>/content`) gets the same note as a bare Blob URL, then its
+    Media record, every size.
   - **Recalls by identification number** (Richard, October 14, 2026). The Recalls tables' first column is the Media
     record's identification number, read from CollectionSpace (one call per record, four at a time, for at most 100
     records of a recall) when it's recalled and kept with the recall and its audit entries, so the page doesn't call
@@ -1130,7 +1139,9 @@ reachable only from campus networks.
   - **Past requests' Blob CSID and Size columns** (Richard, October 14, 2026). A Blob path in a shape Serena serves,
     with a CSID in Serena's format, shows only what differs from row to row: its Blob CSID, shortened, in the "Blob
     CSID" column, and its size in its own "Size" column (both tables); the path is on hover, in ⧉, in the file dialog
-    and in the CSV export. Any other path (a `/media/` URL, a bare `/blobs/<CSID>`) shows the path itself, shortened
+    and in the CSV export. A Media URL in a shape Serena serves shows
+    "Media <shortened Media CSID>" in the Blob CSID column, with its size, and opens its file the same way (pull
+    request 15, D179). Any other path (a bare `/blobs/<CSID>`) shows the path itself, shortened
     in the middle to its first 26 and last 14 characters, with "(not a Blob path)" and no size; ⧉ only when it's
     shortened. The Size column sorts by size, smallest to largest: the
     museum's derivatives in their configured order, then the original file, then anything else. A size that isn't
