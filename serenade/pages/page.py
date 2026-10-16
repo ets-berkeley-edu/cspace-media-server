@@ -63,9 +63,16 @@ class Page:
                                                                  StaleElementReferenceException)).until(clicked)
 
     def type(self, locator: Locator, text: str) -> None:
+        """Replaces what the field holds with the text."""
         element = self.wait_for(locator)
-        element.clear()
+        self._empty(element)
         element.send_keys(text)
+
+    def _empty(self, element: WebElement) -> None:
+        """Empties a field so the page sees it: Selenium's clear() changes the value without the input event Vue's
+        v-model listens for, so the page would keep the old text (and typing would add to it)."""
+        self.driver.execute_script(
+            "arguments[0].value = ''; arguments[0].dispatchEvent(new Event('input', {bubbles: true}))", element)
 
     def add_text(self, locator: Locator, text: str) -> None:
         """Types at the end of what the field already holds."""
@@ -75,7 +82,7 @@ class Page:
         """Puts the text in a field as a paste would: typed, then the field's paste event. (Selenium can't use the
         clipboard the same way on every computer; the page reacts to the event, reading what the field then holds.)"""
         element = self.wait_for(locator)
-        element.clear()
+        self._empty(element)
         element.send_keys(text)
         self.driver.execute_script(
             "arguments[0].dispatchEvent(new Event('paste', {bubbles: true, cancelable: true}))", element)

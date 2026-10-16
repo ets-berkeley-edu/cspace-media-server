@@ -496,6 +496,10 @@ request's branch, run `./serena etl pahma`, open http://localhost:5373/admin/ an
   expect "Served (cached sizes only)", Medium served "Yes", every other size "No", why not "media deleted", State
   "Soft-deleted", "Soft-deleted in CollectionSpace" under its picture, and "The Media record is soft-deleted in
   CollectionSpace. The next refresh drops this Blob; …".
+- [ ] Put the record back as it was: `curl -s -X POST http://localhost:8380/_fake/undelete/<media>`,
+  `curl -s -X POST http://localhost:8380/_fake/restore/<media>` (its file and Blob CSID before the replace) and the
+  approve step above with `{"approved": true}`. Look it up again: expect "Served", every size served, and the Blob CSID
+  row no longer marked "differs" (As of still differs: undoing a change is a change in CollectionSpace too).
 - [ ] Look up `9f9f9f9f-0000-4000-8000-000000000000` (synthetic, unknown): expect "Not served: not in the servable
   list", "Not in CollectionSpace", "CollectionSpace has no Blob or Media record with this CSID either.", and no
   heading. Look up PAHMA's placeholder image, `59a733dd-d641-4e1a-8552`: expect the heading "Placeholder image" and

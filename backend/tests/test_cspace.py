@@ -224,7 +224,7 @@ def test_the_simulators_hooks_say_what_to_give() -> None:
     """An unknown CSID gets a 404 that says why, not a 500; a Blob CSID is named as one (checklist section 19)."""
     hooks = TestClient(fake_app)
     fake.add("1a2b3c4d-0000-4000-8000-0000000000aa", blob="0f1e2d3c-0000-4000-8000-0000000000aa")
-    for hook in ("delete", "replace", "remove-file"):
+    for hook in ("delete", "undelete", "replace", "restore", "remove-file"):
         assert hooks.post(f"/_fake/{hook}/no-such-csid").status_code == 404
     answer = hooks.post("/_fake/approve/0f1e2d3c-0000-4000-8000-0000000000aa", json={"approved": False})
     assert answer.status_code == 404
@@ -235,3 +235,26 @@ def test_the_simulators_hooks_say_what_to_give() -> None:
     assert fake.unreachable is True
     hooks.post("/_fake/unreachable", json={"on": False})
     assert fake.unreachable is False
+
+
+def test_the_simulators_undo_hooks() -> None:
+    """A soft delete undone, and a replaced file and Blob put back, so the test suite can put a record back (serenade:
+    Media look up's CollectionSpace changes)."""
+    hooks = TestClient(fake_app)
+    blob = "0f1e2d3c-0000-4000-8000-0000000000bb"
+    fake.add(MEDIA, blob=blob)
+    original = fake.media[MEDIA].files
+
+    assert hooks.post(f"/_fake/undelete/{MEDIA}").json() == {"csid": MEDIA, "state": "project"}  # not deleted: kept
+    hooks.post(f"/_fake/delete/{MEDIA}")
+    assert client().media_state(MEDIA) == MediaState.DELETED
+    assert hooks.post(f"/_fake/undelete/{MEDIA}").json() == {"csid": MEDIA, "state": "project"}
+    assert client().media_state(MEDIA) == MediaState.EXISTS
+
+    assert hooks.post(f"/_fake/restore/{MEDIA}").json() == {"csid": MEDIA, "blob": blob}  # never replaced: kept
+    hooks.post(f"/_fake/replace/{MEDIA}")
+    hooks.post(f"/_fake/replace/{MEDIA}")  # twice: restore goes back to the file before the first
+    assert fake.media[MEDIA].blob != blob
+    assert hooks.post(f"/_fake/restore/{MEDIA}").json() == {"csid": MEDIA, "blob": blob}
+    assert fake.media[MEDIA].files is original
+    assert fake.media_of_blob(blob) is fake.media[MEDIA]

@@ -1337,7 +1337,7 @@ reachable only from campus networks.
   Media-service calls above with synthetic files (PNG images, a PDF and an X3D model, made in code) and HTTP Basic auth
   with a synthetic account, and the recall form's two lookups: `blobs/<csid>` and the search for the Media record
   whose `blobCsid` is a given Blob CSID (D130). Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a
-  record, remove its file, inject failures, switch an outage on or off (`/_fake/unreachable`: every call answers 503,
+  record and undo either (undelete; restore the file and Blob it had before), remove its file, inject failures, switch an outage on or off (`/_fake/unreachable`: every call answers 503,
   the records kept), and list the calls it received. An unknown CSID gets a 404 that says why (a Blob CSID given for a
   Media record's is named as one). Each record has a synthetic identification number (`2026.1.<n>` unless given). It also answers `accounts/0/accountroles`
   for three synthetic admin accounts (`admin`, with the role in every museum; `pahma-admin`, in PAHMA only;
