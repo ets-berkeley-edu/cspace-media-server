@@ -115,7 +115,10 @@ def test_t21_sorting_and_paging_past_refreshes(driver: WebDriver, base_url: str)
         assert page.admin_refresh(UCJEPS, three_rows, f"serenade T21: refresh {n + 1}")["state"] == "updated"
     every = page.refreshes(UCJEPS)
     assert len(every) == 30
-    by_change = [r["refresh_id"] for r in sorted(every, key=lambda r: r["updated_at"])]
+    # A refresh's last change is kept to the second, so two can tie (an abandoned refresh and the admin refresh that
+    # closed it): the order is checked by the times, and the oldest and newest are each the only one at their time.
+    changed = {r["refresh_id"]: r["updated_at"] for r in every}
+    by_change = sorted(changed, key=lambda refresh: changed[refresh])
     page.open_list(UCJEPS)
     assert page.count(page.ROWS) == 25, "25 rows a page to start"
     page.click(page.header("Last change"))  # newest first to start: one click, oldest first
@@ -126,4 +129,6 @@ def test_t21_sorting_and_paging_past_refreshes(driver: WebDriver, base_url: str)
     page.click((By.XPATH, "//div[contains(@class, 'v-overlay--active')]//div[contains(@class, 'v-list-item-title')"
                           " and normalize-space()='100']"))
     page.wait_for_count(page.ROWS, 30)
-    assert page.first_column() == by_change[::-1], "not all 30, newest change first, on one page"
+    shown = page.first_column()
+    assert sorted(shown) == sorted(changed), "not all 30 on one page"
+    assert [changed[refresh] for refresh in shown] == sorted(changed.values(), reverse=True), "not newest change first"
