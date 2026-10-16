@@ -30,7 +30,8 @@ the matching chromedriver. A run takes the stack's start-up (a few minutes) plus
 The goal is the most tests per dataset, with the fewest resets (Richard, October 14, 2026).
 
 - **The dataset** (`dataset.py`) is daily refreshes by the fake ETL, built once per run: PAHMA's, Cinefiles' (for its
-  PDFs), and two of UCJEPS's, the second of 3 rows, which fails its servable list check (for the alerts). Its CSIDs are the same
+  PDFs), and two of UCJEPS's, the second of 3 rows, which fails its servable list check (for the alerts and the
+  refreshes); and UCJEPS's servable lists of 20 and 3 rows, for the admin refreshes the refresh tests start. Its CSIDs are the same
   every run, and `dataset.py` checks the run built the records it expects.
 - **Records have roles.** A *shared* record may be looked at by any test, never changed. A *reserved* record is set
   aside for the tests that change it, and they put it back where they can. Add a role in `dataset.py` when a test
@@ -42,7 +43,8 @@ The goal is the most tests per dataset, with the fewest resets (Richard, October
   it's skipped rather than failing for the same reason.
 - So the tests run in order, never in parallel or shuffled: each file's tests in file order, and the files in
   `conftest.py`'s `FILE_ORDER`: serving first, then Past requests (which reads the serving tests' lines), then UCJEPS's
-  alerts (which no PAHMA test reads). A new file goes where its changes belong.
+  alerts (which no PAHMA test reads), then the refreshes (which change UCJEPS after its alerts are read). A new file
+  goes where its changes belong.
 
 ## Where the tests come from
 
@@ -57,6 +59,7 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | `tests/test_requests.py` | Past requests, T54 to T64: the page and its range, the summary boxes, the table's lines and columns (no signed-link parameters), Media URL lines, filters, ranges, the CSV export, another museum's page, opening a file from a line (sections 16, 19 to 21, 23) |
 | `tests/test_sign_in.py` | Signing in, and an account without the role (checklist section 12) |
 | `tests/test_alerts.py` | Alerts, T23 to T25, on UCJEPS: a failed check's alert on the bell, the banner and the Alerts page; its text, with its refresh ID as a link; acknowledging (sections 14, 18, 20) |
+| `tests/test_refreshes.py` | Refreshes, T16 to T21: Past refreshes, Start a refresh's missing fields, and on UCJEPS a failed check's page, overriding the threshold, an admin refresh repairing a failed one, sorting and paging 30 refreshes (sections 13 to 15) |
 | `tests/test_lookup_and_recalls.py` | The pilot, T2 to T6: Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19). Recalls, T74 to T81: the preview (what Serena finds, paths and URLs, more than 12 CSIDs and a text file, an already recalled record), a missing reason, a recall's row and its files, Past requests and the audit log, and the recall's alert, T26 (sections 17 to 21). Media look up, T65 to T73: every size of a Media CSID, the comparison with CollectionSpace, the page's address, paths it forgives and refuses, an unknown CSID, the sizes box, and a record changed in CollectionSpace (off the web, replaced, soft-deleted), then put back (sections 17, 19 to 21, 23) |
 
 ## Packages
