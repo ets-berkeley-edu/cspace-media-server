@@ -201,7 +201,7 @@ servable list.
 
 Each museum's list of derivatives (decided October 9, 2026):
 
-| Museum | Derivatives served | Original file of images and cards (`/content`) |
+| Museum | Derivatives served | Original file of images and catalog cards (`/content`) |
 | --- | --- | --- |
 | BAMPFA | Thumbnail, Medium | No |
 | Botanical Garden | Thumbnail, Medium, OriginalJpeg | No |
@@ -226,7 +226,7 @@ Each Blob in the servable list has a kind (decided October 9, 2026):
 
 A Blob of any kind whose `access` is restricted is served only as Restricted files says. A request for a derivative
 of a 3D or PDF Blob gets the unavailable image (reason "no derivatives for this kind").
-Size limits are per museum, set in the admin app. The starting values are 500 MB for images and cards, 1 GB for 3D
+Size limits are per museum, set in the admin app. The starting values are 500 MB for images and catalog cards, 1 GB for 3D
 files and 200 MB for PDFs, for every museum (decided October 9, 2026); the values for production are to be confirmed
 (see Open questions).
 
@@ -357,8 +357,8 @@ sequenceDiagram
    unavailable image.
 2. **Servability.** Read the servability record for `<tenant>#<blob CSID>`; it must exist, its kind must be one Serena
    serves, and its access must be public, or restricted with a valid signed link for a kind the museum allows signed
-   access to (see Restricted files). The request must fit the kind: a derivative only of an image or card, and an
-   image's or card's original file only where the museum serves originals. Then read the recall record for its Media
+   access to (see Restricted files). The request must fit the kind: a derivative only of an image or catalog card, and an
+   image's or catalog card's original file only where the museum serves originals. Then read the recall record for its Media
    CSID, strongly consistent, so a recall takes effect on the next request; an active recall means not servable. If
    not servable: the unavailable image, with the reason (see Requests Serena doesn't serve).
 3. **Cache index.** Look up `<tenant>#<blob CSID>#<derivative>`, or for a watermarking museum the watermarked entry for
@@ -421,7 +421,7 @@ its own reason, so the admin app can say why a file isn't served:
 | `signature_invalid` | A signed link that is malformed (a `uid` that isn't digits included), has an unknown key ID or doesn't match |
 | `signature_expired` | A signed link that has expired, or expires too far ahead |
 | `no_derivatives_for_kind` | A derivative of a 3D or PDF Blob |
-| `original_not_served` | An image's or card's original file, where the museum doesn't serve originals |
+| `original_not_served` | An image's or catalog card's original file, where the museum doesn't serve originals |
 | `recalled` | The Media record has an active recall in Serena |
 | `placeholder_not_set` | The museum's placeholder image while no Media record is named for it: Serena's generic picture, not the unavailable image |
 | `watermark_not_built` | Temporary: a size the museum watermarks, until watermarking is built (pull request 16) |
@@ -432,7 +432,7 @@ its own reason, so the admin app can say why a file isn't served:
 | `cspace_refused` | A miss: CollectionSpace answered 401, 403 or another unexpected status, or Serena has no account for the museum: a configuration problem |
 | `wrong_content_type` | A miss: a content type the kind doesn't allow, or a "PDF" without `%PDF-` in its first 1024 bytes |
 | `too_large` | A miss: over the museum's size limit for the kind |
-| `not_decodable` | A miss: an image or card that doesn't decode |
+| `not_decodable` | A miss: an image or catalog card that doesn't decode |
 | `fetch_busy` | A miss: not enough local disk to fetch it now |
 | `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
 
@@ -828,7 +828,7 @@ picture (decided October 14, 2026, D173, replacing D127).
   whether it's already recalled, and a thumbnail that opens to the full size (D129). Thumbnails and full-size views
   come only through the admin API, to signed-in admins, with `Cache-Control: no-store`, never through Serena's public
   serving or CloudFront: a file being recalled may be sensitive, and must still show here afterwards. Serena uses its
-  cached copy if it has one, and otherwise asks CollectionSpace without storing what it gets. Images and cards show
+  cached copy if it has one, and otherwise asks CollectionSpace without storing what it gets. Images and catalog cards show
   their Thumbnail and open to the largest size the museum serves; a PDF shows CollectionSpace's thumbnail if there is
   one, or a PDF icon, and opens the document; a 3D file shows an icon. With neither a cached copy nor CollectionSpace,
   a placeholder.
@@ -968,7 +968,7 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
 - **Checks.** The response must be 200, with a content type allowed for the Blob's kind, within the museum's size
   limit, and (for images) decodable. Anything else: the unavailable image, nothing stored, and the reason recorded
   (see Requests Serena doesn't serve). Decided October 10, 2026:
-  - Content types (parameters such as `charset` ignored): images and cards `image/jpeg`, `image/png`, `image/tiff`,
+  - Content types (parameters such as `charset` ignored): images and catalog cards `image/jpeg`, `image/png`, `image/tiff`,
     `image/gif`, `image/webp`; 3D `model/x3d+xml`, `model/x3d-vrml`, `model/gltf-binary`, `model/gltf+json`,
     `model/obj`, `model/stl`, `model/vnd.collada+xml`, `model/ply`; PDFs `application/pdf`. Not
     `application/octet-stream`, which would let any bytes through. JPEG 2000 isn't allowed, since the bundled libvips

@@ -32,6 +32,10 @@ from .store import ServabilityRecord, Store
 log = logging.getLogger("serena.admin")
 
 
+# How people read each kind (D151; the admin app's KIND_WORDS): a label names "catalog card", never the raw "card".
+KIND_WORDS = {"image": "image", "card": "catalog card", "3D": "3D model", "pdf": "PDF"}
+
+
 @dataclass(frozen=True)
 class Setting:
     name: str  # as in the API's path: a StartingSettings field, or size_limit_mb.<kind>
@@ -45,7 +49,8 @@ SETTINGS = (
     Setting("etl_poll_interval_seconds", "etl", "ETL poll interval (seconds)"),
     Setting("etl_step_timeout_seconds", "etl", "ETL step timeout (seconds)"),
     Setting("delta_threshold_percent", "check", "Delta threshold (%)", alerted=True),
-    *(Setting(f"size_limit_mb.{kind}", "size_limits", f"Largest {kind} file fetched (MB)") for kind in SERVED_KINDS),
+    *(Setting(f"size_limit_mb.{kind}", "size_limits", f"Largest {KIND_WORDS[kind]} file fetched (MB)")
+      for kind in SERVED_KINDS),
     Setting("audit_retention_days", "audit", "How long the audit log is kept (days)", alerted=True),
     Setting("placeholder_media_csid", "placeholder", "Placeholder image (Media CSID)"),
 )

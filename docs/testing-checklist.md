@@ -181,7 +181,7 @@ CI's `stack` job runs the stack on Linux. This checks it where the team develops
 - [ ] With Docker Desktop running, from the repository's root: `./serena up`. Expect "Serena (Local · simulator) is up"
   within a couple of minutes, and nothing else on ports 8300, 8380 or 9300. If the BMU's stack is running, both run.
 - [ ] `./serena etl pahma`. Expect `updated`, one servable list check warning (PAHMA's first servability update, so the delta threshold
-  doesn't apply), and sample addresses for an image and a card. Open the image one in a browser: expect a grey
+  doesn't apply), and sample addresses for an image and a catalog card. Open the image one in a browser: expect a grey
   square. Open it again: expect the same, now from Serena's store (`./serena logs --no-follow web | grep '"fetched"'`
   shows one fetch).
 - [ ] `./serena etl cinefiles`. Open the `pdf` sample: expect a one-page PDF. Open the `pdf (restricted)` sample:
@@ -294,8 +294,8 @@ checks the pages in Chrome. Start afresh from the pull request's branch (see the
 http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 
 - [ ] Open Settings (the gear at the top right, left of the museum menu). Expect the title "PAHMA Settings", and six cards: Watchdog (deadline 08:00), The ETL job (poll
-  interval 15, step timeout 1800), Servable list check (delta threshold 5), Size limits (image 500, card 500, 3D 1024,
-  pdf 200), Audit log (90 days) and Placeholder image ("none: the generic picture"; section 22), each "default value".
+  interval 15, step timeout 1800), Servable list check (delta threshold 5), Size limits (image 500, catalog card 500, 3D
+  model 1024, PDF 200), Audit log (90 days) and Placeholder image ("none: the generic picture"; section 22), each "default value".
 - [ ] Click "Change" beside the step timeout. Type `10` and a reason, and click "Save". Expect a red message that it
   must be greater than or equal to 60, and the value unchanged. Click "Change" again, type `900` and a reason, and save. Expect 900, "changed; default value
   1800", and a "Use default" button.
