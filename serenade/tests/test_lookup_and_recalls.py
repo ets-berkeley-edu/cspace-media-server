@@ -1,12 +1,12 @@
-"""Media look up and Recalls for PAHMA: the pilot's T1 to T6, the Recalls feature's T74 to T81 and the Media look up
-feature's T65 to T73 of the test inventory (serena-test-inventory.xlsx; docs/testing-checklist.md sections 11 and 17
-to 21).
+"""Media look up and Recalls for PAHMA: the pilot's T2 to T6 (its T1 is in test_serving.py), the Recalls feature's
+T74 to T81 and the Media look up feature's T65 to T73 of the test inventory (serena-test-inventory.xlsx;
+docs/testing-checklist.md sections 11 and 17 to 21).
 
-They run in this order on one dataset (serenade/dataset.py), with no reset: T1, T2, T65 to T67, T71 to T73 and T74 to
-T76 only look (at the shared records, a record only the simulator has, and unknown CSIDs); T77, T3, T4 and T78 to T81
-are the recall chain on the reserved image, which T5 puts back; T68 to T70 change another reserved image in
-CollectionSpace and put it back afterwards; T6 affects every museum, so it runs last and undoes itself. A test that
-builds on an earlier one is skipped if that one didn't pass (@pytest.mark.after)."""
+They run in this order on one dataset (serenade/dataset.py), with no reset, after test_serving.py: T2, T65 to T67,
+T71 to T73 and T74 to T76 only look (at the shared records, a record only the simulator has, and unknown CSIDs); T77,
+T3, T4 and T78 to T81 are the recall chain on the reserved image, which T5 puts back; T68 to T70 change another
+reserved image in CollectionSpace and put it back afterwards; T6 affects every museum, so it runs last and undoes
+itself. A test that builds on an earlier one is skipped if that one didn't pass (@pytest.mark.after)."""
 from __future__ import annotations
 
 import re
@@ -32,7 +32,7 @@ from serenade.pages.page import shortened
 from serenade.pages.recalls_page import RecallsPage
 from serenade.pages.requests_page import RequestsPage
 from serenade.pages.sign_in_page import SignInPage
-from serenade.stack import SERENA_URL, calls_to_simulator, eventually, redirect_of, simulator
+from serenade.stack import SERENA_URL, eventually, redirect_of, simulator
 
 pytestmark = pytest.mark.usefixtures("built_dataset")
 
@@ -44,6 +44,7 @@ CANCEL_REASON = "serenade T5: a test cancel"
 NO_RECALLS = "No active recalls."
 GIVE_A_REASON = "Give a reason first."
 SIZES = ("original", "Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg")  # PAHMA's (museums/pahma.yaml)
+SHARED_CACHED = ("original", "Small", "Medium")  # the shared image's sizes the serving tests cache (T15, T14, T1)
 
 
 def signed_in(driver: WebDriver, base_url: str) -> None:
@@ -59,15 +60,6 @@ def unavailable(path: str) -> None:
     assert redirect_of(path).endswith(UNAVAILABLE), f"{path} doesn't get the unavailable image"
 
 
-def test_t1_a_served_image_comes_from_the_stored_copy() -> None:
-    """Checklist section 11, step 2; section 17, step 1."""
-    served(SHARED_IMAGE.path())
-    served(SHARED_IMAGE.path())
-    fetch = f"media/{SHARED_IMAGE.media}/blob/derivatives/Medium/content"
-    fetches = [c for c in calls_to_simulator() if c.endswith(fetch)]
-    assert len(fetches) == 1, f"expected one fetch from CollectionSpace, got {fetches}"
-
-
 @pytest.mark.after("test_t1_a_served_image_comes_from_the_stored_copy")
 def test_t2_media_look_up_says_served(driver: WebDriver, base_url: str) -> None:
     """Checklist section 17, step 2."""
@@ -80,20 +72,20 @@ def test_t2_media_look_up_says_served(driver: WebDriver, base_url: str) -> None:
 
 
 def test_t65_a_media_csid_alone_every_size(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 17, step 3; section 21."""
+    """Checklist section 17, step 3; section 21. After the serving tests, which cache three of its sizes."""
     signed_in(driver, base_url)
     page = LookUpPage(driver, base_url)
     page.look_up(MUSEUM, SHARED_IMAGE.media)
     page.wait_for_answer(SHARED_IMAGE.media)
     assert page.text_of(page.VERDICT).startswith("Served")
     # All served, so the sizes start folded away under one line.
-    assert page.text_of(page.SIZES_LINE) == "Sizes (6): all served · cached: Medium"
+    assert page.text_of(page.SIZES_LINE) == f"Sizes (6): all served · cached: {', '.join(SHARED_CACHED)}"
     assert not page.is_open(page.SIZES_BOX)
     page.click(page.SIZES_LINE)
     for size in SIZES:
         cells = page.wait_for(page.size_row(size)).find_elements(By.TAG_NAME, "td")
         assert cells[1].text == "Yes", f"{size} isn't served"
-        assert (cells[3].text != "—") == (size == "Medium"), f"{size}'s cached copy: {cells[3].text}"
+        assert (cells[3].text != "—") == (size in SHARED_CACHED), f"{size}'s cached copy: {cells[3].text}"
 
 
 def test_t66_beside_collectionspace_with_no_differences(driver: WebDriver, base_url: str) -> None:

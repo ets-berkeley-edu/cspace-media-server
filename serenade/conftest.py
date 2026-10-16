@@ -31,6 +31,19 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "after(*tests): run only if these earlier tests passed; otherwise skip")
 
 
+# The test files in the order they run (the rest after them, alphabetically): what only looks first, then what
+# changes one record, then what affects a museum or every museum (README: How the tests share one dataset).
+FILE_ORDER = ["test_serving.py", "test_lookup_and_recalls.py", "test_sign_in.py"]
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    def rank(item: pytest.Item) -> int:
+        name = item.path.name
+        return FILE_ORDER.index(name) if name in FILE_ORDER else len(FILE_ORDER)
+
+    items.sort(key=rank)  # a stable sort: each file's tests keep their own order
+
+
 def pytest_runtest_setup(item: pytest.Item) -> None:
     # A test that builds on an earlier test's change is skipped, not failed, when that test didn't pass: its own
     # failure would only repeat the first one.

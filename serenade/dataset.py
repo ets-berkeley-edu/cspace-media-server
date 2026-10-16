@@ -1,4 +1,5 @@
-"""The suite's dataset: one PAHMA daily refresh made by the fake ETL, built once per run by `./serena test`.
+"""The suite's dataset: a PAHMA daily refresh and a Cinefiles one, made by the fake ETL, built once per run by
+`./serena test`.
 
 The fake ETL makes its synthetic CSIDs from the museum and a row number (backend/devtools/fake_etl.py: csid()), so
 every run has the same records. Records are given roles, so tests can share one dataset without resets:
@@ -14,6 +15,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 # The same namespace as backend/devtools/fake_etl.py (NAMESPACE): not a secret, only how the synthetic CSIDs are made.
 _NAMESPACE = uuid.UUID("3f6b0c55-2c4e-4f6e-9d4b-6a1c0b6e5a10")
@@ -42,9 +44,10 @@ class Record:
 
 
 # PAHMA's rows repeat image, image, catalog card (fake_etl.MIX), so rows 0, 1 and 3 are images and row 2 a card.
-# T1, T2, T6, T65 to T67, T72, T73, T74, T75: looked at, never changed (T1's first request caches its Medium size).
+# T1, T2, T6, T8, T14, T15, T65 to T67, T72 to T75: looked at, never changed (T1's first request caches its Medium
+# size, T14's its Small size).
 SHARED_IMAGE = Record(0)
-SHARED_CARD = Record(2)     # T73: looked up, never changed
+SHARED_CARD = Record(2)     # T9, T73: requested and looked up, never changed
 # T77, T3, T4, T78, T79, T80, T81, T5: the recall chain. Recalled (T3), looked at while recalled, then the recall
 # cancelled (T5), which puts it back as it started.
 RESERVED_IMAGE = Record(1)
@@ -59,15 +62,36 @@ SIMULATOR_ONLY = "1a2b3c4d-0000-4000-8000-000000000074"
 
 
 def unknown_csid(n: int) -> str:
-    """A CSID neither Serena nor the simulator knows (T71, T75, T76)."""
+    """A CSID neither Serena nor the simulator knows (T8, T15, T71, T75, T76)."""
     return f"9f9f9f9f-0000-4000-8000-{n:012d}"
+
+
+def _summary(museum: str) -> dict[str, Any]:
+    """A refresh's summary as the fake ETL printed it: PAHMA's in SERENADE_DATASET, another museum's beside it
+    (dataset-<museum>.json)."""
+    path = Path(os.environ["SERENADE_DATASET"])
+    if museum != MUSEUM:
+        path = path.with_name(f"dataset-{museum}.json")
+    summary: dict[str, Any] = json.loads(path.read_text())
+    return summary
+
+
+def sample(museum: str, kind: str) -> str:
+    """The path of a refresh's first record of a kind, as the fake ETL names them ("pdf", "pdf (restricted)")."""
+    return str(_summary(museum)["samples"][kind])
+
+
+# The Cinefiles refresh: shared, its public and restricted PDFs (T7).
+CINEFILES = "cinefiles"
 
 
 def check_built() -> None:
     """Checks the dataset ./serena test built is the one these roles describe; fails the run clearly if not."""
-    summary = json.loads(Path(os.environ["SERENADE_DATASET"]).read_text())
-    if summary.get("state") != "updated":
-        raise AssertionError(f"The dataset's refresh ended {summary.get('state')!r}, not 'updated': {summary}")
+    for museum in (MUSEUM, CINEFILES):
+        state = _summary(museum).get("state")
+        if state != "updated":
+            raise AssertionError(f"The dataset's {museum} refresh ended {state!r}, not 'updated'")
+    summary = _summary(MUSEUM)
     if summary["samples"]["image"] != SHARED_IMAGE.path():
         raise AssertionError("The fake ETL's records aren't the ones serenade/dataset.py expects: "
                              f"{summary['samples']['image']} != {SHARED_IMAGE.path()}")
