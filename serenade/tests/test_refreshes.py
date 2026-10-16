@@ -1,5 +1,6 @@
 """Refreshes: Past refreshes, a refresh's page and Start a refresh, checks T16 to T21 of the test inventory
-(serena-test-inventory.xlsx; docs/testing-checklist.md sections 13 to 15). T22 is covered by the backend's tests.
+(serena-test-inventory.xlsx; docs/testing-checklist.md sections 11, 14, 15 and 21). T22 is covered by the backend's
+tests.
 
 T16 and T20 only look, at PAHMA. T17 to T21 act on UCJEPS, a reserved museum no PAHMA test uses, after the alerts
 tests have read its failed refresh's alert (conftest.py's FILE_ORDER): T17 looks at the dataset's failed refresh, T18
@@ -33,7 +34,7 @@ def signed_in(driver: WebDriver, base_url: str, museum: str) -> RefreshesPage:
 
 
 def test_t16_past_refreshes_lists_the_datasets_refresh(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 13, step 1."""
+    """Checklist section 14, step 1."""
     page = signed_in(driver, base_url, MUSEUM)
     page.open_list(MUSEUM)
     assert page.text_of(page.TITLE) == "PAHMA Past refreshes"
@@ -42,7 +43,7 @@ def test_t16_past_refreshes_lists_the_datasets_refresh(driver: WebDriver, base_u
 
 
 def test_t20_start_a_refresh_says_whats_missing(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 15, step 1. Nothing is started."""
+    """Checklist section 21. Nothing is started."""
     page = signed_in(driver, base_url, MUSEUM)
     before = len(page.refreshes(MUSEUM))
     page.open(f"{MUSEUM}/start-refresh")
@@ -55,7 +56,7 @@ def test_t20_start_a_refresh_says_whats_missing(driver: WebDriver, base_url: str
 
 
 def test_t17_a_failed_servable_list_check_on_its_refreshs_page(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 14, step 1."""
+    """Checklist section 11, step 6; section 14, step 2."""
     page = signed_in(driver, base_url, UCJEPS)
     page.open_refresh(UCJEPS, refresh_id(UCJEPS_FAILED))
     assert page.text_of(page.STATE) == "Servable list check failed"
@@ -67,8 +68,8 @@ def test_t17_a_failed_servable_list_check_on_its_refreshs_page(driver: WebDriver
 
 @pytest.mark.after("test_t17_a_failed_servable_list_check_on_its_refreshs_page")
 def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 14, step 3. The failed refresh is checked again without the threshold and updates, so UCJEPS
-    then publishes its 3 rows."""
+    """Checklist section 14, step 3; section 21. The failed refresh is checked again without the threshold and
+    updates, so UCJEPS then publishes its 3 rows."""
     failed = refresh_id(UCJEPS_FAILED)
     page = signed_in(driver, base_url, UCJEPS)
     page.open_refresh(UCJEPS, failed)
@@ -84,7 +85,7 @@ def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) ->
 
 @pytest.mark.after("test_t18_overriding_the_delta_threshold")
 def test_t19_an_admin_refresh_repairs_an_open_failed_refresh(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 15, steps 2 and 3. First a failed refresh to repair: an admin refresh with the 20-row list,
+    """Checklist section 14, steps 5 and 6. First a failed refresh to repair: an admin refresh with the 20-row list,
     which fails against the 3 rows UCJEPS publishes. Then Start a refresh with the 3-row list repairs it."""
     page = signed_in(driver, base_url, UCJEPS)
     failed = page.admin_refresh(UCJEPS, servable_list("ucjeps-20").read_text(), "serenade T19: a refresh to repair")
@@ -106,7 +107,7 @@ def test_t19_an_admin_refresh_repairs_an_open_failed_refresh(driver: WebDriver, 
 
 @pytest.mark.after("test_t19_an_admin_refresh_repairs_an_open_failed_refresh")
 def test_t21_sorting_and_paging_past_refreshes(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 13, step 2. UCJEPS is brought up to 30 refreshes with admin refreshes of the list it already
+    """Checklist section 15, step 7. UCJEPS is brought up to 30 refreshes with admin refreshes of the list it already
     publishes (each passes and updates): the slowest set-up in the suite, so it runs last of UCJEPS's tests."""
     page = signed_in(driver, base_url, UCJEPS)
     three_rows = servable_list("ucjeps-3").read_text()
