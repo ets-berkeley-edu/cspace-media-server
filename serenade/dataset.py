@@ -41,11 +41,17 @@ class Record:
         return f"/{MUSEUM}/imageserver/blobs/{self.blob}/derivatives/{size}/content"
 
 
-# PAHMA's rows repeat image, image, catalog card (fake_etl.MIX), so rows 0 and 1 are images.
-SHARED_IMAGE = Record(0)    # T1, T2, T6, T74, T75: looked at, never changed (T1's first request caches its Medium size)
+# PAHMA's rows repeat image, image, catalog card (fake_etl.MIX), so rows 0, 1 and 3 are images and row 2 a card.
+# T1, T2, T6, T65 to T67, T72, T73, T74, T75: looked at, never changed (T1's first request caches its Medium size).
+SHARED_IMAGE = Record(0)
+SHARED_CARD = Record(2)     # T73: looked up, never changed
 # T77, T3, T4, T78, T79, T80, T81, T5: the recall chain. Recalled (T3), looked at while recalled, then the recall
 # cancelled (T5), which puts it back as it started.
 RESERVED_IMAGE = Record(1)
+# T68, T69, T70: changed in CollectionSpace (taken off the web, replaced, soft-deleted), then put back with the
+# simulator's hooks (approved again, restored, undeleted). Its Medium size is cached first. Put back, its file, Blob
+# CSID and sizes are as they were; Media look up still marks As of, since each undo is a change in CollectionSpace.
+CSPACE_CHANGES = Record(3)
 
 # Synthetic CSIDs, never in any servable list (the inventory's Data roles sheet).
 # T74: added to the simulator as a Media record, so CollectionSpace knows it and Serena doesn't. No other test uses it.
@@ -53,7 +59,7 @@ SIMULATOR_ONLY = "1a2b3c4d-0000-4000-8000-000000000074"
 
 
 def unknown_csid(n: int) -> str:
-    """A CSID neither Serena nor the simulator knows (T75, T76)."""
+    """A CSID neither Serena nor the simulator knows (T71, T75, T76)."""
     return f"9f9f9f9f-0000-4000-8000-{n:012d}"
 
 

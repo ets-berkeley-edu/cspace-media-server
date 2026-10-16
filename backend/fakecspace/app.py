@@ -17,8 +17,13 @@ Development hooks:
                                     hooks below, its number and "last changed" included), so each ./serena etl, which
                                     adds its records first, doesn't make them look changed.
   POST /_fake/delete/<csid>         soft-delete it (the Media service still returns it, as CollectionSpace does)
+  POST /_fake/undelete/<csid>       undo a soft delete, as CollectionSpace's undelete workflow transition does (a record
+                                    that isn't deleted is left as it is)
   POST /_fake/replace/<csid>        replace its image (CollectionSpace makes a new Blob, so a record with a Blob
                                     gets a new Blob CSID; the Media service then returns the new file)
+  POST /_fake/restore/<csid>        undo replacing: the file and Blob CSID it had before its first replace, as staff
+                                    would point the Media record back at its old Blob (a record never replaced is left
+                                    as it is)
   POST /_fake/approve/<csid>        {"approved": false}: change its "Approved for web" (PAHMA's media_pahma
                                     approvedforweb), as staff do to take it off the web
   POST /_fake/remove-file/<csid>    leave the record with no file
@@ -64,6 +69,8 @@ class Media:
     approved_for_web: bool = True  # media_pahma's approvedforweb: what PAHMA's ETL reads (for Media look up)
     identification_number: str = ""  # media_common's identificationNumber, as staff know the record (D153)
     updated_at: str = field(default_factory=lambda: _now())  # collectionspace_core's updatedAt
+    # Its file and Blob CSID before its first replace, for /_fake/restore; None if never replaced.
+    before_replace: tuple[dict[str, tuple[bytes, str]], str | None] | None = None
 
 
 def _now() -> str:
@@ -295,15 +302,36 @@ def soft_delete(csid: str) -> dict[str, str]:
     return {"csid": csid, "state": "deleted"}
 
 
+@app.post("/_fake/undelete/{csid}")
+def undelete(csid: str) -> dict[str, str]:
+    media = _known(csid)
+    if media.state == "deleted":
+        media.state = "project"
+        media.updated_at = _now()  # an undelete is a change, as in CollectionSpace
+    return {"csid": csid, "state": media.state}
+
+
 @app.post("/_fake/replace/{csid}")
 def replace(csid: str) -> dict[str, str]:
     media = _known(csid)
+    if media.before_replace is None:
+        media.before_replace = (media.files, media.blob)
     image = samples.png(shade=32)  # a different image
     media.files = {"content": (image, "image/png"), **{n: (image, "image/png") for n in DERIVATIVES}}
     if media.blob:
         media.blob = str(uuid.uuid4())  # CollectionSpace makes a new Blob for the new file
     media.updated_at = _now()
     return {"csid": csid, "replaced": "yes", "blob": media.blob or ""}
+
+
+@app.post("/_fake/restore/{csid}")
+def restore(csid: str) -> dict[str, str]:
+    media = _known(csid)
+    if media.before_replace is not None:
+        media.files, media.blob = media.before_replace
+        media.before_replace = None
+        media.updated_at = _now()  # pointing the record back at its old Blob is a change, as in CollectionSpace
+    return {"csid": csid, "blob": media.blob or ""}
 
 
 @app.post("/_fake/approve/{csid}")
