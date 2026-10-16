@@ -42,8 +42,19 @@ class Record:
 
 
 # PAHMA's rows repeat image, image, catalog card (fake_etl.MIX), so rows 0 and 1 are images.
-SHARED_IMAGE = Record(0)    # T1, T2, T6: looked at, never changed (T1's first request caches its Medium size)
-RESERVED_IMAGE = Record(1)  # T3, T4, T5: recalled, looked at while recalled, then the recall cancelled
+SHARED_IMAGE = Record(0)    # T1, T2, T6, T74, T75: looked at, never changed (T1's first request caches its Medium size)
+# T77, T3, T4, T78, T79, T80, T81, T5: the recall chain. Recalled (T3), looked at while recalled, then the recall
+# cancelled (T5), which puts it back as it started.
+RESERVED_IMAGE = Record(1)
+
+# Synthetic CSIDs, never in any servable list (the inventory's Data roles sheet).
+# T74: added to the simulator as a Media record, so CollectionSpace knows it and Serena doesn't. No other test uses it.
+SIMULATOR_ONLY = "1a2b3c4d-0000-4000-8000-000000000074"
+
+
+def unknown_csid(n: int) -> str:
+    """A CSID neither Serena nor the simulator knows (T75, T76)."""
+    return f"9f9f9f9f-0000-4000-8000-{n:012d}"
 
 
 def check_built() -> None:

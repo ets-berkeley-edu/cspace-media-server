@@ -51,7 +51,7 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | Tests | What |
 | --- | --- |
 | `tests/test_sign_in.py` | Signing in, and an account without the role (checklist section 12) |
-| `tests/test_lookup_and_recalls.py` | The pilot, T1 to T6: a served image, Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19) |
+| `tests/test_lookup_and_recalls.py` | The pilot, T1 to T6: a served image, Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19). Recalls, T74 to T81: the preview (what Serena finds, paths and URLs, more than 12 CSIDs and a text file, an already recalled record), a missing reason, a recall's row and its files, Past requests and the audit log (sections 17 to 21) |
 
 ## Packages
 
