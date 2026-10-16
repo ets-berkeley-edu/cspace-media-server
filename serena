@@ -94,10 +94,13 @@ case "$cmd" in
     for _ in $(seq 1 120); do curl -fs -o /dev/null "http://localhost:5473/admin/" && break; printf '.'; sleep 2; done
     curl -fs -o /dev/null "http://localhost:5473/admin/" || { echo; echo "Not up: docker compose -p serena-test logs admin" >&2; exit 1; }
     echo
-    echo "Building the dataset: a daily refresh for PAHMA and one for Cinefiles"
+    echo "Building the dataset: daily refreshes for PAHMA, Cinefiles and UCJEPS (its second fails its check)"
     mkdir -p serenade/.run
     tcompose exec -T worker python -m devtools.fake_etl --museum pahma --json > serenade/.run/dataset.json
     tcompose exec -T worker python -m devtools.fake_etl --museum cinefiles --json > serenade/.run/dataset-cinefiles.json
+    tcompose exec -T worker python -m devtools.fake_etl --museum ucjeps --json > serenade/.run/dataset-ucjeps.json
+    tcompose exec -T worker python -m devtools.fake_etl --museum ucjeps --rows 3 --json \
+      > serenade/.run/dataset-ucjeps-failed.json
     rm -rf serenade/.run/failures
     SERENADE_STACK=test SERENADE_DATASET=serenade/.run/dataset.json SERENADE_BASE_URL="http://localhost:5473/admin/" \
       SERENADE_SERENA_URL="http://localhost:8400" SERENADE_SIM_URL="http://localhost:8480" \

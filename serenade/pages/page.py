@@ -110,6 +110,10 @@ class Page:
     def wait_for_url(self, ending: str) -> None:
         WebDriverWait(self.driver, TIMEOUT).until(lambda d: d.current_url.endswith(ending))
 
+    def wait_for_count(self, locator: Locator, n: int, timeout: float = TIMEOUT) -> None:
+        """Waits until the locator finds exactly n elements (a list that grows or shrinks as the page updates)."""
+        WebDriverWait(self.driver, timeout).until(lambda d: len(d.find_elements(*locator)) == n)
+
     def wait_for_address(self, part: str) -> None:
         """Waits until the page's address holds the text (a query parameter the page sets, say)."""
         WebDriverWait(self.driver, TIMEOUT).until(lambda d: part in d.current_url)
