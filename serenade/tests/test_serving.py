@@ -8,7 +8,19 @@ from __future__ import annotations
 
 import pytest
 
-from serenade.dataset import CINEFILES, MUSEUM, SHARED_CARD, SHARED_IMAGE, sample, unknown_csid
+from serenade.dataset import (
+    BAD_CSID_PATH,
+    CINEFILES,
+    MISSPELLED_SIZE,
+    MUSEUM,
+    SHARED_CARD,
+    SHARED_IMAGE,
+    SHARED_MEDIA_ORIGINAL,
+    SHARED_MEDIA_SMALL,
+    UNKNOWN_MEDIA_PATH,
+    UNKNOWN_PATH,
+    sample,
+)
 from serenade.stack import calls_to_simulator, redirect_of
 
 pytestmark = pytest.mark.usefixtures("built_dataset")
@@ -44,9 +56,9 @@ def test_t7_cinefiles_pdfs_public_served_restricted_not_without_a_signed_link() 
 def test_t8_requests_serena_refuses_get_the_unavailable_image() -> None:
     """Checklist section 16, step 1; section 21, step 1. Not listed, a bad CSID (with signed-link parameters, which
     Past requests must never show), and a size Serena doesn't serve."""
-    unavailable(f"/{MUSEUM}/imageserver/blobs/{unknown_csid(8)}/derivatives/Medium/content")
-    unavailable(f"/{MUSEUM}/imageserver/blobs/not_a_csid/derivatives/Medium/content?uid=serenade&sig=0000")
-    unavailable(SHARED_IMAGE.path("Thumbnial"))
+    unavailable(UNKNOWN_PATH)
+    unavailable(BAD_CSID_PATH + "?uid=serenade&sig=0000")
+    unavailable(SHARED_IMAGE.path(MISSPELLED_SIZE))
 
 
 def test_t9_a_catalog_card_is_served() -> None:
@@ -57,7 +69,7 @@ def test_t9_a_catalog_card_is_served() -> None:
 def test_t14_a_media_url_is_served_as_its_listed_blobs_sharing_its_cache() -> None:
     """Checklist section 23, step 1. Small, which nothing else requests, so the fetch can be counted."""
     before = fetches_of(SHARED_IMAGE.media, "Small")
-    served(f"/{MUSEUM}/imageserver/media/{SHARED_IMAGE.media}/blob/derivatives/Small/content")
+    served(SHARED_MEDIA_SMALL)
     served(SHARED_IMAGE.path("Small"))
     assert fetches_of(SHARED_IMAGE.media, "Small") - before == 1, "the Media and Blob URLs didn't share one fetch"
 
@@ -65,5 +77,5 @@ def test_t14_a_media_url_is_served_as_its_listed_blobs_sharing_its_cache() -> No
 def test_t15_media_urls_the_original_and_an_unknown_media_csid() -> None:
     """Checklist section 23, steps 2 and 3. PAHMA serves originals (museums/pahma.yaml), so the Media URL's original is
     served, as the Blob's would be."""
-    served(f"/{MUSEUM}/imageserver/media/{SHARED_IMAGE.media}/blob/content")
-    unavailable(f"/{MUSEUM}/imageserver/media/{unknown_csid(15)}/blob/derivatives/Medium/content")
+    served(SHARED_MEDIA_ORIGINAL)
+    unavailable(UNKNOWN_MEDIA_PATH)

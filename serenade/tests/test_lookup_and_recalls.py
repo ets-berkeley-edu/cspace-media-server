@@ -327,13 +327,14 @@ def test_t79_a_recalls_row_its_csids_and_its_files(driver: WebDriver, base_url: 
 
 @pytest.mark.after("test_t3_a_recall_stops_serving")
 def test_t80_the_recall_in_past_requests_and_the_audit_log(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 17, step 9; section 18."""
+    """Checklist section 17, step 9; section 18. The recalled image's unserved line has its kind (T56's other half)."""
     unavailable(RESERVED_IMAGE.path())
     signed_in(driver, base_url)
     requests = RequestsPage(driver, base_url)
     requests.open(f"{MUSEUM}/requests")
-    line = requests.wait_for(requests.line_with("unserved", "recalled", shortened(RESERVED_IMAGE.blob)), timeout=30)
-    assert line.text
+    line = requests.line_with("unserved", "recalled", shortened(RESERVED_IMAGE.blob))
+    requests.wait_for(line, timeout=30)
+    assert requests.cells(line)["Kind"] == "image", "an unserved line of a file Serena knows has its kind"
     audit = AuditLogPage(driver, base_url)
     audit.open(f"{MUSEUM}/audit")
     audit.wait_for(audit.entry("recall", RECALL_REASON))
