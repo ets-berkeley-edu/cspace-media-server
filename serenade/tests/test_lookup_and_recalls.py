@@ -1,12 +1,13 @@
 """Media look up and Recalls for PAHMA: the pilot's T2 to T6 (its T1 is in test_serving.py), the Recalls feature's
-T74 to T81 and the Media look up feature's T65 to T73 of the test inventory (serena-test-inventory.xlsx;
-docs/testing-checklist.md sections 11 and 17 to 21).
+T74 to T81, the Media look up feature's T65 to T73 and a recall's alert, T26, of the test inventory
+(serena-test-inventory.xlsx; docs/testing-checklist.md sections 11 and 17 to 21).
 
-They run in this order on one dataset (serenade/dataset.py), with no reset, after test_serving.py: T2, T65 to T67,
-T71 to T73 and T74 to T76 only look (at the shared records, a record only the simulator has, and unknown CSIDs); T77,
-T3, T4 and T78 to T81 are the recall chain on the reserved image, which T5 puts back; T68 to T70 change another
-reserved image in CollectionSpace and put it back afterwards; T6 affects every museum, so it runs last and undoes
-itself. A test that builds on an earlier one is skipped if that one didn't pass (@pytest.mark.after)."""
+They run in this order on one dataset (serenade/dataset.py), with no reset, after the files before them in
+conftest.py's FILE_ORDER: T2, T65 to T67, T71 to T73 and T74 to T76 only look (at the shared records, a record only
+the simulator has, and unknown CSIDs); T77, T3, T4, T78 to T80, T26 and T81 are the recall chain on the reserved
+image, which T5 puts back; T68 to T70 change another reserved image in CollectionSpace and put it back afterwards; T6
+affects every museum, so it runs last and undoes itself. A test that builds on an earlier one is skipped if that one
+didn't pass (@pytest.mark.after)."""
 from __future__ import annotations
 
 import re
@@ -26,6 +27,7 @@ from serenade.dataset import (
     SIMULATOR_ONLY,
     unknown_csid,
 )
+from serenade.pages.alerts_page import AlertsPage
 from serenade.pages.audit_log_page import AuditLogPage
 from serenade.pages.lookup_page import LookUpPage
 from serenade.pages.page import shortened
@@ -338,6 +340,23 @@ def test_t80_the_recall_in_past_requests_and_the_audit_log(driver: WebDriver, ba
     audit = AuditLogPage(driver, base_url)
     audit.open(f"{MUSEUM}/audit")
     audit.wait_for(audit.entry("recall", RECALL_REASON))
+
+
+@pytest.mark.after("test_t3_a_recall_stops_serving")
+def test_t26_a_recalls_alert_names_its_record(driver: WebDriver, base_url: str) -> None:
+    """Checklist section 21, step 5. The alert names the record by its identification number and shortened Media
+    CSID; its About opens Media look up."""
+    signed_in(driver, base_url)
+    page = AlertsPage(driver, base_url)
+    page.open_page(MUSEUM)
+    row = page.wait_for(page.row_with(RECALL_REASON)).text
+    named = re.search(r"An admin recalled Media record 2026\.1\.\d+ \(([^)]*)\) for PAHMA\. Reason: (.*)", row)
+    assert named, f"the alert doesn't name the record: {row!r}"
+    assert named.group(1) == shortened(RESERVED_IMAGE.media) and named.group(2).startswith(RECALL_REASON)
+    page.click((By.XPATH, f"{page.row_with(RECALL_REASON)[1]}//a[@title='Media look up: {RESERVED_IMAGE.media}']"))
+    look_up = LookUpPage(driver, base_url)
+    look_up.wait_for_answer(RESERVED_IMAGE.media)
+    assert look_up.text_of(look_up.VERDICT).startswith("Not served: recalled")
 
 
 @pytest.mark.after("test_t3_a_recall_stops_serving")

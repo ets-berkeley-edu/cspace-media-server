@@ -1,5 +1,5 @@
-"""The suite's dataset: a PAHMA daily refresh and a Cinefiles one, made by the fake ETL, built once per run by
-`./serena test`.
+"""The suite's dataset: daily refreshes made by the fake ETL, built once per run by `./serena test`: PAHMA's, Cinefiles'
+(for its PDFs), and two of UCJEPS's, the second of only 3 rows, so it fails its servable list check.
 
 The fake ETL makes its synthetic CSIDs from the museum and a row number (backend/devtools/fake_etl.py: csid()), so
 every run has the same records. Records are given roles, so tests can share one dataset without resets:
@@ -75,12 +75,12 @@ SHARED_MEDIA_ORIGINAL = f"/{MUSEUM}/imageserver/media/{SHARED_IMAGE.media}/blob/
 UNKNOWN_MEDIA_PATH = f"/{MUSEUM}/imageserver/media/{unknown_csid(15)}/blob/derivatives/Medium/content"  # T15
 
 
-def _summary(museum: str) -> dict[str, Any]:
-    """A refresh's summary as the fake ETL printed it: PAHMA's in SERENADE_DATASET, another museum's beside it
-    (dataset-<museum>.json)."""
+def _summary(refresh: str) -> dict[str, Any]:
+    """A refresh's summary as the fake ETL printed it: PAHMA's in SERENADE_DATASET, the others beside it
+    (dataset-<refresh>.json: dataset-cinefiles.json, dataset-ucjeps.json, dataset-ucjeps-failed.json)."""
     path = Path(os.environ["SERENADE_DATASET"])
-    if museum != MUSEUM:
-        path = path.with_name(f"dataset-{museum}.json")
+    if refresh != MUSEUM:
+        path = path.with_name(f"dataset-{refresh}.json")
     summary: dict[str, Any] = json.loads(path.read_text())
     return summary
 
@@ -90,16 +90,27 @@ def sample(museum: str, kind: str) -> str:
     return str(_summary(museum)["samples"][kind])
 
 
+def refresh_id(refresh: str) -> str:
+    return str(_summary(refresh)["refresh_id"])
+
+
 # The Cinefiles refresh: shared, its public and restricted PDFs (T7).
 CINEFILES = "cinefiles"
+# UCJEPS, a reserved museum (the inventory's Data roles): a normal refresh, then one of 3 rows that fails its servable
+# list check (the delta over the threshold), which raises an alert. T23 to T25 look at its alerts and acknowledge them;
+# no other test uses UCJEPS.
+UCJEPS = "ucjeps"
+UCJEPS_FAILED = "ucjeps-failed"
+# How each refresh of the dataset ends.
+STATES = {MUSEUM: "updated", CINEFILES: "updated", UCJEPS: "updated", UCJEPS_FAILED: "check_failed"}
 
 
 def check_built() -> None:
     """Checks the dataset ./serena test built is the one these roles describe; fails the run clearly if not."""
-    for museum in (MUSEUM, CINEFILES):
-        state = _summary(museum).get("state")
-        if state != "updated":
-            raise AssertionError(f"The dataset's {museum} refresh ended {state!r}, not 'updated'")
+    for refresh, expected in STATES.items():
+        state = _summary(refresh).get("state")
+        if state != expected:
+            raise AssertionError(f"The dataset's {refresh} refresh ended {state!r}, not {expected!r}")
     summary = _summary(MUSEUM)
     if summary["samples"]["image"] != SHARED_IMAGE.path():
         raise AssertionError("The fake ETL's records aren't the ones serenade/dataset.py expects: "
