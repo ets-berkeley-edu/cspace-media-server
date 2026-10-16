@@ -101,6 +101,9 @@ case "$cmd" in
     tcompose exec -T worker python -m devtools.fake_etl --museum ucjeps --json > serenade/.run/dataset-ucjeps.json
     tcompose exec -T worker python -m devtools.fake_etl --museum ucjeps --rows 3 --json \
       > serenade/.run/dataset-ucjeps-failed.json
+    # UCJEPS's servable lists of 20 and 3 rows, for the admin refreshes the refresh tests start.
+    tcompose exec -T worker python -m devtools.fake_etl --museum ucjeps --file-only > serenade/.run/ucjeps-20.tsv
+    tcompose exec -T worker python -m devtools.fake_etl --museum ucjeps --rows 3 --file-only > serenade/.run/ucjeps-3.tsv
     rm -rf serenade/.run/failures
     SERENADE_STACK=test SERENADE_DATASET=serenade/.run/dataset.json SERENADE_BASE_URL="http://localhost:5473/admin/" \
       SERENADE_SERENA_URL="http://localhost:8400" SERENADE_SIM_URL="http://localhost:8480" \

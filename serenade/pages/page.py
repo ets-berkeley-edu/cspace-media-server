@@ -128,6 +128,17 @@ class Page:
         self.wait_until_gone((By.XPATH, "//div[contains(@class, 'v-overlay--active')]//div[contains(@class, "
                                         f"'v-list-item-title') and normalize-space()='{option}']"))
 
+    def call_api(self, method: str, path: str, body: str | None = None,
+                 headers: dict[str, str] | None = None) -> tuple[int, str]:
+        """Calls the admin API with the browser's session, as the app does (a change says it comes from the app, with
+        X-Serena-Admin): its status and its text."""
+        answer: list[object] = self.driver.execute_async_script(
+            "const done = arguments[arguments.length - 1];"
+            "fetch(arguments[0], {method: arguments[1], body: arguments[2], credentials: 'same-origin',"
+            "  headers: Object.assign({'X-Serena-Admin': '1'}, arguments[3])})"
+            "  .then(r => r.text().then(t => done([r.status, t])));", path, method, body, headers or {})
+        return int(str(answer[0])), str(answer[1])
+
     def fetch_text(self, url: str) -> tuple[int, str, str]:
         """Fetches a URL with the browser's session, as a link the page offers would: its status, its
         Content-Disposition header and its text (a download read without a download folder)."""
