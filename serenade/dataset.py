@@ -66,6 +66,15 @@ def unknown_csid(n: int) -> str:
     return f"9f9f9f9f-0000-4000-8000-{n:012d}"
 
 
+# The requests the serving tests make, as Serena logs them (no query string): Past requests reads their lines.
+UNKNOWN_PATH = f"/{MUSEUM}/imageserver/blobs/{unknown_csid(8)}/derivatives/Medium/content"  # T8: not listed
+BAD_CSID_PATH = f"/{MUSEUM}/imageserver/blobs/not_a_csid/derivatives/Medium/content"  # T8: bad CSID; ?uid=&sig= asked
+MISSPELLED_SIZE = "Thumbnial"  # T8: the shared image's path with a size Serena doesn't serve
+SHARED_MEDIA_SMALL = f"/{MUSEUM}/imageserver/media/{SHARED_IMAGE.media}/blob/derivatives/Small/content"  # T14
+SHARED_MEDIA_ORIGINAL = f"/{MUSEUM}/imageserver/media/{SHARED_IMAGE.media}/blob/content"  # T15
+UNKNOWN_MEDIA_PATH = f"/{MUSEUM}/imageserver/media/{unknown_csid(15)}/blob/derivatives/Medium/content"  # T15
+
+
 def _summary(museum: str) -> dict[str, Any]:
     """A refresh's summary as the fake ETL printed it: PAHMA's in SERENADE_DATASET, another museum's beside it
     (dataset-<museum>.json)."""

@@ -110,6 +110,29 @@ class Page:
     def wait_for_url(self, ending: str) -> None:
         WebDriverWait(self.driver, TIMEOUT).until(lambda d: d.current_url.endswith(ending))
 
+    def wait_for_address(self, part: str) -> None:
+        """Waits until the page's address holds the text (a query parameter the page sets, say)."""
+        WebDriverWait(self.driver, TIMEOUT).until(lambda d: part in d.current_url)
+
+    def choose(self, field_id: str, option: str) -> None:
+        """Chooses an option of a Vuetify select: the id is on a hidden input inside it, so the field around it takes
+        the click, and the options open in an overlay."""
+        self.click((By.XPATH, f"//input[@id='{field_id}']/ancestor::div[contains(concat(' ', normalize-space(@class), "
+                              "' '), ' v-field ')][1]"))
+        self.click((By.XPATH, "//div[contains(@class, 'v-overlay--active')]//div[contains(@class, 'v-list-item-title')"
+                              f" and normalize-space()='{option}']"))
+        self.wait_until_gone((By.XPATH, "//div[contains(@class, 'v-overlay--active')]//div[contains(@class, "
+                                        f"'v-list-item-title') and normalize-space()='{option}']"))
+
+    def fetch_text(self, url: str) -> tuple[int, str, str]:
+        """Fetches a URL with the browser's session, as a link the page offers would: its status, its
+        Content-Disposition header and its text (a download read without a download folder)."""
+        answer: list[object] = self.driver.execute_async_script(
+            "const done = arguments[arguments.length - 1];"
+            "fetch(arguments[0], {credentials: 'same-origin'}).then(r => r.text().then("
+            "  t => done([r.status, r.headers.get('content-disposition') || '', t])));", url)
+        return int(str(answer[0])), str(answer[1]), str(answer[2])
+
 
 def by_id(element_id: str) -> Locator:
     return (By.ID, element_id)

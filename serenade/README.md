@@ -41,7 +41,8 @@ The goal is the most tests per dataset, with the fewest resets (Richard, October
 - **A test that builds on an earlier one** says so with `@pytest.mark.after("test_name")`: if that test didn't pass,
   it's skipped rather than failing for the same reason.
 - So the tests run in order, never in parallel or shuffled: each file's tests in file order, and the files in
-  `conftest.py`'s `FILE_ORDER` (serving first; a new file goes where its changes belong).
+  `conftest.py`'s `FILE_ORDER` (serving first, then Past requests, which reads the serving tests' lines; a new file goes where its changes
+  belong).
 
 ## Where the tests come from
 
@@ -53,6 +54,7 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | Tests | What |
 | --- | --- |
 | `tests/test_serving.py` | Serving, T1, T7 to T9, T14, T15 (plain HTTP): a served image from the stored copy, Cinefiles' public and restricted PDFs, requests Serena refuses, a catalog card, Media URLs (sections 11, 16, 17, 21, 23) |
+| `tests/test_requests.py` | Past requests, T54 to T64: the page and its range, the summary boxes, the table's lines and columns (no signed-link parameters), Media URL lines, filters, ranges, the CSV export, another museum's page, opening a file from a line (sections 16, 19 to 21, 23) |
 | `tests/test_sign_in.py` | Signing in, and an account without the role (checklist section 12) |
 | `tests/test_lookup_and_recalls.py` | The pilot, T2 to T6: Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19). Recalls, T74 to T81: the preview (what Serena finds, paths and URLs, more than 12 CSIDs and a text file, an already recalled record), a missing reason, a recall's row and its files, Past requests and the audit log (sections 17 to 21). Media look up, T65 to T73: every size of a Media CSID, the comparison with CollectionSpace, the page's address, paths it forgives and refuses, an unknown CSID, the sizes box, and a record changed in CollectionSpace (off the web, replaced, soft-deleted), then put back (sections 17, 19 to 21, 23) |
 
