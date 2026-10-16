@@ -58,6 +58,10 @@ def test_the_settings_and_their_default_values(client: TestClient) -> None:
                                              "label": "Deadline for today's refresh (HH:MM, Pacific)",
                                              "value": "08:00", "default": "08:00", "changed": False}
     assert [c["days"] for c in body["audit_retention_choices"]] == [90, 183, 365, 548, 730, 1095]
+    # The size limits name each kind as people read it: "catalog card", not the raw "card" (D151).
+    assert [settings[f"size_limit_mb.{kind}"]["label"] for kind in ("image", "card", "3D", "pdf")] == [
+        "Largest image file fetched (MB)", "Largest catalog card file fetched (MB)",
+        "Largest 3D model file fetched (MB)", "Largest PDF file fetched (MB)"]
 
 
 def test_change_a_setting(app: Any, client: TestClient, store: Store) -> None:
