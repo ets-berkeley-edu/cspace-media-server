@@ -91,11 +91,25 @@ def built_dataset() -> None:
 
 @pytest.fixture
 def driver(request: pytest.FixtureRequest) -> Iterator[webdriver.Chrome]:
-    options = webdriver.ChromeOptions()
-    if not (request.config.getoption("--headed") or os.environ.get("SERENADE_HEADED") == "1"):
-        options.add_argument("--headless=new")
-    options.add_argument("--window-size=1400,1000")
-    browser = webdriver.Chrome(options=options)
-    browser.implicitly_wait(0)
+    browser = new_browser(request.config)
     yield browser
     browser.quit()
+
+
+@pytest.fixture
+def second_driver(request: pytest.FixtureRequest) -> Iterator[webdriver.Chrome]:
+    """Another browser, with its own sessions: another admin, or a second window signed in separately."""
+    browser = new_browser(request.config)
+    yield browser
+    browser.quit()
+
+
+def new_browser(config: pytest.Config) -> webdriver.Chrome:
+    options = webdriver.ChromeOptions()
+    if not (config.getoption("--headed") or os.environ.get("SERENADE_HEADED") == "1"):
+        options.add_argument("--headless=new")
+    options.add_argument("--window-size=1400,1000")
+    options.set_capability("goog:loggingPrefs", {"browser": "ALL"})  # Chrome's console, for driver.get_log
+    browser = webdriver.Chrome(options=options)
+    browser.implicitly_wait(0)
+    return browser
