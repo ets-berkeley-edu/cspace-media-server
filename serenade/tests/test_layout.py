@@ -149,11 +149,10 @@ def test_t53_column_help(driver: WebDriver, base_url: str) -> None:
     signed_in(driver, base_url)
     page = RequestsPage(driver, base_url)
     page.open_page(MUSEUM)
+    page.wait_for(page.LINES, timeout=30)
     layout = LayoutPage(driver, base_url)
     # The pointer: the description shows, stays while the pointer moves onto it, and closes with Esc.
-    reason = layout.wait_for(layout.column_help("requests-table", "Reason"))
-    ActionChains(driver).move_to_element(reason).perform()
-    tooltip = layout.wait_for(layout.tooltip(HELP["Reason"]))
+    tooltip = layout.hover(layout.column_help("requests-table", "Reason"), layout.tooltip(HELP["Reason"]))
     ActionChains(driver).move_to_element(tooltip).pause(1).perform()
     assert tooltip.is_displayed(), "the description closed under the pointer"
     ActionChains(driver).send_keys(Keys.ESCAPE).perform()

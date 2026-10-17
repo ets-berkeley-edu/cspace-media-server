@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from selenium.common.exceptions import ElementClickInterceptedException, StaleElementReferenceException
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -61,6 +62,18 @@ class Page:
 
         WebDriverWait(self.driver, TIMEOUT, ignored_exceptions=(ElementClickInterceptedException,
                                                                  StaleElementReferenceException)).until(clicked)
+
+    def hover(self, locator: Locator, shows: Locator) -> WebElement:
+        """Moves the pointer onto the element until what it opens shows (a column's description, say); returns that.
+        Just after a page fills in, what loads above the element can move it from under the pointer, which closes
+        what it opened: then it moves the pointer onto the element again, until the timeout."""
+        def shown(driver: WebDriver) -> WebElement | bool:
+            ActionChains(driver).move_to_element(self.wait_for(locator)).perform()
+            return ec.visibility_of_element_located(shows)(driver)
+
+        element: WebElement = WebDriverWait(self.driver, TIMEOUT, poll_frequency=1, ignored_exceptions=(
+            StaleElementReferenceException,)).until(shown)
+        return element
 
     def type(self, locator: Locator, text: str) -> None:
         """Replaces what the field holds with the text."""
