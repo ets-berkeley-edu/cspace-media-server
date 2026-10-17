@@ -13,6 +13,8 @@ class SignInPage(Page):
     PASSWORD = by_id("password")
     BUTTON = by_id("sign-in-button")
     ERROR = by_id("sign-in-error")
+    TIMED_OUT = by_id("sign-in-timed-out")  # "Your PAHMA session ended. …"
+    OPTIONS = (By.XPATH, "//div[contains(@class, 'v-overlay--active')]//div[contains(@class, 'v-list-item-title')]")
 
     def choose_museum(self, name: str) -> None:
         self.click(self.MUSEUM)
@@ -20,7 +22,12 @@ class SignInPage(Page):
 
     def sign_in(self, museum: str, username: str, password: str) -> None:
         self.open("sign-in")
-        self.choose_museum(museum)
+        self.fill_in(museum, username, password)
+
+    def fill_in(self, museum: str | None, username: str, password: str) -> None:
+        """Signs in from the page as it is (opened from the museum menu, say); None keeps the museum it shows."""
+        if museum:
+            self.choose_museum(museum)
         self.type(self.USERNAME, username)
         self.type(self.PASSWORD, password)
         self.click(self.BUTTON)
