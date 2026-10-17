@@ -34,7 +34,7 @@ def pytest_configure(config: pytest.Config) -> None:
 # The test files in the order they run (the rest after them, alphabetically): what only looks first, then what
 # changes one record, then what affects a museum or every museum (README: How the tests share one dataset).
 FILE_ORDER = ["test_serving.py", "test_requests.py", "test_alerts.py", "test_refreshes.py",
-              "test_lookup_and_recalls.py", "test_settings.py", "test_sign_in.py"]
+              "test_lookup_and_recalls.py", "test_settings.py", "test_audit.py", "test_sign_in.py"]
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
