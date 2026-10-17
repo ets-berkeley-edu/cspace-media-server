@@ -44,8 +44,9 @@ The goal is the most tests per dataset, with the fewest resets (Richard, October
 - So the tests run in order, never in parallel or shuffled: each file's tests in file order, and the files in
   `conftest.py`'s `FILE_ORDER`: serving first, then Past requests (which reads the serving tests' lines), then UCJEPS's
   alerts (which no PAHMA test reads), then the refreshes (which change UCJEPS after its alerts are read), the PAHMA
-  look up and recall tests, the settings (BAMPFA's, and PAHMA's placeholder image, each put back), and the audit
-  log (which reads what all of them recorded). A new file goes where its changes belong.
+  look up and recall tests, the settings (BAMPFA's, and PAHMA's placeholder image, each put back), the audit log
+  (which reads what all of them recorded), and the layout and navigation checks (which only look, at the lines and
+  entries the others left). A new file goes where its changes belong.
 
 ## Where the tests come from
 
@@ -60,6 +61,7 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | `tests/test_requests.py` | Past requests, T54 to T64: the page and its range, the summary boxes, the table's lines and columns (no signed-link parameters), Media URL lines, filters, ranges, the CSV export, another museum's page, opening a file from a line (sections 16, 19 to 21, 23) |
 | `tests/test_settings.py` | Settings, T29 to T35: BAMPFA's page and its default values, a value out of bounds, a change and the default again (with its audit entry), a change that raises an alert, the audit retention's choices, Save without a reason; PAHMA's placeholder image's Media record (sections 15, 19, 21, 22) |
 | `tests/test_audit.py` | Audit log, T37 to T39: UCJEPS's refresh actions and the ETL's calls, BAMPFA's CSV export, PAHMA's By column, links and shortened values (sections 14, 15, 20) |
+| `tests/test_layout.py` | Layout and navigation, T48 to T53, on PAHMA: page titles, the menu's groups, the bell and the gear, keeping your place on Past requests (back by the link, by the browser's Back, and in a new tab), back links and none from the menu, the Overview's links, column help by the pointer and the keyboard (sections 15, 16, 18, 20, 21) |
 | `tests/test_sign_in.py` | Signing in, and an account without the role (checklist section 12) |
 | `tests/test_alerts.py` | Alerts, T23 to T25, on UCJEPS: a failed check's alert on the bell, the banner and the Alerts page; its text, with its refresh ID as a link; acknowledging (sections 14, 18, 20) |
 | `tests/test_refreshes.py` | Refreshes, T16 to T21: Past refreshes, Start a refresh's missing fields, and on UCJEPS a failed check's page, overriding the threshold, an admin refresh repairing a failed one, sorting and paging 30 refreshes (sections 11, 14, 15, 21) |
