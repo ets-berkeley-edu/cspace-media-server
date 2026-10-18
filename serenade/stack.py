@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -16,6 +18,10 @@ SERENA_URL = os.environ.get("SERENADE_SERENA_URL", "http://localhost:8400")
 SIM_URL = os.environ.get("SERENADE_SIM_URL", "http://localhost:8480")
 # Set only by ./serena test: the tests that use the dataset run only on the test stack, never on a tester's.
 ON_TEST_STACK = os.environ.get("SERENADE_STACK") == "test"
+# How to stop and start Serena's web service, for the test of what the admin app says while Serena can't be reached
+# (T47): the test stack's web container. Override them for a stack run without Docker.
+WEB_STOP = os.environ.get("SERENADE_WEB_STOP", "docker compose -p serena-test stop web")
+WEB_START = os.environ.get("SERENADE_WEB_START", "docker compose -p serena-test start web")
 # Only the local stack, over plain http: never QA or production.
 for _url in (SERENA_URL, SIM_URL):
     if not _url.startswith(("http://localhost:", "http://127.0.0.1:")):
@@ -69,3 +75,24 @@ def eventually(check: Callable[[], T], seconds: float = 60, every: float = 1) ->
             if time.monotonic() > deadline:
                 raise
             time.sleep(every)
+
+
+def stop_serena() -> None:
+    """Stops Serena's web service (the admin app's dev server then answers its API calls with 502)."""
+    subprocess.run(shlex.split(WEB_STOP), check=True, capture_output=True, timeout=120)  # noqa: S603 (our own command)
+
+
+def start_serena() -> None:
+    """Starts Serena's web service again and waits until it answers (its data is in moto, which kept running)."""
+    subprocess.run(shlex.split(WEB_START), check=True, capture_output=True, timeout=120)  # noqa: S603 (our own command)
+
+    def healthy() -> None:
+        try:
+            with urllib.request.urlopen(f"{SERENA_URL}/health", timeout=5) as response:  # noqa: S310 (local http)
+                status = response.status
+        except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+            raise AssertionError(f"Serena isn't answering yet: {e}") from e
+        if status != 200:
+            raise AssertionError(f"Serena answered {status}")
+
+    eventually(healthy, seconds=120)
