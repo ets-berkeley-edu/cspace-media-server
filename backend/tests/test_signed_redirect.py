@@ -130,7 +130,7 @@ def test_without_a_signer_nothing_is_served(store: Store, s3: Any, recorder: Mem
     add_blob(store, "pahma", BLOB, MEDIA)
     cache(store, "pahma", "Medium")
     assert client.get(path()).headers["location"] == "/unavailable/pahma.svg"
-    assert recorder.recent[-1].reason == Reason.INTERNAL_ERROR
+    assert recorder.recent[-1].reason == Reason.DELIVERY_NOT_SET_UP
     assert client.get(f"/local-cdn/pahma/objects/{SHA}").status_code == 404  # no local CDN either
 
 

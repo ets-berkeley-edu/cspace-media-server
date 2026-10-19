@@ -62,8 +62,8 @@ def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_ki
     or miss when it was just fetched) and whether a signed link was used."""
     signer: signing.Signer | None = request.app.state.signer
     if signer is None:
-        log.error("no signer configured: set SERENA_CDN_BASE_URL and SERENA_CLOUDFRONT_KEY_SECRET_ID")
-        return _unavailable(request, tenant, Reason.INTERNAL_ERROR)
+        log.warning("no signer configured: set SERENA_CDN_BASE_URL and SERENA_CLOUDFRONT_KEY_SECRET_ID")
+        return _unavailable(request, tenant, Reason.DELIVERY_NOT_SET_UP, kind)
     now = datetime.now(UTC)
     expires = signing.expiry(now)
     url = signer.url(tenant, entry.key, expires)

@@ -719,7 +719,8 @@ From the pull request's branch on the Mac, signed in (`aws sso login --profile b
   "AWS · personal dev · simulator" and the image tag. "Refreshes" lists the two updated refreshes; "Settings" saves
   a change; "Past requests" lists requests (it reads CloudWatch Logs Insights).
 - [ ] Open a sample address the fake ETL printed: expect a fetch (`./serena aws logs web` shows it stored in the
-  museum's bucket) and, until pull request 18, the unavailable image, not an error page.
+  museum's bucket) and, until pull request 18, the unavailable image, not an error page. On "Past requests", expect
+  the reason "delivery not set up" (not "internal error"), and on "Media look up" the size cached.
 - [ ] Recall the sample's Media record on "Recalls", then cancel it: both are in the audit log.
 - [ ] From another network (a phone without Wi-Fi), open `<URL>/health` and `<URL>/admin/`: expect 403 "open only to
   listed addresses". On the Mac again, after `./serena aws allow-my-ip` from that network, both answer.

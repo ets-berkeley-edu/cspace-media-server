@@ -19,7 +19,8 @@ What this first round has, and what waits for pull request 18 (D194):
 | The app and the worker on ECS Fargate, CloudFront (HTTPS, the address rules, WAF where it's on) in front of an internal load balancer, the tables, a bucket per museum, the KMS key, the secrets, the logs. The simulated CollectionSpace and the fake ETL, as an option. | Image delivery: CloudFront behaviors from the museums' buckets with origin access control, the signed-URL key group and its signing key, the unsigned prefix for the unavailable images and the generic placeholder. The SNS topic and its email, and the alarms. |
 
 Until pull request 18, the admin app, the ETL API, the servable list check and servability update, fetching and
-storing all work, but a servable file isn't delivered: there is no CloudFront signer yet.
+storing all work, but a servable file isn't delivered: there is no CloudFront signer yet. Such a request gets the
+unavailable image, and Past requests shows the reason "delivery not set up".
 
 ## Commands
 

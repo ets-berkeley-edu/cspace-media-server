@@ -434,6 +434,7 @@ its own reason, so the admin app can say why a file isn't served:
 | `too_large` | A miss: over the museum's size limit for the kind |
 | `not_decodable` | A miss: an image or catalog card that doesn't decode |
 | `fetch_busy` | A miss: not enough local disk to fetch it now |
+| `delivery_not_set_up` | Servable and stored, but Serena has no CloudFront signer to deliver it with: an AWS environment before image delivery is set up (pull request 18; decided October 19, 2026) |
 | `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
 
 The reasons for a miss were decided October 10, 2026 (see Image fetch). The "unserved" log line holds the museum, the
@@ -467,7 +468,7 @@ shows every unserved request by reason, and "Media look up" explains any one fil
 - Without CloudFront (local development only, `SERENA_LOCAL_CDN`, which needs a local DynamoDB endpoint), Serena signs with a key
   of its own, made when it starts, and serves the files itself at `/local-cdn/<tenant>/objects/<sha256>`, checking the
   signature and expiry. In AWS that path answers 404. With neither, a servable file gets the unavailable image
-  (`internal_error`) and Serena logs that no signer is configured.
+  (`delivery_not_set_up`, decided October 19, 2026) and Serena logs a warning that no signer is configured.
 
 ### Unavailable images
 

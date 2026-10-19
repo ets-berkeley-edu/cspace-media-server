@@ -45,6 +45,9 @@ class Reason(StrEnum):
     TOO_LARGE = "too_large"  # over the museum's size limit for the kind
     NOT_DECODABLE = "not_decodable"  # an image or card that doesn't decode
     FETCH_BUSY = "fetch_busy"  # not enough local disk to fetch it now
+    # Servable and stored, but there is no way to deliver it: no CloudFront signer (an AWS environment before image
+    # delivery is set up, pull request 18)
+    DELIVERY_NOT_SET_UP = "delivery_not_set_up"
     INTERNAL_ERROR = "internal_error"
 
 

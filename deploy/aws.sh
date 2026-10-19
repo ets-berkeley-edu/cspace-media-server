@@ -429,7 +429,7 @@ deploy() {
   docker info >/dev/null 2>&1 || die "Docker isn't running. Start Docker Desktop and try again."
   ensure_state_bucket
   tf_init app; check_museums ask   # before building anything
-  local tag repo registry image devtools_image="" url code museum
+  local tag repo registry image devtools_image="" url code museum _try
   tag="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
   [ -z "$(git status --porcelain 2>/dev/null)" ] || tag="$tag-dirty"
   tag="$tag-$(date -u +%Y%m%d%H%M%S)"
@@ -464,10 +464,16 @@ deploy() {
 
   url="$(app_url)"
   echo "$url" > "$URL_FILE"
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url/health" || true)"
+  # A new CloudFront address can answer 403 or fail for a few minutes while it reaches every edge location.
+  printf 'Checking %s/health ' "$url"
+  for _try in $(seq 1 24); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/health" || true)"
+    [ "$code" = 200 ] && break
+    printf '.'; sleep 5
+  done
   echo
   echo "$ENV_LABEL is up: $url   (the admin app: $url/admin/)"
-  [ "$code" = 200 ] || echo "Note: $url/health answered $code. A new CloudFront address can take a few minutes to work everywhere."
+  [ "$code" = 200 ] || echo "Note: $url/health still answers $code after 2 minutes. If it's 403, your address may have changed: ./serena aws allow-my-ip"
   if [ "$SIMULATED_CSPACE" = true ]; then
     echo "It uses the simulated CollectionSpace (sign in to the admin app as admin/admin). A daily refresh:"
     for museum in $(museum_names); do echo "  ./serena aws etl $museum"; done

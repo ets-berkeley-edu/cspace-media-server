@@ -44,8 +44,12 @@ resource "aws_dynamodb_table" "main" {
 
     content {
       name            = global_secondary_index.key
-      hash_key        = global_secondary_index.value
       projection_type = "ALL"
+
+      key_schema {
+        attribute_name = global_secondary_index.value
+        key_type       = "HASH"
+      }
     }
   }
 
