@@ -1,0 +1,47 @@
+{
+  "admin-sessions": {
+    "indexes": {},
+    "sort_key": null,
+    "ttl_attribute": "expires_at"
+  },
+  "alerts": {
+    "indexes": {},
+    "sort_key": "sk",
+    "ttl_attribute": null
+  },
+  "audit": {
+    "indexes": {},
+    "sort_key": "sk",
+    "ttl_attribute": null
+  },
+  "cache-index": {
+    "indexes": {},
+    "sort_key": null,
+    "ttl_attribute": null
+  },
+  "recalls": {
+    "indexes": {
+      "by_tenant": "tenant"
+    },
+    "sort_key": null,
+    "ttl_attribute": null
+  },
+  "refreshes": {
+    "indexes": {},
+    "sort_key": "sk",
+    "ttl_attribute": null
+  },
+  "servability": {
+    "indexes": {
+      "by_media": "media_key",
+      "by_tenant": "tenant"
+    },
+    "sort_key": null,
+    "ttl_attribute": null
+  },
+  "settings": {
+    "indexes": {},
+    "sort_key": null,
+    "ttl_attribute": null
+  }
+}

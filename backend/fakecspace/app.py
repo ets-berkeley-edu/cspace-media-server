@@ -8,6 +8,7 @@ State is in memory. It is not CollectionSpace: behaviour against the real server
 (docs/testing-checklist.md).
 
 Run: uvicorn fakecspace.app:app --port 8180
+Each museum is told apart by the host name it's called by (pahma.fakecspace) or a path prefix (/pahma/...).
 User: serena, password serena (synthetic; Serena's read-only service account in development).
 Development hooks:
   POST /_fake/reset                 empty
@@ -155,8 +156,34 @@ def _authorized(request: Request) -> bool:
 
 
 def museum_of(request: Request) -> str:
+    """The museum a request is for: the path prefix it came with (an AWS environment, see MuseumPrefix), or else the
+    first label of the host name (the local stack and the tests); PAHMA when neither names one."""
+    prefixed = request.scope.get("fake_museum")
+    if prefixed:
+        return str(prefixed)
     label = (request.url.hostname or "").split(".")[0]
     return label if label in TENANT_IDS else "pahma"
+
+
+class MuseumPrefix:
+    """Lets each museum's CollectionSpace be the simulator under a path, http://<simulator>/<museum>, as well as under a
+    host name of its own. An AWS environment with the simulator (deploy/README.md) has one name for it in its private
+    DNS, so Serena's SERENA_TENANTS gives each museum's server as <that name>/<museum>: the prefix is removed here, and
+    museum_of reads it. Paths without a museum's prefix (the development hooks, the local stack) pass unchanged."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] == "http":
+            first, _, rest = scope["path"].lstrip("/").partition("/")
+            if first in TENANT_IDS and rest:
+                scope = {**scope, "fake_museum": first, "path": "/" + rest,
+                         "raw_path": ("/" + rest).encode()}
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(MuseumPrefix)
 
 
 def _gate(request: Request) -> Response | None:

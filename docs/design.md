@@ -11,7 +11,7 @@ Serena serves the images and documents that the UC Berkeley museums' public port
 `imageserver` uses today. It decides what it may serve from the daily Solr ETL's output, keeps its own private copy
 of every file it has served, and hands browsers short-lived signed links to that copy.
 
-It runs as an AWS service: a FastAPI app on ECS Fargate behind a load balancer, a worker that takes in each day's
+It runs as an AWS service: a FastAPI app on ECS Fargate behind CloudFront and an internal load balancer, a worker that takes in each day's
 servable list, an admin web app, DynamoDB for its records, private S3 buckets for the files and CloudFront for delivery.
 
 Key decisions:
@@ -140,7 +140,7 @@ Constraints (also in `CLAUDE.md`):
 
 ```mermaid
 flowchart LR
-  B[Browser on a portal page] -->|image or document URL| A[Load balancer + WAF]
+  B[Browser on a portal page] -->|image or document URL| A[CloudFront + WAF, internal load balancer]
   A --> S[Serena app: FastAPI on ECS Fargate]
   S -->|servability, recalls, cache index| D[(DynamoDB)]
   S -->|on a miss: Media record, then file| C[CollectionSpace at Lyrasis]
@@ -992,7 +992,8 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
   nothing is fetched. Each task has 50 GB of ephemeral storage (decided October 10, 2026).
 - **Waiting on a large fetch.** A miss answers the 302 only once the file is stored. The load balancer's idle timeout
   is 300 seconds, for large originals; a fetch the browser gave up on still finishes, so the next request is a hit
-  (decided October 10, 2026).
+  (decided October 10, 2026). CloudFront, in front of the load balancer, waits 60 seconds (180 with a quota increase);
+  a longer first fetch gets a 504 there, and the next request is a hit (D184).
 
 ## Storage
 
@@ -1280,13 +1281,43 @@ reachable only from campus networks.
 ## Infrastructure and operations
 
 - **Compute.** FastAPI on Uvicorn, one process per ECS Fargate task (so in-task state such as the shared first fetch
-  and the concurrency cap holds per task), behind an ALB with AWS WAF (rate limits and bot control, since the catalog
-  is crawled routinely). Fargate rather than Lambda: no cold starts for pyvips, and warm connection pools for crawler
-  bursts. The worker is a second ECS service from the same image. Each app task has 50 GB of ephemeral storage for
-  fetches, and the ALB's idle timeout is 300 seconds (see Image fetch).
-- **Routing.** The legacy imageserver's paths on each museum's webapps host are routed to Serena's ALB, one museum at
-  a time. The ALB accepts `/etl/` only from the ETL server and `/admin` only from campus networks.
-- **Infrastructure as code.** Terraform, in `deploy/`, with state in S3. No secrets in Terraform files or state.
+  and the concurrency cap holds per task). Fargate rather than Lambda: no cold starts for pyvips, and warm connection
+  pools for crawler bursts. The worker is a second ECS service from the same image (`deploy/Dockerfile`: the app and
+  the built admin app, D190). Both run on ARM: the app with 1 vCPU, 2 GB and 50 GB of ephemeral storage for fetches,
+  one task in personal-dev and two elsewhere; the worker with 0.5 vCPU and 1 GB, the old one stopped before the new
+  one starts. A deploy that doesn't start rolls back (D188).
+- **Front door (decided October 14, 2026, D183 to D186).** CloudFront, at its own `*.cloudfront.net` address for
+  HTTPS until there is a domain (then an alternate name and a certificate on the same distribution), in front of an
+  internal load balancer through a VPC origin, as in the BMU; the load balancer is never on the internet, and its
+  idle timeout is 300 seconds. CloudFront waits at most 60 seconds for an answer (180 with a quota increase, to ask
+  for before production): a first request whose fetch takes longer gets a 504, the fetch finishes, and the next
+  request is a hit (D184). Only the admin app's built files are cached there. A CloudFront Function checks the
+  visitor's address (D185): `/etl/` only from the ETL servers, `/admin` only from campus networks, the image paths
+  and `/health` from anywhere in production; personal-dev and QA are open only to listed addresses. AWS WAF on the
+  distribution, where it's switched on (D186): AWS's common rule set (its body-size rule counting, not blocking, so a
+  servable list can be uploaded), known bad inputs, the IP reputation list, a rate limit per address, and Bot
+  Control in count mode first, since the catalog is crawled routinely and blocking crawlers could hide images from
+  search engines.
+- **Network (D187).** The BMU's: a VPC across two zones, the tasks in public subnets with public addresses and no
+  NAT gateway (their security groups take traffic only from the load balancer), the load balancer in private
+  subnets, and gateway endpoints for S3 and DynamoDB. No fixed outbound addresses: Lyrasis doesn't restrict callers
+  by address.
+- **Routing.** The legacy imageserver's paths on each museum's webapps host are sent on to Serena's CloudFront
+  address, one museum at a time.
+- **Infrastructure as code.** Terraform, in `deploy/terraform/` (the image repositories, then the app), with state
+  in an S3 bucket in each account, applied by `./serena aws` (`deploy/aws.sh`, modeled on the BMU's; D181) from
+  Richard's Mac only (D193). CI checks the Terraform code and that its tables and settings match the app, with no
+  AWS credentials. No secrets in Terraform files or state: Terraform creates each secret empty, and `./serena aws`
+  sets it (D191): a museum's CollectionSpace account as typed, a random ETL token or portal signing key shown once
+  for the ETL or the portal, the old one kept as "previous". The first environment is personal-dev, in Richard's
+  personal account (D182); QA and production follow in the UC Berkeley account. `deploy/README.md` has the commands.
+- **Protecting data (D192).** Where the data matters (QA, production), tables can't be deleted, a destroy won't
+  empty the buckets, and deleted secrets and the key wait 30 days; personal-dev can be thrown away. Everywhere:
+  point-in-time recovery on every table but the admin sessions, bucket versioning, no lifecycle rule that deletes,
+  and key rotation.
+- **The simulator in AWS (D189).** An environment can run the CollectionSpace simulator instead of a real one
+  (never where data matters): every museum's server is the simulator under the museum's name, and
+  `./serena aws etl <museum>` runs the fake ETL once inside the VPC. The fake ETL refuses to run anywhere else.
 - **Least privilege.** The app's task role can read the servability table; read and write the recall and settings
   tables (the admin app's recalls and settings are served by the app), the cache index (its `last_served` too, D142),
   refreshes, alerts,
@@ -1296,7 +1327,9 @@ reachable only from campus networks.
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
   update and delete recalls (D119), read, put and delete audit entries (the entries for ended recalls, and the daily removal,
-  D98), read and put the servable lists in S3, and publish to the SNS topic. Neither can delete S3 objects or create or delete tables.
+  D98), read and put the servable lists in S3, and publish to the SNS topic (pull request 18). Neither can delete S3
+  objects or create or delete tables. With the simulator, the fake ETL's role reads its museums' ETL tokens and
+  nothing else.
 - **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30
   days and encrypted with the KMS key, D110) and embedded metrics: requests, hits, misses, unserved
   requests by reason, fetch time, upstream errors by cause, duplicate fetches, refresh outcomes. No passwords, tokens,
@@ -1348,7 +1381,8 @@ reachable only from campus networks.
 
 1. Build Serena and deploy it beside the legacy imageserver.
 2. Get the ETL change (CSW-1027) in for every museum, calling Serena's ETL API.
-3. Route one low-traffic museum's `imageserver` paths to Serena; compare with the legacy imageserver.
+3. Route one low-traffic museum's `imageserver` paths to Serena; compare with the legacy imageserver. (Open: the rollout
+   plan proposes PAHMA first, since its QA tenant is where Serena is tested.)
 4. Move the other museums one at a time. Cinefiles moves once Glimmer signs its PDF links in production (see
    Restricted files) and its staff have confirmed the rest of F8; the Botanical Garden once watermarking is built.
 5. Decommission the legacy imageserver and remove it from cspace-webapps-common.

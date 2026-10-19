@@ -1,5 +1,6 @@
 """A fake ETL: runs one museum's whole ETL job through Serena's ETL API, as the real one will (design: The daily
-sequence, The ETL API; Jira CSW-1027). Local development only.
+sequence, The ETL API; Jira CSW-1027). For the local stack, and for an AWS environment that runs the simulated
+CollectionSpace (deploy/README.md: ./serena aws etl <museum>), where every museum's server is the simulator.
 
     python -m devtools.fake_etl --museum pahma           # a whole daily refresh: the Solr refresh's stand-in, the
                                                          # servable list, then start, upload, check and poll
@@ -17,6 +18,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import os
 import sys
 import time
 import uuid
@@ -158,8 +160,28 @@ def token_for(tenant: str) -> str:
     return token
 
 
+def why_not_here(secretsmanager_endpoint: str | None, tenants: dict[str, str], simulator: str,
+                 simulated: str) -> str | None:
+    """None where the fake ETL may run: the local stack (a local Secrets Manager stand-in), or an AWS environment that
+    runs the simulated CollectionSpace (SERENA_SIMULATED_CSPACE=true, set only there) and whose every museum's server
+    is that simulator, so the records it adds and the servable lists it sends never touch a real museum's data.
+    Otherwise, why not."""
+    if secretsmanager_endpoint is not None:
+        return None
+    if simulated != "true":
+        return ("devtools.fake_etl runs only against the local stack, or in an AWS environment with the simulated "
+                "CollectionSpace.")
+    base = simulator.rstrip("/") + "/"
+    real = sorted(t for t, url in tenants.items() if not (url.rstrip("/") + "/").startswith(base))
+    if not tenants or real:
+        return (f"devtools.fake_etl refused: every museum's CollectionSpace must be the simulator ({simulator}); "
+                + ("no museum is set." if not tenants else "not " + ", ".join(real) + "."))
+    return None
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run one museum's ETL job through Serena's ETL API (local only).")
+    parser = argparse.ArgumentParser(
+        description="Run one museum's ETL job through Serena's ETL API (the local stack, or AWS with the simulator).")
     parser.add_argument("--museum", required=True)
     parser.add_argument("--rows", type=int, default=20)
     parser.add_argument("--failed", action="store_true",
@@ -174,8 +196,11 @@ def main() -> None:
                         help="add the records to the simulator and print the servable list, for the admin app's upload "
                              "page; Serena isn't called")
     args = parser.parse_args()
-    if get_settings().secretsmanager_endpoint is None:
-        sys.exit("devtools.fake_etl runs only against the local stack.")
+    settings = get_settings()
+    refusal = None if settings.secretsmanager_endpoint is not None else why_not_here(
+        None, settings.tenants, args.cspace, os.environ.get("SERENA_SIMULATED_CSPACE", ""))
+    if refusal:
+        sys.exit(refusal)
     if args.file_only:
         listed = rows(args.museum, args.rows)
         with httpx.Client(base_url=args.cspace, timeout=60) as cspace:

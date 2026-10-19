@@ -4,7 +4,8 @@ Serena is the new media server for UC Berkeley's CollectionSpace museums: BAMPFA
 PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 [cspace-webapps-common](https://github.com/cspace-deployment/cspace-webapps-common).
 
-It's being built, one pull request at a time, and runs locally today; the AWS deployment comes next. It answers the
+It's being built, one pull request at a time. It runs locally, and `./serena aws` deploys it to AWS (`deploy/README.md`;
+image delivery from AWS comes next). It answers the
 legacy imageserver's addresses (by Blob CSID or by Media CSID) and decides from its records whether each file may be
 served. It takes each day's servable list through its ETL API: its worker checks the list and updates servability from
 it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file from CollectionSpace,
@@ -44,7 +45,7 @@ placeholder image's Media record among them. Watermarking (the Botanical Garden)
 | `serenade/` | The admin app's Selenium tests (`./serena ui`) |
 | `backend/devtools/` | Local-only tools: seeding the AWS stand-in, and a fake ETL |
 | `docker-compose.yml`, `serena` | The local stack and its script (`./serena help`) |
-| `deploy/` | The AWS deployment: Terraform and the production image (to come) |
+| `deploy/` | The AWS deployment: the production image, Terraform and `./serena aws` (`deploy/README.md`) |
 | `.github/workflows/` | CI (`ci.yml`), the weekly dependency audit (`audit.yml`) and the secret scan (`security.yml`) |
 
 ## Run it locally

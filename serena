@@ -13,9 +13,10 @@
 #   ./serena test [pytest options] the headless test suite (serenade/) on its own stack, started afresh, with its dataset
 #   ./serena test-down             stop the test stack
 #   ./serena urls                  the addresses
+#   ./serena aws <command>         deploy to AWS and look after it (deploy/README.md; ./serena aws help)
 #
 # The stack is its own Docker Compose project (serena), on ports that don't clash with the BMU's. It needs Docker
-# and nothing else: no .env, no keys. It never talks to AWS or a real CollectionSpace.
+# and nothing else: no .env, no keys. It never talks to AWS or a real CollectionSpace; only ./serena aws does.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -128,7 +129,9 @@ case "$cmd" in
     echo "Admin app:   http://localhost:${SERENA_ADMIN_PORT:-5373}/admin/   (admin/admin, pahma-admin/pahma-admin, viewer/viewer)"
     echo "Simulator:   http://localhost:${SERENA_SIM_PORT:-8380}   (calls it received: /_fake/calls)"
     echo "moto:        http://localhost:${SERENA_MOTO_PORT:-9300}/moto-api/" ;;
+  aws)
+    exec deploy/aws.sh "$@" ;;
   help|-h|--help)
-    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' ;;
+    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) echo "Unknown command '$cmd'. ./serena help lists them." >&2; exit 2 ;;
 esac

@@ -700,3 +700,33 @@ request's branch, run `./serena etl pahma`, then open http://localhost:5373/admi
   with no note about /media/ URLs, and the Media record beside CollectionSpace.
 - [ ] On "Recalls", recall `<MEDIA>` with a reason. Open the Media Medium URL again: expect the unavailable image,
   and on "Past requests" reason "recalled". Cancel the recall with a reason; within a minute the URL serves again.
+
+## 24. The first AWS environment, personal-dev with the simulator (about 1 hour, mostly waiting; before merging pull request 17)
+
+What it checks: decisions D181 to D194. `./serena aws` deploys Serena to Richard's personal account with the
+simulated CollectionSpace, the fake ETL runs a daily refresh inside the environment, and the address rules hold.
+Image delivery waits for pull request 18 (D194), so a servable file is fetched and stored but not delivered.
+From the pull request's branch on the Mac, signed in (`aws sso login --profile bmu-personal`):
+
+- [ ] `./serena aws deploy`: confirm the account, check the plan, type `yes`. Expect it to finish in about 15–25
+  minutes and print the address; `<URL>/health` answers `ok`.
+- [ ] `./serena aws status`: expect web, worker and fakecspace "running 1 of 1", the image's tag ending in the
+  commit, and for PAHMA its CollectionSpace account and ETL token "set".
+- [ ] `./serena aws etl pahma`: expect "updated" with its counts and sample addresses, in a minute or two. Run it
+  again: "updated" with 0 written, 0 deleted.
+- [ ] `./serena aws etl pahma --failed`: expect "Failed refresh" and nothing sent to Serena.
+- [ ] In Chrome, open `<URL>/admin/` and sign in to PAHMA as `admin` (password `admin`): expect the header to show
+  "AWS · personal dev · simulator" and the image tag. "Refreshes" lists the two updated refreshes; "Settings" saves
+  a change; "Past requests" lists requests (it reads CloudWatch Logs Insights).
+- [ ] Open a sample address the fake ETL printed: expect a fetch (`./serena aws logs web` shows it stored in the
+  museum's bucket) and, until pull request 18, the unavailable image, not an error page.
+- [ ] Recall the sample's Media record on "Recalls", then cancel it: both are in the audit log.
+- [ ] From another network (a phone without Wi-Fi), open `<URL>/health` and `<URL>/admin/`: expect 403 "open only to
+  listed addresses". On the Mac again, after `./serena aws allow-my-ip` from that network, both answer.
+- [ ] Note: the fake ETL calls the internal load balancer directly, not through CloudFront. Uploading a large
+  servable list through CloudFront and WAF (D184, D186) is checked when the real ETL first calls the QA environment.
+- [ ] `./serena aws pause`: expect no running tasks and `<URL>/health` failing; `./serena aws resume` brings it back.
+  Then `./serena aws etl pahma` again: "updated" (the simulator lost its records, the fake ETL adds them again).
+- [ ] Look for `AccessDenied` in `./serena aws logs web` and `worker`: there should be none. Note any for `iam.tf`.
+- [ ] When done: `./serena aws destroy`, type `personal-dev`. Expect it to finish (run it again if it stops at the
+  VPC) and the Cost Explorer to show nothing new the next day.

@@ -75,9 +75,17 @@ The local stack, from the repository's root (Docker only; never AWS or a real Co
 ./serena down          # stop; moto forgets everything
 ```
 
+AWS (`deploy/README.md`): `./serena aws deploy | plan | status | logs | etl <museum> | pause | resume | destroy`
+(`deploy/aws.sh`, Terraform in `deploy/terraform/`, the production image `deploy/Dockerfile`). Richard runs every one.
+After changing a `.tf` file, `terraform fmt -recursive deploy/terraform`; after changing a table,
+`python -m serena.tables > ../deploy/terraform/app/tables.json` in `backend/` (`tests/test_deploy.py` checks both
+the tables and that every `SERENA_` setting Terraform gives the app is one it reads). CI's `terraform` job runs
+`fmt -check`, `validate` and `terraform test` with no AWS sign-in.
+
 Local-only code (the seed step and the fake ETL) is in `backend/devtools/`, and the simulator in
-`backend/fakecspace/`; neither goes in the production image. Serena refuses to create tables, or to serve files
-itself in place of CloudFront, without a local DynamoDB endpoint.
+`backend/fakecspace/`; neither goes in the production image (an AWS environment with the simulator runs them from
+the local stack's image). Serena refuses to create tables, or to serve files itself in place of CloudFront, without a
+local DynamoDB endpoint.
 
 To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with the tools installed
 (`pip install --require-hashes -r requirements-tools.txt`). Each museum's configuration is

@@ -148,3 +148,37 @@ def test_file_only_prints_the_days_file_for_the_upload_page(monkeypatch: pytest.
     assert capsysbinary.readouterr().out == fake_etl.tsv(fake_etl.rows("bampfa", 3))
     media = fake_etl.rows("bampfa", 3)[0][1]
     assert media in fake.media  # added to the simulator, so its files can be fetched
+
+
+# --- an AWS environment with the simulated CollectionSpace (deploy/README.md) -------------------------------------
+
+SIM = "http://fakecspace.serena-dev.internal:8180"
+
+
+def test_the_fake_etl_runs_on_the_local_stack() -> None:
+    assert fake_etl.why_not_here("http://moto:5000", {"pahma": "https://pahma.qa.collectionspace.org"}, SIM, "") is None
+
+
+def test_the_fake_etl_runs_in_aws_only_with_the_simulator_for_every_museum() -> None:
+    every = {t: f"{SIM}/{t}" for t in TENANTS}
+    assert fake_etl.why_not_here(None, every, SIM, "true") is None
+    assert "only against the local stack" in (fake_etl.why_not_here(None, every, SIM, "") or "")
+    real = {**every, "pahma": "https://pahma.qa.collectionspace.org"}
+    assert "not pahma" in (fake_etl.why_not_here(None, real, SIM, "true") or "")
+    # A server that only starts with the simulator's name isn't the simulator.
+    look_alike = {"pahma": SIM + "0.example.org/pahma"}
+    assert "not pahma" in (fake_etl.why_not_here(None, look_alike, SIM, "true") or "")
+    assert "no museum" in (fake_etl.why_not_here(None, {}, SIM, "true") or "")
+
+
+def test_the_simulator_tells_museums_apart_by_path_prefix() -> None:
+    """In AWS each museum's server is the simulator under /<museum> (SERENA_TENANTS): the prefix picks the museum,
+    as the host name does on the local stack."""
+    client = TestClient(fake_app, base_url=SIM)
+    roles = client.get("/pahma/cspace-services/accounts/0/accountroles", auth=("pahma-admin", "pahma-admin")).text
+    assert "<tenantId>14</tenantId>" in roles and "SERENA_ADMIN" in roles
+    roles = client.get("/ucjeps/cspace-services/accounts/0/accountroles", auth=("pahma-admin", "pahma-admin")).text
+    assert "<tenantId>15</tenantId>" in roles and "SERENA_ADMIN" not in roles
+    # The development hooks and the Media service work under a museum's prefix too.
+    assert client.post("/_fake/media", json={"csid": "m-1", "blob": "b-1"}).status_code == 200
+    assert client.get("/bampfa/cspace-services/media/m-1", auth=("serena", "serena")).status_code == 200

@@ -1,0 +1,50 @@
+// Who may reach which paths (D185). Generated from the allowed_cidrs, etl_cidrs, admin_cidrs and open_images
+// variables; the distribution is IPv4-only, so the viewer's address is IPv4.
+//   allowed_cidrs: everything.   etl_cidrs: /etl/ too.   admin_cidrs: /admin too.
+//   open_images: everything else (the image paths, /health, the unavailable images) for anyone.
+var ALLOWED = "${allowed}";
+var ETL = "${etl}";
+var ADMIN = "${admin}";
+var OPEN = ${open};
+function ip4(s) {
+  var p = s.split(".");
+  if (p.length !== 4) return -1;
+  var n = 0;
+  for (var i = 0; i < 4; i++) {
+    var v = parseInt(p[i], 10);
+    if (isNaN(v) || v < 0 || v > 255) return -1;
+    n = n * 256 + v;
+  }
+  return n;
+}
+function ranges(list) {
+  return list.split(",").map(function (c) {
+    var a = c.trim().split("/");
+    var bits = a.length > 1 ? parseInt(a[1], 10) : 32;
+    var base = ip4(a[0]);
+    var size = Math.pow(2, 32 - bits);
+    var lo = base - (base % size);
+    return { lo: lo, hi: lo + size - 1, ok: base >= 0 && bits >= 0 && bits <= 32 };
+  }).filter(function (r) { return r.ok; });
+}
+var R_ALLOWED = ranges(ALLOWED), R_ETL = ranges(ETL), R_ADMIN = ranges(ADMIN);
+function inside(ip, rs) {
+  for (var i = 0; i < rs.length; i++) {
+    if (ip >= rs[i].lo && ip <= rs[i].hi) return true;
+  }
+  return false;
+}
+function handler(event) {
+  var ip = ip4(event.viewer.ip);
+  var uri = event.request.uri;
+  var ok = inside(ip, R_ALLOWED);
+  if (!ok) {
+    if (uri.indexOf("/etl/") === 0) ok = inside(ip, R_ETL);
+    else if (uri === "/admin" || uri.indexOf("/admin/") === 0) ok = inside(ip, R_ADMIN);
+    else ok = OPEN;
+  }
+  if (ok) return event.request;
+  return { statusCode: 403, statusDescription: "Forbidden",
+           headers: { "content-type": { value: "text/plain; charset=utf-8" }, "cache-control": { value: "no-store" } },
+           body: { encoding: "text", data: "This Serena environment is open only to listed addresses.\n" } };
+}
