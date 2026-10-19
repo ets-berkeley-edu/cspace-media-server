@@ -10,6 +10,7 @@ class OverviewPage(Page):
     MUSEUM_MENU = by_id("museum-menu")
     SIGN_OUT = by_id("sign-out")
     AUDIT = by_id("nav-audit")
+    LOOKUP = by_id("nav-lookup")
     AUDIT_TABLE = by_id("audit-table")
     # The audit log's rows arrive after the page opens: wait for one, by its action.
     SIGN_IN_ROW = (By.XPATH, "//*[@id='audit-table']//td[normalize-space()='sign in']")
@@ -17,6 +18,7 @@ class OverviewPage(Page):
     SIGN_IN_ANOTHER = by_id("sign-in-another")  # in the museum menu
     SIGN_OUT_ALL = by_id("sign-out-all")
     CONFIRM_SIGN_OUT_ALL = by_id("confirm-sign-out-all")
+    SIGN_OUT_ALL_ERROR = by_id("sign-out-all-error")  # in the dialog, when signing everyone out failed
     # The museum menu's museums, each "<museum> (<user>)".
     MUSEUMS = (By.XPATH, "//div[contains(@class, 'v-overlay--active')]//a[contains(@class, 'v-list-item')]"
                          "[not(@id='sign-in-another')]//div[contains(@class, 'v-list-item-title')]")

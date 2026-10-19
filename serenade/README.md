@@ -46,8 +46,8 @@ The goal is the most tests per dataset, with the fewest resets (Richard, October
   alerts (which no PAHMA test reads), then the refreshes (which change UCJEPS after its alerts are read), the PAHMA
   look up and recall tests, the settings (BAMPFA's, and PAHMA's placeholder image, each put back), the audit log
   (which reads what all of them recorded), the layout and navigation checks (which only look, at the lines and
-  entries the others left), and sign-in and sessions, last (T45 signs everyone out of PAHMA). A new file goes where
-  its changes belong.
+  entries the others left), sign-in and sessions (T45 signs everyone out of PAHMA), and last, Serena unreachable
+  (T47 stops and starts its web service). A new file goes where its changes belong.
 
 ## Where the tests come from
 
@@ -64,6 +64,7 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | `tests/test_audit.py` | Audit log, T37 to T39: UCJEPS's refresh actions and the ETL's calls, BAMPFA's CSV export, PAHMA's By column, links and shortened values (sections 14, 15, 20) |
 | `tests/test_layout.py` | Layout and navigation, T48 to T53, on PAHMA: page titles, the menu's groups, the bell and the gear, keeping your place on Past requests (back by the link, by the browser's Back, and in a new tab), back links and none from the menu, the Overview's links, column help by the pointer and the keyboard (sections 15, 16, 18, 20, 21) |
 | `tests/test_sign_in.py` | Sign-in and sessions, T40 to T46: the five museums on the sign-in page, signing in and out, an account without the role, two museums at once, the role per museum, the API documentation page (read-only, nothing in the console about the Content-Security-Policy), and, last of the whole run, "Sign everyone out" ending another browser's session (sections 12, 20) |
+| `tests/test_unreachable.py` | T47, last of all: with Serena's web service stopped (the test stack's web container), "Sign everyone out" and Media look up say "Serena can't be reached right now. Try again in a minute. (502)", and the dialog stays open; Serena is started again however the test ends (sections 20, 21) |
 | `tests/test_alerts.py` | Alerts, T23 to T25, on UCJEPS: a failed check's alert on the bell, the banner and the Alerts page; its text, with its refresh ID as a link; acknowledging (sections 14, 18, 20) |
 | `tests/test_refreshes.py` | Refreshes, T16 to T21: Past refreshes, Start a refresh's missing fields, and on UCJEPS a failed check's page, overriding the threshold, an admin refresh repairing a failed one, sorting and paging 30 refreshes (sections 11, 14, 15, 21) |
 | `tests/test_lookup_and_recalls.py` | The pilot, T2 to T6: Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19). Recalls, T74 to T81: the preview (what Serena finds, paths and URLs, more than 12 CSIDs and a text file, an already recalled record), a missing reason, a recall's row and its files, Past requests and the audit log, and the recall's alert, T26 (sections 17 to 21). Media look up, T65 to T73: every size of a Media CSID, the comparison with CollectionSpace, the page's address, paths it forgives and refuses, an unknown CSID, the sizes box, and a record changed in CollectionSpace (off the web, replaced, soft-deleted), then put back (sections 17, 19 to 21, 23) |
