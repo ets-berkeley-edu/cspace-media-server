@@ -179,6 +179,19 @@ def why_not_here(secretsmanager_endpoint: str | None, tenants: dict[str, str], s
     return None
 
 
+def repair_hint(museum: str, count: int, in_aws: bool) -> str:
+    """What --failed prints. In AWS the servable list for the admin refresh is made on the local stack: its CSIDs
+    depend only on the museum and --rows, so the file matches the records just added to the environment's simulator."""
+    make = f"./serena etl {museum} --rows {count} --file-only > <file>"
+    if in_aws:
+        where = (f"With the local stack up (./serena up): {make}, then \"Start a refresh\" in this environment's "
+                 "admin app.")
+    else:
+        where = f"{make}, then \"Start a refresh\" in the admin app."
+    return (f"Failed refresh: {museum}'s records were added and its servable list made, but Serena wasn't called.\n"
+            f"  Repair it with an admin refresh. {where}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run one museum's ETL job through Serena's ETL API (the local stack, or AWS with the simulator).")
@@ -214,9 +227,7 @@ def main() -> None:
         print(json.dumps(summary))
         return
     if summary["failed"]:
-        print(f"Failed refresh: {args.museum}'s records were added and its servable list made, but Serena wasn't "
-              "called.\n  Repair it with an admin refresh: ./serena etl " + args.museum + f" --rows {args.rows} "
-              "--file-only > <file>, then \"Start a refresh\" in the admin app.")
+        print(repair_hint(args.museum, args.rows, in_aws=settings.secretsmanager_endpoint is None))
         return
     print(f"{summary['refresh_id']}: {summary['state']}")
     for line in count_lines(summary):

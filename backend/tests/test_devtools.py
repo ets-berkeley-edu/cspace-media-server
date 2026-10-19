@@ -105,6 +105,15 @@ def test_a_failed_refresh_never_calls_serena(stack: Any) -> None:
     assert serena.get("/etl/v1/museums/cinefiles", headers=headers).status_code == 404  # no refresh at all
 
 
+def test_the_repair_hint_says_where_to_make_the_file() -> None:
+    """In AWS the servable list for the admin refresh is made on the local stack, which must be up."""
+    local = fake_etl.repair_hint("pahma", 20, in_aws=False)
+    aws = fake_etl.repair_hint("pahma", 20, in_aws=True)
+    assert "./serena etl pahma --rows 20 --file-only > <file>" in local and "./serena up" not in local
+    assert "./serena etl pahma --rows 20 --file-only > <file>" in aws and "./serena up" in aws
+    assert "this environment's admin app" in aws
+
+
 def test_a_day_with_different_rows_trips_the_threshold(stack: Any) -> None:
     """What happens when ./serena etl pahma --rows 3 follows a 20-row refresh: the servable list check
     refuses, as it should. Rerunning the ETL job with the right list repairs the same refresh."""
