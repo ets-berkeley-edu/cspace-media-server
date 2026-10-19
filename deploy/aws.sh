@@ -545,7 +545,7 @@ etl() {  # etl MUSEUM [fake_etl options]
     die "'$ENV' uses a real CollectionSpace: its servable lists come from the real ETL (Jira CSW-1027), not the fake one."
   need_museum "$museum" etl
   check_account; need_terraform; tf_init app; need_deployed
-  local family subnets sg lb url task id overrides code log
+  local family subnets sg lb url task id overrides code log out
   family="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_definition"])')"
   subnets="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["subnets"])')"
   sg="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["security_group"])')"
@@ -563,14 +563,35 @@ PY
     --network-configuration "awsvpcConfiguration={subnets=[$subnets],securityGroups=[$sg],assignPublicIp=ENABLED}" \
     --overrides "$overrides" --query 'tasks[0].taskArn' --output text)"
   case "$task" in arn:*) ;; *) die "The fake ETL's task didn't start: $task" ;; esac
-  aws_ ecs wait tasks-stopped --cluster "$NAME" --tasks "$task" ||
-    die "Still running after 10 minutes: ./serena aws logs devtools"
   id="${task##*/}"
+  echo "  task $id"
+  # The waits and reads below change nothing, so each is tried again on a dropped connection (a Wi-Fi or VPN blip):
+  # the task runs on in AWS whatever happens to this computer's connection.
+  until_stopped "$task" ||
+    die "Couldn't tell whether the fake ETL finished (still running, or AWS unreachable from here). Its log: ./serena aws logs devtools (task $id)"
   log="/serena/$SERENA_ENV_NAME/devtools"
-  aws_ logs get-log-events --log-group-name "$log" --log-stream-name "fake-etl/fake-etl/$id" --start-from-head \
-    --query 'events[].message' --output text 2>/dev/null | tr '\t' '\n' || echo "(no output in $log)"
-  code="$(aws_ ecs describe-tasks --cluster "$NAME" --tasks "$task" --query 'tasks[0].containers[0].exitCode' --output text)"
-  [ "$code" = 0 ] || die "The fake ETL ended with $code: $(aws_ ecs describe-tasks --cluster "$NAME" --tasks "$task" --query 'tasks[0].stoppedReason' --output text)"
+  out="$(retry aws_ logs get-log-events --log-group-name "$log" --log-stream-name "fake-etl/fake-etl/$id" --start-from-head \
+    --query 'events[].message' --output text)" || die "The fake ETL's task ended, but its log couldn't be read: ./serena aws logs devtools (task $id)"
+  if [ -n "$out" ] && [ "$out" != None ]; then printf '%s\n' "$out" | tr '\t' '\n'; else echo "(no output in $log)"; fi
+  code="$(retry aws_ ecs describe-tasks --cluster "$NAME" --tasks "$task" --query 'tasks[0].containers[0].exitCode' --output text)" ||
+    die "Couldn't read the fake ETL's exit code (task $id); its output is above."
+  [ "$code" = 0 ] || die "The fake ETL ended with $code: $(retry aws_ ecs describe-tasks --cluster "$NAME" --tasks "$task" --query 'tasks[0].stoppedReason' --output text || true)"
+}
+
+retry() {  # retry COMMAND...: a read-only AWS call, tried up to 4 times, 5 seconds apart; its error shown on the last
+  local _try
+  for _try in 1 2 3; do "$@" 2>/dev/null && return 0; sleep 5; done
+  "$@"
+}
+
+until_stopped() {  # until_stopped TASK: waits up to about 15 minutes for the task to stop
+  local _poll state
+  for _poll in $(seq 1 90); do
+    state="$(retry aws_ ecs describe-tasks --cluster "$NAME" --tasks "$1" --query 'tasks[0].lastStatus' --output text)" || return 1
+    [ "$state" = STOPPED ] && return 0
+    sleep 10
+  done
+  return 1
 }
 
 logs() {
