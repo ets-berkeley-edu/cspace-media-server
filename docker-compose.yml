@@ -30,7 +30,7 @@ services:
   # The AWS stand-in: moto, the same library and version the tests use (backend/requirements-dev.txt).
   # Its state is at http://localhost:9300/moto-api/
   moto:
-    image: motoserver/moto:5.2.3
+    image: motoserver/moto:5.2.4
     ports: ["${SERENA_MOTO_PORT:-9300}:5000"]
 
   fakecspace:
