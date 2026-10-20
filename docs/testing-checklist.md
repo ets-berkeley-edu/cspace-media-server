@@ -838,8 +838,15 @@ step below says what to run, where, and what you should see. If you see somethin
      - `HTTP/2 302`
      - `location: <URL>/pahma/objects/<64 hex characters>?Expires=<number>&Signature=<…>&Key-Pair-Id=<…>`
      - `cache-control: private, max-age=<a number from 900 to 1800>`
-  2. Copy the whole `location` value and set it: `SIGNED="<that location>"`. Also note the 64 hex characters
-     (the file's SHA-256) and the `Key-Pair-Id` value; steps 8 and 11 use them.
+  2. Save the signed address, the file's SHA-256 (the 64 hex characters after `/objects/`) and the key's ID; steps
+     7, 8, 10 and 11 use them:
+     ```
+     SIGNED="$(curl -sI "$SAMPLE" | awk 'tolower($1) == "location:" {print $2}' | tr -d '\r')"
+     SHA="${SIGNED##*/objects/}"; SHA="${SHA%%\?*}"
+     KEY_ID="${SIGNED##*Key-Pair-Id=}"
+     echo "$SIGNED"; echo "$SHA"; echo "$KEY_ID"
+     ```
+     Expect the signed address, then 64 characters of 0–9 and a–f, then an ID like `K3EK0MNYL92FBO`.
   3. Run `curl -sI "$SIGNED"` twice. Expect both times `HTTP/2 200`, `content-type: image/png` and
      `cache-control: private, max-age=900`. Expect `x-cache: Miss from cloudfront` the first time and
      `x-cache: Hit from cloudfront` the second (the signature isn't part of the cache key, D197).
@@ -858,7 +865,7 @@ step below says what to run, where, and what you should see. If you see somethin
        --query "Buckets[?starts_with(Name, 'serena-dev-pahma-')].Name" --output text)"
      ```
      `echo "$BUCKET"` should print `serena-dev-pahma-<account>-us-west-2`.
-  2. Run `curl -sI "https://$BUCKET.s3.us-west-2.amazonaws.com/objects/<the SHA-256 from step 6>"`. Expect
+  2. Run `curl -sI "https://$BUCKET.s3.us-west-2.amazonaws.com/objects/$SHA"`. Expect
      `HTTP/1.1 403 Forbidden`.
   3. Run `curl -sI "$URL/pahma/servable-list/x"`. Expect no file: only `/pahma/objects/…` goes to the bucket, so
      this path goes to Serena, which doesn't serve it. Note the status you get; it must not be a 200 with a file.
@@ -884,8 +891,8 @@ step below says what to run, where, and what you should see. If you see somethin
      with one public key added (type `yes`), "Terraform now adds it to the key group CloudFront trusts", and a
      line saying Serena signs the museums' files with the new key within 5 minutes.
   2. Run `./serena aws status`. Expect "signing keys trusted:" to list two keys, the new one last.
-  3. Wait 5 minutes, then run `curl -sI "$SAMPLE"`. Expect a `location` whose `Key-Pair-Id` differs from the one
-     you noted in step 6.
+  3. Wait 5 minutes, then run `curl -sI "$SAMPLE"`. Expect a `location` whose `Key-Pair-Id` differs from `$KEY_ID`
+     (`echo "$KEY_ID"`), saved in step 6.
   4. Run `curl -sI "$SIGNED"` (signed with the old key). Expect `HTTP/2 200` until its `Expires`.
 
 - [ ] **12. An alert by email.**
