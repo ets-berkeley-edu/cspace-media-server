@@ -503,7 +503,9 @@ finish_cdn_key() {  # the pending key becomes the one the app signs with, once C
   aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
     KEY_ID="$key_id" python3 -c 'import json, os, sys; v = json.load(sys.stdin); print(json.dumps({"key_pair_id": os.environ["KEY_ID"], "private_key": v["private_key"]}))' |
     put_secret "$id"
-  aws_ secretsmanager update-secret-version-stage --secret-id "$id" --version-stage AWSPENDING --remove-from-version-id "$version" >/dev/null
+  # Moving AWSCURRENT to the new version may already have taken AWSPENDING off the old one.
+  [ -z "$(pending_version)" ] ||
+    aws_ secretsmanager update-secret-version-stage --secret-id "$id" --version-stage AWSPENDING --remove-from-version-id "$version" >/dev/null
   echo "Serena signs the museums' files with $name within 5 minutes. The key before it stays trusted until the next ./serena aws cdn-key."
 }
 
