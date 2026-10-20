@@ -1,0 +1,23 @@
+# What docker build never sends when it builds from the repository root (deploy/Dockerfile). Keep keys, local state
+# and installed packages out: admin/node_modules from a Mac would replace the image's own (different platform).
+# The local stack builds backend/ on its own (backend/.dockerignore).
+.git
+**/.env
+**/.env.*
+**/*.env
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.egg-info
+**/.venv
+admin/dist
+deploy/environments/*.local.conf
+deploy/environments/*.url
+**/.terraform
+**/*.tfstate*
+docs
+serenade
+local
+.DS_Store

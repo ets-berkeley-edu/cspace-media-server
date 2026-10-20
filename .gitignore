@@ -21,3 +21,6 @@ admin/dist/
 serenade/.venv/
 # serenade's runs: the test dataset's summary, and failed tests' screenshots and page HTML
 serenade/.run/
+# ./serena aws: each environment's settings on one computer (account number, allowed addresses) and its address
+deploy/environments/*.local.conf
+deploy/environments/*.url

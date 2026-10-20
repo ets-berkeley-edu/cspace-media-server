@@ -1,7 +1,7 @@
 # Weekly update pull requests (Mondays), grouped so there are few of them. Each one runs CI like any other PR.
 #
-# Docker: the local stack's image (backend/Dockerfile) and the images docker-compose.yml names; /deploy joins the
-# docker entry with the production image (pull request 17).
+# Docker: the local stack's image (backend/Dockerfile), the production image (deploy/Dockerfile) and the images
+# docker-compose.yml names. Terraform: the AWS provider in both configurations (deploy/terraform), within ~> 6.0.
 #
 # Python: the requirements files are pip-compile output (backend/pin-requirements.sh, as in the BMU); Dependabot
 # reruns pip-compile with the options in each file's header. Base images: only patch updates are offered, so Python
@@ -50,11 +50,13 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: docker
-    directories: [/backend]
+    directories: [/backend, /deploy]
     schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
     ignore:
       - dependency-name: "*python"
         update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: "*node"
+        update-types: [version-update:semver-major]
     groups:
       images:
         patterns: ["*"]
@@ -69,4 +71,11 @@ updates:
         update-types: [version-update:semver-major]
     groups:
       compose:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directories: [/deploy/terraform/app, /deploy/terraform/registry]
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    groups:
+      terraform:
         patterns: ["*"]

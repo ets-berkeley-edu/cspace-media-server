@@ -7,9 +7,9 @@ on:
 # The workflow's token can only read the repository: no job here writes to GitHub.
 permissions:
   contents: read
-# A pull request that changes only documentation skips `backend`. It is skipped with `if:`, not left out with
-# paths-ignore, so it still reports (as skipped, which counts as passing) and a required check never waits on
-# "Expected". The `dependencies` job and everything in security.yml run on every pull request and every push,
+# A pull request that changes only documentation skips `backend`, `admin` and `terraform`. Each is skipped with
+# `if:`, not left out with paths-ignore, so it still reports (as skipped, which counts as passing) and a required
+# check never waits on "Expected". The `dependencies` job and everything in security.yml run on every pull request and every push,
 # whatever changed: README and docs files are where a secret or personal data most often leaks.
 jobs:
   changes:
@@ -94,6 +94,36 @@ jobs:
         # Without src/plugins/main.scss the components render unstyled, which no unit test notices.
         run: grep -q '\.v-field{' dist/assets/*.css || { echo "::error::No Vuetify styles in the build"; exit 1; }
 
+  terraform:
+    # deploy/terraform: formatting, validation against the provider, and terraform test (a simulated AWS provider).
+    # Nothing here signs in to AWS or reads Terraform state.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
+    runs-on: ubuntu-latest
+    env: { TF_IN_AUTOMATION: "1", TF_INPUT: "0" }
+    defaults: { run: { working-directory: deploy/terraform } }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # Pinned by commit; Dependabot moves the pin and its comment together.
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+      - name: Formatting (terraform fmt -recursive deploy/terraform fixes it)
+        run: terraform fmt -check -recursive -diff
+      # -lockfile=readonly: the providers must be the ones .terraform.lock.hcl pins, with its checksums.
+      - name: Validate the image repositories' configuration
+        working-directory: deploy/terraform/registry
+        run: |
+          terraform init -backend=false -lockfile=readonly
+          terraform validate
+      - name: Validate and test the app's configuration
+        working-directory: deploy/terraform/app
+        run: |
+          terraform init -backend=false -lockfile=readonly
+          terraform validate
+          terraform test
   stack:
     # The local stack (docker-compose.yml, ./serena): builds the image, starts the stack, runs a whole daily refresh for PAHMA
     # through the fake ETL, then fetches, stores and serves one of its images. Not a required check.

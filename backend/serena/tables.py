@@ -4,6 +4,7 @@ In AWS, Terraform creates them (with encryption by the customer-managed KMS key 
 create_all() is for local development and tests."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -65,3 +66,17 @@ def create_all(dynamodb: Any, prefix: str) -> list[str]:
                 "Enabled": True, "AttributeName": table.ttl_attribute})
         created.append(name)
     return created
+
+
+def as_json() -> str:
+    """The tables as deploy/terraform/app/tables.json, which Terraform creates them from (dynamodb.tf); a test keeps
+    the two in step. After changing a table: python -m serena.tables > ../deploy/terraform/app/tables.json"""
+    described = {
+        table.name: {"sort_key": table.sort_key, "indexes": dict(table.indexes), "ttl_attribute": table.ttl_attribute}
+        for table in ALL
+    }
+    return json.dumps(described, indent=2, sort_keys=True) + "\n"
+
+
+if __name__ == "__main__":
+    print(as_json(), end="")
