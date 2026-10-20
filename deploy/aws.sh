@@ -435,14 +435,16 @@ cdn_key_names() {  # the trusted keys' names, oldest first, one per line
     python3 -c 'import json, sys; [print(k["name"]) for k in json.load(sys.stdin)]' 2>/dev/null || true
 }
 
-pending_version() {  # the signing key secret's version labeled AWSPENDING (and not AWSCURRENT); "" if none
+# The secret's very first version also gets AWSCURRENT, whatever label it's given (Secrets Manager's rule), so a pending
+# key is found by its AWSPENDING label alone.
+pending_version() {  # the signing key secret's version labeled AWSPENDING; "" if none
   aws_ secretsmanager describe-secret --secret-id "$(cdn_secret)" --output json 2>/dev/null | python3 -c '
 import json, sys
 try:
     stages = json.load(sys.stdin).get("VersionIdsToStages") or {}
 except ValueError:
     stages = {}
-print(next((v for v, s in stages.items() if "AWSPENDING" in s and "AWSCURRENT" not in s), ""))'
+print(next((v for v, s in stages.items() if "AWSPENDING" in s), ""))'
 }
 
 apply_again() {  # apply with the running images and settings (no prompt for a change cdn-key or deploy started)
