@@ -84,7 +84,9 @@ aws sso login --profile bmu-personal
 3. **State bucket.** It creates `serena-tfstate-<account>-<region>`, once per account.
 4. **Image repositories** (about a minute), then **the images**, built for ARM and pushed: Serena's
    (`deploy/Dockerfile`: the app and the built admin app, D190) and, with the simulator, the local stack's
-   (`backend/Dockerfile`), which runs the simulator and the fake ETL.
+   (`backend/Dockerfile`), which runs the simulator and the fake ETL. Both take their Python base image from Amazon
+   ECR Public; for `backend/Dockerfile` the deploy swaps it in with a named build context, since CI and the local
+   stack build that file from Docker Hub (ECR Public refuses GitHub's shared runners).
 5. **Serena.** Terraform lists what it will create and asks; type `yes`. The first time takes about **15–25
    minutes**, mostly CloudFront. It finishes when the app and the worker are running.
 6. **Secrets.** With the simulator, deploy sets each museum's secrets once: the simulator's synthetic account, a

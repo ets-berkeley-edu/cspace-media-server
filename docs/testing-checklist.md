@@ -971,3 +971,20 @@ replaces the task definitions; the commands that apply again with the running im
   `./serena aws resume`, the same, and `./serena aws etl pahma` (the simulator lost its records).
 - [ ] When done, `./serena aws destroy` (type `personal-dev`), or `./serena aws pause` if personal-dev is kept for
   the next pull request.
+
+## 27. The devtools image's base from ECR Public in AWS only (10 minutes, at the next personal-dev deploy)
+
+What it checks: `./serena aws deploy` builds the simulator's and fake ETL's image (`backend/Dockerfile`) with its
+Python base image from Amazon ECR Public, by a named build context, while the local stack and CI still build the
+same file from Docker Hub (ECR Public refused CI's shared runners: section 26, step 1). From this pull request's
+branch on the Mac, signed in (`aws sso login --profile bmu-personal`):
+
+- [ ] **1. The local stack is unchanged.** Run `./serena down && ./serena up`. Expect it to start as before, and the
+  build's output to name `docker.io/library/python:3.11-slim` (not `public.ecr.aws`).
+- [ ] **2. The AWS build uses ECR Public.** Run `./serena aws deploy` (or `./serena aws resume` first if
+  personal-dev is paused). Under "== 2/3 The simulator's and fake ETL's image", expect a line like
+  `[context python:3.11-slim] load metadata for public.ecr.aws/docker/library/python:3.11-slim`, and no
+  `docker.io/library/python`. Type `yes` at the plan.
+- [ ] **3. The devtools image still works.** Run `./serena aws etl pahma`. Expect "updated" and sample addresses (the
+  fake ETL runs from that image, and the simulator it fills does too).
+- [ ] When done, `./serena aws pause` (or `./serena aws destroy`, type `personal-dev`).
