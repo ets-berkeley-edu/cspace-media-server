@@ -857,6 +857,8 @@ step below says what to run, where, and what you should see. If you see somethin
   1. Copy `$SIGNED`, change one character in the middle of the `Signature=` value, and run `curl -sI "<that>"`.
      Expect `HTTP/2 403`.
   2. Run `curl -sI "${SIGNED%%\?*}"` (the address without its query string). Expect `HTTP/2 403`.
+  - Each 403 carries `cache-control: private, max-age=900` (the files' response headers policy applies to errors
+    too). That's expected and harmless: see the design doc, Signed URLs (D198).
 
 - [ ] **8. The bucket can be reached only through CloudFront (D196).**
   1. Find the bucket's name and set it:

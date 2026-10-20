@@ -471,6 +471,12 @@ shows every unserved request by reason, and "Media look up" explains any one fil
 - CloudFront adds `Cache-Control: private, max-age=900` to every delivered file (a response headers policy, whatever
   the object carries), so a browser doesn't keep using a file much past its URL's life (decided October 20, 2026,
   D198; the stored objects carry only their content type).
+  - CloudFront adds it to its own error responses too, such as the 403 for an expired or badly signed URL: a
+    response headers policy can't tell a 403 from a 200, and a viewer-response function doesn't run for 400 or
+    higher. It's harmless: the browser keeps the 403 only for that exact URL, and a URL that failed never becomes
+    valid later (an expired or bad signature stays so; Serena signs with a new key only after CloudFront trusts it).
+    The alternatives, `Cache-Control` on each stored object or a Lambda@Edge function, cost more than the header
+    does (seen in testing, October 20, 2026).
 - CloudFront caches delivered files at its edges (AWS's CachingOptimized policy): it checks the signature first, and
   the signature's query parameters aren't in the cache key, so the edge cache works across windows. Files are
   content-addressed, so a cached copy is never stale (D197; checked by hand, testing checklist section 25).
