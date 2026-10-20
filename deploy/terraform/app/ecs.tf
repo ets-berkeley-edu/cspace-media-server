@@ -74,7 +74,12 @@ resource "aws_ecs_task_definition" "web" {
     image        = var.image_uri
     essential    = true
     environment  = [for name, value in local.web_environment : { name = name, value = value }]
-    portMappings = [{ containerPort = 8000, protocol = "tcp" }]
+    portMappings = [{ containerPort = 8000, hostPort = 8000, protocol = "tcp" }]
+    # ECS fills these in when it registers a task definition; written out here so Terraform's plan doesn't see a
+    # difference and replace the task definition at every deploy.
+    mountPoints    = []
+    volumesFrom    = []
+    systemControls = []
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -107,6 +112,12 @@ resource "aws_ecs_task_definition" "worker" {
     command     = ["python", "-m", "serena.worker"]
     stopTimeout = 120
     environment = [for name, value in local.worker_environment : { name = name, value = value }]
+    # ECS fills these in when it registers a task definition; written out here so Terraform's plan doesn't see a
+    # difference and replace the task definition at every deploy.
+    portMappings   = []
+    mountPoints    = []
+    volumesFrom    = []
+    systemControls = []
     logConfiguration = {
       logDriver = "awslogs"
       options = {
