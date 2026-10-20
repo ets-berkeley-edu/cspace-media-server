@@ -1,8 +1,8 @@
 # Serena's secrets (D191), created empty: Terraform never holds a value, so none is in its state. ./serena aws sets
 # them (deploy/README.md): cspace-secret <museum> asks for the read-only account; etl-token <museum> and portal-key
 # <museum> generate and print a value once. With the simulator, ./serena aws deploy sets every museum's account to the
-# simulator's synthetic one and makes the ETL tokens and portal keys itself. The CloudFront signing key comes with
-# delivery, in pull request 18 (D194).
+# simulator's synthetic one and makes the ETL tokens and portal keys itself. The CloudFront signing key's private key
+# is made and stored by ./serena aws (cdn-key; the first deploy makes one, D200).
 
 resource "aws_secretsmanager_secret" "cspace" {
   for_each    = toset(local.museums)
@@ -28,6 +28,16 @@ resource "aws_secretsmanager_secret" "portal_key" {
   for_each                = toset(local.signed_museums)
   name                    = "${local.name}/${each.key}/portal-signing-key"
   description             = "Serena: ${each.key}'s portal signing keys {\"current\": {\"kid\", \"key\"}, \"previous\"} (design: Signed links)."
+  kms_key_id              = aws_kms_key.main.arn
+  recovery_window_in_days = var.protect_data ? 30 : 0
+}
+
+# The private key that signs the URLs of the museums' files (design: Signed URLs; D200): {"key_pair_id", "private_key"}.
+# Only the app reads it. While ./serena aws cdn-key waits for a new public key to be trusted, the new private key is
+# kept in this secret's AWSPENDING version, never in a file.
+resource "aws_secretsmanager_secret" "cdn_key" {
+  name                    = "${local.name}/cloudfront-signing-key"
+  description             = "Serena: the CloudFront signing key {\"key_pair_id\", \"private_key\"} (design: Signed URLs)."
   kms_key_id              = aws_kms_key.main.arn
   recovery_window_in_days = var.protect_data ? 30 : 0
 }

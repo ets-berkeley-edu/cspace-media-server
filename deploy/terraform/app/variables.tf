@@ -137,6 +137,23 @@ variable "vpc_cidr" {
   }
 }
 
+variable "cdn_keys" {
+  description = "true once ./serena aws has made the CloudFront signing key: Terraform reads the public keys from the SSM parameter /serena-<env>/cloudfront-public-keys, and the museums' files are delivered (delivery.tf, D200). false: nothing is delivered yet."
+  type        = bool
+  default     = false
+}
+
+variable "alert_email" {
+  description = "Where alerts and alarms are emailed (ALERT_EMAIL in the uncommitted .local.conf, D201); empty: no email subscription. Confirmed with ./serena aws confirm-alerts."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.alert_email == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alert_email))
+    error_message = "alert_email must be an email address, or empty."
+  }
+}
+
 variable "protect_data" {
   description = "true where the data matters (QA, production; D192): tables can't be deleted, destroy won't empty buckets, secrets and the key are kept 30 days. false (personal-dev) lets ./serena aws destroy remove everything."
   type        = bool

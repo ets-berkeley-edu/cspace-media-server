@@ -434,7 +434,7 @@ its own reason, so the admin app can say why a file isn't served:
 | `too_large` | A miss: over the museum's size limit for the kind |
 | `not_decodable` | A miss: an image or catalog card that doesn't decode |
 | `fetch_busy` | A miss: not enough local disk to fetch it now |
-| `delivery_not_set_up` | Servable and stored, but Serena has no CloudFront signer to deliver it with: an AWS environment before image delivery is set up (pull request 18; decided October 19, 2026) |
+| `delivery_not_set_up` | Servable and stored, but Serena has no CloudFront signer to deliver it with: an AWS environment whose first signing key isn't made yet (`./serena aws deploy` makes it; decided October 19, 2026) |
 | `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
 
 The reasons for a miss were decided October 10, 2026 (see Image fetch). The "unserved" log line holds the museum, the
@@ -448,20 +448,38 @@ shows every unserved request by reason, and "Media look up" explains any one fil
 ### Signed URLs
 
 - CloudFront signed URLs with a trusted key group, canned policy (an expiry only). The private key is in Secrets
-  Manager, `{"key_pair_id": …, "private_key": "<PEM>"}` (RSA, as CloudFront requires); only the app's task role can
-  read it, and each task reads it again every 5 minutes, so a rotation needs no restart.
-- One distribution per environment (`SERENA_CDN_BASE_URL`); a stored file's URL is `<base>/<tenant>/objects/<sha256>`
-  (decided October 9, 2026). CloudFront sends `/<tenant>/…` to that museum's bucket, without the museum's prefix, so
-  the object's key stays `objects/<sha256>` (built in pull request 18).
+  Manager, `{"key_pair_id": …, "private_key": "<PEM>"}` (RSA 2048, as CloudFront requires); only the app's task role
+  can read it, and each task reads it again every 5 minutes, so a rotation needs no restart.
+- **The signing key (decided October 20, 2026, D200).** `./serena aws` makes the key pair: the first deploy makes
+  the first one and `./serena aws cdn-key` rotates. The private key goes straight from `openssl` into the secret, held
+  in its `AWSPENDING` version until CloudFront trusts the new public key, then made current with its key ID. The
+  public keys, the current one and the one before it, are in an SSM parameter (`/serena-<env>/cloudfront-public-keys`)
+  that Terraform reads into the key group, so a URL signed with the previous key keeps working after a rotation (a
+  URL lives at most 30 minutes; rotations are further apart). No private key is in Terraform's state or a file.
+- One distribution per environment, the same one as the app's (`SERENA_CDN_BASE_URL` is its address); a stored file's
+  URL is `<base>/<tenant>/objects/<sha256>` (decided October 9, 2026). Each museum has a cache behavior,
+  `/<tenant>/objects/*`, to its bucket; a CloudFront Function (the one that applies the address rules) removes
+  `/<tenant>` from the path, so the object's key stays `objects/<sha256>` (D195). These paths never clash with the
+  legacy `/<tenant>/imageserver/…` paths, which go to the app.
+- **Origin access control (D196).** Each bucket's policy lets only this distribution read, and only under
+  `objects/` (never the servable lists); the KMS key's policy lets CloudFront decrypt for this distribution only.
 - The 302 to a signed URL carries `Cache-Control: private, max-age=<the URL's remaining life>`. The URL is never logged:
   the log line says only that the museum's file was served from the cache.
 - 15-minute windows: a URL's expiry is the end of the 15-minute window after the current one, so every request for
   the same object in the same window gets the same URL (the browser can reuse it) and each URL lives between 15 and
   30 minutes.
-- S3 objects carry `Cache-Control: private, max-age=900`, so a browser doesn't keep using a file much past its
-  URL's life.
-- CloudFront's cache key leaves out the signature's query parameters, so the edge cache still works across windows.
-  (To verify when built.)
+- CloudFront adds `Cache-Control: private, max-age=900` to every delivered file (a response headers policy, whatever
+  the object carries), so a browser doesn't keep using a file much past its URL's life (decided October 20, 2026,
+  D198; the stored objects carry only their content type).
+  - CloudFront adds it to its own error responses too, such as the 403 for an expired or badly signed URL: a
+    response headers policy can't tell a 403 from a 200, and a viewer-response function doesn't run for 400 or
+    higher. It's harmless: the browser keeps the 403 only for that exact URL, and a URL that failed never becomes
+    valid later (an expired or bad signature stays so; Serena signs with a new key only after CloudFront trusts it).
+    The alternatives, `Cache-Control` on each stored object or a Lambda@Edge function, cost more than the header
+    does (seen in testing, October 20, 2026).
+- CloudFront caches delivered files at its edges (AWS's CachingOptimized policy): it checks the signature first, and
+  the signature's query parameters aren't in the cache key, so the edge cache works across windows. Files are
+  content-addressed, so a cached copy is never stale (D197; checked by hand, testing checklist section 25).
 - After a recall, no new URL is issued. A URL already handed out works until it expires (at most 30 minutes), and a
   browser may keep showing an image it already has for up to 15 minutes more: about 45 minutes in all, within the
   1 to 2 hour tolerance.
@@ -472,11 +490,14 @@ shows every unserved request by reason, and "Media look up" explains any one fil
 
 ### Unavailable images
 
-Each museum has its unavailable image (today `404.svg`, the same file for every museum), stored under a prefix that
-CloudFront serves without a signature: `<base URL>/<tenant>/unavailable.svg`, where the base URL is a setting
-(`SERENA_UNAVAILABLE_BASE_URL`). A museum Serena doesn't serve gets `<base URL>/default/unavailable.svg`. Without a
-base URL (local development and tests), Serena serves the file itself at `/unavailable/<tenant>.svg`, as an SVG that
-can run and load nothing. (Decided October 9, 2026.)
+Each museum has its unavailable image (today `404.svg`, the same file for every museum), which CloudFront serves
+without a signature: `<base URL>/<tenant>/unavailable.svg`, where the base URL is a setting
+(`SERENA_UNAVAILABLE_BASE_URL`, the distribution's address in AWS). A museum Serena doesn't serve gets
+`<base URL>/default/unavailable.svg`. In AWS the files are in a small static bucket per environment (S3-managed
+encryption, private, read through origin access control), which Terraform fills from `backend/serena/static/`; they
+are served with a Content-Security-Policy that lets the SVG draw but never run a script or load anything (decided
+October 20, 2026, D199). Without a base URL (local development and tests), Serena serves the file itself at
+`/unavailable/<tenant>.svg`, with the same policy. (Decided October 9, 2026.)
 
 The unavailable image is distinct from the placeholder image, which is a real Blob in the public core that Serena
 serves like any other (see Placeholder image). Beside the unavailable images, `<base URL>/default/placeholder.svg` is
@@ -762,8 +783,10 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 
 An alert counts on the admin app's bell and shows in its one-line banner (checked on every page change and every
 minute; see Admin web app, Layout) until an admin acknowledges it, one at a time, on the Alerts page, which lists the
-last 30 days' alerts, acknowledged or not. An alert is logged, and is emailed through one Amazon SNS topic
-per environment (`SERENA_ALERT_TOPIC_ARN`) to the team's mailing list. Besides the watchdog's alerts, an admin's
+last 30 days' alerts, acknowledged or not. An alert is logged, and is emailed by the worker through one Amazon SNS
+topic per environment (`SERENA_ALERT_TOPIC_ARN`, encrypted with Serena's key) to the team's mailing list, the same
+topic the alarms use (see Infrastructure and operations). The address is a deploy setting kept out of the repository,
+and `./serena aws confirm-alerts` confirms the subscription (decided October 20, 2026, D201). Besides the watchdog's alerts, an admin's
 override of the delta threshold raises one, and so does an admin's change to the delta threshold or the audit retention
 ("An admin changed a setting"), so the team hears of each. The subscription requires authentication to
 unsubscribe. Without a topic (local development) alerts are recorded and logged, not emailed.
@@ -1292,7 +1315,8 @@ reachable only from campus networks.
   internal load balancer through a VPC origin, as in the BMU; the load balancer is never on the internet, and its
   idle timeout is 300 seconds. CloudFront waits at most 60 seconds for an answer (180 with a quota increase, to ask
   for before production): a first request whose fetch takes longer gets a 504, the fetch finishes, and the next
-  request is a hit (D184). Only the admin app's built files are cached there. A CloudFront Function checks the
+  request is a hit (D184). Of the app's answers, only the admin app's built files are cached there; the same
+  distribution delivers the museums' files and the unavailable images (see Signed URLs and Unavailable images). A CloudFront Function checks the
   visitor's address (D185): `/etl/` only from the ETL servers, `/admin` only from campus networks, the image paths
   and `/health` from anywhere in production; personal-dev and QA are open only to listed addresses. AWS WAF on the
   distribution, where it's switched on (D186): AWS's common rule set (its body-size rule counting, not blocking, so a
@@ -1324,16 +1348,18 @@ reachable only from campus networks.
   refreshes, alerts,
   audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
   uploaded servable lists; use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
-  check, fetches, the recall form's lookups and thumbnails, and Media look up's read of the Media record); and run Logs Insights queries on its own log group
+  check, fetches, the recall form's lookups and thumbnails, and Media look up's read of the Media record, and the
+  CloudFront signing key); and run Logs Insights queries on its own log group
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
   update and delete recalls (D119), read, put and delete audit entries (the entries for ended recalls, and the daily removal,
-  D98), read and put the servable lists in S3, and publish to the SNS topic (pull request 18). Neither can delete S3
+  D98), read and put the servable lists in S3, and publish to the alert topic. Neither can delete S3
   objects or create or delete tables. With the simulator, the fake ETL's role reads its museums' ETL tokens and
   nothing else.
 - **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30
-  days and encrypted with the KMS key, D110) and embedded metrics: requests, hits, misses, unserved
-  requests by reason, fetch time, upstream errors by cause, duplicate fetches, refresh outcomes. No passwords, tokens,
+  days and encrypted with the KMS key, D110). For now the alarms' numbers come from CloudWatch Logs metric filters on
+  those lines (decided October 20, 2026, D203); embedded metrics (requests, hits, misses, unserved requests by reason,
+  fetch time, upstream errors by cause, duplicate fetches, refresh outcomes) are to come in a later pull request. No passwords, tokens,
   signed URLs or personal data in logs: the PDF link suffix is removed before anything is logged, and the query
   string (where a signed link's `uid` and `sig` are) is never logged. Uvicorn's access log is off, since it would log
   the raw request; Serena logs requests itself. As a backstop, every log field and traceback is scrubbed of
@@ -1347,6 +1373,13 @@ reachable only from campus networks.
   - **Apache on the museums' webapps hosts,** which routes the legacy paths to Serena: outside Serena. Its access logs
     record the full request, with the email address after `linked_pdf:` and a signed link's `uid` and `sig`. The DevOps
     team is to keep them out of those logs (a sub-task of Glimmer's story).
+- **Alarms (decided October 20, 2026, D202 to D204).** CloudWatch alarms email the alert topic when they fire and
+  when they clear: no healthy app task for 5 minutes; the worker not running for 10 minutes (no CPU figure from ECS
+  for its service; the watchdog runs in the worker, so it can't report this itself); 5 or more 5xx answers from the
+  app in 5 minutes; and, from metric filters on the app's `unserved` log lines, 5 or more `internal_error` in 15
+  minutes, any `cspace_refused` (most often a changed service-account password), and 20 or more `cspace_unavailable`
+  in 15 minutes. The thresholds are starting values, to tune in QA. CloudFront's own metrics (only in us-east-1) aren't
+  alarmed for now. While an environment is paused, the alarms send nothing.
 - **Configuration.** Settings come from environment variables prefixed `SERENA_` (never a secret: those are in Secrets
   Manager). Each museum has a YAML file in `backend/serena/museums/`: its derivatives, whether it serves the original
   file, its placeholder image's Blob CSID, the sizes it watermarks, the kinds it allows signed access to (its signing keys
@@ -1460,11 +1493,13 @@ The F numbers follow the team's list of follow-ups.
 - **Rate limit.** Agree a fetch rate with Lyrasis.
 - **Images beyond the public core.** Do any internal apps need files that aren't in the public core?
 - **Unavailable images.** One per museum, or different ones for "recalled" and "not found"?
-- **CloudFront cache key.** Confirm that signed-URL query parameters are left out of the cache key.
 - **Single-use signed URLs.** Can a signed URL be made to work only once, so that no client can use it twice and,
   if several clients get the same URL, only the first one to use it gets a response? To discuss (raised October 8,
   2026).
-- **Notifications list.** The team mailing list that receives alarms.
+- **Notifications list.** Which team mailing list receives alerts and alarms in QA and production (each environment's
+  `ALERT_EMAIL`; in personal-dev, Richard's address).
+- **CORS on delivered files (D205).** Whether the portals' JavaScript viewers (PAHMA's 3D models, a PDF viewer) read
+  Serena's files from script and so need `Access-Control-Allow-Origin`; none is sent until QA shows a need.
 - **The Media record behind a Blob.** Confirm against a real museum's CollectionSpace how the recall form finds the
   Media record whose `blobCsid` is a given Blob CSID (a search on the Media service), and whether CollectionSpace makes
   a thumbnail for a PDF.

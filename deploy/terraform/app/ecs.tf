@@ -4,12 +4,14 @@ resource "aws_cloudwatch_log_group" "web" {
   name              = "/serena/${var.env_name}/web"
   retention_in_days = var.log_retention_days
   kms_key_id        = aws_kms_key.main.arn
+  depends_on        = [aws_kms_key_policy.main] # the key's policy lets CloudWatch Logs use it
 }
 
 resource "aws_cloudwatch_log_group" "worker" {
   name              = "/serena/${var.env_name}/worker"
   retention_in_days = var.log_retention_days
   kms_key_id        = aws_kms_key.main.arn
+  depends_on        = [aws_kms_key_policy.main] # the key's policy lets CloudWatch Logs use it
 }
 
 resource "aws_ecs_cluster" "main" {
@@ -33,9 +35,18 @@ locals {
     SERENA_CSPACE_SECRET_IDS      = jsonencode({ for m, s in aws_secretsmanager_secret.cspace : m => s.name })
     SERENA_SIGNING_KEY_SECRET_IDS = jsonencode({ for m, s in aws_secretsmanager_secret.portal_key : m => s.name })
   }
-  # The Past requests page queries the app's own log group (D110).
-  web_environment    = merge(local.app_environment, { SERENA_LOG_GROUP = aws_cloudwatch_log_group.web.name })
-  worker_environment = local.app_environment
+  # The Past requests page queries the app's own log group (D110). The unavailable images are always CloudFront's
+  # (D199); the museums' files once there is a signing key (D200). The worker emails the alerts (D201).
+  web_environment = merge(local.app_environment,
+    {
+      SERENA_LOG_GROUP            = aws_cloudwatch_log_group.web.name
+      SERENA_UNAVAILABLE_BASE_URL = "https://${aws_cloudfront_distribution.main.domain_name}"
+    },
+    local.delivery ? {
+      SERENA_CDN_BASE_URL             = "https://${aws_cloudfront_distribution.main.domain_name}"
+      SERENA_CLOUDFRONT_KEY_SECRET_ID = aws_secretsmanager_secret.cdn_key.name
+  } : {})
+  worker_environment = merge(local.app_environment, { SERENA_ALERT_TOPIC_ARN = aws_sns_topic.alerts.arn })
 }
 
 resource "aws_ecs_task_definition" "web" {
