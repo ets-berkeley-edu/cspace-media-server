@@ -15,6 +15,10 @@
 #                              shows it once, for the ETL's token file
 #   ./serena aws portal-key MUSEUM      make a new signing key for a museum's signed links (the old one keeps working
 #                              until the next); shows it once, for the portal
+#   ./serena aws cdn-key       make a new CloudFront signing key for the museums' files (the first deploy makes the
+#                              first one); the old one stays trusted until the next. Nothing is shown
+#   ./serena aws confirm-alerts   confirm the alert email's subscription (paste the link from AWS's email; don't click
+#                              it), so that unsubscribing needs an AWS sign-in
 #   ./serena aws destroy       delete everything in AWS for this environment, data included (asks first)
 #   ./serena aws init          point Terraform at this environment's state, to run terraform commands yourself
 #
@@ -25,7 +29,8 @@
 # CollectionSpace instead, for the museums in SIMULATED_MUSEUMS, and ./serena aws etl runs the fake ETL; deploy then
 # sets every secret itself (the simulator's account, random ETL tokens and portal keys). Never with data that matters.
 # Sign in first with: aws sso login --profile <the environment's AWS_PROFILE>. Nothing here handles a password, token
-# or key except cspace-secret, etl-token and portal-key, which pass them straight to AWS Secrets Manager.
+# or key except cspace-secret, etl-token, portal-key and cdn-key, which pass them straight to AWS Secrets Manager.
+# ALERT_EMAIL (in NAME.local.conf, never committed) is where alerts and alarms are emailed (D201).
 # Terraform (deploy/terraform) creates everything; its state is in an S3 bucket in the same account, which the first
 # deploy creates. SERENA_AWS_YES=1 skips Terraform's "yes" prompt. Works with the macOS bash (3.2) and needs python3.
 # A deployed museum's CollectionSpace server never changes (check_museums). Modeled on the BMU's deploy/aws.sh.
@@ -57,7 +62,7 @@ load_env() {
   URL_FILE="$ENV_DIR/$ENV.url"
   [ -f "$CONF" ] || die "No settings for environment '$ENV' ($CONF). Environments: $(ls "$ENV_DIR" | sed -n 's/\.conf$//p' | grep -v '\.local$' | tr '\n' ' ')"
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
-  CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT=""
+  CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
@@ -255,6 +260,7 @@ app_vars() {
     -var "admin_cidrs=$(cidr_list "$ADMIN_CIDRS")" -var "open_images=$OPEN_IMAGES" -var "waf=$WAF"
     -var "tenants=$(tenants_var)" -var "env_label=$ENV_LABEL" -var "protect_data=$PROTECT_DATA"
     -var "simulated_cspace=$SIMULATED_CSPACE" -var "devtools_image_uri=${3:-}" -var "web_count=$WEB_COUNT"
+    -var "cdn_keys=$(cdn_keys_exist)" -var "alert_email=$ALERT_EMAIL"
   )
 }
 
@@ -411,6 +417,118 @@ sim_secrets() {
   done
 }
 
+# ---- image delivery: the CloudFront signing key (D200; deploy/terraform/app/delivery.tf, secrets.tf) ---------------
+# The private key goes from openssl straight into the secret, first as its AWSPENDING version; the public keys (the
+# current one and the one before it) go into an SSM parameter that Terraform reads, so CloudFront's key group trusts
+# both. Once Terraform has applied, the pending key becomes the secret's current value with the key ID CloudFront gave
+# it, and the app signs with it within 5 minutes. A rotation never breaks a URL already handed out: the previous key
+# stays trusted until the next rotation (a URL lives 30 minutes at most, so don't rotate twice within 30 minutes).
+cdn_secret() { echo "$NAME/cloudfront-signing-key"; }
+cdn_param() { echo "/$NAME/cloudfront-public-keys"; }
+
+cdn_keys_exist() {  # true once the first public key is in SSM (Terraform then reads it and delivers files)
+  aws_ ssm get-parameter --name "$(cdn_param)" --query Parameter.Name --output text >/dev/null 2>&1 && echo true || echo false
+}
+
+cdn_key_names() {  # the trusted keys' names, oldest first, one per line
+  aws_ ssm get-parameter --name "$(cdn_param)" --query Parameter.Value --output text 2>/dev/null |
+    python3 -c 'import json, sys; [print(k["name"]) for k in json.load(sys.stdin)]' 2>/dev/null || true
+}
+
+pending_version() {  # the signing key secret's version labeled AWSPENDING (and not AWSCURRENT); "" if none
+  aws_ secretsmanager describe-secret --secret-id "$(cdn_secret)" --output json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    stages = json.load(sys.stdin).get("VersionIdsToStages") or {}
+except ValueError:
+    stages = {}
+print(next((v for v, s in stages.items() if "AWSPENDING" in s and "AWSCURRENT" not in s), ""))'
+}
+
+apply_again() {  # apply with the running images and settings (no prompt for a change cdn-key or deploy started)
+  app_vars "$(applied image_uri)" "$(was_running)" "$(applied devtools_image_uri)"
+  # shellcheck disable=SC2046
+  tf app apply -input=false $(approve) "${TF_VARS[@]}"
+}
+
+cdn_key() {  # a new signing key: made, trusted by CloudFront (Terraform), then used
+  local id version name public keys
+  id="$(cdn_secret)"
+  need_secret "$id"
+  command -v openssl >/dev/null || die "openssl isn't installed."
+  if [ -n "$(pending_version)" ]; then
+    echo "A new signing key is already waiting for CloudFront to trust it (an earlier cdn-key didn't finish): applying."
+  else
+    name="$NAME-$(date -u +%Y%m%d%H%M%S)"
+    version="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+    echo "Making the CloudFront signing key $name. Its private key goes straight to AWS Secrets Manager ($id)."
+    openssl genrsa 2048 2>/dev/null |
+      KEY_NAME="$name" python3 -c 'import json, os, sys; print(json.dumps({"name": os.environ["KEY_NAME"], "private_key": sys.stdin.read()}))' |
+      aws_ secretsmanager put-secret-value --secret-id "$id" --client-request-token "$version" --version-stages AWSPENDING \
+        --secret-string file:///dev/stdin >/dev/null
+    public="$(aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
+      python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin)["private_key"])' | openssl rsa -pubout 2>/dev/null || true)"
+    case "$public" in
+      "-----BEGIN PUBLIC KEY-----"*) ;;
+      *) aws_ secretsmanager update-secret-version-stage --secret-id "$id" --version-stage AWSPENDING --remove-from-version-id "$version" >/dev/null || true
+         die "openssl couldn't make the key pair; nothing was changed." ;;
+    esac
+    keys="$(aws_ ssm get-parameter --name "$(cdn_param)" --query Parameter.Value --output text 2>/dev/null || echo '[]')"
+    KEYS="$keys" KEY_NAME="$name" PUBLIC="$public" python3 -c '
+import json, os
+old = json.loads(os.environ["KEYS"])
+print(json.dumps(old[-1:] + [{"name": os.environ["KEY_NAME"], "public_key": os.environ["PUBLIC"] + "\n"}]))' |
+      aws_ ssm put-parameter --name "$(cdn_param)" --type String --overwrite --value file:///dev/stdin >/dev/null
+    echo "Terraform now adds it to the key group CloudFront trusts (a few minutes)."
+  fi
+  apply_again
+  finish_cdn_key
+}
+
+finish_cdn_key() {  # the pending key becomes the one the app signs with, once CloudFront trusts it
+  local id version name key_id
+  id="$(cdn_secret)"
+  version="$(pending_version)"
+  [ -n "$version" ] || return 0
+  name="$(aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
+    python3 -c 'import json, sys; print(json.load(sys.stdin).get("name", ""))')"
+  key_id="$(tf app output -json cdn_key_ids 2>/dev/null |
+    KEY_NAME="$name" python3 -c 'import json, os, sys; print(json.load(sys.stdin).get(os.environ["KEY_NAME"], ""))' 2>/dev/null || true)"
+  if [ -z "$key_id" ]; then
+    echo "The new signing key $name isn't trusted by CloudFront yet: run ./serena aws deploy (or cdn-key) again to finish."
+    return 0
+  fi
+  aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
+    KEY_ID="$key_id" python3 -c 'import json, os, sys; v = json.load(sys.stdin); print(json.dumps({"key_pair_id": os.environ["KEY_ID"], "private_key": v["private_key"]}))' |
+    put_secret "$id"
+  aws_ secretsmanager update-secret-version-stage --secret-id "$id" --version-stage AWSPENDING --remove-from-version-id "$version" >/dev/null
+  echo "Serena signs the museums' files with $name within 5 minutes. The key before it stays trusted until the next ./serena aws cdn-key."
+}
+
+# ---- alert email (D201; deploy/terraform/app/alerts.tf) --------------------------------------------------------------
+# AWS emails ALERT_EMAIL a link. Confirming it here, instead of by a click, makes unsubscribing need an AWS sign-in, so
+# no one on a mailing list can unsubscribe everyone by accident.
+confirm_alerts() {
+  look; need_deployed
+  local topic email link
+  topic="$(applied alert_topic_arn)" email="$(applied alert_email)"
+  [ -n "$topic" ] || die "'$ENV' has no alert topic yet: ./serena aws deploy."
+  [ -n "$email" ] || die "No address is subscribed: set ALERT_EMAIL=\"<address>\" in $LOCAL, then ./serena aws deploy."
+  echo "AWS emailed $email a link to confirm the subscription. Don't click it: copy the link and paste it here."
+  printf "The link: "; IFS= read -r link
+  LINK="$link" TOPIC="$topic" python3 -c '
+import json, os, sys
+from urllib.parse import parse_qs, urlparse
+query = parse_qs(urlparse(os.environ["LINK"].strip()).query)
+topic, token = query.get("TopicArn", [""])[0], query.get("Token", [""])[0]
+if topic != os.environ["TOPIC"] or not token:
+    sys.exit("That is not the confirmation link for this environment\x27s alert topic. Nothing was changed.")
+print(json.dumps({"TopicArn": topic, "Token": token, "AuthenticateOnUnsubscribe": "true"}))' |
+    aws_ sns confirm-subscription --cli-input-json file:///dev/stdin >/dev/null ||
+    die "Not confirmed. AWS's link expires after 3 days: for a new one, remove ALERT_EMAIL, deploy, put it back and deploy again."
+  echo "Confirmed: alerts and alarms now go to $email; unsubscribing needs an AWS sign-in."
+}
+
 # ---- commands -----------------------------------------------------------------------------------------------------
 prepare() { load_env; check_account; need_terraform; ensure_state_bucket; }
 
@@ -461,6 +579,11 @@ deploy() {
   # shellcheck disable=SC2046
   tf app apply -input=false $(approve) "${TF_VARS[@]}"
   [ "$SIMULATED_CSPACE" = false ] || sim_secrets
+  finish_cdn_key   # a rotation an earlier cdn-key didn't finish
+  if [ "$(cdn_keys_exist)" = false ]; then
+    echo "== Image delivery: the first CloudFront signing key. Terraform shows a second, smaller plan."
+    cdn_key
+  fi
 
   url="$(app_url)"
   echo "$url" > "$URL_FILE"
@@ -474,6 +597,8 @@ deploy() {
   echo
   echo "$ENV_LABEL is up: $url   (the admin app: $url/admin/)"
   [ "$code" = 200 ] || echo "Note: $url/health still answers $code after 2 minutes. If it's 403, your address may have changed: ./serena aws allow-my-ip"
+  [ -z "$ALERT_EMAIL" ] || [ "$(alert_subscription)" != pending ] ||
+    echo "Next: ./serena aws confirm-alerts   (AWS emailed $ALERT_EMAIL a link; paste it there, don't click it)"
   if [ "$SIMULATED_CSPACE" = true ]; then
     echo "It uses the simulated CollectionSpace (sign in to the admin app as admin/admin). A daily refresh:"
     for museum in $(museum_names); do echo "  ./serena aws etl $museum"; done
@@ -514,6 +639,14 @@ secret_line() {  # secret_line LABEL ID FIX
   esac
 }
 
+alert_subscription() {  # confirmed, pending or none: the alert topic's email subscription
+  local topic arn
+  topic="$(applied alert_topic_arn)"
+  [ -n "$topic" ] || { echo none; return 0; }
+  arn="$(aws_ sns list-subscriptions-by-topic --topic-arn "$topic" --query 'Subscriptions[0].SubscriptionArn' --output text 2>/dev/null || true)"
+  case "$arn" in arn:*) echo confirmed ;; PendingConfirmation) echo pending ;; *) echo none ;; esac
+}
+
 status() {
   look
   local url deployed museum services="web worker"
@@ -529,6 +662,20 @@ status() {
       --query "services[].[serviceName, join('', ['running ', to_string(runningCount), ' of ', to_string(desiredCount)])]" --output text 2>/dev/null || true; } |
   while IFS="$(printf '\t')" read -r name counts; do echo "  $name: $counts"; done
   echo "Allowed addresses: $ALLOWED_CIDRS"
+  if [ "$(applied delivery)" = true ]; then
+    echo "Image delivery: on; signing keys trusted: $(cdn_key_names | tr '\n' ' ')(the newest signs)"
+  else
+    echo "Image delivery: off (no signing key yet: ./serena aws deploy or cdn-key)"
+  fi
+  [ -z "$(pending_version)" ] || echo "  A new signing key is waiting to be trusted: ./serena aws deploy"
+  case "$(alert_subscription)" in
+    confirmed) echo "Alert email: $(applied alert_email)" ;;
+    pending) echo "Alert email: $(applied alert_email), NOT CONFIRMED (./serena aws confirm-alerts)" ;;
+    *) echo "Alert email: none (set ALERT_EMAIL in $LOCAL and deploy)" ;;
+  esac
+  local firing
+  firing="$(aws_ cloudwatch describe-alarms --alarm-name-prefix "$NAME-" --state-value ALARM --query 'MetricAlarms[].AlarmName' --output text 2>/dev/null || true)"
+  [ "$(was_running)" = true ] && echo "Alarms: on${firing:+; firing: $firing}" || echo "Alarms: off while paused"
   deployed="$(applied museums)"   # what was deployed; the settings may have changed since
   echo "Museums:"
   for museum in $(museum_names "${deployed:-$MUSEUMS}"); do
@@ -627,6 +774,7 @@ destroy() {
   # CloudFront removes its VPC origin's network interfaces in the background, which can briefly hold the VPC.
   tf app destroy -input=false -auto-approve "${TF_VARS[@]}" ||
     die "The destroy didn't finish. Wait a few minutes and run ./serena aws destroy again; Terraform continues where it stopped."
+  aws_ ssm delete-parameter --name "$(cdn_param)" >/dev/null 2>&1 || true   # the public keys (made by cdn-key)
   tf_init registry
   registry_vars
   tf registry destroy -input=false -auto-approve "${REGISTRY_VARS[@]}"
@@ -660,6 +808,8 @@ case "$CMD" in
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
   etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;
+  cdn-key) prepare; tf_init app; need_deployed; check_museums ask; cdn_key ;;
+  confirm-alerts) confirm_alerts ;;
   init) prepare
         backend_config registry; tf registry init -reconfigure "${BACKEND[@]}"
         backend_config app; tf app init -reconfigure "${BACKEND[@]}" ;;

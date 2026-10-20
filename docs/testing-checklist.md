@@ -101,7 +101,7 @@ The tests use moto's SNS. These checks need the real topic and the team's mailin
 - [ ] Try to unsubscribe from the email's link without signing in to AWS: expect it to be refused (the subscription
   requires authentication to unsubscribe).
 
-## 7. Signed URLs through CloudFront, in QA (15 minutes, once CloudFront is set up in pull request 18)
+## 7. Signed URLs through CloudFront, in QA (15 minutes, once Serena is in QA)
 
 The tests check the signature against a key made at run time and serve files through the local stand-in.
 
@@ -737,5 +737,63 @@ Checked by Richard on October 19, 2026, at commit `3f12afd`.
   Then `./serena aws etl pahma` again: "updated" (the simulator lost its records, the fake ETL adds them again).
 - [x] Look for `AccessDenied` in `./serena aws logs web` and `worker`: there should be none. Note any for `iam.tf`.
   - None in the web, worker and devtools logs over the day of testing.
-- [ ] Moved to pull request 18: personal-dev is kept, paused between sessions (`./serena aws pause`), so pull
-  request 18 can add image delivery to it. Its checks end with `./serena aws destroy`.
+- [x] Moved to pull request 18: personal-dev is kept, paused between sessions (`./serena aws pause`), so pull
+  request 18 can add image delivery to it. Its checks end with `./serena aws destroy` (section 25).
+
+## 25. Image delivery, alerts and alarms, personal-dev with the simulator (about 1 hour; before merging pull request 18)
+
+What it checks: decisions D195 to D206. personal-dev gets image delivery (signed URLs from the museums' buckets), the
+unavailable images from the static bucket, the alert email and the alarms. From the pull request's branch on the
+Mac, signed in (`aws sso login --profile bmu-personal`), with `ALERT_EMAIL="<your address>"` added to
+`deploy/environments/personal-dev.local.conf`. In the commands, `<URL>` is what `./serena aws url` prints.
+
+- [ ] `./serena aws deploy`. In the first plan, expect only additions and in-place changes: the static bucket and its
+  files, origin access control, the alert topic and its email subscription, the metric filters and alarms, the KMS
+  key's policy as its own resource (`aws_kms_key_policy.main` created, and **`aws_kms_key.main` not replaced**), the
+  buckets' policies, the distribution and the task definitions updated. Nothing "must be replaced" but the task
+  definitions. Then "Image delivery: the first CloudFront signing key" and a second, smaller plan (the public key, the
+  key group, the museum's file behavior). Expect it to end with the address and "Next: ./serena aws confirm-alerts".
+- [ ] AWS's "Subscription Confirmation" email arrives. Don't click its link: `./serena aws confirm-alerts`, paste the
+  link. Expect "Confirmed".
+  - The alerts recorded before there was a topic (the placeholder image's, the recalls') are sent to the topic on the
+    worker's first pass, before the subscription is confirmed, so they don't arrive. That's expected.
+- [ ] `./serena aws status`: expect "Image delivery: on" with one key, "Alert email: <your address>", "Alarms: on"
+  with nothing firing. If "web-down" or "worker-down" fired during the deploy, expect each to clear within 10 minutes,
+  with an email when it fires and when it clears.
+- [ ] `./serena aws etl pahma` (the deploy emptied the simulator): "updated".
+- [ ] Open a sample image address the fake ETL printed in Chrome: expect the image itself. On "Past requests", expect
+  it served (cache "miss" the first time, "hit" after).
+- [ ] `curl -sI "<sample address>"`: expect a 302 whose `location` is `<URL>/pahma/objects/<sha256>?Expires=…&Signature=…&Key-Pair-Id=…`
+  and `cache-control: private, max-age=` between 900 and 1800. Then `curl -sI "<that location>"` twice: expect 200,
+  `content-type: image/png`, `cache-control: private, max-age=900` and `x-cache: Miss from cloudfront`, then
+  `Hit from cloudfront` (the signature isn't in the cache key, D197). This also checks that CloudFront checks the
+  signature against the address as requested, before the function removes `/pahma`: if instead the signed address
+  gets a 403, note it here.
+- [ ] The same location with a character of `Signature` changed, and without its query string: expect 403 from
+  CloudFront each time.
+- [ ] Origin access control (D196): the bucket's own address,
+  `curl -sI https://serena-dev-pahma-<account>-us-west-2.s3.us-west-2.amazonaws.com/objects/<sha256>`: expect 403.
+  `<URL>/pahma/servable-list/x`: expect no file (it goes to the app, which doesn't serve that path).
+- [ ] The unavailable image: request a Blob CSID the fake ETL didn't list (change a digit of a sample address): expect
+  a 302 to `<URL>/pahma/unavailable.svg`, which shows the "no image" picture; `curl -sI <URL>/pahma/unavailable.svg`
+  and `<URL>/default/placeholder.svg`: expect 200, `content-type: image/svg+xml` and
+  `content-security-policy: default-src 'none'; style-src 'unsafe-inline'`.
+- [ ] Recall the sample's Media record on "Recalls": expect its legacy address to get the unavailable image at once,
+  while the signed location you copied above still answers 200 until its `Expires`. Cancel the recall.
+- [ ] `./serena aws cdn-key`: expect "Making the CloudFront signing key …", a small plan (one public key added), and
+  "Serena signs the museums' files with … within 5 minutes". `status` lists two trusted keys. Within 5 minutes,
+  `curl -sI "<sample address>"` gives a location with the new `Key-Pair-Id`; the location copied before the rotation
+  still answers 200 until it expires.
+- [ ] An alert by email: on "Settings", change PAHMA's delta threshold and save (then put it back). Within 5 minutes
+  expect an email "An admin changed a setting" (the worker sends it).
+- [ ] An alarm by email: `aws cloudwatch set-alarm-state --profile bmu-personal --region us-west-2 --alarm-name serena-dev-cspace-refused --state-value ALARM --state-reason "testing by hand"`:
+  expect an ALARM email, and an OK email within about 15 minutes, when the alarm next looks at its numbers.
+- [ ] In an alert email, follow "unsubscribe" without signing in to AWS: expect it refused (D201).
+- [ ] `./serena aws pause`: `status` says "Alarms: off while paused", and no "web-down" email comes in the next 15
+  minutes. `./serena aws resume`, then `./serena aws etl pahma`.
+- [ ] Look for `AccessDenied` in the logs (the command in section 24's notes, with
+  `--filter-pattern '?AccessDenied ?AccessDeniedException ?"not authorized"'`): expect none. Note any for `iam.tf`.
+- [ ] Note for QA (D205): whether the portals' 3D and PDF viewers need CORS headers is checked there, with the real
+  portals.
+- [ ] When done (moved here from section 24): `./serena aws destroy`, type `personal-dev`. Expect it to finish (run
+  it again if it stops at the VPC), and the next day nothing new in Cost Explorer.

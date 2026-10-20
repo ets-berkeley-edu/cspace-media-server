@@ -88,6 +88,79 @@ run "names_and_sizes" {
     condition     = length(aws_secretsmanager_secret.portal_key) == 0
     error_message = "PAHMA has no signed access, so no portal signing key."
   }
+
+  assert {
+    condition     = !output.delivery && length(aws_cloudfront_key_group.cdn) == 0 && length(aws_cloudfront_distribution.main.ordered_cache_behavior) == 3
+    error_message = "Without a signing key (cdn_keys = false) nothing is delivered: no key group, and only the admin app's files and the two unavailable-image behaviors."
+  }
+
+  assert {
+    condition     = length(aws_s3_object.static) == 3 && contains(keys(aws_s3_object.static), "pahma/unavailable.svg") && contains(keys(aws_s3_object.static), "default/placeholder.svg")
+    error_message = "The static bucket holds each museum's and the default unavailable image, and the generic placeholder (D199)."
+  }
+
+  assert {
+    condition     = length(aws_sns_topic_subscription.email) == 0 && aws_cloudwatch_metric_alarm.web_down.actions_enabled
+    error_message = "No email subscription without alert_email; the alarms act while the environment runs."
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.unserved) == 3 && aws_cloudwatch_log_metric_filter.unserved["cspace-refused"].pattern == "{ $.message = \"unserved\" && $.reason = \"cspace_refused\" }"
+    error_message = "Three alarms on unserved requests, from metric filters on the app's log lines (D202, D203)."
+  }
+}
+
+run "delivery" {
+  command = plan
+
+  variables {
+    cdn_keys    = true
+    alert_email = "alerts@example.org"
+    tenants = {
+      pahma     = "https://pahma.qa.collectionspace.org"
+      cinefiles = "https://cinefiles.qa.collectionspace.org"
+    }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.cdn_keys
+    values = {
+      insecure_value = "[{\"name\": \"serena-dev-20261020000000\", \"public_key\": \"-----BEGIN PUBLIC KEY-----\\nMOCK\\n-----END PUBLIC KEY-----\\n\"}, {\"name\": \"serena-dev-20261021000000\", \"public_key\": \"-----BEGIN PUBLIC KEY-----\\nMOCK2\\n-----END PUBLIC KEY-----\\n\"}]"
+    }
+  }
+
+  assert {
+    condition     = output.delivery && length(aws_cloudfront_public_key.cdn) == 2 && contains(keys(aws_cloudfront_public_key.cdn), "serena-dev-20261021000000")
+    error_message = "Both public keys in the SSM parameter, current and previous, are trusted (D200)."
+  }
+
+  assert {
+    condition     = length(aws_cloudfront_distribution.main.ordered_cache_behavior) == 5 && contains([for b in aws_cloudfront_distribution.main.ordered_cache_behavior : b.path_pattern], "/cinefiles/objects/*")
+    error_message = "With a signing key, each museum's files get a behavior of their own (D195)."
+  }
+
+  assert {
+    condition     = alltrue([for b in aws_cloudfront_distribution.main.ordered_cache_behavior : length(b.trusted_key_groups) == 1 if endswith(b.path_pattern, "/objects/*")])
+    error_message = "A museum's files are delivered only with a signed URL."
+  }
+
+  assert {
+    condition     = length(aws_sns_topic_subscription.email) == 1 && aws_sns_topic_subscription.email[0].protocol == "email"
+    error_message = "alert_email subscribes one address to the alert topic (D201)."
+  }
+}
+
+run "paused_alarms_are_silent" {
+  command = plan
+
+  variables {
+    running = false
+  }
+
+  assert {
+    condition     = !aws_cloudwatch_metric_alarm.web_down.actions_enabled && !aws_cloudwatch_metric_alarm.worker_down.actions_enabled && alltrue([for a in aws_cloudwatch_metric_alarm.unserved : !a.actions_enabled])
+    error_message = "A paused environment sends no alarm (D204)."
+  }
 }
 
 run "paused" {
