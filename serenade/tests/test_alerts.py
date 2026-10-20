@@ -1,5 +1,5 @@
 """Alerts for UCJEPS, checks T23 to T25 of the test inventory (serena-test-inventory.xlsx; docs/testing-checklist.md
-sections 14, 18 and 20), and for BAMPFA, T82 and T83: finding the waiting alerts, and acknowledging all of them
+sections 14, 18 and 20), and for BAMPFA, T84 and T85: finding the waiting alerts, and acknowledging all of them
 (section 28). T26 (a recall's alert) is in the recall chain, in test_lookup_and_recalls.py; T27 and T28
 (the watchdog's deadline and placeholder alerts) are covered by the backend's tests.
 
@@ -7,7 +7,7 @@ UCJEPS is a reserved museum: the dataset's second UCJEPS refresh fails its serva
 the alert at once. No other test uses UCJEPS, so where this file runs doesn't matter to the PAHMA tests. T25 changes
 UCJEPS's alerts (acknowledged), which nothing else reads.
 
-T82 raises two alerts on BAMPFA by changing its delta threshold and putting it back (as T32 does, later); T83
+T84 raises two alerts on BAMPFA by changing its delta threshold and putting it back (as T32 does, later); T85
 acknowledges them with Acknowledge all, and a fixture acknowledges any left if it fails, so the settings tests start
 with none waiting."""
 from __future__ import annotations
@@ -102,20 +102,20 @@ def none_waiting_after(driver: WebDriver, base_url: str) -> Iterator[None]:
         page.wait_for_count(page.ACKNOWLEDGE, waiting - 1)
 
 
-def test_t82_finding_the_waiting_alerts(driver: WebDriver, base_url: str) -> None:
+def test_t84_finding_the_waiting_alerts(driver: WebDriver, base_url: str) -> None:
     """Checklist section 28, steps 1 to 3 (D212 to D214). Two alerts raised by changing BAMPFA's delta threshold and
-    putting it back, as T32 does; T83 acknowledges them."""
+    putting it back, as T32 does; T85 acknowledges them."""
     page = bampfa_alerts(driver, base_url)
     settings = SettingsPage(driver, base_url)
     settings.open_page(BAMPFA)
-    settings.change("delta_threshold_percent", "12.5", "serenade T82: a test change")
+    settings.change("delta_threshold_percent", "12.5", "serenade T84: a test change")
     settings.wait_for_text(settings.row("delta_threshold_percent"), "changed; default value 5")
-    settings.use_default("delta_threshold_percent", "serenade T82: back to the default")
+    settings.use_default("delta_threshold_percent", "serenade T84: back to the default")
     # The banner's "Open alerts" opens Waiting.
     OverviewPage(driver, base_url).open(BAMPFA)
     page.click(page.OPEN_ALERTS)
     page.wait_for_address("show=waiting")
-    page.wait_for(page.row_with("serenade T82: a test change"))
+    page.wait_for(page.row_with("serenade T84: a test change"))
     waiting = page.count(page.ACKNOWLEDGE)
     assert waiting >= 2
     assert page.showing() == f"Waiting ({waiting})"
@@ -132,13 +132,13 @@ def test_t82_finding_the_waiting_alerts(driver: WebDriver, base_url: str) -> Non
     assert page.showing() == f"Waiting ({waiting})"
 
 
-@pytest.mark.after("test_t82_finding_the_waiting_alerts")
+@pytest.mark.after("test_t84_finding_the_waiting_alerts")
 @pytest.mark.usefixtures("none_waiting_after")
-def test_t83_acknowledging_all_the_waiting_alerts(driver: WebDriver, base_url: str) -> None:
+def test_t85_acknowledging_all_the_waiting_alerts(driver: WebDriver, base_url: str) -> None:
     """Checklist section 28, steps 4 to 6 (D207 to D211, D215)."""
     page = bampfa_alerts(driver, base_url)
     page.open_page(BAMPFA)
-    page.wait_for(page.row_with("serenade T82: a test change"))
+    page.wait_for(page.row_with("serenade T84: a test change"))
     waiting = page.count(page.ACKNOWLEDGE)
     assert page.text_of(page.ACKNOWLEDGE_ALL) == f"Acknowledge all ({waiting})"
     # It asks first, listing them; a listed alert's link shows its row, marked, acknowledging nothing.
@@ -155,7 +155,7 @@ def test_t83_acknowledging_all_the_waiting_alerts(driver: WebDriver, base_url: s
     page.wait_for(page.ALL_DIALOG)
     page.click(page.CONFIRM_ALL)
     page.wait_for_count(page.ACKNOWLEDGE, 0)
-    row = page.text_of(page.row_with("serenade T82: a test change"))
+    row = page.text_of(page.row_with("serenade T84: a test change"))
     assert f"{ADMIN[0]}, " in row and "UTC" in row, row
     page.wait_until_gone(page.BANNER)
     assert page.count(page.BADGE) == 0 and page.count(page.ACKNOWLEDGE_ALL) == 0

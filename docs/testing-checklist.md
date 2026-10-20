@@ -976,11 +976,11 @@ replaces the task definitions; the commands that apply again with the running im
 
 What it checks: decisions D207 to D215 (October 20, 2026). On the Alerts page, "All · Waiting (<n>)" and a red bar on
 waiting rows; the bell and the banner open Waiting; "Acknowledge all (<n>)" asks first, listing the alerts (each a link
-to its row), and acknowledges exactly those. serenade's T82 and T83 check the same on BAMPFA. On the local stack, from
+to its row), and acknowledges exactly those. serenade's T84 and T85 check the same on BAMPFA. On the local stack, from
 this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as `admin` (password
 `admin`) at http://localhost:5373/admin/.
 
-**Before you start:** make three alerts wait. On **Settings** (the gear), change "Delta threshold (%)" to 12.5 (any
+**Before you start:** make four alerts wait. On **Settings** (the gear), change "Delta threshold (%)" to 12.5 (any
 reason), then **Use default** (any reason): that's two "An admin changed a setting" alerts. Do the same once more for a
 third and fourth. Leave any older alerts as they are.
 
@@ -999,9 +999,11 @@ third and fourth. Leave any older alerts as they are.
   "Acknowledge <n> alerts?", the alerts listed newest first, all of them even if they're on other pages of the table,
   and the reminder that a problem still there is raised again the next day; no reason field; **Cancel** and
   **Acknowledge <n>**. Click **Cancel**: nothing changes.
-- [ ] **5. A listed alert is a link (D215).** Set "Items per page" to 10 so the alerts span pages. Open **Acknowledge
-  all** and click the oldest listed alert. Expect the dialog to close, the table to show the page that holds it,
-  that row marked (shaded) and in view, and nothing acknowledged (the badge's count unchanged).
+- [ ] **5. A listed alert is a link (D215).** Click **All**, click the **Raised** header once (oldest first), and set
+  "Items per page" to 10. The waiting alerts, the newest, are now on the last page; if All fits on one page, do "Before
+  you start" again until it holds more than 10 alerts. Open **Acknowledge all** and click the first listed alert (the
+  newest). Expect the dialog to close, the table to move to the page that holds it, that row marked (shaded) and in
+  view, and nothing acknowledged (the badge's count unchanged).
 - [ ] **6. Acknowledge them (D207, D210, D211).** Open **Acknowledge all** again and click **Acknowledge <n>**. Expect
   every row acknowledged by "admin" with the time, the button, the badge and the banner gone, and **Waiting (0)**
   showing "No alerts waiting.". On the **Audit log**, expect one "alert acknowledge" entry per alert. The banner never
