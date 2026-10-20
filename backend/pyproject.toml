@@ -5,12 +5,12 @@ description = "Serena, the media server for UC Berkeley's CollectionSpace museum
 license = { text = "Copyright The Regents of the University of California. Educational, research and not-for-profit use; see LICENSE" }
 requires-python = ">=3.11"
 dependencies = [
-  "fastapi>=0.115",
+  "fastapi>=0.143.2",
   "uvicorn[standard]>=0.30",
   "httpx>=0.27",
-  "boto3>=1.34",
+  "boto3>=1.43.114",
   "cryptography>=42",  # signs CloudFront URLs (RSA)
-  "pydantic-settings>=2.3",
+  "pydantic-settings>=2.16.0",
   "pyyaml>=6",
   "defusedxml>=0.7",
   "pyvips[binary]>=3.0",  # checks fetched images decode; later makes watermarked copies (libvips bundled by the wheel)
@@ -20,8 +20,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
-  "moto[dynamodb,s3,secretsmanager,sns,sqs]>=5",
-  "ruff>=0.6",
+  "moto[dynamodb,s3,secretsmanager,sns,sqs]>=5.2.4",
+  "ruff>=0.17.1",
   "mypy>=1.11",
   "types-PyYAML>=6",
 ]
