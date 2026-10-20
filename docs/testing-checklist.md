@@ -808,7 +808,10 @@ step below says what to run, where, and what you should see. If you see somethin
        Then do 1 to 3 above with the new email.
   - The alerts recorded before there was a topic (the placeholder image's, the recalls') are sent on the worker's
     first pass, before you confirm, so they never arrive. That's expected.
-  - Note (October 20, 2026): `confirm-alerts` failed with "Invalid JSON received" on macOS; fixed in `e5b8297`.
+  - If it's already confirmed, `confirm-alerts` says "Already confirmed: alerts and alarms go to `<your address>`"
+    without asking for the link.
+  - Note (October 20, 2026): `confirm-alerts` failed with "Invalid JSON received" on macOS; fixed in `e5b8297`. Run
+    again on a confirmed subscription, it said "Not confirmed" (AWS refuses a link already used); fixed after.
 
 - [ ] **3. Check the status.** Run `./serena aws status`. Expect, among its lines:
   - `web: running 1 of 1`, `worker: running 1 of 1`, `fakecspace: running 1 of 1`.

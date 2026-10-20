@@ -518,6 +518,9 @@ confirm_alerts() {
   topic="$(applied alert_topic_arn)" email="$(applied alert_email)"
   [ -n "$topic" ] || die "'$ENV' has no alert topic yet: ./serena aws deploy."
   [ -n "$email" ] || die "No address is subscribed: set ALERT_EMAIL=\"<address>\" in $LOCAL, then ./serena aws deploy."
+  if [ "$(alert_subscription)" = confirmed ]; then
+    echo "Already confirmed: alerts and alarms go to $email. Nothing to do."; return 0
+  fi
   echo "AWS emailed $email a link to confirm the subscription. Don't click it: copy the link and paste it here."
   printf "The link: "; IFS= read -r link
   # The request goes in a file only we can read, not on the command line (where ps would show the token). Not
@@ -535,6 +538,8 @@ print(json.dumps({"TopicArn": topic, "Token": token, "AuthenticateOnUnsubscribe"
     { rm -f "$request"; exit 1; }
   if ! aws_ sns confirm-subscription --cli-input-json "file://$request" >/dev/null; then
     rm -f "$request"
+    # Confirmed meanwhile (the same link pasted twice, or confirmed elsewhere): AWS refuses the link, but all is well.
+    [ "$(alert_subscription)" != confirmed ] || { echo "Already confirmed: alerts and alarms go to $email."; return 0; }
     die "Not confirmed. AWS's link expires after 3 days: for a new one, remove ALERT_EMAIL, deploy, put it back and deploy again."
   fi
   rm -f "$request"
