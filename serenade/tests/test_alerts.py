@@ -135,7 +135,7 @@ def test_t84_finding_the_waiting_alerts(driver: WebDriver, base_url: str) -> Non
 @pytest.mark.after("test_t84_finding_the_waiting_alerts")
 @pytest.mark.usefixtures("none_waiting_after")
 def test_t85_acknowledging_all_the_waiting_alerts(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 28, steps 4 to 6 (D207 to D211, D215)."""
+    """Checklist section 28, steps 4 to 6 (D207 to D211, D215 to D217)."""
     page = bampfa_alerts(driver, base_url)
     page.open_page(BAMPFA)
     page.wait_for(page.row_with("serenade T84: a test change"))
@@ -147,6 +147,10 @@ def test_t85_acknowledging_all_the_waiting_alerts(driver: WebDriver, base_url: s
     assert f"Acknowledge {waiting} alerts?" in dialog and "raises it again the next day" in dialog
     links = driver.find_elements(*page.ALL_DIALOG_LINKS)
     assert len(links) == waiting and all(link.text for link in links)
+    # Each line says what it's about and when it was raised; only the list scrolls (D216, D217).
+    listed = page.wait_for(page.ALL_DIALOG_LIST)
+    assert "delta_threshold_percent" in listed.text and " UTC" in listed.text, listed.text
+    assert listed.value_of_css_property("overflow-y") == "auto"
     links[-1].click()
     page.wait_until_gone(page.ALL_DIALOG)
     assert page.count(page.MARKED_ROW) == 1 and page.count(page.ACKNOWLEDGE) == waiting

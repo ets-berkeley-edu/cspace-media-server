@@ -84,21 +84,33 @@
         </v-btn>
       </template>
     </v-data-table>
-    <!-- Acknowledge all (D207 to D211, D215): asks first, listing what it acknowledges; each alert is a link to its row. -->
-    <v-dialog v-model="confirming" max-width="600">
+    <!-- Acknowledge all (D207 to D211, D215 to D218): asks first, listing what it acknowledges; each alert is a link to
+         its row. Only the list scrolls, so the title, the reminder and the buttons stay in view (D216). -->
+    <v-dialog v-model="confirming" max-width="640">
       <v-card id="acknowledge-all-dialog">
-        <v-card-title>Acknowledge {{ asked.length }} alerts?</v-card-title>
+        <v-card-title>{{ askedTitle }}</v-card-title>
         <v-card-text>
-          <p class="mb-2">These are the {{ asked.length }} alerts waiting to be acknowledged, on every page of the table:</p>
-          <ul class="ml-6 mb-3">
-            <li v-for="a in asked" :key="a.key">
-              <a :href="`#alert-${a.key}`" class="alert-jump" @click.prevent="jumpTo(a.key)">{{ a.title }}</a> · {{ a.refresh_date }}
-            </li>
-          </ul>
-          <p class="text-medium-emphasis">
+          <p v-if="asked.length < waitingAlerts.length" id="acknowledge-all-limit" class="mb-2">
+            {{ waitingAlerts.length }} alerts are waiting, and one click acknowledges at most {{ MAX_ACKNOWLEDGE_ALL }}.
+            These are the newest {{ asked.length }}: then click "Acknowledge all" again for the rest.
+          </p>
+          <p v-else class="mb-2">These are the {{ asked.length }} alerts waiting to be acknowledged, on every page of the table:</p>
+          <p class="text-medium-emphasis mb-2">
             Acknowledging doesn't hide a problem: if it's still there, the watchdog raises it again the next day. Each one
             is in the audit log.
           </p>
+          <ul
+            id="acknowledge-all-list"
+            class="pl-6"
+            tabindex="0"
+            aria-label="The alerts it acknowledges"
+          >
+            <li v-for="a in asked" :key="a.key">
+              <a :href="`#alert-${a.key}`" class="alert-jump" @click.prevent="jumpTo(a.key)">{{ a.title }}</a>
+              · <span v-if="isCsid(a.subject)" class="text-no-wrap"><span class="mono">{{ short(a.subject) }}</span><CopyButton :value="a.subject" label="CSID" /></span><template v-else>{{ a.subject }}</template>
+              · <span class="text-no-wrap">{{ raised(a.created_at) }}</span>
+            </li>
+          </ul>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -110,7 +122,7 @@
             :loading="acknowledging"
             @click="acknowledgeAll"
           >
-            Acknowledge {{ asked.length }}
+            {{ asked.length < waitingAlerts.length ? `Acknowledge the newest ${asked.length}` : `Acknowledge ${asked.length}` }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -129,7 +141,7 @@ import LoadError from '@/components/LoadError.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import WhenText from '@/components/WhenText.vue'
 import {alertsChanged, museumName} from '@/session'
-import {PAGE_SIZES, REFRESH_ID, REFRESH_IN_TEXT, isCsid, short} from '@/words'
+import {PAGE_SIZES, REFRESH_ID, REFRESH_IN_TEXT, isCsid, short, when} from '@/words'
 import {useQueryValue, useTableState} from '@/tableState'
 
 // Sortable: when, refresh date, alert, about and acknowledged (D94); the alert sorts by its title.
@@ -203,11 +215,22 @@ function rowProps({item}: {item: AlertItem}) {
 const confirming = ref(false)
 const acknowledging = ref(false)
 const asked = ref<AlertItem[]>([])
+// One click acknowledges at most this many, the newest (D218): Serena takes no more in one request.
+const MAX_ACKNOWLEDGE_ALL = 500
 watch(confirming, open => {
   if (open) {
     asked.value = [...waitingAlerts.value].sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, MAX_ACKNOWLEDGE_ALL)
   }
 })
+const askedTitle = computed(() => asked.value.length < waitingAlerts.value.length
+  ? `Acknowledge the newest ${asked.value.length} of ${waitingAlerts.value.length} alerts?`
+  : `Acknowledge ${asked.value.length} alerts?`)
+// When a listed alert was raised (D217): its time, and its date too unless it's today (UTC, as the table shows).
+function raised(at: string): string {
+  const text = when(at).replace(/:\d\d UTC$/, ' UTC')
+  return text.startsWith(new Date().toISOString().slice(0, 10)) ? text.slice(11) : text
+}
 
 async function acknowledgeAll() {
   acknowledging.value = true
@@ -294,5 +317,10 @@ onActivated(() => {
 }
 #alerts-table :deep(tr.marked > td) {
   background: rgba(var(--v-theme-primary), 0.08);
+}
+/* Acknowledge all's list: about 12 lines, then it scrolls on its own (D216). */
+#acknowledge-all-list {
+  max-height: 18rem;
+  overflow-y: auto;
 }
 </style>

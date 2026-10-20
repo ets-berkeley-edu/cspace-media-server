@@ -95,12 +95,37 @@ describe('acknowledging all', () => {
     expect(dialog.textContent).toContain('Acknowledge 3 alerts?')
     expect([...dialog.querySelectorAll('a.alert-jump')].map(a => a.textContent)).toEqual(
       ['Check failed 2026-10-12', 'Check failed 2026-10-08', 'Check failed 2026-09-15']) // all pages, newest first
+    // Each line tells its alert apart: what it's about, and when it was raised (D217).
+    expect(dialog.querySelector('#acknowledge-all-list li')?.textContent?.replace(/\s+/g, ' ').trim())
+      .toBe('Check failed 2026-10-12 · pahma-2026-10-12-1 · 2026-10-12 10:00 UTC')
     ;(document.querySelector('#confirm-acknowledge-all') as HTMLButtonElement).click()
     await flushPromises()
     const sent = calls.find(c => c.method === 'POST')
     expect(sent?.body).toEqual({keys: [list[0].key, list[4].key, list[27].key]})
     expect(sent?.headers['X-Serena-Admin']).toBe('1') // a change (CSRF)
     expect(alertsChanged.value).toBe(before + 1) // the table, the banner and the bell reload
+    wrapper.unmount()
+  })
+
+  it('takes the newest 500 at a time, saying so (D218)', async () => {
+    const list = alerts(503, Array.from({length: 503}, (_, i) => i))
+    const calls = fakeApi({
+      'GET /museums/pahma/alerts': {body: {alerts: list}},
+      'POST /museums/pahma/alerts/acknowledge-all': {body: {acknowledged: [], skipped: 0}}
+    })
+    const {wrapper} = await at('/pahma/alerts')
+    expect(wrapper.find('#acknowledge-all').text()).toBe('Acknowledge all (503)')
+    await wrapper.find('#acknowledge-all').trigger('click')
+    await flushPromises()
+    const dialog = document.querySelector('#acknowledge-all-dialog') as HTMLElement
+    expect(dialog.textContent).toContain('Acknowledge the newest 500 of 503 alerts?')
+    expect(dialog.querySelector('#acknowledge-all-limit')?.textContent).toContain('click "Acknowledge all" again')
+    expect(dialog.querySelectorAll('a.alert-jump')).toHaveLength(500)
+    const confirm = document.querySelector('#confirm-acknowledge-all') as HTMLButtonElement
+    expect(confirm.textContent?.trim()).toBe('Acknowledge the newest 500')
+    confirm.click()
+    await flushPromises()
+    expect(calls.find(c => c.method === 'POST')?.body).toEqual({keys: list.slice(0, 500).map(a => a.key)})
     wrapper.unmount()
   })
 

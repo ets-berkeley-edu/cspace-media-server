@@ -974,7 +974,7 @@ replaces the task definitions; the commands that apply again with the running im
 
 ## 28. Acknowledge all, and finding the waiting alerts, locally (15 minutes, before merging the pull request that adds them)
 
-What it checks: decisions D207 to D215 (October 20, 2026). On the Alerts page, "All · Waiting (<n>)" and a red bar on
+What it checks: decisions D207 to D218 (October 20, 2026). On the Alerts page, "All · Waiting (<n>)" and a red bar on
 waiting rows; the bell and the banner open Waiting; "Acknowledge all (<n>)" asks first, listing the alerts (each a link
 to its row), and acknowledges exactly those. serenade's T84 and T85 check the same on BAMPFA. On the local stack, from
 this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as `admin` (password
@@ -998,7 +998,10 @@ third and fourth. Leave any older alerts as they are.
   the right, above the table (with only 1 waiting, there's none: its row's button does it). Click it. Expect
   "Acknowledge <n> alerts?", the alerts listed newest first, all of them even if they're on other pages of the table,
   and the reminder that a problem still there is raised again the next day; no reason field; **Cancel** and
-  **Acknowledge <n>**. Click **Cancel**: nothing changes.
+  **Acknowledge <n>**. Each line reads like "An admin changed a setting · delta_threshold_percent · 22:45 UTC" (the
+  date too for an alert not raised today) (D217). Make the window short enough that the list doesn't fit: only the
+  list scrolls, and the title, the reminder and the buttons stay in view (D216). Click **Cancel**: nothing changes.
+  (More than 500 waiting, D218, is checked by the admin app's tests: a local stack won't have that many.)
 - [ ] **5. A listed alert is a link (D215).** Click **All**, click the **Raised** header once (oldest first), and set
   "Items per page" to 10. The waiting alerts, the newest, are now on the last page; if All fits on one page, do "Before
   you start" again until it holds more than 10 alerts. Open **Acknowledge all** and click the first listed alert (the

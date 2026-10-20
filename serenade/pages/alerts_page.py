@@ -24,6 +24,7 @@ class AlertsPage(Page):
     MARKED_ROW = (By.XPATH, "//*[@id='alerts-table']//tbody/tr[contains(concat(' ', @class, ' '), ' marked ')]")
     ACKNOWLEDGE_ALL = by_id("acknowledge-all")
     ALL_DIALOG = by_id("acknowledge-all-dialog")
+    ALL_DIALOG_LIST = by_id("acknowledge-all-list")
     ALL_DIALOG_LINKS = (By.XPATH, "//*[@id='acknowledge-all-dialog']//a[contains(@class, 'alert-jump')]")
     CONFIRM_ALL = by_id("confirm-acknowledge-all")
 

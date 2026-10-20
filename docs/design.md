@@ -783,7 +783,7 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 
 An alert counts on the admin app's bell and shows in its one-line banner (checked on every page change and every
 minute; see Admin web app, Layout) until an admin acknowledges it on the Alerts page, which lists the last 30 days'
-alerts, acknowledged or not (decided October 20, 2026, D207 to D215):
+alerts, acknowledged or not (decided October 20, 2026, D207 to D218):
 
 - **One at a time,** with its row's Acknowledge button, or **all those waiting at once** with "Acknowledge all (<n>)",
   shown above the table while two or more wait. It asks first, listing the alerts it will acknowledge (all of them,
@@ -792,8 +792,11 @@ alerts, acknowledged or not (decided October 20, 2026, D207 to D215):
   (`POST /museums/<museum>/alerts/acknowledge-all`, at most 500), so an alert raised since is never acknowledged
   unseen; one acknowledged meanwhile, or not this museum's, is skipped. Each alert gets its own "alert acknowledge"
   entry in the audit log. Each listed alert is a link: it closes the dialog without acknowledging anything and shows
-  that alert in the table, on the page that holds it in the current view and sort, marked and focused. The banner
-  keeps "Open alerts" only: alerts are acknowledged where they can be read.
+  that alert in the table, on the page that holds it in the current view and sort, marked and focused. Each line also
+  says what the alert is about and when it was raised (its date too unless it's today), and only the list scrolls
+  (about 12 lines), so the title, the reminder and the buttons stay in view (D216, D217). With more than 500 waiting,
+  the dialog lists and acknowledges the newest 500 ("Acknowledge the newest 500 of <n> alerts?") and says to click
+  again for the rest (D218). The banner keeps "Open alerts" only: alerts are acknowledged where they can be read.
 - **Finding the waiting ones:** "All · Waiting (<n>)" above the table shows every alert or only those not yet
   acknowledged (All is the default; the choice is kept in the address as `show=waiting`, like sorting and paging;
   "No alerts waiting." when there are none). The bell's badge and the banner's "Open alerts" open Alerts on Waiting;
