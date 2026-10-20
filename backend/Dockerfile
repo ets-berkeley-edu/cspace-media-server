@@ -1,6 +1,8 @@
 # The image for the local stack (docker-compose.yml): Serena, the CollectionSpace simulator and the local tools.
 # The production image is deploy/Dockerfile (pull request 17), without the simulator or the tools.
-FROM python:3.11-slim
+# The base image comes from Amazon ECR Public's copy of the Docker official image, as in deploy/Dockerfile (no Docker
+# Hub rate limits).
+FROM public.ecr.aws/docker/library/python:3.11-slim
 WORKDIR /app
 # The pinned dependencies first, checked against their hashes, so a change to the code alone reuses this layer.
 COPY requirements.txt ./

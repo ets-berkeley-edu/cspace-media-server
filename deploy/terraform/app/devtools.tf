@@ -125,7 +125,13 @@ resource "aws_ecs_task_definition" "fakecspace" {
     image        = var.devtools_image_uri
     essential    = true
     command      = ["uvicorn", "fakecspace.app:app", "--host", "0.0.0.0", "--port", "8180"]
-    portMappings = [{ containerPort = 8180, protocol = "tcp" }]
+    portMappings = [{ containerPort = 8180, hostPort = 8180, protocol = "tcp" }]
+    # ECS fills these in when it registers a task definition; written out here so Terraform's plan doesn't see a
+    # difference and replace the task definition at every deploy.
+    environment    = []
+    mountPoints    = []
+    volumesFrom    = []
+    systemControls = []
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -194,6 +200,12 @@ resource "aws_ecs_task_definition" "fake_etl" {
     # Serena's settings (for the museums and their token secrets), and the mark that lets the fake ETL run here.
     environment = [for name, value in merge(local.app_environment, { SERENA_SIMULATED_CSPACE = "true" }) :
     { name = name, value = value }]
+    # ECS fills these in when it registers a task definition; written out here so Terraform's plan doesn't see a
+    # difference and replace the task definition at every deploy.
+    portMappings   = []
+    mountPoints    = []
+    volumesFrom    = []
+    systemControls = []
     logConfiguration = {
       logDriver = "awslogs"
       options = {
