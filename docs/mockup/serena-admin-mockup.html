@@ -59,6 +59,10 @@
   .err-text:empty { margin: 0; }
   button.danger-outline { background: var(--surface-2); border-color: var(--text-danger); color: var(--text-danger); font-weight: 600; }
   button.danger { background: var(--text-danger); border-color: var(--text-danger); color: var(--surface-2); font-weight: 600; }
+  /* A filled button keeps its colour under the pointer (the plain button's hover turned "Waiting" and the Past requests
+     range unreadable), only a little lighter. */
+  button.primary:hover:not(:disabled) { background: var(--text-accent); filter: brightness(1.15); }
+  button.danger:hover:not(:disabled) { background: var(--text-danger); filter: brightness(1.15); }
   button.link { border: 0; background: none; padding: 0; height: auto; color: var(--text-accent); text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--text-accent); outline-offset: 2px; }
   input[type=text], input[type=search], select, textarea { border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-2); padding: 6px 8px; min-height: 34px; }
@@ -161,8 +165,11 @@
   .req-path .mono { font-size: 12px; }
   .copy.icon { height: 22px; min-width: 22px; padding: 0 5px; font-size: 12px; line-height: 1; vertical-align: middle; }
   th .help { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
-  tr.focus td { background: var(--surface-1); box-shadow: inset 3px 0 0 var(--text-accent); }
+  tr.focus td { background: var(--surface-1); }
+  tr.focus td:first-child { box-shadow: inset 3px 0 0 var(--text-accent); } /* the bar at the row's left edge only */
   td.actions { text-align: right; white-space: nowrap; }
+  /* An alert waiting to be acknowledged (D214): a bar in the banner's colour down the row's left edge. */
+  tr.waiting td:first-child { box-shadow: inset 4px 0 0 var(--text-danger); }
   .sync-ok { color: var(--text-success); font-size: 15px; font-weight: 600; margin-left: 6px; }
   .sync-diff { color: var(--text-warning); font-size: 15px; font-weight: 600; margin-left: 6px; }
   .timeout { border: 1px solid var(--border); border-left: 3px solid var(--text-warning); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
@@ -290,7 +297,14 @@
     <summary>Mockup settings</summary>
     <div class="row">
       <label>Theme <select id="mockTheme"><option value="">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-      <label>Unacknowledged alerts <select id="mockAlerts"><option value="0">None</option><option value="1" selected>1</option><option value="3">3</option></select></label>
+      <label>Alerts <select id="mockAlerts" autocomplete="off">
+        <option value="none">Sample: none waiting</option>
+        <option value="one" selected>Sample: 1 waiting</option>
+        <option value="three">Sample: 3 waiting</option>
+        <option value="pages2">2 pages: 40 alerts, 4 waiting</option>
+        <option value="pages3">3 pages: 65 alerts, 6 waiting</option>
+      </select></label>
+      <button type="button" id="mockReset" title="Reload the mockup: every page's data, sorting and paging as at the start">Reset everything</button>
       <label><input type="checkbox" id="mockCspaceDown"> CollectionSpace unreachable</label>
       <button type="button" id="mockSignOut">Back to sign-in</button>
       <button type="button" id="mockTimeout">Time out the session</button>
@@ -302,6 +316,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 40 (October 20, 2026, D207 to D211):</strong> <strong>Alerts</strong> has "Acknowledge all (&lt;n&gt;)" above the table, at the right, while 2 or more alerts wait (choose an Alerts scenario in Mockup settings: 1 or 3 waiting, or 2 or 3 pages of alerts with waiting ones on every page; "Reset everything" starts the mockup over). It asks first, listing the alerts it will acknowledge, all of them on every page of the table (each a link: it closes the dialog and shows that alert in the table, on its page, marked), and repeats that a problem still there is raised again the next day; no reason is asked, as for one alert. Each alert gets its own "alert acknowledge" entry in the Audit log. The alert banner keeps "Open alerts" only. <strong>Finding the waiting ones (D212 to D214):</strong> "All · Waiting (&lt;n&gt;)" at the left above the table shows every alert or only those waiting (All is the default; sorting and paging work in both, and "No alerts waiting." when there are none); the bell and the banner's "Open alerts" open Alerts on Waiting, every other way in on All; and in All, a waiting alert's row has a red bar down its left edge. In the app the choice is kept in the address, like sorting and paging.</li>
       <li><strong>Version 39 (October 14, 2026, D174 to D180, pull request 15):</strong> Serena serves <strong>Media URLs</strong> (…/media/&lt;Media CSID&gt;/blob/content and …/blob/derivatives/&lt;size&gt;/content) as a request for the record's listed Blob, public files only. <strong>Past requests</strong> shows one as "Media &lt;shortened Media CSID&gt;" in the Blob CSID column, with its size, and opens its file like a Blob's; here, a served Media URL and one for an unknown record ("not listed"). <strong>Media look up</strong> answers a Media URL like its Blob's URL, with no note; …/media/&lt;CSID&gt;/content (without /blob/) is still refused, with the note, and its record looked up on its own.</li>
       <li><strong>Version 38 (October 14, 2026, D166 to D173):</strong> the placeholder image comes from a Media record named on <strong>Settings</strong> ("Placeholder image (Media CSID)"): Serena checks it with CollectionSpace and fetches every size when it's saved; the row then shows the record's CSID and identification number (in the app, its thumbnail too, and a warning if the record's Blob isn't the one the ETL lists). Try the unknown sample CSID 9f9f9f9f-0000-4000-8000-000000000000 (refused) and then any other CSID. Until one is named, Media look up's "The placeholder image" says the public gets Serena's generic "Image restricted" picture.</li>
       <li><strong>Version 37 (October 14, 2026, in the pull request that builds versions 27 to 36 into the app):</strong> the mockup and the app agree on these pages. <strong>Times</strong> are UTC everywhere, as the app shows them ("2026-10-13 17:00:00 UTC"). <strong>Past requests</strong> has the app's words, its By day table, the 20 most requested, the Outcome and Reason filters, and a "Signed link" column only for Cinefiles. <strong>Recalls</strong>: "Recall…" under the explanation, outlined red, with no switch; the app's explanation and column names. <strong>The recall form</strong> takes paths and URLs too: a pasted one is cut down to its CSID at once, and again on "Preview recall"; another museum's path is listed under "Not recalled" with its reason; "You gave" shows the path. <strong>A reason is never a disabled button:</strong> Recall, Release, Cancel recall, a Settings change ("Change" and "Use default" on Settings now open the dialog) and Start a refresh say what's missing under the field and move focus there; a hint says where the reason is recorded. <strong>Alerts</strong> have Serena's own words: "An admin recalled Media record &lt;identification number&gt; (&lt;shortened Media CSID&gt;) for PAHMA. Reason: …" for one record, "&lt;n&gt; Media records" for several. <strong>Media look up</strong> reads a path as the app does: no leading slash or no museum is this museum's ("blobs/&lt;CSID&gt;/content"), another museum's path says which ("That's a Cinefiles path; you're looking up PAHMA's files."), and a /media/ URL is refused but its Media record is looked up; layout C only, as decided (D139). Not shown here: an error from Serena itself, which the app shows with its code ("Serena can't be reached right now. Try again in a minute. (502)"), and the plain "Not found." for an address outside Serena's APIs. Mockup only: the "Mockup settings" panel.</li>
@@ -331,7 +346,7 @@
       <li><strong>Media look up, Serena and CollectionSpace (layout C):</strong> below the sizes, a table compares Serena's records (from the last refresh) with what CollectionSpace says now about the Media record: whether it exists or is soft-deleted, which Blob it points to, the Media fields the ETL reads, and when it last changed. A row that differs is highlighted, and a line says what the next refresh will do. When Serena has no cached copy, the preview is CollectionSpace's thumbnail, which Serena doesn't keep. Serena can't tell whether the ETL will now treat the file as restricted (its rules also read the Object record), so it shows the fields, not a verdict. Try "Replaced in CollectionSpace today", "Deleted in CollectionSpace today", "The recalled image" (taken off the web since: "Approved for web" No) and "Not in the servable list"; and "CollectionSpace unreachable" in Mockup settings.</li>
       <li><strong>Sample data:</strong> one consistent set. "Now" is Oct 13, 2026, 10:00 AM PDT; the last refresh is pahma-2026-10-12-1. Every page draws on the same Media records, and each Past requests line's outcome comes from Serena's rules at its time, so a path, a CSID on Recalls, an example button or a typed CSID all land on the same answer in Media look up. Older lines can differ from today's answer when something changed since (a recall, a deletion). Recalling, releasing and acknowledging update Recalls, Alerts, the Audit log and Media look up together.</li>
       <li><strong>Try:</strong> the example buttons under the search box: a served image, the recalled image, a recall a refresh kept, a file not in the servable list, files replaced or deleted in CollectionSpace today, a Media record with two Blobs, the placeholder image, a recall a refresh ended, and a path Serena refuses; Cinefiles' restricted PDF is under Cinefiles (Sign in to another museum). Typed CSIDs work too: an unknown one, the replaced image's new Blob (61f0e9d8-c7b6-4a59-8e4d-3c2b1a0f9e8d) or the unlisted file's Media record (7c1d9e20-3b4a-4f5e-8a6b-9c0d1e2f3a4b).</li>
-      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with "Unacknowledged alerts" in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
+      <li><strong>Frame:</strong> as in the app today: a top bar with the environment and build, the museum menu (switch museums or sign in to another), the alert banner, and a menu down the left. Pages are grouped: Daily refresh (Overview, Start a refresh, Past refreshes; the page that lists refreshes is "Past refreshes", titled "PAHMA Past refreshes"), Media records (Past requests, Media look up, Recalls; the page is titled "PAHMA Past requests"), Admin (Audit log, API documentation). The alert banner shows only while an alert waits to be acknowledged (one line: how many, and the newest one's title, with Open alerts). The bell at the top right is the way to Alerts (it's no longer in the left-hand menu); while alerts wait, it carries a red badge with their count (99+ above 99), and its label says how many. Try the counts with the Alerts scenarios in Mockup settings, or acknowledge the sample alert on the Alerts page. Settings is the gear button to the bell's right, beside the museum menu (its label, for screen readers and on hover, is "PAHMA settings"); it's highlighted while the Settings page is open.</li>
       <li><strong>Recalls:</strong> "Cancel recall…" undoes a recall still waiting for a later refresh (D148); "Recall…" opens the form; "Preview recall" shows the summary with thumbnails (click one for the full size); the button that recalls is never disabled: without a reason it says so under the field. "CollectionSpace unreachable" in Mockup settings shows how an unknown CSID is reported. Release appears only on a recall a refresh kept.</li>
       <li><strong>Past requests:</strong> each path is plain text until you hover over it (or reach it with the keyboard); then it shows as a link. Clicking it opens the file in a dialog, with whether that request was served, a "Media look up" button (opens Media look up on that path) and a Dismiss button. Admins see the file even when the public isn't served it (a recalled image, for example), as on the recall form. A path with no CSID Serena could look up (a bad CSID) stays plain text.</li>
       <li><strong>Recalls:</strong> the Media record and Blob CSIDs work like Past requests' paths: plain text until hovered, then a link that opens the file in a dialog, with "Media look up" and Dismiss.</li>
@@ -345,7 +360,7 @@
 <script>
 (() => {
   const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
-  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: ""};
+  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: ""};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
@@ -706,7 +721,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 39</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 40</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -723,12 +738,12 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 39</span><span class="spacer"></span>
-      <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 40</span><span class="spacer"></span>
+      <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" ${open ? 'data-show="waiting"' : ""} aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
       ${S.menu ? `<div class="menu" role="menu">${Object.entries(MUSEUMS).filter(([k]) => k !== S.museum).slice(0, 2).map(([k, v]) => `<button role="menuitem" data-museum="${k}">Switch to ${v}</button>`).join("")}<button role="menuitem" data-museum-other>Sign in to another museum</button><hr><button role="menuitem" id="signOutAll">Sign everyone out of ${esc(name())}</button><button role="menuitem" id="signOut">Sign out of ${esc(name())}</button></div>` : ""}</div></div>
-      ${open ? `<div class="banner" id="alertBanner"><strong>${open} alert${open > 1 ? "s" : ""}:</strong> ${esc(here(ALERTS).find(a => !a.ack).title)}<span class="spacer"></span><button type="button" data-go="alerts">Open alerts</button></div>` : ""}
+      ${open ? `<div class="banner" id="alertBanner"><strong>${open} alert${open > 1 ? "s" : ""}:</strong> ${esc(here(ALERTS).find(a => !a.ack).title)}<span class="spacer"></span><button type="button" data-go="alerts" data-show="waiting">Open alerts</button></div>` : ""}
       <div class="shell"><nav class="side" aria-label="Pages">${NAV.map(([g, items]) => `<div class="group">${g}</div>` + items.map(([k, v]) => `<button type="button" data-go="${k}" ${S.page === k ? 'aria-current="page"' : ""}>${v}</button>`).join("")).join("")}</nav>
       <main id="main">${(PAGES[S.page] || PAGES.overview)()}</main></div>`;
   }
@@ -760,6 +775,8 @@
       return `<th aria-sort="${on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${id}:${c.key}">${label}<span class="arrow" aria-hidden="true">${on ? (sort.dir === "asc" ? "▲" : "▼") : "▲"}</span></button></th>`;
     }).join("");
     const pg = S.pages[id] || (S.pages[id] = {size: 25, page: 1});
+    // A link to one row (the Acknowledge all dialog's alerts): open the page that holds it, in the current sort.
+    if (opts && opts.jumpTo) { const at = order.findIndex(([r]) => opts.jumpTo(r)); if (at >= 0) pg.page = Math.floor(at / pg.size) + 1; }
     const pages = Math.max(1, Math.ceil(order.length / pg.size));
     pg.page = Math.min(pg.page, pages);
     const from = (pg.page - 1) * pg.size;
@@ -772,10 +789,10 @@
     const body = shown.map(([r, i]) => {
       const k = detail ? `${id}:${opts.key(r)}` : "", isOpen = detail && open[k];
       const toggle = detail ? `<td class="expander"><button type="button" class="expand" data-expand="${esc(k)}" aria-expanded="${isOpen ? "true" : "false"}" aria-controls="d-${esc(k)}" aria-label="${isOpen ? "Hide" : "Show"} details">${isOpen ? "▾" : "▸"}</button></td>` : "";
-      const row = `<tr class="${[r.focus ? "focus" : "", isOpen ? "opened" : ""].join(" ").trim()}">${toggle}${cols.map(c => `<td${c.num ? ' class="num"' : c.cls ? ` class="${c.cls}"` : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`;
+      const row = `<tr class="${[r.focus ? "focus" : "", isOpen ? "opened" : "", opts && opts.rowClass ? opts.rowClass(r) : ""].join(" ").trim()}">${toggle}${cols.map(c => `<td${c.num ? ' class="num"' : c.cls ? ` class="${c.cls}"` : ""}>${c.html ? c.html(r, i) : esc(r[c.key])}</td>`).join("")}</tr>`;
       return row + (isOpen ? `<tr class="detail-row" id="d-${esc(k)}"><td></td><td colspan="${span - 1}">${detail(r, i)}</td></tr>` : "");
     }).join("");
-    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${span}" class="muted">None.</td></tr>`}</tbody></table>
+    return `<div class="tw"><table id="table-${id}"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${span}" class="muted">${esc((opts && opts.none) || "None.")}</td></tr>`}</tbody></table>
       ${pager}</div>`;
   }
   const PAGES = {
@@ -808,12 +825,15 @@
       <button class="primary" type="submit">Start the refresh</button></form>`,
 
     alerts: () => `${title(`${esc(name())} Alerts`)}<p class="lead">The last 30 days' alerts, newest first. Each is emailed to the team once; acknowledge it here when it's handled. Click a column's name to sort by it.</p>
+      <div class="toolbar"><div role="group" aria-label="Show">${[["all", "All"], ["waiting", `Waiting (${waitingAlerts().length})`]].map(([k, v]) => `<button type="button" data-show-alerts="${k}" class="${S.alertsShow === k ? "primary" : ""}" aria-pressed="${S.alertsShow === k}">${v}</button>`).join(" ")}</div>
+        <span class="spacer" style="flex:1"></span>${waitingAlerts().length >= 2 ? `<button type="button" id="ackAllBtn">Acknowledge all (${waitingAlerts().length})</button>` : ""}</div>
       ${table("alerts", [
         {key: "at", title: "Raised", help: "When Serena raised it (UTC). Each alert is emailed to the team once.", html: a => when(a.at)},
         {key: "date", title: "Refresh date", help: "The refresh date it belongs to: the day, in Pacific time, of the refresh it's about or that was due."},
         {key: "title", title: "Alert", help: "What happened, and what to do. A refresh ID in it opens that refresh.", html: a => `<strong>${esc(a.title)}</strong><div class="secondary">${linkRefreshes(a.msg)}</div>`},
         {key: "about", title: "About", help: "The refresh, Media record or date the alert is about. A refresh opens its page; a Media CSID opens Media look up, and ⧉ copies it; a recall's \"<n> Media records\" opens Recalls.", html: a => targetHtml({target: a.about})},
-        {key: "ack", title: "Acknowledged", help: "Who acknowledged it and when, or a button to acknowledge it once it's handled.", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${i}">Acknowledge</button>`}], here(ALERTS), {key: "at", dir: "desc"})}`,
+        {key: "ack", title: "Acknowledged", help: "Who acknowledged it and when, or a button to acknowledge it once it's handled.", val: a => a.ack ? a.ack.at : "", html: (a, i) => a.ack ? `${esc(a.ack.by)}, ${when(a.ack.at)}` : `<button data-ack="${ALERTS.indexOf(a)}">Acknowledge</button>`}], S.alertsShow === "waiting" ? waitingAlerts() : here(ALERTS), {key: "at", dir: "desc"},
+        {rowClass: a => [a.ack ? "" : "waiting", a === S.jumpAlert ? "focus" : ""].join(" "), jumpTo: S.jumpTo ? a => a === S.jumpAlert : null, none: S.alertsShow === "waiting" ? "No alerts waiting." : "No alerts in the last 30 days."})}`,
 
     requests: () => {
       const lines = inRange(), served = lines.filter(l => l.outcome === "served").length;
@@ -1068,6 +1088,8 @@
   }
   const TO_TEAM = "the audit log and the alert emailed to the team";
 
+  /** This museum's alerts waiting to be acknowledged, newest first: what "Acknowledge all" acknowledges (D207). */
+  const waitingAlerts = () => here(ALERTS).filter(a => !a.ack).sort((x, y) => y.at.localeCompare(x.at));
   function dialog(head, body, foot) {
     $("#dlgHead").innerHTML = head; $("#dlgBody").innerHTML = body; $("#dlgFoot").innerHTML = foot;
     const d = $("#dlg"); if (!d.open) d.showModal();
@@ -1145,7 +1167,10 @@
 
   // ---- events
   function bind() {
-    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); S.menu = false; S.focus = null; S.from = null; render(); });
+    // The bell and the banner open Alerts showing the waiting ones (D213); every other way in shows All.
+    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); if (S.page === "alerts") { S.jumpAlert = null; S.alertsShow = b.dataset.show === "waiting" ? "waiting" : "all"; S.pages.alerts && (S.pages.alerts.page = 1); } S.menu = false; S.focus = null; S.from = null; render(); });
+    // All or Waiting (D212); in the app the choice is kept in the address, like sorting and paging.
+    document.querySelectorAll("[data-show-alerts]").forEach(b => b.onclick = () => { S.jumpAlert = null; S.alertsShow = clean(b.dataset.showAlerts); if (S.pages.alerts) S.pages.alerts.page = 1; render(); const again = document.querySelector(`[data-show-alerts="${S.alertsShow}"]`); if (again) again.focus(); });
     document.querySelectorAll("[data-back]").forEach(b => b.onclick = () => { S.page = S.from; S.from = null; S.focus = null; render(); window.scrollTo(0, S.scroll || 0); });
     document.querySelectorAll("[data-expand]").forEach(b => b.onclick = () => { const k = clean(b.dataset.expand); S.expanded[k] = !S.expanded[k]; render(); const again = document.querySelector(`[data-expand="${CSS.escape(k)}"]`); if (again) again.focus(); });
     document.querySelectorAll("[data-refresh]").forEach(b => b.onclick = () => { leaving(); S.page = "refreshes"; S.focus = clean(b.dataset.refresh); render(); });
@@ -1166,9 +1191,32 @@
     document.querySelectorAll("[data-pagesize]").forEach(el => el.onchange = () => { S.pages[clean(el.dataset.pagesize)] = {size: +el.value, page: 1}; render(); });
     document.querySelectorAll("[data-pagego]").forEach(b => b.onclick = () => { const [id, to] = clean(b.dataset.pagego).split(":"); S.pages[id].page = +to; render(); });
     document.querySelectorAll("[data-ack]").forEach(b => b.onclick = () => {
-      const a = here(ALERTS)[+clean(b.dataset.ack)]; a.ack = {by: S.user, at: NOW};
+      const a = ALERTS[+clean(b.dataset.ack)]; a.ack = {by: S.user, at: NOW};
       AUDIT.unshift({at: NOW, admin: S.user, action: "alert acknowledge", target: `${a.title} · ${a.date}`, details: ""}); render();
     });
+    // Acknowledge all (D207 to D211): the alerts this page shows as waiting, on every page of the table; asks first.
+    const ackAll = $("#ackAllBtn"); if (ackAll) ackAll.onclick = () => {
+      const waiting = waitingAlerts(), n = waiting.length;
+      dialog(`Acknowledge ${n} alerts?`, `<p style="margin-top:0">These are the ${n} alerts waiting to be acknowledged, on every page of the table:</p>
+        <ul>${waiting.map(a => `<li><button type="button" class="link" data-jump-alert="${ALERTS.indexOf(a)}" title="Show it in the table">${esc(a.title)}</button> · ${esc(a.date)}</li>`).join("")}</ul>
+        <p class="secondary">Acknowledging doesn't hide a problem: if it's still there, the watchdog raises it again the next day. Each one is in the audit log.</p>`,
+        `<button type="button" data-close>Cancel</button><button type="button" class="primary" id="ackAllConfirm">Acknowledge ${n}</button>`);
+      document.querySelectorAll("#dlg [data-close]").forEach(b => b.onclick = close);
+      // Each alert is a link (Richard, October 20, 2026): it closes the dialog and shows that alert in the table, on
+      // the page that holds it, marked, without acknowledging anything.
+      document.querySelectorAll("#dlg [data-jump-alert]").forEach(l => l.onclick = () => {
+        S.jumpAlert = ALERTS[+clean(l.dataset.jumpAlert)]; S.jumpTo = true; close(); render(); S.jumpTo = false;
+        const row = document.querySelector("#table-alerts tr.focus");
+        if (row) { row.scrollIntoView({block: "center"}); row.setAttribute("tabindex", "-1"); row.focus(); }
+      });
+      $("#ackAllConfirm").onclick = () => {
+        for (const a of waiting) {
+          a.ack = {by: S.user, at: NOW};
+          AUDIT.unshift({at: NOW, admin: S.user, action: "alert acknowledge", target: `${a.title} · ${a.date}`, details: ""});
+        }
+        close(); render();
+      };
+    };
     document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { S.range = clean(b.dataset.range); S.reason = ""; render(); });
     const ro = $("#reqOutcome"); if (ro) ro.onchange = () => { S.outcome = clean(ro.value); render(); };
     const rr = $("#reqReason"); if (rr) rr.onchange = () => { S.reason = clean(rr.value); render(); };
@@ -1374,19 +1422,42 @@
 
   $("#dlg").addEventListener("click", e => { if (e.target === $("#dlg")) close(); });
   $("#mockTheme").onchange = render;
-  // Mockup settings: how many sample alerts wait to be acknowledged. 3 adds today's missed deadline and leaves the
-  // Oct 12 "still public" alert unacknowledged.
+  // Mockup settings: the Alerts scenarios, for trying "Acknowledge all" (version 40). The samples are the 12 alerts
+  // above: none, 1 or 3 waiting (3 adds today's missed deadline and leaves the Oct 12 "still public" one waiting).
+  // "2 pages" and "3 pages" add older made-up alerts (Sep 14 to Oct 1, inside the 30 days) to make 40 or 65 alerts,
+  // with the waiting ones spread over every page at 25 per page. Choosing a scenario opens Alerts on its first page.
   const DEADLINE = {at: "2026-10-13T15:00:04Z", date: "2026-10-13", title: "Today's refresh isn't finished by the deadline", about: "2026-10-13", msg: "PAHMA's refresh for 2026-10-13 isn't updated or abandoned by its deadline, 08:00 Pacific.", ack: null};
-  const SAMPLE_ACK = new Map(ALERTS.map(a => [a, a.ack]));
-  $("#mockAlerts").onchange = e => {
-    const n = +e.target.value;
-    ALERTS.splice(0, ALERTS.length, ...ALERTS.filter(a => a !== DEADLINE));
-    SAMPLE_ACK.forEach((ack, a) => { a.ack = ack; });
-    const recall = ALERTS.find(a => a.at === "2026-10-13T06:02:16Z"), kept = ALERTS.find(a => a.at === "2026-10-12T10:41:13Z");
-    if (n === 0) recall.ack = {by: "admin", at: "2026-10-13T06:10:00Z"};
-    if (n === 3) { kept.ack = null; DEADLINE.ack = null; ALERTS.unshift(DEADLINE); }
-    render();
-  };
+  const SAMPLE = [...ALERTS], SAMPLE_ACK = new Map(ALERTS.map(a => [a, a.ack]));
+  function olderAlerts(n) {
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const t = ms("2026-10-01T18:00:00Z") - k * 8 * 3600 * 1000, at = new Date(t).toISOString().replace(".000", "");
+      const date = at.slice(0, 10), ack = {by: k % 3 ? "admin" : "pahma-admin", at: new Date(t + 3600 * 1000).toISOString().replace(".000", "")};
+      const kind = k % 3;
+      out.push(kind === 0 ? {at, date, title: "Today's refresh isn't finished by the deadline", about: date, msg: `PAHMA's refresh for ${date} isn't updated or abandoned by its deadline, 08:00 Pacific.`, ack}
+        : kind === 1 ? {at, date, title: "A servable list check failed", about: `pahma-${date}-1`, msg: `Refresh pahma-${date}-1 failed its servable list check: ${(9000 + k * 731).toLocaleString("en-US")} rows removed (${(5 + (k % 7) * 1.3).toFixed(1)}%), more than the 5% delta threshold. Its page says more.`, ack}
+        : {at, date, title: "Serena hasn't had a servability update in 24 hours", about: `pahma-${new Date(t - DAY * 2).toISOString().slice(0, 10)}-1`, msg: `The last servability update was on ${new Date(t - DAY * 2).toISOString().slice(0, 10)} (pahma-${new Date(t - DAY * 2).toISOString().slice(0, 10)}-1, updated ${new Date(t - DAY * 2).toISOString().slice(0, 10)}T17:41:13+00:00).`, ack});
+    }
+    return out;
+  }
+  function alertsScenario(name) {
+    SAMPLE_ACK.forEach((ack, a) => { a.ack = ack; }); DEADLINE.ack = null;
+    const recall = SAMPLE.find(a => a.at === "2026-10-13T06:02:16Z"), kept = SAMPLE.find(a => a.at === "2026-10-12T10:41:13Z");
+    let list = [...SAMPLE];
+    if (name === "none") recall.ack = {by: "admin", at: "2026-10-13T06:10:00Z"};
+    if (name === "three") { kept.ack = null; list.unshift(DEADLINE); }
+    if (name === "pages2" || name === "pages3") {
+      list = [...list, ...olderAlerts(name === "pages2" ? 28 : 53)].sort((x, y) => y.at.localeCompare(x.at));
+      // Positions (newest first) left waiting: the sample's recall is the first; the rest fall on pages 1 to 3.
+      const waiting = name === "pages2" ? [0, 11, 29, 38] : [0, 14, 27, 40, 52, 63];
+      waiting.forEach(i => { list[i].ack = null; });
+    }
+    ALERTS.splice(0, ALERTS.length, ...list);
+    S.pages.alerts = {size: 25, page: 1}; S.sort.alerts = {key: "at", dir: "desc"};
+    S.page = "alerts"; S.alertsShow = "all"; S.jumpAlert = null; render();
+  }
+  $("#mockAlerts").onchange = e => alertsScenario(e.target.value);
+  $("#mockReset").onclick = () => location.reload();
   $("#mockCspaceDown").onchange = e => { S.cspaceDown = e.target.checked; if (S.page === "lookup") render(); };
   $("#mockSignOut").onclick = () => { S.signedIn = false; S.timedOut = false; render(); };
   // Any "not signed in" answer takes the admin to sign-in, says why, and returns to the page after (Richard, Oct 13).
