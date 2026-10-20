@@ -520,6 +520,10 @@ confirm_alerts() {
   [ -n "$email" ] || die "No address is subscribed: set ALERT_EMAIL=\"<address>\" in $LOCAL, then ./serena aws deploy."
   echo "AWS emailed $email a link to confirm the subscription. Don't click it: copy the link and paste it here."
   printf "The link: "; IFS= read -r link
+  # The request goes in a file only we can read, not on the command line (where ps would show the token). Not
+  # file:///dev/stdin: the AWS CLI on macOS reads nothing from a pipe there ("Invalid JSON received").
+  local request
+  request="$(umask 077 && mktemp)" || die "Couldn't make a temporary file."
   LINK="$link" TOPIC="$topic" python3 -c '
 import json, os, sys
 from urllib.parse import parse_qs, urlparse
@@ -527,9 +531,13 @@ query = parse_qs(urlparse(os.environ["LINK"].strip()).query)
 topic, token = query.get("TopicArn", [""])[0], query.get("Token", [""])[0]
 if topic != os.environ["TOPIC"] or not token:
     sys.exit("That is not the confirmation link for this environment\x27s alert topic. Nothing was changed.")
-print(json.dumps({"TopicArn": topic, "Token": token, "AuthenticateOnUnsubscribe": "true"}))' |
-    aws_ sns confirm-subscription --cli-input-json file:///dev/stdin >/dev/null ||
+print(json.dumps({"TopicArn": topic, "Token": token, "AuthenticateOnUnsubscribe": "true"}))' >"$request" ||
+    { rm -f "$request"; exit 1; }
+  if ! aws_ sns confirm-subscription --cli-input-json "file://$request" >/dev/null; then
+    rm -f "$request"
     die "Not confirmed. AWS's link expires after 3 days: for a new one, remove ALERT_EMAIL, deploy, put it back and deploy again."
+  fi
+  rm -f "$request"
   echo "Confirmed: alerts and alarms now go to $email; unsubscribing needs an AWS sign-in."
 }
 
