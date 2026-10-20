@@ -566,7 +566,7 @@ deploy() {
   docker info >/dev/null 2>&1 || die "Docker isn't running. Start Docker Desktop and try again."
   ensure_state_bucket
   tf_init app; check_museums ask   # before building anything
-  local tag repo registry image devtools_image="" url code museum _try
+  local tag repo registry image devtools_image="" base url code museum _try
   tag="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
   [ -z "$(git status --porcelain 2>/dev/null)" ] || tag="$tag-dirty"
   tag="$tag-$(date -u +%Y%m%d%H%M%S)"
@@ -587,7 +587,16 @@ deploy() {
   if [ "$SIMULATED_CSPACE" = true ]; then
     devtools_image="$(tf registry output -raw devtools_repository_url):$tag"
     echo "== 2/3 The simulator's and fake ETL's image $devtools_image (linux/arm64)"
-    docker build --platform linux/arm64 -f backend/Dockerfile -t "$devtools_image" backend
+    # The base image from ECR Public's copy of the Docker official image, as deploy/Dockerfile's (no Docker Hub limits
+    # on a shared address). Here only: CI and the local stack build backend/Dockerfile from Docker Hub, since ECR
+    # Public refuses GitHub's shared runners ("429 Data limit exceeded"). A named build context replaces the image
+    # its FROM names, so the Dockerfile (and Dependabot's updates to it) stays as it is.
+    base="$(awk 'toupper($1) == "FROM" { print $2; exit }' backend/Dockerfile)"
+    case "$base" in
+      */*|"") die "backend/Dockerfile's base image ($base) isn't a Docker official image; update deploy/aws.sh." ;;
+    esac
+    docker build --platform linux/arm64 --build-context "$base=docker-image://public.ecr.aws/docker/library/$base" \
+      -f backend/Dockerfile -t "$devtools_image" backend
     docker push "$devtools_image"
   fi
 
