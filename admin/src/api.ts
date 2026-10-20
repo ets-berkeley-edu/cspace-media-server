@@ -376,5 +376,8 @@ export const api = {
   alerts: (museum: string, background = false) => call<{alerts: AlertItem[]}>('GET', `/museums/${museum}/alerts`,
     undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),
   acknowledge: (museum: string, key: string) =>
-    call<{acknowledged: string}>('POST', `/museums/${museum}/alerts/acknowledge`, {key})
+    call<{acknowledged: string}>('POST', `/museums/${museum}/alerts/acknowledge`, {key}),
+  /** The alerts the page shows as waiting (D207); one acknowledged meanwhile is skipped. */
+  acknowledgeAll: (museum: string, keys: string[]) =>
+    call<{acknowledged: string[], skipped: number}>('POST', `/museums/${museum}/alerts/acknowledge-all`, {keys})
 }

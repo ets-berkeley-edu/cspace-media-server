@@ -18,7 +18,7 @@ from typing import Annotated, Any
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import uploads
 from .admin_api import SignedIn, changes, services
@@ -53,6 +53,23 @@ class Reason(BaseModel):
 
 class Acknowledge(BaseModel):
     key: str = Field(min_length=1, max_length=200)
+
+
+# The most alerts one "Acknowledge all" takes: far more than 30 days hold (a few a day), so a request with more is a
+# mistake, not a museum's backlog.
+MAX_ACKNOWLEDGE_ALL = 500
+
+
+class AcknowledgeAll(BaseModel):
+    """The alerts the Alerts page shows as waiting (D207): acknowledging all of them never takes one raised since."""
+    keys: list[str] = Field(min_length=1, max_length=MAX_ACKNOWLEDGE_ALL)
+
+    @field_validator("keys")
+    @classmethod
+    def each_key(cls, keys: list[str]) -> list[str]:
+        if any(not 1 <= len(k) <= 200 for k in keys):
+            raise ValueError("each key is 1 to 200 characters")
+        return list(dict.fromkeys(keys))  # once each, in order
 
 
 def summary(refresh: Refresh) -> dict[str, Any]:
@@ -252,6 +269,17 @@ def create_router() -> APIRouter:
             raise HTTPException(409, "No such alert, or it's already acknowledged.")
         services(request).audit.record(session.tenant, session.user, Action.ALERT_ACKNOWLEDGE, body.key)
         return {"acknowledged": body.key}
+
+    @router.post("/alerts/acknowledge-all", dependencies=[Depends(changes)])
+    def acknowledge_all(body: AcknowledgeAll, session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
+        """Acknowledges each alert the admin was shown as waiting (D207 to D210): one audit entry per alert, as for one
+        alert. An alert acknowledged meanwhile (by another admin), or not this museum's, is skipped, not an error."""
+        done = [key for key in body.keys if r.alerts.acknowledge(session.tenant, key, session.user)]
+        for key in done:
+            services(request).audit.record(session.tenant, session.user, Action.ALERT_ACKNOWLEDGE, key)
+        log.info("alerts acknowledged", extra={"museum": session.tenant, "acknowledged": len(done),
+                                               "skipped": len(body.keys) - len(done)})
+        return {"acknowledged": done, "skipped": len(body.keys) - len(done)}
 
     return router
 

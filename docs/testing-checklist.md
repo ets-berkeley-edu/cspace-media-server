@@ -988,3 +988,47 @@ branch on the Mac, signed in (`aws sso login --profile bmu-personal`):
 - [ ] **3. The devtools image still works.** Run `./serena aws etl pahma`. Expect "updated" and sample addresses (the
   fake ETL runs from that image, and the simulator it fills does too).
 - [ ] When done, `./serena aws pause` (or `./serena aws destroy`, type `personal-dev`).
+
+## 28. Acknowledge all, and finding the waiting alerts, locally (15 minutes, before merging the pull request that adds them)
+
+What it checks: decisions D207 to D218 (October 20, 2026). On the Alerts page, "All · Waiting (<n>)" and a red bar on
+waiting rows; the bell and the banner open Waiting; "Acknowledge all (<n>)" asks first, listing the alerts (each a link
+to its row), and acknowledges exactly those. serenade's T84 and T85 check the same on BAMPFA. On the local stack, from
+this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as `admin` (password
+`admin`) at http://localhost:5373/admin/.
+
+**Before you start:** make four alerts wait. On **Settings** (the gear), change "Delta threshold (%)" to 12.5 (any
+reason), then **Use default** (any reason): that's two "An admin changed a setting" alerts. Do the same once more for a
+third and fourth. Leave any older alerts as they are.
+
+- [ ] **1. The bell and the banner open Waiting (D213).** Expect the bell's red badge to count the waiting alerts and
+  the banner to name the newest. Click the banner's **Open alerts**. Expect the address to end with `?show=waiting`,
+  **Waiting (<n>)** to be chosen, and the table to list only the waiting alerts, each with its Acknowledge button.
+  Go to **Overview**, then click the bell: the same.
+- [ ] **2. All, and the waiting rows' bar (D212, D214).** Click **All**. Expect `show=waiting` to leave the address,
+  every alert of the last 30 days listed, and each waiting alert's row to have a red bar down its left edge (the
+  acknowledged ones none). Sort by **Acknowledged**, then page or change "Items per page" to 10: the choice of All
+  stays. Click **Waiting**: back to page 1, only the waiting ones. Press the browser's Back: All again, as it was.
+- [ ] **3. Opened another way, All (D213).** On the **Audit log**, click an "alert acknowledge" entry's target (an
+  alert of the last 30 days): expect Alerts on **All**, not Waiting, even while alerts wait.
+- [ ] **4. Acknowledge all asks first (D207 to D209).** With 2 or more waiting, expect **Acknowledge all (<n>)** at
+  the right, above the table (with only 1 waiting, there's none: its row's button does it). Click it. Expect
+  "Acknowledge <n> alerts?", the alerts listed newest first, all of them even if they're on other pages of the table,
+  and the reminder that a problem still there is raised again the next day; no reason field; **Cancel** and
+  **Acknowledge <n>**. Each line reads like "An admin changed a setting · delta_threshold_percent · 22:45 UTC" (the
+  date too for an alert not raised today) (D217). Make the window short enough that the list doesn't fit: only the
+  list scrolls, and the title, the reminder and the buttons stay in view (D216). Click **Cancel**: nothing changes.
+  (More than 500 waiting, D218, is checked by the admin app's tests: a local stack won't have that many.)
+- [ ] **5. A listed alert is a link (D215).** Click **All**, click the **Raised** header once (oldest first), and set
+  "Items per page" to 10. The waiting alerts, the newest, are now on the last page; if All fits on one page, do "Before
+  you start" again until it holds more than 10 alerts. Open **Acknowledge all** and click the first listed alert (the
+  newest). Expect the dialog to close, the table to move to the page that holds it, that row marked (shaded) and in
+  view, and nothing acknowledged (the badge's count unchanged).
+- [ ] **6. Acknowledge them (D207, D210, D211).** Open **Acknowledge all** again and click **Acknowledge <n>**. Expect
+  every row acknowledged by "admin" with the time, the button, the badge and the banner gone, and **Waiting (0)**
+  showing "No alerts waiting.". On the **Audit log**, expect one "alert acknowledge" entry per alert. The banner never
+  had its own Acknowledge all (D211).
+- [ ] **7. One acknowledged meanwhile is skipped.** Make two alerts wait again (step "Before you start"). Open
+  **Acknowledge all** and leave the dialog open; in a second tab, acknowledge one of them with its row's button. Back
+  in the first tab, click **Acknowledge 2**: expect no error, both acknowledged (the second tab's by its own click),
+  and one audit entry for each, not two for the one.

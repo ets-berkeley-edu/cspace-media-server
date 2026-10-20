@@ -6,7 +6,7 @@
       id="open-alerts"
       size="small"
       variant="outlined"
-      :to="{name: 'alerts', params: {museum}}"
+      :to="{name: 'alerts', params: {museum}, query: {show: 'waiting'}}"
       @click="markMenuNavigation"
     >
       Open alerts
@@ -22,7 +22,7 @@ import {markMenuNavigation} from '@/navigation'
 import {alertsChanged, waiting} from '@/session'
 
 // One line, only while an alert waits to be acknowledged: how many, the newest one's title, and a way to the Alerts
-// page, where they're acknowledged. The app bar's bell shows the same count (D137).
+// page, where they're acknowledged, showing the waiting ones (D213). The app bar's bell shows the same count (D137).
 const route = useRoute()
 const museum = computed(() => String(route.params.museum || ''))
 const unacknowledged = computed(() => waiting.museum === museum.value ? waiting.alerts : [])

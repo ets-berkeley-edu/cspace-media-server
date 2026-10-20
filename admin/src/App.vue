@@ -17,7 +17,7 @@
         <v-btn
           id="alerts-bell"
           icon
-          :to="{name: 'alerts', params: {museum: current.museum}}"
+          :to="{name: 'alerts', params: {museum: current.museum}, query: waitingCount ? {show: 'waiting'} : {}}"
           :aria-label="waitingCount ? `Alerts: ${waitingCount} unacknowledged` : 'Alerts'"
           :title="waitingCount ? `${waitingCount} unacknowledged alert${waitingCount === 1 ? '' : 's'}` : 'Alerts'"
           @click="markMenuNavigation"
