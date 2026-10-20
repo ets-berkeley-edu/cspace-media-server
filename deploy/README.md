@@ -1,6 +1,6 @@
 # Serena in AWS
 
-`./serena aws` deploys Serena to an AWS account and looks after it (decisions D181 to D194, October 2026). It is
+`./serena aws` deploys Serena to an AWS account and looks after it (decisions D181 to D206, October 2026). It is
 modeled on the BMU's `./bmu aws`, and the commands are the same where they can be.
 
 - **One environment per settings file** in `deploy/environments/`. `personal-dev.conf` is Richard's personal
@@ -12,15 +12,10 @@ modeled on the BMU's `./bmu aws`, and the commands are the same where they can b
   shell's history.
 - **Only Richard deploys,** from his Mac (D193). CI checks the Terraform code with no AWS sign-in.
 
-What this first round has, and what waits for pull request 18 (D194):
-
-| In pull request 17 | In pull request 18 |
-| --- | --- |
-| The app and the worker on ECS Fargate, CloudFront (HTTPS, the address rules, WAF where it's on) in front of an internal load balancer, the tables, a bucket per museum, the KMS key, the secrets, the logs. The simulated CollectionSpace and the fake ETL, as an option. | Image delivery: CloudFront behaviors from the museums' buckets with origin access control, the signed-URL key group and its signing key, the unsigned prefix for the unavailable images and the generic placeholder. The SNS topic and its email, and the alarms. |
-
-Until pull request 18, the admin app, the ETL API, the servable list check and servability update, fetching and
-storing all work, but a servable file isn't delivered: there is no CloudFront signer yet. Such a request gets the
-unavailable image, and Past requests shows the reason "delivery not set up".
+What it builds: the app and the worker on ECS Fargate, CloudFront (HTTPS, the address rules, WAF where it's on) in
+front of an internal load balancer, the tables, a bucket per museum, the KMS key, the secrets and the logs (pull
+request 17); image delivery from the museums' buckets with signed URLs, the unavailable images, and the alert email
+and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as an option.
 
 ## Commands
 
@@ -28,15 +23,18 @@ unavailable image, and Past requests shows the reason "delivery not set up".
 | --- | --- |
 | `./serena aws deploy` | Builds the image (and, with the simulator, the simulator's image) and pushes it, then shows Terraform's plan and, after you type `yes`, applies it and waits until the app and the worker are running. Prints the address and saves it in `deploy/environments/<env>.url`. |
 | `./serena aws plan` | Shows what a deploy of the running image would change, without changing anything. |
-| `./serena aws status` | The address, the running tasks, the deployed image, the allowed addresses, and each museum with its server and whether each of its secrets is set. |
+| `./serena aws status` | The address, the running tasks, the deployed image, the allowed addresses, whether files are delivered (and the trusted signing keys), the alert email and whether it's confirmed, the alarms (and any firing), and each museum with its server and whether each of its secrets is set. |
 | `./serena aws url` | Prints the address. |
 | `./serena aws logs web` / `worker` / `devtools` | Follows a service's logs, starting with the last 30 minutes. `devtools` (the simulator and the fake ETL) only with the simulator. |
-| `./serena aws pause` / `resume` | Stops or starts every service to save money. The data stays. Terraform shows the change and asks first. |
+| `./serena aws pause` / `resume` | Stops or starts every service to save money, and switches the alarms' emails off or on (D204). The data stays. Terraform shows the change and asks first. |
 | `./serena aws allow-my-ip` | Adds this computer's current address to the allowlist, and applies it. |
 | `./serena aws etl <museum> [--rows N] [--failed]` | With the simulator: runs the fake ETL once, inside the environment, for a whole daily refresh (the same as `./serena etl` on the local stack). Prints the refresh's result and sample image addresses. |
+| `./serena aws list <museum> [--limit N] [--kind KIND]` | What Serena may serve for the museum, from its servability table (the last updated refresh's servable list): each file's kind, access and Media CSID, with its address. The first 25, or N (`--limit 0` for all); `--kind image` (or `pdf`, `3D` ...) for one kind. Only reads. With the simulator, a deploy or pause empties the simulator but not this table, so a listed file not cached yet can't be fetched until `./serena aws etl` runs again. |
 | `./serena aws cspace-secret <museum>` | Sets the museum's read-only CollectionSpace service account. It asks for the user name and password and passes them straight to Secrets Manager. Not with the simulator, whose account deploy sets. |
 | `./serena aws etl-token <museum>` | Makes a new random ETL token. The old one becomes "previous" and keeps working until the next rotation. Shows the new token once, for the ETL's token file (Jira CSW-1027). |
 | `./serena aws portal-key <museum>` | For a museum with signed access (Cinefiles): makes a new signing key for its signed links, keeping the old one as "previous". Shows the key and its ID once, for the portal (Glimmer). |
+| `./serena aws cdn-key` | Makes a new CloudFront signing key for the museums' files (D200): the private key goes straight to Secrets Manager, CloudFront is told to trust the new public key (Terraform shows a small plan), then the app signs with it within 5 minutes. The key before it stays trusted until the next rotation. Nothing is shown. The first deploy makes the first key. |
+| `./serena aws confirm-alerts` | Confirms the alert email's subscription (D201): paste the link from AWS's "Subscription Confirmation" email. Don't click the link: confirmed here, unsubscribing needs an AWS sign-in. |
 | `./serena aws destroy` | Deletes everything in AWS for the environment, data included. It asks for the environment's name first. |
 | `./serena aws init` | Points Terraform at the environment's state, to run `terraform` commands yourself. |
 
@@ -58,6 +56,7 @@ unavailable image, and Past requests shows the reason "delivery not set up".
 | `PROTECT_DATA` | `true` where the data matters (D192): see "Protecting data". |
 | `WEB_COUNT` | Web tasks: 1 in personal-dev, 2 elsewhere (D188). |
 | `ENV_LABEL` | Shown in the admin app's header. |
+| `ALERT_EMAIL` | Where alerts and alarms are emailed (D201). Only in the uncommitted `.local.conf`, so no address is in the repository: in personal-dev, your own; in QA and production, the team's mailing list. Empty: no email. After the deploy that subscribes it, `./serena aws confirm-alerts`. |
 
 **Once deployed, a museum's server never changes.** A museum's servability, recalls and cached files refer to the
 records on the server it was deployed for. So `deploy`, `plan`, `pause`, `resume` and `allow-my-ip` stop before
@@ -90,6 +89,11 @@ aws sso login --profile bmu-personal
    minutes**, mostly CloudFront. It finishes when the app and the worker are running.
 6. **Secrets.** With the simulator, deploy sets each museum's secrets once: the simulator's synthetic account, a
    random ETL token and, for a museum with signed access, a random portal key. Nothing is shown.
+7. **Image delivery.** The first time, it makes the CloudFront signing key (as `./serena aws cdn-key` does): Terraform
+   shows a second, smaller plan, which adds the key group and the museums' file paths to the distribution (a few
+   minutes). From then on a servable file is delivered with a signed URL.
+8. **Alert email.** With `ALERT_EMAIL` set, AWS emails that address a confirmation link. Don't click it: run
+   `./serena aws confirm-alerts` and paste it there. The link expires after 3 days.
 
 It prints the address (`https://<something>.cloudfront.net`). The admin app is at `/admin/`: sign in as `admin` /
 `admin` (the simulator's synthetic admin, every museum), `pahma-admin` / `pahma-admin`, or `viewer` / `viewer`.
@@ -147,10 +151,26 @@ the next rotation, so the ETL or the portal can switch at its own pace.
   one bucket per museum (versioned, encrypted with the KMS key, Intelligent-Tiering, no rule that deletes), one KMS
   key with yearly rotation, and the secrets: per museum, its CollectionSpace account, its ETL tokens and, with
   signed access, its portal signing key.
+- **Image delivery (D195 to D200).** Once the signing key exists, a behavior per museum, `/<museum>/objects/*`, to its
+  bucket through origin access control, for a valid signed URL only (the key group trusts the current key and the
+  one before it). The allowlist function removes `/<museum>` from the path. Each bucket's policy lets only this
+  distribution read, and only `objects/`; the key's policy lets CloudFront decrypt for this distribution only.
+  CloudFront caches the files at its edges and adds `Cache-Control: private, max-age=900`. The public keys are in the
+  SSM parameter `/serena-<env>/cloudfront-public-keys`, the private key in the secret `serena-<env>/cloudfront-signing-key`.
+- **The unavailable images (D199).** A static bucket, `serena-<env>-static-…` (S3-managed encryption), holds each
+  museum's `unavailable.svg`, the default one and the generic `placeholder.svg`, uploaded by Terraform from
+  `backend/serena/static/`; served without a signature, with a Content-Security-Policy that stops a script.
+- **Alerts and alarms (D201 to D204).** The SNS topic `serena-<env>-alerts`, encrypted with the key, with
+  `ALERT_EMAIL` subscribed. The worker emails the watchdog's alerts to it. Six alarms email it when they fire and when
+  they clear: no healthy app task for 5 minutes; the worker not running for 10 minutes; 5 or more 5xx answers in 5
+  minutes; and, from metric filters on the app's log, 5 or more internal errors, any refusal by CollectionSpace (most
+  often a changed password), or 20 or more fetches CollectionSpace didn't answer, each in 15 minutes. Paused, they
+  send nothing.
 - **Logs.** `/serena/<env>/web`, `/worker` (and `/devtools`), kept 30 days, encrypted with the key. The load
   balancer's and CloudFront's access logs are off (design: Infrastructure and operations).
 - **IAM.** One role for the app and one for the worker, with only what each needs (`iam.tf` has the table), and one
-  for the fake ETL (its museums' ETL tokens only).
+  for the fake ETL (its museums' ETL tokens only). Whoever deploys also needs SSM Parameter Store (the public keys)
+  and SNS, besides what pull request 17 needed.
 
 ## Protecting data (D192)
 
@@ -190,15 +210,17 @@ After changing a `.tf` file: `terraform fmt -recursive deploy/terraform`. After 
 
 | State | Cost | Main items |
 | --- | --- | --- |
-| Running | About **$2.70 a day** (about $80 a month) | The app's task (about $31 a month, its extra storage included), the worker (about $14), the simulator (about $7), the load balancer (about $16), three public IPv4 addresses (about $11), the KMS key and secrets (about $2). CloudFront, DynamoDB, S3 and the logs cost cents at test volumes. |
+| Running | About **$2.75 a day** (about $82 a month) | The app's task (about $31 a month, its extra storage included), the worker (about $14), the simulator (about $7), the load balancer (about $16), three public IPv4 addresses (about $11), the KMS key and secrets (about $2), six alarms (about $0.60). CloudFront, DynamoDB, S3, SNS and the logs cost cents at test volumes. |
 | Paused | About **$0.60 a day** | The load balancer, the key and the secrets still bill. |
 | Destroyed | Nothing | — |
 
 WAF adds about $15 a month plus Bot Control's fee when it's on. Pause or destroy the environment between test sessions.
 
-## Not in this first round
+## Not yet
 
-- **Image delivery, SNS and alarms:** pull request 18 (D194).
+- **CORS (D205).** Delivered files carry no `Access-Control-Allow-Origin`. If a portal's JavaScript viewer (3D, PDF)
+  needs it in QA, it's a small change.
+- **A cost alert (D206).** Not in Terraform; cost tracking is for the UC Berkeley account's ops ticket.
 - **60-second requests (D184).** CloudFront waits at most 60 seconds for Serena's answer. A first request whose fetch
   takes longer gets a 504; the fetch still finishes and the next request is a hit. AWS raises the limit to 180
   seconds on request: ask before production.
@@ -208,6 +230,10 @@ WAF adds about $15 a month plus Bot Control's fee when it's on. Pause or destroy
 
 - **"Not signed in to AWS".** The sign-in (8 hours) expired: `aws sso login --profile <profile>`, then repeat the
   command, which changed nothing.
+- **"The new signing key … isn't trusted by CloudFront yet".** The apply after `cdn-key` didn't finish:
+  `./serena aws deploy` (or `cdn-key`) again finishes it, without making another key.
+- **Alarm emails while you work.** Pausing switches them off. A deploy's restart can fire "web down" or "worker down"
+  briefly; they clear on their own and email when they do.
 - **"Docker isn't running".** Start Docker Desktop and deploy again.
 - **The first creation fails.** Terraform stops at the resource that failed and keeps the rest; `./serena aws
   deploy` again continues. A brand-new account sometimes fails once while AWS creates its service roles, and

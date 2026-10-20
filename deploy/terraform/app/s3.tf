@@ -1,5 +1,5 @@
 # One bucket per museum (design: Storage; D192): every file Serena has fetched (objects/<sha256>) and every servable
-# list it received (servable-list/...). Private, encrypted with Serena's key, versioned, HTTPS only, and no rule that
+# list it received (servable-list/...). CloudFront reads objects/ only, through origin access control (D196). Private, encrypted with Serena's key, versioned, HTTPS only, and no rule that
 # deletes anything; S3 Intelligent-Tiering for cost. Where data isn't protected (personal-dev), ./serena aws destroy
 # empties and deletes them.
 
@@ -93,6 +93,25 @@ data "aws_iam_policy_document" "museum_bucket" {
       test     = "Bool"
       variable = "aws:SecureTransport"
       values   = ["false"]
+    }
+  }
+
+  # Origin access control (D196): this environment's distribution reads the fetched files, and nothing else in the
+  # bucket (never the servable lists).
+  statement {
+    sid       = "CloudFrontReadsFetchedFiles"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.museum[each.key].arn}/objects/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.main.arn]
     }
   }
 }

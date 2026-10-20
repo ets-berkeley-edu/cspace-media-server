@@ -69,3 +69,23 @@ output "fake_etl" {
     security_group  = aws_security_group.devtools[0].id
   } : null
 }
+
+output "delivery" {
+  description = "Whether the museums' files are delivered (a signing key exists, D200); false: requests get the unavailable image."
+  value       = local.delivery
+}
+
+output "cdn_key_ids" {
+  description = "The trusted CloudFront public keys, name => key ID (the secret's key_pair_id); ./serena aws cdn-key reads it."
+  value       = { for name, k in aws_cloudfront_public_key.cdn : name => k.id }
+}
+
+output "alert_topic_arn" {
+  description = "The SNS topic for alerts and alarms (D201)."
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "alert_email" {
+  description = "The address subscribed to the alert topic; empty if none."
+  value       = var.alert_email
+}

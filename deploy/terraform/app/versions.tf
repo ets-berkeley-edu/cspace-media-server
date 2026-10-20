@@ -1,8 +1,8 @@
 # Serena in AWS, one environment per state (D181-D194; docs/design.md, Infrastructure and operations): the app and the
 # worker on ECS Fargate, CloudFront (HTTPS, the path and address rules, and WAF where it's on) in front of an internal
-# load balancer, DynamoDB, an S3 bucket per museum, a KMS key and Secrets Manager. Applied by ./serena aws deploy; the
-# images come from ../registry. Image delivery (CloudFront from the museums' buckets, signed URLs) and alarms come in
-# pull request 18 (D194).
+# load balancer, DynamoDB, an S3 bucket per museum, a KMS key and Secrets Manager; image delivery from the museums'
+# buckets with signed URLs (delivery.tf), and the alert topic and alarms (alerts.tf). Applied by ./serena aws deploy;
+# the images come from ../registry.
 #
 # Layout (D187): tasks run in public subnets with public IPs (no NAT gateway); nothing can reach them from outside,
 # because their security groups take traffic only from the load balancer. The load balancer is internal (private

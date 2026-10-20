@@ -1,11 +1,14 @@
 // Who may reach which paths (D185). Generated from the allowed_cidrs, etl_cidrs, admin_cidrs and open_images
 // variables; the distribution is IPv4-only, so the viewer's address is IPv4.
 //   allowed_cidrs: everything.   etl_cidrs: /etl/ too.   admin_cidrs: /admin too.
-//   open_images: everything else (the image paths, /health, the unavailable images) for anyone.
+//   open_images: everything else (the image paths, /health, the files and the unavailable images) for anyone.
+// It also removes the museum from a file's path, /<museum>/objects/<sha256> -> /objects/<sha256>, the key in the
+// museum's bucket (D195). The query string (a signed URL's signature) is left as it is.
 var ALLOWED = "${allowed}";
 var ETL = "${etl}";
 var ADMIN = "${admin}";
 var OPEN = ${open};
+var FILE = /^\/(${museums})(\/objects\/[0-9a-f]{64})$/;
 function ip4(s) {
   var p = s.split(".");
   if (p.length !== 4) return -1;
@@ -43,7 +46,11 @@ function handler(event) {
     else if (uri === "/admin" || uri.indexOf("/admin/") === 0) ok = inside(ip, R_ADMIN);
     else ok = OPEN;
   }
-  if (ok) return event.request;
+  if (ok) {
+    var file = uri.match(FILE);
+    if (file) event.request.uri = file[2];
+    return event.request;
+  }
   return { statusCode: 403, statusDescription: "Forbidden",
            headers: { "content-type": { value: "text/plain; charset=utf-8" }, "cache-control": { value: "no-store" } },
            body: { encoding: "text", data: "This Serena environment is open only to listed addresses.\n" } };

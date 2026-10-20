@@ -102,6 +102,7 @@ resource "aws_cloudwatch_log_group" "devtools" {
   name              = "/serena/${var.env_name}/devtools"
   retention_in_days = var.log_retention_days
   kms_key_id        = aws_kms_key.main.arn
+  depends_on        = [aws_kms_key_policy.main] # the key's policy lets CloudWatch Logs use it
 }
 
 # No task role: the simulator calls no AWS service. The execution role pulls its image and writes its logs.

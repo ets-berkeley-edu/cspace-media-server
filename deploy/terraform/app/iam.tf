@@ -13,8 +13,9 @@
 #   S3 objects/      read and put (fetched files)                -
 #   S3 servable-list put (uploads)                               read and put
 #   secrets          its own: CollectionSpace accounts, ETL      -
-#                    tokens, portal signing keys
+#                    tokens, portal signing keys, CloudFront key
 #   logs             Logs Insights on its own log group (D110)   -
+#   alert topic      -                                           publish (D201)
 #
 # Both use Serena's KMS key (kms.tf) for the buckets and the secrets.
 
@@ -118,7 +119,7 @@ data "aws_iam_policy_document" "web" {
     sid     = "OwnSecrets"
     actions = ["secretsmanager:GetSecretValue"]
     resources = concat([for s in aws_secretsmanager_secret.cspace : s.arn], [for s in aws_secretsmanager_secret.etl_tokens : s.arn],
-    [for s in aws_secretsmanager_secret.portal_key : s.arn])
+    [for s in aws_secretsmanager_secret.portal_key : s.arn], [aws_secretsmanager_secret.cdn_key.arn])
   }
 
   statement {
@@ -171,6 +172,12 @@ data "aws_iam_policy_document" "worker" {
     sid       = "Key"
     actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
     resources = [aws_kms_key.main.arn]
+  }
+
+  statement {
+    sid       = "Alerts"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.alerts.arn]
   }
 }
 

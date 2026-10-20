@@ -1,6 +1,7 @@
 # CloudFront: HTTPS at a *.cloudfront.net address (D183), in front of the internal load balancer, with the path and
 # address rules (D185) and, where it's on, WAF (D186). A domain later is an alternate name and an ACM certificate on
-# this distribution. Image delivery from the museums' buckets is added to it in pull request 18 (D194).
+# this distribution. It also delivers the museums' files from their buckets with signed URLs, and the unavailable
+# images from the static bucket (delivery.tf, D195 to D199).
 
 locals {
   # AWS-managed CloudFront policies (the same IDs in every account).
@@ -43,6 +44,7 @@ resource "aws_cloudfront_function" "allowlist" {
     etl     = join(",", var.etl_cidrs)
     admin   = join(",", var.admin_cidrs)
     open    = var.open_images ? "true" : "false"
+    museums = join("|", local.museums)
   })
 }
 
@@ -63,6 +65,23 @@ resource "aws_cloudfront_distribution" "main" {
       origin_read_timeout      = var.origin_read_timeout
       origin_keepalive_timeout = 5
     }
+  }
+
+  # Each museum's bucket (D195, D196): only its objects/ are reachable, with a signed URL.
+  dynamic "origin" {
+    for_each = toset(local.museums)
+
+    content {
+      origin_id                = "museum-${origin.value}"
+      domain_name              = aws_s3_bucket.museum[origin.value].bucket_regional_domain_name
+      origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+    }
+  }
+
+  origin {
+    origin_id                = "static"
+    domain_name              = aws_s3_bucket.static.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
   }
 
   # Everything goes to the app, uncached: its answers (redirects to signed URLs, the admin API) are per request.
@@ -96,6 +115,50 @@ resource "aws_cloudfront_distribution" "main" {
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.allowlist.arn
+    }
+  }
+
+  # A museum's files (D195 to D198), once there is a signing key: a valid signed URL only, cached at the edge (the
+  # signature isn't in the cache key; CloudFront checks it first), /<museum> removed by the function.
+  dynamic "ordered_cache_behavior" {
+    for_each = local.delivery ? local.museums : []
+
+    content {
+      path_pattern               = "/${ordered_cache_behavior.value}/objects/*"
+      target_origin_id           = "museum-${ordered_cache_behavior.value}"
+      viewer_protocol_policy     = "redirect-to-https"
+      allowed_methods            = ["GET", "HEAD"]
+      cached_methods             = ["GET", "HEAD"]
+      compress                   = false
+      cache_policy_id            = local.cloudfront_policy.caching_optimized
+      response_headers_policy_id = aws_cloudfront_response_headers_policy.files.id
+      trusted_key_groups         = [aws_cloudfront_key_group.cdn[0].id]
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.allowlist.arn
+      }
+    }
+  }
+
+  # The unavailable images and the generic placeholder (D199), without a signature.
+  dynamic "ordered_cache_behavior" {
+    for_each = ["*/unavailable.svg", "/default/placeholder.svg"]
+
+    content {
+      path_pattern               = ordered_cache_behavior.value
+      target_origin_id           = "static"
+      viewer_protocol_policy     = "redirect-to-https"
+      allowed_methods            = ["GET", "HEAD"]
+      cached_methods             = ["GET", "HEAD"]
+      compress                   = true
+      cache_policy_id            = local.cloudfront_policy.caching_optimized
+      response_headers_policy_id = aws_cloudfront_response_headers_policy.static.id
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.allowlist.arn
+      }
     }
   }
 
