@@ -10,6 +10,8 @@
 #   ./serena aws allow-my-ip   add this computer's current address to the allowlist
 #   ./serena aws etl MUSEUM [--rows N] [--failed]   with the simulator: a whole daily refresh by the fake ETL, run
 #                              once inside the environment; prints the refresh's result and sample image addresses
+#   ./serena aws list MUSEUM [--limit N] [--kind KIND]   what Serena may serve for a museum (its servability table),
+#                              each with its address: the first 25, or N (0 for all)
 #   ./serena aws cspace-secret MUSEUM   set a museum's read-only CollectionSpace account (asks; nothing is shown or saved)
 #   ./serena aws etl-token MUSEUM       make a museum's new ETL token (the old one keeps working until the next);
 #                              shows it once, for the ETL's token file
@@ -748,6 +750,50 @@ PY
   [ "$code" = 0 ] || die "The fake ETL ended with $code: $(retry aws_ ecs describe-tasks --cluster "$NAME" --tasks "$task" --query 'tasks[0].stoppedReason' --output text || true)"
 }
 
+# What Serena may serve for a museum: its rows in the servability table (the last servable list, D175), read with
+# the profile's own access. Only reads. With the simulator, a deploy or pause empties the simulator but not this
+# table: a listed file not cached yet can't be fetched until ./serena aws etl adds the records again.
+list_servable() {  # list_servable MUSEUM [--limit N] [--kind KIND]
+  local museum="${1:-}" limit=25 kind="" url max=()
+  shift || true
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --limit) [ $# -ge 2 ] || die "--limit needs a number"; limit="$2"; shift 2 ;;
+      --kind) [ $# -ge 2 ] || die "--kind needs a kind (image, pdf, 3D, card ...)"; kind="$2"; shift 2 ;;
+      *) die "Usage: ./serena aws list <museum> [--limit N] [--kind KIND]" ;;
+    esac
+  done
+  case "$limit" in ''|*[!0-9]*) die "--limit needs a whole number (0 for all)" ;; esac
+  load_env; need_museum "$museum" list; check_account; need_terraform; tf_init app; need_deployed
+  url="$(app_url)"
+  [ "$limit" = 0 ] || max=(--max-items "$limit")
+  local filter=()
+  [ -z "$kind" ] || filter=(--filter-expression "#k = :k" --expression-attribute-values "{\":t\":{\"S\":\"$museum\"},\":k\":{\"S\":\"$kind\"}}")
+  [ -n "$kind" ] || filter=(--expression-attribute-values "{\":t\":{\"S\":\"$museum\"}}")
+  retry aws_ dynamodb query --table-name "$NAME-servability" --index-name by_tenant \
+      --key-condition-expression "tenant = :t" "${filter[@]}" ${max[@]+"${max[@]}"} \
+      --projection-expression "blob_csid, media_csid, #k, #a" --expression-attribute-names '{"#k":"kind","#a":"access"}' \
+      --output json |
+    MUSEUM="$museum" URL="$url" LIMIT="$limit" python3 -c '
+import json, os, sys
+data = json.load(sys.stdin)
+items = data.get("Items", [])
+museum, url, limit = os.environ["MUSEUM"], os.environ["URL"], int(os.environ["LIMIT"])
+if not items:
+    print(f"Serena has nothing servable for {museum} yet (no updated refresh): ./serena aws etl {museum} with the simulator.")
+    sys.exit()
+rows = sorted((i.get("kind", {}).get("S", ""), i.get("media_csid", {}).get("S", ""), i["blob_csid"]["S"],
+               i.get("access", {}).get("S", "")) for i in items)
+print("%-8s %-10s %-36s  %s" % ("kind", "access", "Media CSID", "address"))
+for kind, media, blob, access in rows:
+    tail = "derivatives/Medium/content" if kind in ("image", "card") else "content"
+    note = "  (needs a signed link)" if access != "public" else ""
+    address = "%s/%s/imageserver/blobs/%s/%s" % (url, museum, blob, tail)
+    print("%-8s %-10s %-36s  %s%s" % (kind, access, media or "(placeholder)", address, note))
+more = " There are more: --limit N, or --limit 0 for all." if data.get("NextToken") else ""
+print(f"{len(rows)} shown.{more}")'
+}
+
 retry() {  # retry COMMAND...: a read-only AWS call, tried up to 4 times, 5 seconds apart; its error shown on the last
   local _try
   for _try in 1 2 3; do "$@" 2>/dev/null && return 0; sleep 5; done
@@ -822,6 +868,7 @@ case "$CMD" in
     prepare; tf_init app
     if [ -z "$(applied image_uri)" ]; then echo "Saved; it applies at the first deploy."; else reapply "$(was_running)"; fi ;;
   etl) etl "$@" ;;
+  list) list_servable "$@" ;;
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
   etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;

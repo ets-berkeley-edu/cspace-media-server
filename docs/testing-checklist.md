@@ -826,6 +826,7 @@ step below says what to run, where, and what you should see. If you see somethin
   addresses, one per kind of file, like
   `image   https://<…>.cloudfront.net/pahma/imageserver/blobs/<Blob CSID>/derivatives/Medium/content`.
   Copy the `image` line's address and set it in the terminal: `SAMPLE="<that address>"`.
+  `./serena aws list pahma` lists every file Serena may serve for PAHMA, with its address (`--limit 0` for all).
 
 - [ ] **5. An image in the browser.** In Chrome, open the `$SAMPLE` address. Expect the image itself (not the "no
   image" picture, not an error). Then in the admin app (`<URL>/admin/`, sign in to PAHMA as `admin`, password
