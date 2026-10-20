@@ -1234,7 +1234,12 @@ reachable only from campus networks.
     one, with a reason; the audit log records the value before and after; a change to the delta threshold or the
     audit retention raises an emailed alert. Each setting shows its default value (the starting value in
     configuration), and "Use default" removes the admin's value. For the audit retention, the page says how many entries a shorter period would remove
-    at the next daily removal;
+    at the next daily removal. Serena sends what each value must be (a whole number or a number with its bounds, a
+    time, a choice or a Media CSID, the bounds read from the settings' own model so they can't drift); the Change
+    dialog shows it as the field's hint and checks the value on Save, before sending it, saying what's wrong under the
+    field in words ("Give a number from 0.1 to 100.") with the dialog left open. A value Serena refuses anyway is said
+    there too, for every setting as for the placeholder's record (D170), and Serena says it in the same words, never
+    its validation library's (decided October 20, 2026, D219 to D221);
   - the audit log's CSV export: every entry the museum keeps, oldest first (time, by, action, target, details),
     with any cell a spreadsheet could run as a formula made safe (D96); the export is audited;
   - the placeholder image's Media record, a setting (see Placeholder image);

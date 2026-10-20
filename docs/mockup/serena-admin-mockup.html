@@ -316,6 +316,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 42 (October 20, 2026, D219 to D221):</strong> <strong>Settings</strong>: the Change dialog checks the value when you click Save, before anything is sent, and says what's wrong under the field in words ("Give a number from 0.1 to 100.", "Give a whole number from 5 to 300.", "Give a time as HH:MM, from 00:00 to 23:59."), the dialog left open; try "5d" for the delta threshold. In the app, the bounds come from Serena with the settings (and show as each field's hint), and a value Serena refuses anyway is said under the field too, for every setting.</li>
       <li><strong>Version 41 (October 20, 2026, D216 to D218, Richard's review of Acknowledge all):</strong> In the Acknowledge all dialog, each listed alert also says what it's about and when it was raised (its date only when it isn't today), so alerts with the same title can be told apart; the reminder comes before the list, and only the list scrolls (about 12 lines), so the title, the reminder and the buttons stay in view however many wait. In the app, with more than 500 waiting, the dialog lists and acknowledges the newest 500 ("Acknowledge the newest 500 of &lt;n&gt; alerts?", "Acknowledge the newest 500") and says to click again for the rest; the mockup never has that many.</li>
       <li><strong>Version 40 (October 20, 2026, D207 to D211):</strong> <strong>Alerts</strong> has "Acknowledge all (&lt;n&gt;)" above the table, at the right, while 2 or more alerts wait (choose an Alerts scenario in Mockup settings: 1 or 3 waiting, or 2 or 3 pages of alerts with waiting ones on every page; "Reset everything" starts the mockup over). It asks first, listing the alerts it will acknowledge, all of them on every page of the table (each a link: it closes the dialog and shows that alert in the table, on its page, marked), and repeats that a problem still there is raised again the next day; no reason is asked, as for one alert. Each alert gets its own "alert acknowledge" entry in the Audit log. The alert banner keeps "Open alerts" only. <strong>Finding the waiting ones (D212 to D214):</strong> "All · Waiting (&lt;n&gt;)" at the left above the table shows every alert or only those waiting (All is the default; sorting and paging work in both, and "No alerts waiting." when there are none); the bell and the banner's "Open alerts" open Alerts on Waiting, every other way in on All; and in All, a waiting alert's row has a red bar down its left edge. In the app the choice is kept in the address, like sorting and paging.</li>
       <li><strong>Version 39 (October 14, 2026, D174 to D180, pull request 15):</strong> Serena serves <strong>Media URLs</strong> (…/media/&lt;Media CSID&gt;/blob/content and …/blob/derivatives/&lt;size&gt;/content) as a request for the record's listed Blob, public files only. <strong>Past requests</strong> shows one as "Media &lt;shortened Media CSID&gt;" in the Blob CSID column, with its size, and opens its file like a Blob's; here, a served Media URL and one for an unknown record ("not listed"). <strong>Media look up</strong> answers a Media URL like its Blob's URL, with no note; …/media/&lt;CSID&gt;/content (without /blob/) is still refused, with the note, and its record looked up on its own.</li>
@@ -722,7 +723,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 41</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 42</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -739,7 +740,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 41</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 42</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" ${open ? 'data-show="waiting"' : ""} aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -1258,6 +1259,13 @@
         const v = $("#setValue");
         if (v && !v.value.trim()) { $("#setValueMsg").textContent = "Give a value first."; v.focus(); return; }
         if (v) $("#setValueMsg").textContent = "";
+        // Checked on Save, before anything is sent, and said under the field in words (version 42, D219 to D221).
+        const rule = {"Deadline for today's refresh": ["time"], "Poll interval": ["whole", 5, 300], "Step timeout": ["whole", 60, 7200], "Delta threshold": ["number", 0.1, 100]}[label];
+        if (v && rule) {
+          const t = v.value.trim(), [kind, lo, hi] = rule, n = Number(t);
+          const ok = kind === "time" ? /^([01]\d|2[0-3]):[0-5]\d$/.test(t) : (kind === "whole" ? /^\d+$/ : /^(\d+(\.\d*)?|\.\d+)$/).test(t) && n >= lo && n <= hi;
+          if (!ok) { $("#setValueMsg").textContent = kind === "time" ? "Give a time as HH:MM, from 00:00 to 23:59." : `Give a ${kind === "whole" ? "whole " : ""}number from ${lo.toLocaleString("en-US")} to ${hi.toLocaleString("en-US")}.`; v.focus(); return; }
+        }
         if (!reasonGiven("setReason")) return;
         if (label.startsWith("Placeholder")) {
           // Checked with CollectionSpace before it's saved (D170): here, the unknown sample CSID is refused.

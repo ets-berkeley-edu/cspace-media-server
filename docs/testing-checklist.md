@@ -296,8 +296,8 @@ http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
 - [ ] Open Settings (the gear at the top right, left of the museum menu). Expect the title "PAHMA Settings", and six cards: Watchdog (deadline 08:00), The ETL job (poll
   interval 15, step timeout 1800), Servable list check (delta threshold 5), Size limits (image 500, catalog card 500, 3D
   model 1024, PDF 200), Audit log (90 days) and Placeholder image ("none: the generic picture"; section 22), each "default value".
-- [ ] Click "Change" beside the step timeout. Type `10` and a reason, and click "Save". Expect a red message that it
-  must be greater than or equal to 60, and the value unchanged. Click "Change" again, type `900` and a reason, and save. Expect 900, "changed; default value
+- [ ] Click "Change" beside the step timeout. Type `10` and a reason, and click "Save". Expect "Give a whole number
+  from 60 to 7,200." under the field, the dialog still open (section 29); click "Cancel": the value unchanged. Click "Change" again, type `900` and a reason, and save. Expect 900, "changed; default value
   1800", and a "Use default" button.
 - [ ] Open "Audit log". Expect a "settings change" entry for `etl_step_timeout_seconds` with Before 1800, After 900 and
   your reason.
@@ -997,7 +997,8 @@ to its row), and acknowledges exactly those. serenade's T84 and T85 check the sa
 this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as `admin` (password
 `admin`) at http://localhost:5373/admin/.
 
-**Before you start:** make four alerts wait. On **Settings** (the gear), change "Delta threshold (%)" to 12.5 (any
+**Before you start:** make four alerts wait. On **Settings** (the gear), under "Servable list check", change "Delta
+threshold (%)" (not another setting: only it and the audit retention raise an alert) to 12.5 (any
 reason), then **Use default** (any reason): that's two "An admin changed a setting" alerts. Do the same once more for a
 third and fourth. Leave any older alerts as they are.
 
@@ -1032,3 +1033,26 @@ third and fourth. Leave any older alerts as they are.
   **Acknowledge all** and leave the dialog open; in a second tab, acknowledge one of them with its row's button. Back
   in the first tab, click **Acknowledge 2**: expect no error, both acknowledged (the second tab's by its own click),
   and one audit entry for each, not two for the one.
+
+## 29. A setting's value checked on Save, locally (10 minutes, before merging the pull request that adds it)
+
+What it checks: decisions D219 to D221 (October 20, 2026). The Settings page's Change dialog checks a value when you
+click Save, before sending it, and says what's wrong under the field in words, with the dialog left open; a value
+Serena refuses anyway is said the same way. serenade's T30 and T86 check the same on BAMPFA. On the local stack, from
+this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as `admin` (password
+`admin`) at http://localhost:5373/admin/, on **Settings** (the gear).
+
+- [ ] **1. The hints.** Click **Change** beside each setting in turn (then **Cancel**). Expect the hint under the field:
+  00:00 to 23:59, Pacific; 5 to 300; 60 to 7,200 (2 hours); 0.1 to 100; 1 to 2,048 for each size limit; and the
+  placeholder's "The Media CSID of a record in this museum's CollectionSpace".
+- [ ] **2. Not a value (D219, D221).** Change **Delta threshold (%)** to `5d`, give a reason, click **Save**. Expect
+  "Give a number from 0.1 to 100." in red under the field, the cursor in the field, the dialog open, and no red
+  message on the page. Type `12.5` instead: the message goes as you type. **Cancel**.
+- [ ] **3. Out of bounds, and whole numbers.** The same with **ETL poll interval** `12.5` and `301` ("Give a whole
+  number from 5 to 300."), **Largest PDF file fetched** `4096` ("… from 1 to 2,048."), and the **Deadline** `8am`
+  ("Give a time as HH:MM, from 00:00 to 23:59."). The order doesn't matter: without a reason, a bad value is named
+  first; with a good value and no reason, "Give a reason first.".
+- [ ] **4. Nothing was sent.** Open **Audit log**: no "settings change" entry from steps 2 and 3, and no alert on the
+  bell.
+- [ ] **5. A good value still saves.** Change **ETL poll interval** to `30` with a reason: saved, "changed; default
+  value 15". Then **Use default** (any reason).

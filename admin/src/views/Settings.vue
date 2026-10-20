@@ -122,7 +122,7 @@
             v-model="value"
             :label="editing.label"
             :error-messages="valueProblem ? [valueProblem] : []"
-            :hint="hints[editing.name] || hints[editing.group]"
+            :hint="hintFor(editing)"
             persistent-hint
           />
           <p v-if="editing.name === PLACEHOLDER && !toDefault" class="text-body-2 mt-2 mb-0">
@@ -177,14 +177,38 @@ const GROUPS: Record<string, string> = {
 }
 // The placeholder image's Media record (decided October 14, 2026, D166 to D172).
 const PLACEHOLDER = 'placeholder_media_csid'
-// The allowed values (D88); Serena checks them too.
-const hints: Record<string, string> = {
-  watchdog_deadline: '00:00 to 23:59, Pacific',
-  etl_poll_interval_seconds: '5 to 300',
-  etl_step_timeout_seconds: '60 to 7,200 (2 hours)',
-  delta_threshold_percent: '0.1 to 100',
-  size_limits: '1 to 2,048',
-  placeholder_media_csid: 'The Media CSID of a record in this museum\'s CollectionSpace'
+// The allowed values (D88), from Serena's answer (D219), so the hint and the check on Save never drift from what
+// Serena checks; a few words added where they help.
+const HINT_EXTRA: Record<string, string> = {etl_step_timeout_seconds: ' (2 hours)'}
+const number = (n: number | null | undefined) => (n ?? 0).toLocaleString('en-US')
+function hintFor(setting: SettingItem): string {
+  switch (setting.kind) {
+  case 'whole':
+  case 'number':
+    return `${number(setting.min)} to ${number(setting.max)}${HINT_EXTRA[setting.name] || ''}`
+  case 'time':
+    return '00:00 to 23:59, Pacific'
+  case 'csid':
+    return 'The Media CSID of a record in this museum\'s CollectionSpace'
+  default:
+    return ''
+  }
+}
+/** What's wrong with a value, in words, or '' (D219, D221): checked on Save, before anything is sent. */
+function problemWith(setting: SettingItem, text: string): string {
+  const inRange = (n: number) => n >= (setting.min ?? -Infinity) && n <= (setting.max ?? Infinity)
+  switch (setting.kind) {
+  case 'whole':
+    return /^\d+$/.test(text) && inRange(Number(text)) ? ''
+      : `Give a whole number from ${number(setting.min)} to ${number(setting.max)}.`
+  case 'number':
+    return /^(\d+(\.\d*)?|\.\d+)$/.test(text) && inRange(Number(text)) ? ''
+      : `Give a number from ${number(setting.min)} to ${number(setting.max)}.`
+  case 'time':
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? '' : 'Give a time as HH:MM, from 00:00 to 23:59.'
+  default:
+    return '' // a Media CSID: Serena checks it with CollectionSpace (D170)
+  }
 }
 
 const route = useRoute()
@@ -259,6 +283,13 @@ async function save() {
     valueField.value?.focus()
     return
   }
+  if (!toDefault.value) {
+    valueProblem.value = problemWith(editing.value, String(value.value).trim())
+    if (valueProblem.value) {
+      valueField.value?.focus()
+      return
+    }
+  }
   if (!reasonField.value?.check()) {
     return
   }
@@ -275,8 +306,12 @@ async function save() {
     dialog.value = false
   } catch (e) {
     const message = e instanceof ApiError ? e.message : 'That didn\'t work.'
-    if (editing.value?.name === PLACEHOLDER && !toDefault.value && e instanceof ApiError && e.status === 422) {
-      valueProblem.value = message // a record that won't do: said under the field, the dialog stays open (D170)
+    if (!toDefault.value && e instanceof ApiError && e.status === 422 && editing.value) {
+      // A value Serena refuses, any setting's (D220, as D170 for the placeholder's record): said under the field,
+      // without the setting's name that the dialog already shows, and the dialog stays open.
+      const prefix = `${editing.value.label}: `
+      const said = message.startsWith(prefix) ? message.slice(prefix.length) : message
+      valueProblem.value = said.charAt(0).toUpperCase() + said.slice(1)
       valueField.value?.focus()
     } else {
       saveError.value = message
