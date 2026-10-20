@@ -868,7 +868,8 @@ step below says what to run, where, and what you should see. If you see somethin
   2. Run `curl -sI "https://$BUCKET.s3.us-west-2.amazonaws.com/objects/$SHA"`. Expect
      `HTTP/1.1 403 Forbidden`.
   3. Run `curl -sI "$URL/pahma/servable-list/x"`. Expect no file: only `/pahma/objects/…` goes to the bucket, so
-     this path goes to Serena, which doesn't serve it. Note the status you get; it must not be a 200 with a file.
+     this path goes to Serena, which doesn't serve it. Expect `HTTP/2 404` with `content-type: text/plain` and
+     `cache-control: no-store` (Serena's answer; S3's would be `application/xml`). Seen on October 20, 2026.
 
 - [ ] **9. The unavailable image.**
   1. Copy `$SAMPLE` and change one character of its Blob CSID (for example a `1` to a `2`), so it's a Blob CSID the
