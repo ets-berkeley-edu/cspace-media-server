@@ -20,6 +20,8 @@ SERVED_KINDS = ("image", "card", "3D", "pdf")
 Kind = Literal["image", "card", "3D", "pdf"]
 
 _DEADLINE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+# The bounds of each size limit, in MB (D88): the admin app shows them and checks a value against them too (D219).
+SIZE_LIMIT_MB = (1, 2048)
 # How long a museum's audit log is kept, in days: 90 days, or 6, 12, 18, 24 or 36 months (decided October 12, 2026,
 # D97).
 AUDIT_RETENTION_DAYS = (90, 183, 365, 548, 730, 1095)
@@ -58,7 +60,7 @@ class StartingSettings(BaseModel):
         missing = [kind for kind in SERVED_KINDS if kind not in limits]
         if missing:
             raise ValueError(f"size_limit_mb needs a limit for {', '.join(missing)}")
-        if any(not 1 <= limit <= 2048 for limit in limits.values()):
+        if any(not SIZE_LIMIT_MB[0] <= limit <= SIZE_LIMIT_MB[1] for limit in limits.values()):
             raise ValueError("size limits must be 1 to 2,048 MB")
         return limits
 

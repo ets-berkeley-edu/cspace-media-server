@@ -24,7 +24,7 @@ from .alerts import Alert, Alerts, Kind
 from .audit import Action, Audit
 from .cspace.client import CSpaceError, MediaState
 from .fetch import Fetcher
-from .museum import AUDIT_RETENTION_DAYS, SERVED_KINDS, Museum, StartingSettings
+from .museum import AUDIT_RETENTION_DAYS, SERVED_KINDS, SIZE_LIMIT_MB, Museum, StartingSettings
 from .museum_settings import MuseumSettings
 from .refreshes import PACIFIC
 from .store import ServabilityRecord, Store
@@ -57,6 +57,49 @@ SETTINGS = (
 PLACEHOLDER = "placeholder_media_csid"
 NUMBER = "placeholder_identification_number"  # kept with it (not a setting of its own)
 BY_NAME = {setting.name: setting for setting in SETTINGS}
+
+
+@dataclass(frozen=True)
+class Rule:
+    """What a setting's value must be (D88), in a form the admin app checks before sending it and says in words when
+    it isn't (decided October 20, 2026, D219 to D221). The bounds come from StartingSettings, so they can't drift."""
+    kind: str  # whole (a whole number), number, time (HH:MM), choice (one of a list) or csid
+    low: float | None = None
+    high: float | None = None
+
+    def words(self) -> str:
+        if self.kind == "whole":
+            return f"a whole number from {self.low:,g} to {self.high:,g}"
+        if self.kind == "number":
+            return f"a number from {self.low:,g} to {self.high:,g}"
+        if self.kind == "time":
+            return "a time as HH:MM, from 00:00 to 23:59"
+        if self.kind == "choice":
+            return f"one of {', '.join(f'{days:,}' for days in AUDIT_RETENTION_DAYS)}"
+        return "a Media CSID"
+
+
+def _bounds(field: str) -> tuple[float, float]:
+    """A StartingSettings field's ge and le."""
+    low: float | None = None
+    high: float | None = None
+    for constraint in StartingSettings.model_fields[field].metadata:
+        low = getattr(constraint, "ge", low)
+        high = getattr(constraint, "le", high)
+    if low is None or high is None:
+        raise ValueError(f"{field} has no bounds")
+    return low, high
+
+
+RULES = {
+    "watchdog_deadline": Rule("time"),
+    "etl_poll_interval_seconds": Rule("whole", *_bounds("etl_poll_interval_seconds")),
+    "etl_step_timeout_seconds": Rule("whole", *_bounds("etl_step_timeout_seconds")),
+    "delta_threshold_percent": Rule("number", *_bounds("delta_threshold_percent")),
+    **{f"size_limit_mb.{kind}": Rule("whole", *SIZE_LIMIT_MB) for kind in SERVED_KINDS},
+    "audit_retention_days": Rule("choice"),
+    PLACEHOLDER: Rule("csid"),
+}
 
 
 @dataclass
@@ -133,7 +176,9 @@ def create_router() -> APIRouter:
         return {
             "settings": [{"name": s.name, "group": s.group, "label": s.label, "value": value_of(current, s.name),
                           "default": value_of(museum.settings, s.name),
-                          "changed": value_of(current, s.name) != value_of(museum.settings, s.name)}
+                          "changed": value_of(current, s.name) != value_of(museum.settings, s.name),
+                          # What the value must be (D219): the admin app checks it on Save and shows it as the hint.
+                          "kind": RULES[s.name].kind, "min": RULES[s.name].low, "max": RULES[s.name].high}
                          for s in SETTINGS],
             # The Blob the museum's ETL lists for its placeholder image (its configuration), if it uses one, and the
             # named record's identification number, for the Settings page (D169).
@@ -195,9 +240,9 @@ def create_router() -> APIRouter:
         updated = with_value(museum, overrides, name, value)
         try:
             after = value_of(merged(museum, updated), name)
-        except ValidationError as error:
-            problems = "; ".join(e["msg"].removeprefix("Value error, ") for e in error.errors())
-            raise HTTPException(422, f"{setting.label}: {problems}") from None
+        except ValidationError:
+            # In words, not pydantic's (D221): "Delta threshold (%): give a number from 0.1 to 100."
+            raise HTTPException(422, f"{setting.label}: give {RULES[name].words()}.") from None
         updated = with_value(museum, overrides, name, after)  # stored as the validated value (a number, not text)
         extra: dict[str, Any] = {}
         if name == PLACEHOLDER and after is not None:

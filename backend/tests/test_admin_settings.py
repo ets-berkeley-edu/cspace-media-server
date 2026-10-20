@@ -56,7 +56,14 @@ def test_the_settings_and_their_default_values(client: TestClient) -> None:
                               "placeholder_media_csid"]
     assert settings["watchdog_deadline"] == {"name": "watchdog_deadline", "group": "watchdog",
                                              "label": "Deadline for today's refresh (HH:MM, Pacific)",
-                                             "value": "08:00", "default": "08:00", "changed": False}
+                                             "value": "08:00", "default": "08:00", "changed": False,
+                                             "kind": "time", "min": None, "max": None}
+    # What each value must be, from StartingSettings' bounds, for the admin app to check on Save (D219).
+    assert [(settings[n]["kind"], settings[n]["min"], settings[n]["max"]) for n in
+            ("etl_poll_interval_seconds", "etl_step_timeout_seconds", "delta_threshold_percent", "size_limit_mb.pdf",
+             "audit_retention_days", "placeholder_media_csid")] == [
+        ("whole", 5, 300), ("whole", 60, 7200), ("number", 0.1, 100), ("whole", 1, 2048), ("choice", None, None),
+        ("csid", None, None)]
     assert [c["days"] for c in body["audit_retention_choices"]] == [90, 183, 365, 548, 730, 1095]
     # The size limits name each kind as people read it: "catalog card", not the raw "card" (D151).
     assert [settings[f"size_limit_mb.{kind}"]["label"] for kind in ("image", "card", "3D", "pdf")] == [
@@ -70,7 +77,7 @@ def test_change_a_setting(app: Any, client: TestClient, store: Store) -> None:
     assert response.status_code == 200, response.text
     assert settings_of(response.json())["etl_step_timeout_seconds"] | {"label": ""} == {
         "name": "etl_step_timeout_seconds", "group": "etl", "label": "", "value": 900, "default": 1800,
-        "changed": True}
+        "changed": True, "kind": "whole", "min": 60, "max": 7200}
     # The app reads it at once (the other tasks within a minute), and so does the ETL API.
     assert app.state.museum_settings.get(museum.load("pahma")).etl_step_timeout_seconds == 900
     entry = client.get("/admin/v1/museums/pahma/audit").json()["entries"][0]
@@ -93,17 +100,21 @@ def test_weakening_a_protection_is_emailed(client: TestClient, store: Store) -> 
 
 
 @pytest.mark.parametrize(("name", "value", "problem"), [
-    ("etl_step_timeout_seconds", 10, "greater than or equal to 60"),
-    ("etl_poll_interval_seconds", 301, "less than or equal to 300"),
-    ("delta_threshold_percent", 0.05, "greater than or equal to 0.1"),
-    ("watchdog_deadline", "8am", "HH:MM"),
-    ("size_limit_mb.pdf", 4096, "1 to 2,048 MB"),
-    ("audit_retention_days", 30, "must be one of 90, 183"),
+    ("etl_step_timeout_seconds", 10, "ETL step timeout (seconds): give a whole number from 60 to 7,200."),
+    ("etl_poll_interval_seconds", 301, "ETL poll interval (seconds): give a whole number from 5 to 300."),
+    ("etl_poll_interval_seconds", "12.5", "ETL poll interval (seconds): give a whole number from 5 to 300."),
+    ("delta_threshold_percent", 0.05, "Delta threshold (%): give a number from 0.1 to 100."),
+    ("delta_threshold_percent", "5d", "Delta threshold (%): give a number from 0.1 to 100."),
+    ("watchdog_deadline", "8am", "Deadline for today's refresh (HH:MM, Pacific): give a time as HH:MM, from 00:00 to "
+                                 "23:59."),
+    ("size_limit_mb.pdf", 4096, "Largest PDF file fetched (MB): give a whole number from 1 to 2,048."),
+    ("audit_retention_days", 30, "How long the audit log is kept (days): give one of 90, 183, 365, 548, 730, 1,095."),
 ])
 def test_values_out_of_bounds_are_refused(client: TestClient, name: str, value: Any, problem: str) -> None:
+    """In words, never pydantic's (D221), and nothing is saved."""
     sign_in(client)
     response = put(client, name, value)
-    assert response.status_code == 422 and problem in response.json()["detail"]
+    assert response.status_code == 422 and response.json()["detail"] == problem
 
 
 def test_refused_without_the_header_a_reason_or_a_known_setting(client: TestClient) -> None:

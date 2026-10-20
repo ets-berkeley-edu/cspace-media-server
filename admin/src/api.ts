@@ -93,6 +93,11 @@ export interface SettingItem {
   value: string | number | null // null: none (the placeholder image's Media CSID before one is named)
   default: string | number | null // the value in Serena's configuration
   changed: boolean
+  // What the value must be (D219): a whole number or a number from min to max, a time (HH:MM), one of the audit
+  // retention choices, or a Media CSID. The page checks it on Save and shows it as the field's hint.
+  kind?: 'whole' | 'number' | 'time' | 'choice' | 'csid'
+  min?: number | null
+  max?: number | null
 }
 
 export interface SettingsResponse {

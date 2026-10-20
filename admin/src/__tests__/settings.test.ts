@@ -9,7 +9,8 @@ import Settings from '@/views/Settings.vue'
 
 const SETTINGS = {
   settings: [
-    {name: 'delta_threshold_percent', group: 'check', label: 'Delta threshold (%)', value: 5, default: 5, changed: false},
+    {name: 'delta_threshold_percent', group: 'check', label: 'Delta threshold (%)', value: 5, default: 5, changed: false,
+      kind: 'number', min: 0.1, max: 100},
     {name: 'audit_retention_days', group: 'audit', label: 'How long the audit log is kept (days)', value: 90, default: 90,
       changed: false}
   ],
@@ -100,6 +101,75 @@ describe('the Settings page', () => {
     expect(put?.body).toEqual({value: '12.5', reason: 'PAHMA republishes its images this week'})
     expect(put?.headers['X-Serena-Admin']).toBe('1')
     expect(wrapper.find('#setting-delta_threshold_percent .reset').text()).toBe('Use default')
+    wrapper.unmount()
+  })
+})
+
+describe('checking a value on Save (October 20, 2026, D219 to D221)', () => {
+  const POLL = {name: 'etl_poll_interval_seconds', group: 'etl', label: 'ETL poll interval (seconds)', value: 15,
+    default: 15, changed: false, kind: 'whole', min: 5, max: 300}
+  const DEADLINE = {name: 'watchdog_deadline', group: 'watchdog', label: 'Deadline for today\'s refresh (HH:MM, Pacific)',
+    value: '08:00', default: '08:00', changed: false, kind: 'time', min: null, max: null}
+  const SIZE = {name: 'size_limit_mb.pdf', group: 'size_limits', label: 'Largest PDF file fetched (MB)', value: 200,
+    default: 200, changed: false, kind: 'whole', min: 1, max: 2048}
+
+  async function dialogFor(wrapper: ReturnType<typeof mount>, name: string, value: string) {
+    await wrapper.find(`#setting-${name.replace('.', '-')} .change`).trigger('click')
+    await flushPromises()
+    const field = document.querySelector('#setting-value') as HTMLInputElement
+    field.value = value
+    field.dispatchEvent(new Event('input'))
+    const reason = document.querySelector('#reason') as HTMLTextAreaElement
+    reason.value = 'A test'
+    reason.dispatchEvent(new Event('input'))
+    await flushPromises()
+    ;(document.querySelector('#save-setting') as HTMLButtonElement).click()
+    await flushPromises()
+  }
+  const closeDialog = async () => {
+    (document.querySelector('.v-dialog .v-card-actions .v-btn--variant-outlined') as HTMLButtonElement).click()
+    await flushPromises()
+  }
+
+  it('says what a value must be, under the field, sends nothing and keeps the dialog open', async () => {
+    const page = {...SETTINGS, settings: [DEADLINE, POLL, ...SETTINGS.settings, SIZE]}
+    const calls = fakeApi({'GET /museums/pahma/settings': {body: page}})
+    const wrapper = await at('/pahma/settings', Settings)
+    const cases: [string, string, string][] = [
+      ['delta_threshold_percent', '5d', 'Give a number from 0.1 to 100.'],
+      ['delta_threshold_percent', '0.05', 'Give a number from 0.1 to 100.'],
+      ['etl_poll_interval_seconds', '12.5', 'Give a whole number from 5 to 300.'],
+      ['etl_poll_interval_seconds', '301', 'Give a whole number from 5 to 300.'],
+      ['size_limit_mb.pdf', '4096', 'Give a whole number from 1 to 2,048.'],
+      ['watchdog_deadline', '8am', 'Give a time as HH:MM, from 00:00 to 23:59.']
+    ]
+    for (const [name, value, problem] of cases) {
+      await dialogFor(wrapper, name, value)
+      expect(document.querySelector('.v-dialog')?.textContent, `${name} ${value}`).toContain(problem)
+      expect(document.activeElement?.id).toBe('setting-value')
+      await closeDialog()
+    }
+    expect(calls.filter(c => c.method === 'PUT')).toHaveLength(0)
+    expect(wrapper.find('#settings-error').exists()).toBe(false)
+    // The hint is the range Serena sent.
+    await wrapper.find('#setting-size_limit_mb-pdf .change').trigger('click')
+    await flushPromises()
+    expect(document.querySelector('.v-dialog')?.textContent).toContain('1 to 2,048')
+    wrapper.unmount()
+  })
+
+  it('shows a value Serena refuses under the field too, the dialog open (D220)', async () => {
+    const calls = fakeApi({
+      'GET /museums/pahma/settings': {body: SETTINGS},
+      'PUT /museums/pahma/settings/delta_threshold_percent': {status: 422,
+        body: {detail: 'Delta threshold (%): give a number from 0.1 to 100.'}}
+    })
+    const wrapper = await at('/pahma/settings', Settings)
+    await dialogFor(wrapper, 'delta_threshold_percent', '12.5')
+    await vi.waitFor(() => expect(document.querySelector('.v-dialog')?.textContent).toContain('Give a number from 0.1 to 100.'))
+    expect(document.querySelector('#save-setting')).not.toBeNull()
+    expect(wrapper.find('#settings-error').exists()).toBe(false)
+    expect(calls.filter(c => c.method === 'PUT')).toHaveLength(1)
     wrapper.unmount()
   })
 })

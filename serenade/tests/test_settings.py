@@ -1,5 +1,5 @@
-"""Settings, checks T29 to T35 of the test inventory (serena-test-inventory.xlsx; docs/testing-checklist.md sections 15,
-19, 21 and 22).
+"""Settings, checks T29 to T35 and T86 of the test inventory (serena-test-inventory.xlsx; docs/testing-checklist.md
+sections 15, 19, 21, 22 and 29).
 
 T29 to T34 use BAMPFA, the museum reserved for settings tests (the inventory's Data roles): each change is put back
 ("Use default"), so they leave BAMPFA as they found it, apart from its audit entries and alerts. T35 names PAHMA's
@@ -67,12 +67,35 @@ def test_t29_the_settings_page_and_its_default_values(driver: WebDriver, base_ur
 
 
 def test_t30_a_value_out_of_bounds_is_refused(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 15, step 2. Nothing changes."""
+    """Checklist section 15, step 2; section 29 (D219). Said under the field, the dialog open; nothing changes."""
     page = settings_page(driver, base_url)
     page.change("etl_step_timeout_seconds", "10", "serenade T30: out of bounds")
-    error = page.wait_for(page.ERROR).text
-    assert "ETL step timeout (seconds)" in error and "60" in error, error
+    page.wait_for_text(page.VALUE_MESSAGES, "Give a whole number from 60 to 7,200.")
+    assert page.focused_id() == "setting-value"
+    page.click(page.CANCEL)
+    page.wait_until_gone(page.SAVE)
+    assert page.count(page.ERROR) == 0
     assert page.cells("etl_step_timeout_seconds")[1:] == ["1800", "default value"]
+
+
+def test_t86_a_value_that_isnt_one_is_caught_on_save(driver: WebDriver, base_url: str) -> None:
+    """Checklist section 29 (D219 to D221): a value that isn't a number or a time is said under the field, in words,
+    and nothing is sent: no change, no audit entry."""
+    page = settings_page(driver, base_url)
+    for name, value, problem in (
+        ("delta_threshold_percent", "5d", "Give a number from 0.1 to 100."),
+        ("etl_poll_interval_seconds", "12.5", "Give a whole number from 5 to 300."),
+        ("watchdog_deadline", "8am", "Give a time as HH:MM, from 00:00 to 23:59."),
+    ):
+        page.change(name, value, "serenade T86: not a value")
+        page.wait_for_text(page.VALUE_MESSAGES, problem)
+        assert page.focused_id() == "setting-value"
+        page.click(page.CANCEL)
+        page.wait_until_gone(page.SAVE)
+        assert page.cells(name)[1:] == [DEFAULTS[name], "default value"]
+    audit = AuditLogPage(driver, base_url)
+    audit.open_page(BAMPFA)
+    assert "serenade T86" not in audit.text_of(audit.TABLE)
 
 
 def test_t31_changing_a_setting_and_using_the_default_again(driver: WebDriver, base_url: str) -> None:
