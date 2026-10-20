@@ -852,8 +852,13 @@ step below says what to run, where, and what you should see. If you see somethin
   2. Run `curl -sI "${SIGNED%%\?*}"` (the address without its query string). Expect `HTTP/2 403`.
 
 - [ ] **8. The bucket can be reached only through CloudFront (D196).**
-  1. Find the bucket's name in the deploy's output, under `buckets` (`serena-dev-pahma-<account>-us-west-2`).
-  2. Run `curl -sI "https://<bucket name>.s3.us-west-2.amazonaws.com/objects/<the SHA-256 from step 6>"`. Expect
+  1. Find the bucket's name and set it:
+     ```
+     BUCKET="$(aws --profile bmu-personal --region us-west-2 s3api list-buckets \
+       --query "Buckets[?starts_with(Name, 'serena-dev-pahma-')].Name" --output text)"
+     ```
+     `echo "$BUCKET"` should print `serena-dev-pahma-<account>-us-west-2`.
+  2. Run `curl -sI "https://$BUCKET.s3.us-west-2.amazonaws.com/objects/<the SHA-256 from step 6>"`. Expect
      `HTTP/1.1 403 Forbidden`.
   3. Run `curl -sI "$URL/pahma/servable-list/x"`. Expect no file: only `/pahma/objects/…` goes to the bucket, so
      this path goes to Serena, which doesn't serve it. Note the status you get; it must not be a 200 with a file.
