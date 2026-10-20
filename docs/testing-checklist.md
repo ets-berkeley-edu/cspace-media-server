@@ -946,21 +946,20 @@ step below says what to run, where, and what you should see. If you see somethin
   3. The next day, in the AWS console, open Billing and Cost Management → Cost Explorer for your personal account:
      expect no new costs for the day after the destroy.
 
-## 26. Quieter plans, and the devtools image from ECR Public (15 minutes, at the next personal-dev deploy)
+## 26. Quieter plans (15 minutes, at the next personal-dev deploy)
 
 What it checks: the task definitions write out what ECS fills in (`hostPort`, `mountPoints`, `volumesFrom`,
 `systemControls`, and an empty `environment` or `portMappings` where there are none), so Terraform stops replacing
-them when nothing in them changed; and `backend/Dockerfile` takes its base image from Amazon ECR Public, as
-`deploy/Dockerfile` does. A deploy always builds a new image tag (the commit and the time), so a deploy still
+them when nothing in them changed. A deploy always builds a new image tag (the commit and the time), so a deploy still
 replaces the task definitions; the commands that apply again with the running images (`plan`, `pause`, `resume`,
 `allow-my-ip`, `cdn-key`) shouldn't. From this pull request's branch on the Mac, signed in
 (`aws sso login --profile bmu-personal`):
 
-- [ ] **1. The local stack builds from ECR Public.** Run `./serena down && ./serena up`. Expect it to start as
-  before, and the build's output to name `public.ecr.aws/docker/library/python:3.11-slim`, not
-  `docker.io/library/python:3.11-slim`.
-- [ ] **2. Deploy.** Run `./serena aws deploy`. Expect the build of "The simulator's and fake ETL's image" to name
-  `public.ecr.aws/docker/library/python:3.11-slim`. In the plan, the four task definitions "must be replaced" (a new
+- [x] **1. (Dropped.)** This pull request first moved `backend/Dockerfile`'s base image to ECR Public too. Checked
+  by Richard on October 20, 2026, but CI's `stack` job then failed twice with `429 Too Many Requests - Data limit
+  exceeded` from public.ecr.aws (GitHub's runners share addresses), so the change was taken out and the local stack
+  and the devtools image stay on Docker Hub.
+- [ ] **2. Deploy.** Run `./serena aws deploy`. In the plan, the four task definitions "must be replaced" (a new
   image), and in each one's `container_definitions` the only changes are `image` and `SERENA_BUILD`: no
   `- hostPort`, `- mountPoints = []`, `- volumesFrom = []`, `- systemControls = []`, `- portMappings = []` or
   `- environment = []` lines. Type `yes`.
