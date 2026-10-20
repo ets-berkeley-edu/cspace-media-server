@@ -971,3 +971,42 @@ replaces the task definitions; the commands that apply again with the running im
   `./serena aws resume`, the same, and `./serena aws etl pahma` (the simulator lost its records).
 - [ ] When done, `./serena aws destroy` (type `personal-dev`), or `./serena aws pause` if personal-dev is kept for
   the next pull request.
+
+## 28. Acknowledge all, and finding the waiting alerts, locally (15 minutes, before merging the pull request that adds them)
+
+What it checks: decisions D207 to D215 (October 20, 2026). On the Alerts page, "All · Waiting (<n>)" and a red bar on
+waiting rows; the bell and the banner open Waiting; "Acknowledge all (<n>)" asks first, listing the alerts (each a link
+to its row), and acknowledges exactly those. serenade's T82 and T83 check the same on BAMPFA. On the local stack, from
+this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as `admin` (password
+`admin`) at http://localhost:5373/admin/.
+
+**Before you start:** make three alerts wait. On **Settings** (the gear), change "Delta threshold (%)" to 12.5 (any
+reason), then **Use default** (any reason): that's two "An admin changed a setting" alerts. Do the same once more for a
+third and fourth. Leave any older alerts as they are.
+
+- [ ] **1. The bell and the banner open Waiting (D213).** Expect the bell's red badge to count the waiting alerts and
+  the banner to name the newest. Click the banner's **Open alerts**. Expect the address to end with `?show=waiting`,
+  **Waiting (<n>)** to be chosen, and the table to list only the waiting alerts, each with its Acknowledge button.
+  Go to **Overview**, then click the bell: the same.
+- [ ] **2. All, and the waiting rows' bar (D212, D214).** Click **All**. Expect `show=waiting` to leave the address,
+  every alert of the last 30 days listed, and each waiting alert's row to have a red bar down its left edge (the
+  acknowledged ones none). Sort by **Acknowledged**, then page or change "Items per page" to 10: the choice of All
+  stays. Click **Waiting**: back to page 1, only the waiting ones. Press the browser's Back: All again, as it was.
+- [ ] **3. Opened another way, All (D213).** On the **Audit log**, click an "alert acknowledge" entry's target (an
+  alert of the last 30 days): expect Alerts on **All**, not Waiting, even while alerts wait.
+- [ ] **4. Acknowledge all asks first (D207 to D209).** With 2 or more waiting, expect **Acknowledge all (<n>)** at
+  the right, above the table (with only 1 waiting, there's none: its row's button does it). Click it. Expect
+  "Acknowledge <n> alerts?", the alerts listed newest first, all of them even if they're on other pages of the table,
+  and the reminder that a problem still there is raised again the next day; no reason field; **Cancel** and
+  **Acknowledge <n>**. Click **Cancel**: nothing changes.
+- [ ] **5. A listed alert is a link (D215).** Set "Items per page" to 10 so the alerts span pages. Open **Acknowledge
+  all** and click the oldest listed alert. Expect the dialog to close, the table to show the page that holds it,
+  that row marked (shaded) and in view, and nothing acknowledged (the badge's count unchanged).
+- [ ] **6. Acknowledge them (D207, D210, D211).** Open **Acknowledge all** again and click **Acknowledge <n>**. Expect
+  every row acknowledged by "admin" with the time, the button, the badge and the banner gone, and **Waiting (0)**
+  showing "No alerts waiting.". On the **Audit log**, expect one "alert acknowledge" entry per alert. The banner never
+  had its own Acknowledge all (D211).
+- [ ] **7. One acknowledged meanwhile is skipped.** Make two alerts wait again (step "Before you start"). Open
+  **Acknowledge all** and leave the dialog open; in a second tab, acknowledge one of them with its row's button. Back
+  in the first tab, click **Acknowledge 2**: expect no error, both acknowledged (the second tab's by its own click),
+  and one audit entry for each, not two for the one.

@@ -320,3 +320,33 @@ def test_alerts_and_acknowledging(app: Any, admin: TestClient, store: Store) -> 
     assert admin.post("/admin/v1/museums/pahma/alerts/acknowledge", headers=CHANGES,
                       json={"key": key}).status_code == 409
     assert audit(admin)[0]["action"] == "alert_acknowledge"
+
+
+def test_acknowledging_all(app: Any, admin: TestClient, store: Store) -> None:
+    """Acknowledge all (D207 to D210): the keys the page shows, one audit entry each, others skipped."""
+    alerts = Alerts(store, None, "")
+    for day in ("2026-10-08", "2026-10-09", "2026-10-10"):
+        alerts.raise_(Alert("pahma", day, Kind.MISSED_DEADLINE, day, f"Not finished on {day}"))
+    # Another museum's alert, on a day PAHMA has none: its key (unique only within a museum) names nothing of PAHMA's.
+    alerts.raise_(Alert("cinefiles", "2026-10-07", Kind.MISSED_DEADLINE, "2026-10-07", "another museum's"))
+    keys = [a["key"] for a in admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"]]
+    cinefiles_key = "2026-10-07#missed_deadline#2026-10-07"
+    # One was acknowledged meanwhile (another admin): it's skipped, not an error.
+    one = admin.post("/admin/v1/museums/pahma/alerts/acknowledge", headers=CHANGES, json={"key": keys[0]})
+    assert one.status_code == 200
+    url = "/admin/v1/museums/pahma/alerts/acknowledge-all"
+    assert admin.post(url, json={"keys": keys}).status_code == 403  # a change needs the header
+    response = admin.post(url, headers=CHANGES, json={"keys": [*keys, keys[1], cinefiles_key, "no such alert"]})
+    assert response.status_code == 200, response.text
+    assert response.json() == {"acknowledged": keys[1:], "skipped": 3}
+    listed = admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"]
+    assert all(a["acknowledged_by"] == "admin" and a["acknowledged_at"] for a in listed)
+    assert admin.get("/admin/v1/museums/pahma/status").json()["unacknowledged"] == 0
+    # The other museum's alert, named by its key while signed in to PAHMA, is untouched.
+    assert alerts.recent("cinefiles", "2026-10-01")[0]["acknowledged_at"] is None
+    acknowledged = [e for e in audit(admin) if e["action"] == "alert_acknowledge"]
+    assert sorted(e["target"] for e in acknowledged) == sorted(keys)  # one entry per alert, the earlier one included
+    # Nothing to do, too many, or a bad key: refused.
+    assert admin.post(url, headers=CHANGES, json={"keys": []}).status_code == 422
+    assert admin.post(url, headers=CHANGES, json={"keys": [f"k{i}" for i in range(501)]}).status_code == 422
+    assert admin.post(url, headers=CHANGES, json={"keys": ["x" * 201]}).status_code == 422

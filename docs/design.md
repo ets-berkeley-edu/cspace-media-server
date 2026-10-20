@@ -782,8 +782,25 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
   its first servability update there's nothing to compare with.
 
 An alert counts on the admin app's bell and shows in its one-line banner (checked on every page change and every
-minute; see Admin web app, Layout) until an admin acknowledges it, one at a time, on the Alerts page, which lists the
-last 30 days' alerts, acknowledged or not. An alert is logged, and is emailed by the worker through one Amazon SNS
+minute; see Admin web app, Layout) until an admin acknowledges it on the Alerts page, which lists the last 30 days'
+alerts, acknowledged or not (decided October 20, 2026, D207 to D215):
+
+- **One at a time,** with its row's Acknowledge button, or **all those waiting at once** with "Acknowledge all (<n>)",
+  shown above the table while two or more wait. It asks first, listing the alerts it will acknowledge (all of them,
+  on every page of the table, newest first), and repeats that a problem still there is raised again the next day; no
+  reason is asked, as for one alert. The app sends the keys of the alerts it listed
+  (`POST /museums/<museum>/alerts/acknowledge-all`, at most 500), so an alert raised since is never acknowledged
+  unseen; one acknowledged meanwhile, or not this museum's, is skipped. Each alert gets its own "alert acknowledge"
+  entry in the audit log. Each listed alert is a link: it closes the dialog without acknowledging anything and shows
+  that alert in the table, on the page that holds it in the current view and sort, marked and focused. The banner
+  keeps "Open alerts" only: alerts are acknowledged where they can be read.
+- **Finding the waiting ones:** "All · Waiting (<n>)" above the table shows every alert or only those not yet
+  acknowledged (All is the default; the choice is kept in the address as `show=waiting`, like sorting and paging;
+  "No alerts waiting." when there are none). The bell's badge and the banner's "Open alerts" open Alerts on Waiting;
+  every other way in (an Audit log target, the bell with nothing waiting, a typed address) on All. In All, a waiting alert's
+  row has a red bar, the banner's colour, down its left edge.
+
+An alert is logged, and is emailed by the worker through one Amazon SNS
 topic per environment (`SERENA_ALERT_TOPIC_ARN`, encrypted with Serena's key) to the team's mailing list, the same
 topic the alarms use (see Infrastructure and operations). The address is a deploy setting kept out of the repository,
 and `./serena aws confirm-alerts` confirms the subscription (decided October 20, 2026, D201). Besides the watchdog's alerts, an admin's
@@ -1081,7 +1098,8 @@ reachable only from campus networks.
   bell, the Settings gear and the museum menu. The left-hand menu has three groups: Daily refresh (Overview, Start a
   refresh, Past refreshes), Media records (Past requests, Media look up, Recalls) and Admin (Audit log, API
   documentation). The bell opens the Alerts page; while alerts wait to be acknowledged it carries a red badge with
-  their number (99+ above 99), and a one-line banner under the app bar names the newest one, with "Open alerts". The
+  their number (99+ above 99), and a one-line banner under the app bar names the newest one, with "Open alerts". While
+  alerts wait, the bell and "Open alerts" open the page showing only those (D213; see Watchdog and alerts). The
   bell and the banner share one request, made on every page change and every minute while the tab is visible. The
   gear, labelled "<museum> settings", opens Settings. Page paths stay short (`/refreshes`, `/requests`, `/lookup`,
   `/recalls`).
@@ -1201,7 +1219,8 @@ reachable only from campus networks.
     file this page can't show (a TIFF, say), or nothing to show because Serena has no cached copy and CollectionSpace
     has no such file or can't be reached. The admin API's 404 for a preview carries that sentence.
 - **First-release features:**
-  - alerts: the bell, the banner, the Alerts page and acknowledging there (see Watchdog and alerts);
+  - alerts: the bell, the banner, the Alerts page and acknowledging there, one at a time or all at once (see Watchdog
+    and alerts);
   - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
   - the Past refreshes, Alerts and Audit log pages show the last 30 days, newest first; the browser sorts all 30 days by a
     column's name (each click switches between ascending and descending; a table is always sorted) and pages them, 25 rows to start (10, 25, 50 or 100) (decided October 12, 2026, D91 to D94);
