@@ -104,7 +104,7 @@ dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `n
 refreshes, alerts), `backend/serena/admin_recalls.py` (recalls, their thumbnails, and Media look up, with
 `recalls.py` and `lookup.py`; Media look up reads the Media record from CollectionSpace beside Serena's answer, which never
 depends on it) and `backend/serena/admin_requests.py` (the Past requests page, which reads the log through
-`backend/serena/requests_log.py`: CloudWatch Logs Insights in AWS, a local log file otherwise). The Selenium tests are in `serenade/` (`./serena ui`, against the local stack only).
+`backend/serena/requests_log.py`: CloudWatch Logs Insights in AWS, a local log file otherwise). The Selenium tests are in `serenade/`: `tests/` against the local stack only (`./serena test`, `./serena ui`), and `aws/` against a deployed environment (`./serena aws test`, which Richard runs, signed in; never Claude or CI).
 
 CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`
 job), and a `dependencies` job: the requirements files are in step and `pip-audit` finds no known vulnerabilities.

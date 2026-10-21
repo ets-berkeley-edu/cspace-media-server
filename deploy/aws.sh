@@ -8,10 +8,14 @@
 #   ./serena aws logs web|worker|devtools   follow a service's logs (the last 30 minutes first)
 #   ./serena aws pause         stop every service to save money (the data stays); ./serena aws resume starts them
 #   ./serena aws allow-my-ip   add this computer's current address to the allowlist
-#   ./serena aws etl MUSEUM [--rows N] [--failed]   with the simulator: a whole daily refresh by the fake ETL, run
-#                              once inside the environment; prints the refresh's result and sample image addresses
+#   ./serena aws etl MUSEUM [--rows N] [--failed] [--json]   with the simulator: a whole daily refresh by the fake
+#                              ETL, run once inside the environment; prints the refresh's result and sample image
+#                              addresses (--json: only its summary, as JSON, for ./serena aws test)
 #   ./serena aws list MUSEUM [--limit N] [--kind KIND]   what Serena may serve for a museum (its servability table),
 #                              each with its address: the first 25, or N (0 for all)
+#   ./serena aws test [pytest options]   the AWS tests (serenade/aws/) against this running environment: what
+#                              Serena serves through CloudFront, the admin app, a recall that's cancelled, the logs
+#                              (D222-D231); only the tests that look against a real CollectionSpace
 #   ./serena aws cspace-secret MUSEUM   set a museum's read-only CollectionSpace account (asks; nothing is shown or saved)
 #   ./serena aws etl-token MUSEUM       make a museum's new ETL token (the old one keeps working until the next);
 #                              shows it once, for the ETL's token file
@@ -726,7 +730,10 @@ etl() {  # etl MUSEUM [fake_etl options]
     die "'$ENV' uses a real CollectionSpace: its servable lists come from the real ETL (Jira CSW-1027), not the fake one."
   need_museum "$museum" etl
   check_account; need_terraform; tf_init app; need_deployed
-  local family subnets sg lb url task id overrides code log out
+  local family subnets sg lb url task id overrides code log out quiet=false arg
+  for arg in "$@"; do [ "$arg" != --json ] || quiet=true; done
+  # With --json only the summary goes to standard output (./serena aws test reads it); the rest goes to errors.
+  if [ "$quiet" = true ]; then exec 3>&2; else exec 3>&1; fi
   family="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_definition"])')"
   subnets="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["subnets"])')"
   sg="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["security_group"])')"
@@ -739,13 +746,13 @@ command = ["python", "-m", "devtools.fake_etl", "--museum", museum, "--serena", 
 print(json.dumps({"containerOverrides": [{"name": "fake-etl", "command": command}]}))
 PY
 )"
-  echo "Running the fake ETL for $museum in '$ENV' (a minute or two) ..."
+  echo "Running the fake ETL for $museum in '$ENV' (a minute or two) ..." >&3
   task="$(aws_ ecs run-task --cluster "$NAME" --task-definition "$family" --launch-type FARGATE --count 1 \
     --network-configuration "awsvpcConfiguration={subnets=[$subnets],securityGroups=[$sg],assignPublicIp=ENABLED}" \
     --overrides "$overrides" --query 'tasks[0].taskArn' --output text)"
   case "$task" in arn:*) ;; *) die "The fake ETL's task didn't start: $task" ;; esac
   id="${task##*/}"
-  echo "  task $id"
+  echo "  task $id" >&3
   # The waits and reads below change nothing, so each is tried again on a dropped connection (a Wi-Fi or VPN blip):
   # the task runs on in AWS whatever happens to this computer's connection.
   until_stopped "$task" ||
@@ -801,6 +808,46 @@ for kind, media, blob, access in rows:
     print("%-8s %-10s %-36s  %s%s" % (kind, access, media or "(placeholder)", address, note))
 more = " There are more: --limit N, or --limit 0 for all." if data.get("NextToken") else ""
 print(f"{len(rows)} shown.{more}")'
+}
+
+# The AWS tests (serenade/aws/, D222-D231) against this environment once it's deployed and running: you run them,
+# signed in, after ./serena aws deploy or resume; never in CI (D229). They make read-only AWS calls with this
+# environment's profile, and change only what they undo (a fake ETL refresh, a recall they cancel).
+run_tests() {  # run_tests [pytest options]
+  load_env; check_account; need_terraform; tf_init app; need_deployed
+  [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
+  local url saved deployed museum py
+  url="$(app_url)"
+  case "$url" in https://*) ;; *) die "'$ENV' has no address yet: run ./serena aws deploy again." ;; esac
+  saved="$(cat "$URL_FILE" 2>/dev/null || true)"
+  [ "$saved" = "$url" ] || die "$URL_FILE says '${saved:-nothing}', but '$ENV' is at $url: ./serena aws deploy saves it."
+  deployed="$(applied museums)"
+  museum="$(museum_names "${deployed:-$MUSEUMS}" | head -n 1)"
+  # The admin account (D228): the simulator's synthetic admin/admin, or a museum admin's, asked for each run and
+  # never saved or shown.
+  if [ "$SIMULATED_CSPACE" = true ]; then
+    : "${SERENADE_ADMIN_USER:=admin}" "${SERENADE_ADMIN_PASSWORD:=admin}"
+  else
+    [ -n "${SERENADE_ADMIN_USER:-}" ] ||
+      die "'$ENV' uses a real CollectionSpace: set SERENADE_ADMIN_USER to a $museum admin's username for the run."
+    if [ -z "${SERENADE_ADMIN_PASSWORD:-}" ]; then
+      read -r -s -p "$SERENADE_ADMIN_USER's password (not shown or saved): " SERENADE_ADMIN_PASSWORD; echo
+    fi
+  fi
+  py="$(command -v python3.11 || true)"
+  [ -n "$py" ] || die "./serena aws test needs python3.11 (the repository's Python)."
+  if [ ! -x serenade/.venv/bin/python ]; then
+    "$py" -m venv serenade/.venv
+    serenade/.venv/bin/pip install -q --require-hashes -r serenade/requirements.txt
+  fi
+  echo "The AWS tests against $ENV_LABEL: $url (image ${IMAGE##*:}, museum $museum)"
+  [ "$SIMULATED_CSPACE" = true ] || echo "A real CollectionSpace: only the tests that look run."
+  rm -rf serenade/.run/failures
+  SERENADE_AWS_ENV="$ENV" SERENADE_AWS_URL="$url" SERENADE_AWS_MUSEUM="$museum" SERENADE_AWS_LABEL="$ENV_LABEL" \
+    SERENADE_AWS_IMAGE_TAG="${IMAGE##*:}" SERENADE_AWS_SIMULATED="$SIMULATED_CSPACE" \
+    SERENADE_AWS_LOG_PREFIX="/serena/$SERENA_ENV_NAME" SERENADE_AWS_BUCKET="$NAME-$museum-$ACCOUNT_ID-$AWS_REGION" \
+    SERENADE_ADMIN_USER="$SERENADE_ADMIN_USER" SERENADE_ADMIN_PASSWORD="$SERENADE_ADMIN_PASSWORD" \
+    serenade/.venv/bin/python -m pytest serenade/aws -p no:cacheprovider "$@"
 }
 
 retry() {  # retry COMMAND...: a read-only AWS call, tried up to 4 times, 5 seconds apart; its error shown on the last
@@ -878,6 +925,7 @@ case "$CMD" in
     if [ -z "$(applied image_uri)" ]; then echo "Saved; it applies at the first deploy."; else reapply "$(was_running)"; fi ;;
   etl) etl "$@" ;;
   list) list_servable "$@" ;;
+  test) run_tests "$@" ;;
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
   etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;

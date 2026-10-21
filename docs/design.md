@@ -1345,7 +1345,10 @@ reachable only from campus networks.
     export: `serena-requests-<museum>-<date>.csv`.
 - **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
   objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October
-  10, 2026). Not in CI yet.
+  10, 2026). Not in CI yet. A second set, `serenade/aws/`, checks a deployed environment after a deploy or resume
+  (`./serena aws test`, D222 to D231): what Serena serves through CloudFront, the admin app, a recall it cancels and
+  the logs' permission errors; against a real CollectionSpace only the tests that look. Run by hand, signed in, never
+  in CI.
 
 ## Infrastructure and operations
 

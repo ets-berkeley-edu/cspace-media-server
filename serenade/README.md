@@ -2,8 +2,9 @@
 
 Automated checks of Serena on the local stack: plain HTTP checks of what Serena serves, and Selenium browser checks of
 the admin app, written as the team writes them for BOA (bea), Damien (mrsbaylock) and Diablo (xena): pytest, with a
-page object per screen in `pages/` and the tests in `tests/`. Never against QA or production: the tests sign in,
-recall files and switch the CollectionSpace simulator's outage on.
+page object per screen in `pages/` and the tests in `tests/`. The local tests (`tests/`) run only against the local
+stack: they sign in, recall files and switch the CollectionSpace simulator's outage on. A second, smaller set in
+`aws/` checks a deployed environment ("The AWS tests", below). Neither ever runs against production.
 
 ## Running it
 
@@ -68,6 +69,35 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | `tests/test_alerts.py` | Alerts, T23 to T25, on UCJEPS: a failed check's alert on the bell, the banner and the Alerts page; its text, with its refresh ID as a link; acknowledging (sections 14, 18, 20). T84 and T85, on BAMPFA (two alerts from a setting changed and put back): All · Waiting, the waiting rows' bar, the banner and the bell opening Waiting; Acknowledge all, its dialog's list and links, and none waiting after. T87 to T89 (20 more alerts, raised through the admin API): All held through sorting, paging and Back, Waiting back to page 1, the audit log's link opening All; the dialog's order, Cancel, no reason, only its list scrolling in a short window, a link to another page of the table, one audit entry per alert; and a second browser acknowledging one while the dialog is open (section 28) |
 | `tests/test_refreshes.py` | Refreshes, T16 to T21: Past refreshes, Start a refresh's missing fields, and on UCJEPS a failed check's page, overriding the threshold, an admin refresh repairing a failed one, sorting and paging 30 refreshes (sections 11, 14, 15, 21) |
 | `tests/test_lookup_and_recalls.py` | The pilot, T2 to T6: Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19). Recalls, T74 to T81: the preview (what Serena finds, paths and URLs, more than 12 CSIDs and a text file, an already recalled record), a missing reason, a recall's row and its files, Past requests and the audit log, and the recall's alert, T26 (sections 17 to 21). Media look up, T65 to T73: every size of a Media CSID, the comparison with CollectionSpace, the page's address, paths it forgives and refuses, an unknown CSID, the sizes box, and a record changed in CollectionSpace (off the web, replaced, soft-deleted), then put back (sections 17, 19 to 21, 23) |
+| `aws/test_deployment.py` | A deployed environment, T90 to T105 ("The AWS tests", above; sections 24, 25, 27) |
+
+## The AWS tests
+
+`aws/` checks an environment in AWS after `./serena aws deploy` or `./serena aws resume` (D222 to D231, decided
+October 21, 2026): T90 to T105, from the checklist's AWS sections (24, 25 and 27, their steps marked "Automated").
+
+```
+./serena aws test                  # personal-dev (or --env NAME), signed in with aws sso login
+./serena aws test -k t96 --headed  # one test, with the browser showing
+```
+
+- **You run it, signed in.** Never in CI and never by Claude (D229). It checks the sign-in and that the environment is
+  deployed and running, then passes the tests its address, museum, image tag and the rest (`aws/target.py`). The
+  tests refuse any address but the one the environment's last deploy saved in `deploy/environments/<env>.url`
+  (D225).
+- **What it checks:** `./serena aws status`; `/health` and that the image is the checked-out commit; the fake ETL's
+  refreshes (`./serena aws etl … --json`); a file request's 302 to a signed address, its delivery and CloudFront's
+  cache, bad and missing signatures, the bucket refusing direct requests, the unavailable images; the admin app's
+  header, Past refreshes, Past requests (CloudWatch Logs Insights, which can take a few minutes to catch up) and Media
+  look up; a recall stopping an address but not a signed one; and last, no permission errors in the logs. The deploy,
+  plans, emails, `cdn-key`, a second network, pause and destroy stay in the checklist, by hand.
+- **What it changes, it undoes** (D227): with the simulator, the fake ETL's refreshes (the simulator's synthetic
+  records) and a recall that T104 cancels, even when T103 failed after making it. Never a setting, key, alarm or
+  pause.
+- **A real CollectionSpace (QA):** only the tests that look run; those marked `changes` or `simulator` are skipped
+  (D224), and the sample image comes from `./serena aws list`. Set `SERENADE_ADMIN_USER` to a museum admin's username;
+  `./serena aws test` asks for the password (D228), which isn't shown or saved. With the simulator it's `admin`/`admin`.
+- **Read-only AWS calls** (D231) use the AWS CLI with the environment's profile: `logs filter-log-events` for T105.
 
 ## Packages
 
