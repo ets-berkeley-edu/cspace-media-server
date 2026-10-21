@@ -1097,8 +1097,9 @@ minutes each).
   the fake ETL first, for its sample address; T99 needs no browser, so none opens). `./serena aws test -k t100
   --headed`: Chrome shows the sign-in and Past refreshes, and `1 passed`. A test that builds on an earlier one (T101
   to T104) is skipped when run alone, as in the local suite: give `-k` both, for example `-k "t96 or t101"`.
-  - Note (October 21, 2026): T100 alone was skipped at `a856b05`, because it waited for T95 without needing it; fixed
-    after.
+  - Note (October 21, 2026): T100 alone was skipped at `a856b05`, because it waited for T95 without needing it. At
+    `1c4f2eb` it ran but failed: alone, it made its refresh after Past refreshes had loaded, so the list didn't show
+    it. Both fixed after.
 - [x] **6. Only through `./serena aws test`.** Run `serenade/.venv/bin/python -m pytest serenade/aws`. Expect "The AWS
   tests run only through ./serena aws test (SERENADE_AWS_ENV isn't set)." and no test run.
 - [x] **7. Not while paused.** `./serena aws pause` (type `yes`), then `./serena aws test`. Expect "'personal-dev' is

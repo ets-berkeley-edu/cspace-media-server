@@ -182,15 +182,16 @@ def test_t99_the_unavailable_images(target: Target, sample: str) -> None:
 def test_t100_the_header_and_past_refreshes(driver: WebDriver, base_url: str, target: Target,
                                             admin: tuple[str, str], request: pytest.FixtureRequest) -> None:
     """Checklist section 24, step 5: the header names the environment and its image; Past refreshes lists the run's
-    refresh (personal-dev)."""
+    refresh (personal-dev). The refresh is made before the page opens: run alone, this test makes it."""
+    refresh_id = request.getfixturevalue("refresh")["refresh_id"] if target.simulated else None
     signed_in(driver, base_url, target, admin)
     page = Page(driver, base_url)
     assert page.text_of(ENVIRONMENT) == f"{target.label} · {target.image_tag}"
-    if target.simulated:
+    if refresh_id:
         refreshes = RefreshesPage(driver, base_url)
         refreshes.open_list(target.museum)
         assert refreshes.text_of(refreshes.TITLE) == f"{target.museum.upper()} Past refreshes"
-        refreshes.wait_for(refreshes.row_of(request.getfixturevalue("refresh")["refresh_id"]))
+        refreshes.wait_for(refreshes.row_of(refresh_id))
 
 
 @pytest.mark.after("test_t96_the_signed_address_delivers_the_file")
