@@ -993,9 +993,9 @@ branch on the Mac, signed in (`aws sso login --profile bmu-personal`):
 
 What it checks: decisions D207 to D218 (October 20, 2026). On the Alerts page, "All · Waiting (<n>)" and a red bar on
 waiting rows; the bell and the banner open Waiting; "Acknowledge all (<n>)" asks first, listing the alerts (each a link
-to its row), and acknowledges exactly those. serenade's T84 and T85 check the same on BAMPFA. On the local stack, from
-this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as `admin` (password
-`admin`) at http://localhost:5373/admin/.
+to its row), and acknowledges exactly those. serenade's T84, T85 and T87 to T89 check the same on BAMPFA. On the
+local stack, from this pull request's branch (see "Testing a pull request locally" above), signed in to PAHMA as
+`admin` (password `admin`) at http://localhost:5373/admin/.
 
 **Before you start:** make four alerts wait. On **Settings** (the gear), under "Servable list check", change "Delta
 threshold (%)" (not another setting: only it and the audit retention raise an alert) to 12.5 (any
