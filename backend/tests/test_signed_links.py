@@ -172,7 +172,7 @@ def test_a_malformed_key_entry_is_ignored(entry: Any) -> None:
     assert check(link(NOW + 900), rotating) == Reason.SIGNATURE_INVALID
 
 
-# A museum that allows signed access but has no usable key: a configuration problem in Serena (D232)
+# A museum that allows signed access but has no usable key: a configuration problem in Serena (D239)
 
 @pytest.mark.parametrize("current", [{"kid": KID, "key": "only-twenty-chars-xx"}, {"kid": KID}, "not an object"])
 def test_a_secret_with_no_usable_key(caplog: pytest.LogCaptureFixture, current: Any) -> None:
