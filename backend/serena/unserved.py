@@ -48,6 +48,9 @@ class Reason(StrEnum):
     # Servable and stored, but there is no way to deliver it: no CloudFront signer (an AWS environment before image
     # delivery is set up, pull request 18)
     DELIVERY_NOT_SET_UP = "delivery_not_set_up"
+    # A signed link at a museum that allows signed access, but Serena has no usable signing key for it: no secret in
+    # SERENA_SIGNING_KEY_SECRET_IDS, or one with no usable key (decided October 21, 2026, D232)
+    SIGNING_NOT_SET_UP = "signing_not_set_up"
     INTERNAL_ERROR = "internal_error"
 
 
