@@ -305,7 +305,7 @@ signature that doesn't match) or `signature_expired`. If the museum allows signe
 for it (no secret named for it, or a secret with no usable key: see Keys), a request with any of the four parameters
 gets the unavailable image with `signing_not_set_up`, before the parameters are checked, and a warning naming the
 museum, never the parameters, the `uid` or a key: a configuration problem in Serena, not the portal signing badly
-(decided October 21, 2026, D232). A request with none of them is still `restricted`. If the museum's keys can't be
+(decided October 21, 2026, D239). A request with none of them is still `restricted`. If the museum's keys can't be
 read, Serena fails closed: the unavailable image with `internal_error`, and a warning naming the museum (decided
 October 10, 2026). A public Blob is served with or without a signature.
 
@@ -318,7 +318,7 @@ portal keeps only the current key, in its own secret store (Glimmer: its Rails e
 needs no deploy: put the new key in `current` and the old one in `previous`; after 5 minutes switch the portal to the
 new key; after at least 60 more minutes (the longest a link lives) set `previous` to null. A museum that allows
 signed access needs a usable key: with no secret named for it, or with both entries malformed or shorter than 32
-characters, its signed links get `signing_not_set_up` (decided October 21, 2026, D232), and at startup Serena warns
+characters, its signed links get `signing_not_set_up` (decided October 21, 2026, D239), and at startup Serena warns
 about a museum with signed access and no secret named.
 
 **Logs.** The signature, `exp` and the keys are never logged. The reader's `uid` is neither logged nor recorded
@@ -442,7 +442,7 @@ its own reason, so the admin app can say why a file isn't served:
 | `not_decodable` | A miss: an image or catalog card that doesn't decode |
 | `fetch_busy` | A miss: not enough local disk to fetch it now |
 | `delivery_not_set_up` | Servable and stored, but Serena has no CloudFront signer to deliver it with: an AWS environment whose first signing key isn't made yet (`./serena aws deploy` makes it; decided October 19, 2026) |
-| `signing_not_set_up` | A signed link at a museum that allows signed access, but Serena has no usable signing key for it (no secret in `SERENA_SIGNING_KEY_SECRET_IDS`, or none of its keys usable): a configuration problem in Serena, not the portal (decided October 21, 2026, D232) |
+| `signing_not_set_up` | A signed link at a museum that allows signed access, but Serena has no usable signing key for it (no secret in `SERENA_SIGNING_KEY_SECRET_IDS`, or none of its keys usable): a configuration problem in Serena, not the portal (decided October 21, 2026, D239) |
 | `internal_error` | Serena couldn't decide (for example, DynamoDB unreachable) |
 
 The reasons for a miss were decided October 10, 2026 (see Image fetch). The "unserved" log line holds the museum, the
