@@ -1008,8 +1008,10 @@ third and fourth. Leave any older alerts as they are.
   Go to **Overview**, then click the bell: the same.
 - [ ] **2. All, and the waiting rows' bar (D212, D214).** Click **All**. Expect `show=waiting` to leave the address,
   every alert of the last 30 days listed, and each waiting alert's row to have a red bar down its left edge (the
-  acknowledged ones none). Sort by **Acknowledged**, then page or change "Items per page" to 10: the choice of All
-  stays. Click **Waiting**: back to page 1, only the waiting ones. Press the browser's Back: All again, as it was.
+  acknowledged ones none). Sort by **Acknowledged**, change "Items per page" to 10 and go to page 2: the choice of
+  All stays. Open **Audit log** from the menu, then press the browser's Back: All again, on page 2, as it was (All and
+  Waiting change the address in place, like sorting and paging, so Back right after one leaves Alerts). Click
+  **Waiting**: back to page 1, only the waiting ones, the sort and "Items per page" kept.
 - [ ] **3. Opened another way, All (D213).** On the **Audit log**, click an "alert acknowledge" entry's target (an
   alert of the last 30 days): expect Alerts on **All**, not Waiting, even while alerts wait.
 - [ ] **4. Acknowledge all asks first (D207 to D209).** With 2 or more waiting, expect **Acknowledge all (<n>)** at
