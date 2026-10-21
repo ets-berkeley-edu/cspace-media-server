@@ -483,6 +483,24 @@ shows every unserved request by reason, and "Media look up" explains any one fil
 - After a recall, no new URL is issued. A URL already handed out works until it expires (at most 30 minutes), and a
   browser may keep showing an image it already has for up to 15 minutes more: about 45 minutes in all, within the
   1 to 2 hour tolerance.
+- **Single-use URLs: not adopted (assessed October 20, 2026).** A URL that works only for its first request was
+  considered and set aside:
+  - CloudFront can't do it: a signed URL's policy holds an expiry, an optional start time and an optional IP range,
+    and it works for any number of requests within them; CloudFront keeps no record of which URLs were used. Single
+    use would need Serena to send every file itself (no CDN, every byte through Fargate, PDFs up to 200 MB) or a
+    Lambda@Edge check against DynamoDB on every request (a new part, in us-east-1, and latency on every image).
+  - It would protect little. The public URLs (`/<tenant>/imageserver/…`, Blob and Media paths alike) don't change, and
+    each request to one gets a fresh signed URL after Serena's checks, so a single-use signed URL stops no one who
+    can ask again. The protection is that a restricted, recalled or unlisted file never gets a signed URL at all.
+  - It would break ordinary use: PDF viewers and video players fetch a file in several range requests; browsers
+    retry, prefetch and reload; link previewers (Slack, email scanners) would use the URL up before the person.
+  - Cinefiles' restricted PDFs (see Signed links) are the one place Serena could do it, since it checks Glimmer's
+    signature itself and could record each link's first use; previewers and reloads would still use links up, so a
+    short expiry fits better there too.
+  - If signed URLs are to be tightened, the cheaper ways are a shorter life (Serena redirects at once, so 1 to 2
+    minutes would do instead of 15 to 30) and a custom policy tying each URL to the requester's IP address (a copied
+    URL fails on another network; viewers whose address changes mid-session, on some mobile networks and VPNs, could
+    see a failure). Not decided: see Open questions.
 - Without CloudFront (local development only, `SERENA_LOCAL_CDN`, which needs a local DynamoDB endpoint), Serena signs with a key
   of its own, made when it starts, and serves the files itself at `/local-cdn/<tenant>/objects/<sha256>`, checking the
   signature and expiry. In AWS that path answers 404. With neither, a servable file gets the unavailable image
@@ -1520,9 +1538,9 @@ The F numbers follow the team's list of follow-ups.
 - **Rate limit.** Agree a fetch rate with Lyrasis.
 - **Images beyond the public core.** Do any internal apps need files that aren't in the public core?
 - **Unavailable images.** One per museum, or different ones for "recalled" and "not found"?
-- **Single-use signed URLs.** Can a signed URL be made to work only once, so that no client can use it twice and,
-  if several clients get the same URL, only the first one to use it gets a response? To discuss (raised October 8,
-  2026).
+- **Tighter signed URLs.** Single-use URLs were assessed and not adopted (October 20, 2026; see Signed URLs).
+  Whether to shorten a signed URL's life (15 to 30 minutes today) and whether to tie it to the requester's IP
+  address: to decide, weighing viewers whose address changes and the browser reuse that the 15-minute windows allow.
 - **Notifications list.** Which team mailing list receives alerts and alarms in QA and production (each environment's
   `ALERT_EMAIL`; in personal-dev, Richard's address).
 - **CORS on delivered files (D205).** Whether the portals' JavaScript viewers (PAHMA's 3D models, a PDF viewer) read
