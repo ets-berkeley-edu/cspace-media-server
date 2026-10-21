@@ -22,6 +22,15 @@ updates:
       python:
         patterns: ["*"]
 
+  # serenade's own requirements (its Selenium tests run on the Mac, not in the images); missed until October 21, 2026,
+  # when its certifi was left behind the backend's (GHSA-6q48-6c7w-9gw2).
+  - package-ecosystem: pip
+    directory: /serenade
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
+    groups:
+      serenade:
+        patterns: ["*"]
+
   - package-ecosystem: npm
     directory: /admin
     schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
