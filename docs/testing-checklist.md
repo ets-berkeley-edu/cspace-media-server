@@ -1076,8 +1076,9 @@ signed in; it changes only what it undoes (two fake ETL refreshes and a recall i
 branch on the Mac (`git switch <the branch> && git pull`), signed in (`aws sso login --profile bmu-personal`), with
 Chrome installed:
 
-Steps 1 to 3, 6 and 7 checked by Richard on October 21, 2026, at commit `a856b05` (`16 passed` twice, in about 4
-minutes each).
+Checked by Richard on October 21, 2026: steps 1 to 4, 6 and 7 at commit `a856b05` (`16 passed` twice, in about 4
+minutes each; step 4 by the second run, whose T103 could recall again only because T104 had cancelled the first
+run's recall), and step 5 at `348b090`.
 
 - [x] **1. Deploy this branch.** personal-dev is paused: `./serena aws resume`, then `./serena aws deploy` (T91
   checks the running image is this branch's commit). Type `yes` at the plan: expect only the four task definitions
@@ -1090,10 +1091,10 @@ minutes each).
   "museum pahma", then pytest: `16 passed` in about 5 to 10 minutes (T101 waits for Logs Insights, up to 5
   minutes). A failed browser test's screenshot is in `serenade/.run/failures/`. If T90 fails with "firing:
   serena-dev-web-down" just after the deploy, wait 10 minutes and run it again.
-- [ ] **4. It leaves nothing behind.** In the admin app (`<URL>/admin/`, PAHMA, `admin`/`admin`), "Recalls" shows no
+- [x] **4. It leaves nothing behind.** In the admin app (`<URL>/admin/`, PAHMA, `admin`/`admin`), "Recalls" shows no
   active recall; "Ended" has "serenade T104: an AWS test cancel"; the Audit log has the recall and its
   cancellation. Run `./serena aws test` again: `16 passed`.
-- [ ] **5. One test.** `./serena aws test -k t99 --headed`: expect `1 passed, 15 deselected` in about a minute (it runs
+- [x] **5. One test.** `./serena aws test -k t99 --headed`: expect `1 passed, 15 deselected` in about a minute (it runs
   the fake ETL first, for its sample address; T99 needs no browser, so none opens). `./serena aws test -k t100
   --headed`: Chrome shows the sign-in and Past refreshes, and `1 passed`. A test that builds on an earlier one (T101
   to T104) is skipped when run alone, as in the local suite: give `-k` both, for example `-k "t96 or t101"`.
