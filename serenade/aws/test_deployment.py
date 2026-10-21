@@ -179,7 +179,6 @@ def test_t99_the_unavailable_images(target: Target, sample: str) -> None:
 
 # ---- the admin app (Selenium) ---------------------------------------------------------------------------------------
 
-@pytest.mark.after("test_t95_a_file_request_redirects_to_a_signed_address")
 def test_t100_the_header_and_past_refreshes(driver: WebDriver, base_url: str, target: Target,
                                             admin: tuple[str, str], request: pytest.FixtureRequest) -> None:
     """Checklist section 24, step 5: the header names the environment and its image; Past refreshes lists the run's
