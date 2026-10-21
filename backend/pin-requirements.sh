@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Regenerates the backend's pinned requirements files (exact versions with hashes) from pyproject.toml and
-# requirements-tools.in, as in the BMU. Never edit requirements*.txt by hand: change pyproject.toml (or
-# requirements-tools.in) and run this.
+# Regenerates the backend's pinned requirements files (exact versions with hashes) from requirements.in,
+# requirements-dev.in and requirements-tools.in, as in the BMU. Never edit requirements*.txt by hand: change the .in
+# file and run this. Dependabot reruns pip-compile with the options in each .txt file's header.
 #
 # Needs Python 3.11 (.python-version: the Python that CI and the images run) with the tools installed:
 #   pip install --require-hashes -r backend/requirements-tools.txt
 #
-#   backend/pin-requirements.sh                          keep every pin; add or drop what pyproject.toml changed
+#   backend/pin-requirements.sh                          keep every pin; add or drop what the .in files changed
 #   backend/pin-requirements.sh --upgrade                move every package to its newest allowed version
 #   backend/pin-requirements.sh --upgrade-package boto3  move one package (repeat the option for more)
 #
@@ -21,9 +21,9 @@ if [ "$version" != "$(cat ../.python-version)" ]; then
 fi
 
 options=(--quiet --generate-hashes --allow-unsafe --strip-extras)
-# The app: its dependencies, and setuptools to build it (--all-build-deps), so nothing unpinned is installed.
-pip-compile "${options[@]}" --all-build-deps "$@" -o requirements.txt pyproject.toml
-# The tests and checks: the app's pins plus the dev extra (pytest, moto, ruff, mypy).
-pip-compile "${options[@]}" --all-build-deps --extra dev -c requirements.txt "$@" -o requirements-dev.txt pyproject.toml
+# The app and the worker, with setuptools to build Serena itself (so nothing unpinned is installed).
+pip-compile "${options[@]}" "$@" -o requirements.txt requirements.in
+# The tests and checks: the app's pins (requirements-dev.in constrains to requirements.txt) plus pytest, moto, ruff, mypy.
+pip-compile "${options[@]}" "$@" -o requirements-dev.txt requirements-dev.in
 # pip-tools and pip-audit, in their own file so they never change the app's or the tests' versions.
 pip-compile "${options[@]}" "$@" -o requirements-tools.txt requirements-tools.in

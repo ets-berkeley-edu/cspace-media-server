@@ -1,0 +1,9 @@
+# The tests and checks: Serena's own pins (requirements.txt) plus the tools below. pin-requirements.sh compiles this
+# into requirements-dev.txt; Dependabot does the same.
+-c requirements.txt
+-r requirements.in
+pytest>=8
+moto[dynamodb,s3,secretsmanager,sns,sqs]>=5.2.4
+ruff>=0.17.1
+mypy>=1.11
+types-PyYAML>=6
