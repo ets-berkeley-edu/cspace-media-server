@@ -4,27 +4,10 @@ version = "0.1.0"
 description = "Serena, the media server for UC Berkeley's CollectionSpace museums (replaces the legacy imageserver)"
 license = { text = "Copyright The Regents of the University of California. Educational, research and not-for-profit use; see LICENSE" }
 requires-python = ">=3.11"
-dependencies = [
-  "fastapi>=0.146.0",
-  "uvicorn[standard]>=0.30",
-  "httpx>=0.27",
-  "boto3>=1.43.114",
-  "cryptography>=42",  # signs CloudFront URLs (RSA)
-  "pydantic-settings>=2.16.0",
-  "pyyaml>=6",
-  "defusedxml>=0.7",
-  "pyvips[binary]>=3.0",  # checks fetched images decode; later makes watermarked copies (libvips bundled by the wheel)
-  "tzdata>=2024.1",  # America/Los_Angeles for a refresh's refresh date, also where the OS has no time zone database
-]
-
-[project.optional-dependencies]
-dev = [
-  "pytest>=8",
-  "moto[dynamodb,s3,secretsmanager,sns,sqs]>=5.2.4",
-  "ruff>=0.17.1",
-  "mypy>=1.11",
-  "types-PyYAML>=6",
-]
+# The dependencies are in requirements.in (the app) and requirements-dev.in (the tests and checks), compiled into the
+# hash-pinned requirements files by pin-requirements.sh, so that Dependabot can update them. Serena is always
+# installed from those files, then itself with --no-deps.
+dependencies = []
 
 [build-system]
 requires = ["setuptools>=68"]

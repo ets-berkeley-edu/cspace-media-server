@@ -51,8 +51,9 @@ at a time, following the plan; the design is `docs/design.md`. `README.md` descr
 
 The code follows the BMU (`ets-berkeley-edu/cspace-bulk-media-uploader`): Python 3.11 (`.python-version`) in
 `backend/`, the package `serena/` with its tests in `tests/`. Install only from the hash-pinned requirements files,
-which `backend/pin-requirements.sh` generates from `backend/pyproject.toml` (and `requirements-tools.in`); never edit
-them by hand.
+which `backend/pin-requirements.sh` generates from `backend/requirements.in`, `requirements-dev.in` and
+`requirements-tools.in`; never edit them by hand. The dependencies are listed in those `.in` files, not in
+`pyproject.toml`, so that Dependabot can regenerate the pinned files itself (decided October 21, 2026).
 
 ```sh
 cd backend
@@ -88,7 +89,7 @@ Local-only code (the seed step and the fake ETL) is in `backend/devtools/`, and 
 the local stack's image). Serena refuses to create tables, or to serve files itself in place of CloudFront, without a
 local DynamoDB endpoint.
 
-To change a dependency, edit `pyproject.toml` and run `pin-requirements.sh` with the tools installed
+To change a dependency, edit the `.in` file and run `pin-requirements.sh` with the tools installed
 (`pip install --require-hashes -r requirements-tools.txt`). Each museum's configuration is
 `backend/serena/museums/<tenant>.yaml`.
 
