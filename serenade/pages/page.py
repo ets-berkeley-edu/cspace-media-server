@@ -52,12 +52,23 @@ class Page:
     def click(self, locator: Locator) -> None:
         """Clicks the element once it can take the click. Just after a page opens, its layout is still settling (the
         side menu briefly covers the content), and Chrome refuses a click that would land on another element: then it
-        waits and tries again, until the timeout. A refused click clicks nothing, so trying again is safe."""
+        waits and tries again, until the timeout. A refused click clicks nothing, so trying again is safe. Each try
+        after a refused one first brings the element to the middle of the window: a page scrolled where it was (Back,
+        or after paging) can leave it under the app bar, which would take every click."""
+        refused = False
+
         def clicked(driver: WebDriver) -> bool:
+            nonlocal refused
             element = ec.element_to_be_clickable(locator)(driver)
             if not element:
                 return False
-            element.click()
+            if refused:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'})", element)
+            try:
+                element.click()
+            except ElementClickInterceptedException:
+                refused = True
+                raise
             return True
 
         WebDriverWait(self.driver, TIMEOUT, ignored_exceptions=(ElementClickInterceptedException,

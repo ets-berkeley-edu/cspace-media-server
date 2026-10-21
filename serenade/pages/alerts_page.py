@@ -4,13 +4,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from selenium.common.exceptions import ElementClickInterceptedException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support.wait import WebDriverWait
 
-from .page import DIALOG, TIMEOUT, Locator, Page, by_id
+from .page import DIALOG, Locator, Page, by_id
 
 API = "/admin/v1/museums"
 
@@ -72,16 +69,7 @@ class AlertsPage(Page):
         self.wait_for_address(f"rows={n}")
 
     def open_acknowledge_all(self) -> None:
-        """Opens Acknowledge all's dialog, from wherever the page is scrolled. After paging, the button can sit under
-        the app bar, which takes the click; the page may still be scrolling, so each try brings it into view first."""
-        def opened(driver: WebDriver) -> bool:
-            button = driver.find_element(*self.ACKNOWLEDGE_ALL)
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'})", button)
-            button.click()
-            return True
-
-        WebDriverWait(self.driver, TIMEOUT, ignored_exceptions=(ElementClickInterceptedException,
-                                                                 StaleElementReferenceException)).until(opened)
+        self.click(self.ACKNOWLEDGE_ALL)
         self.wait_for(self.ALL_DIALOG)
 
     def row_keys(self, locator: Locator) -> list[str]:
