@@ -1,9 +1,14 @@
 """Settings (design: Admin web app, Settings)."""
 from __future__ import annotations
 
+import json
+import time
+
 from selenium.webdriver.common.by import By
 
 from .page import Locator, Page, by_id, dialog_button, messages_of
+
+API = "/admin/v1/museums"
 
 
 class SettingsPage(Page):
@@ -53,3 +58,20 @@ class SettingsPage(Page):
         self.type(self.REASON, reason)
         self.click(self.SAVE)
         self.wait_until_gone(self.SAVE, timeout=60)
+
+    def change_and_put_back(self, museum: str, name: str, value: float, reason: str) -> None:
+        """Changes a setting and puts its default back through the admin API, as Change… and Use default do: two
+        "An admin changed a setting" alerts without the dialog (for a test that needs many alerts). An alert's
+        key holds the second it was raised, so each call waits out the second before it: two in one second would be
+        one alert."""
+        json_body = {"Content-Type": "application/json"}
+        time.sleep(1.1)
+        status, text = self.call_api("PUT", f"{API}/{museum}/settings/{name}",
+                                     json.dumps({"value": value, "reason": f"{reason}: a test change"}), json_body)
+        if status != 200:
+            raise AssertionError(f"The admin API answered {status}, not 200: {text[:300]}")
+        time.sleep(1.1)
+        status, text = self.call_api("POST", f"{API}/{museum}/settings/{name}/reset",
+                                     json.dumps({"reason": f"{reason}: back to the default"}), json_body)
+        if status != 200:
+            raise AssertionError(f"The admin API answered {status}, not 200: {text[:300]}")

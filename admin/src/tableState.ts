@@ -24,6 +24,10 @@ function text(query: LocationQuery, name: string): string | null {
   return typeof value === 'string' ? value : null
 }
 
+// The address a write has asked for and the router hasn't reached yet: two writes in one tick (Waiting, which also
+// goes back to page 1) each start from it, so the second doesn't undo the first.
+let pending: LocationQuery | null = null
+
 /** Puts `changes` into the address in place (no new history entry), only while this page is the one shown. */
 function useWriter() {
   const route = useRoute()
@@ -33,7 +37,7 @@ function useWriter() {
     if (route.name !== own) {
       return // a kept-alive page out of sight: the address is another page's
     }
-    const query: LocationQuery = {...route.query}
+    const query: LocationQuery = {...(pending ?? route.query)}
     for (const [name, value] of Object.entries(changes)) {
       if (value === null) {
         delete query[name]
@@ -41,7 +45,12 @@ function useWriter() {
         query[name] = value
       }
     }
-    void router.replace({query})
+    pending = query
+    void router.replace({query}).finally(() => {
+      if (pending === query) {
+        pending = null
+      }
+    })
   }
 }
 

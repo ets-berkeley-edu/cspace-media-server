@@ -318,8 +318,21 @@ onActivated(() => {
 #alerts-table :deep(tr.marked > td) {
   background: rgba(var(--v-theme-primary), 0.08);
 }
-/* Acknowledge all's list: about 12 lines, then it scrolls on its own (D216). */
+/* Acknowledge all's list: about 12 lines, then it scrolls on its own (D216). In a window too short for that, the
+   list shrinks, not the card around it scrolling, so the title, the reminder and the buttons stay in view. */
+#acknowledge-all-dialog {
+  display: flex;
+  flex-direction: column;
+}
+#acknowledge-all-dialog > :deep(.v-card-text) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 #acknowledge-all-list {
+  flex: 0 1 auto;
+  min-height: 3rem;
   max-height: 18rem;
   overflow-y: auto;
 }

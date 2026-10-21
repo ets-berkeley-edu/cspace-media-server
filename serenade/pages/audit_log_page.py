@@ -1,6 +1,9 @@
 """Audit log (design: Admin web app, Audit log)."""
 from __future__ import annotations
 
+import json
+from typing import Any
+
 from selenium.webdriver.common.by import By
 
 from .page import Locator, Page, by_id
@@ -11,6 +14,9 @@ class AuditLogPage(Page):
     TABLE = by_id("audit-table")
     ROWS = (By.XPATH, "//*[@id='audit-table']//tbody/tr[contains(@class, 'v-data-table__tr')]")  # not "Loading"
     EXPORT = by_id("export-audit")
+    # An "alert acknowledge" entry's target: a link to Alerts while the alert is listed there (30 days).
+    ALERT_TARGET = (By.XPATH, "//*[@id='audit-table']//tbody/tr[td[3][normalize-space()='alert acknowledge']]"
+                              "//span[contains(@class, 'audit-target')]//a")
 
     COLUMNS = ("When (UTC)", "By", "Action", "Target", "Details")
 
@@ -39,3 +45,15 @@ class AuditLogPage(Page):
         i = self.COLUMNS.index(name) + 1
         return [td.text for td in self.driver.find_elements(
             By.XPATH, f"//*[@id='audit-table']//tbody/tr[contains(@class, 'v-data-table__tr')]/td[{i}]")]
+
+    def entries(self, museum: str) -> list[dict[str, Any]]:
+        """The museum's audit entries, through the admin API with the browser's session (every one, not a page's)."""
+        status, text = self.call_api("GET", f"/admin/v1/museums/{museum}/audit")
+        if status != 200:
+            raise AssertionError(f"The admin API answered {status}, not 200: {text[:300]}")
+        found: list[dict[str, Any]] = json.loads(text)["entries"]
+        return found
+
+    def acknowledged(self, museum: str) -> list[str]:
+        """The alert keys the "alert acknowledge" entries name, one per entry."""
+        return [e["target"] for e in self.entries(museum) if e["action"] == "alert_acknowledge"]
