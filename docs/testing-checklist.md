@@ -710,6 +710,13 @@ From the pull request's branch on the Mac, signed in (`aws sso login --profile b
 
 Checked by Richard on October 19, 2026, at commit `3f12afd`.
 
+*Automated since section 30* (`./serena aws test`): `status` (T90); the fake ETL's refreshes, again and
+`--failed` (T92 to T94); the admin app's header and Refreshes (T100), Past requests (T101); a sample address
+fetched and stored (T95, T96; delivered since pull request 18) and Media look up (T102); the recall and its
+cancellation in the audit log (T103, T104); no `AccessDenied` (T105). Still by hand: the deploy, Settings saving a
+change (it emails since pull request 18; T29 to T35 locally), the 403 from another network and `allow-my-ip`, pause
+and resume.
+
 
 - [x] `./serena aws deploy`: confirm the account, check the plan, type `yes`. Expect it to finish in about 15–25
   minutes and print the address; `<URL>/health` answers `ok`.
@@ -745,6 +752,8 @@ Checked by Richard on October 19, 2026, at commit `3f12afd`.
 What it checks: decisions D195 to D206. personal-dev gets image delivery (signed URLs to files in the museums'
 buckets, D195 to D200), the unavailable images from the static bucket, the alert email (D201) and the alarms. Each
 step below says what to run, where, and what you should see. If you see something else, write it under the step.
+Since section 30, the steps marked *Automated* are `./serena aws test`'s: after the deploy (step 1) and the alert
+email (step 2), run it once in place of them, then do the rest by hand.
 
 **Before you start** (once per terminal window, in the clone on the Mac):
 
@@ -813,7 +822,7 @@ step below says what to run, where, and what you should see. If you see somethin
   - Note (October 20, 2026): `confirm-alerts` failed with "Invalid JSON received" on macOS; fixed in `e5b8297`. Run
     again on a confirmed subscription, it said "Not confirmed" (AWS refuses a link already used); fixed after.
 
-- [ ] **3. Check the status.** Run `./serena aws status`. Expect, among its lines:
+- [ ] **3. Check the status.** *Automated:* T90 (`./serena aws test`, section 30). Run `./serena aws status`. Expect, among its lines:
   - `web: running 1 of 1`, `worker: running 1 of 1`, `fakecspace: running 1 of 1`.
   - `Image delivery: on; signing keys trusted: serena-dev-<date and time> (the newest signs)`, with one key.
   - `Alert email: <your address>`, with no "NOT CONFIRMED".
@@ -821,19 +830,19 @@ step below says what to run, where, and what you should see. If you see somethin
   - If "Alarms: on; firing: serena-dev-web-down" (or `worker-down`) appears because the services restarted during
     the deploy: expect an ALARM email, then within 10 minutes an OK email, and `status` again shows no "firing:".
 
-- [ ] **4. Load the simulator's records.** A deploy restarts the simulator, which loses its records. Run
+- [ ] **4. Load the simulator's records.** *Automated:* T92 (`./serena aws test`, section 30). A deploy restarts the simulator, which loses its records. Run
   `./serena aws etl pahma`. Expect, in a minute or two, a line with "updated" and its counts, then sample
   addresses, one per kind of file, like
   `image   https://<…>.cloudfront.net/pahma/imageserver/blobs/<Blob CSID>/derivatives/Medium/content`.
   Copy the `image` line's address and set it in the terminal: `SAMPLE="<that address>"`.
   `./serena aws list pahma` lists every file Serena may serve for PAHMA, with its address (`--limit 0` for all).
 
-- [ ] **5. An image in the browser.** In Chrome, open the `$SAMPLE` address. Expect the image itself (not the "no
+- [ ] **5. An image in the browser.** *Automated:* T96, T101 (`./serena aws test`, section 30). In Chrome, open the `$SAMPLE` address. Expect the image itself (not the "no
   image" picture, not an error). Then in the admin app (`<URL>/admin/`, sign in to PAHMA as `admin`, password
   `admin`), open "Past requests": expect the request listed as served, with cache "miss". Open the address again
   and reload "Past requests": the new line says cache "hit".
 
-- [ ] **6. The redirect and the signed address.**
+- [ ] **6. The redirect and the signed address.** *Automated:* T95, T96 (`./serena aws test`, section 30).
   1. Run `curl -sI "$SAMPLE"`. Expect:
      - `HTTP/2 302`
      - `location: <URL>/pahma/objects/<64 hex characters>?Expires=<number>&Signature=<…>&Key-Pair-Id=<…>`
@@ -853,14 +862,14 @@ step below says what to run, where, and what you should see. If you see somethin
   - This also checks that CloudFront checks the signature against the address as requested, before its function
     removes `/pahma` from the path. If `$SIGNED` gets a 403 instead, write it here.
 
-- [ ] **7. A bad or missing signature is refused.**
+- [ ] **7. A bad or missing signature is refused.** *Automated:* T97 (`./serena aws test`, section 30).
   1. Copy `$SIGNED`, change one character in the middle of the `Signature=` value, and run `curl -sI "<that>"`.
      Expect `HTTP/2 403`.
   2. Run `curl -sI "${SIGNED%%\?*}"` (the address without its query string). Expect `HTTP/2 403`.
   - Each 403 carries `cache-control: private, max-age=900` (the files' response headers policy applies to errors
     too). That's expected and harmless: see the design doc, Signed URLs (D198).
 
-- [ ] **8. The bucket can be reached only through CloudFront (D196).**
+- [ ] **8. The bucket can be reached only through CloudFront (D196).** *Automated:* T98 (`./serena aws test`, section 30).
   1. Find the bucket's name and set it:
      ```
      BUCKET="$(aws --profile bmu-personal --region us-west-2 s3api list-buckets \
@@ -873,7 +882,7 @@ step below says what to run, where, and what you should see. If you see somethin
      this path goes to Serena, which doesn't serve it. Expect `HTTP/2 404` with `content-type: text/plain` and
      `cache-control: no-store` (Serena's answer; S3's would be `application/xml`). Seen on October 20, 2026.
 
-- [ ] **9. The unavailable image.**
+- [ ] **9. The unavailable image.** *Automated:* T99 (`./serena aws test`, section 30).
   1. Copy `$SAMPLE` and change one character of its Blob CSID (for example a `1` to a `2`), so it's a Blob CSID the
      fake ETL didn't list. Run `curl -sI "<that>"`. Expect `HTTP/2 302` with `location: <URL>/pahma/unavailable.svg`.
   2. Open that changed address in Chrome. Expect the "no image" picture.
@@ -881,7 +890,7 @@ step below says what to run, where, and what you should see. If you see somethin
      `HTTP/2 200`, `content-type: image/svg+xml` and
      `content-security-policy: default-src 'none'; style-src 'unsafe-inline'`.
 
-- [ ] **10. A recall stops the old address at once, but not a signed address already handed out.**
+- [ ] **10. A recall stops the old address at once, but not a signed address already handed out.** *Automated:* T103, T104 (`./serena aws test`, section 30).
   1. In the admin app, on "Recalls", start a recall and paste `$SAMPLE` (the form takes addresses as well as
      CSIDs). Check that the preview names one Media record, give any reason, and recall it.
   2. Run `curl -sI "$SAMPLE"`. Expect `HTTP/2 302` to `<URL>/pahma/unavailable.svg`.
@@ -925,7 +934,7 @@ step below says what to run, where, and what you should see. If you see somethin
   4. Run `./serena aws resume` (expect "Running: `<URL>`"), then `./serena aws etl pahma` (the simulator lost its
      records again): expect "updated".
 
-- [ ] **16. No permission errors in the logs.** Run this once for each of `web`, `worker` and `devtools`
+- [ ] **16. No permission errors in the logs.** *Automated:* T105 (`./serena aws test`, section 30). Run this once for each of `web`, `worker` and `devtools`
   (it searches the last 24 hours):
   ```
   aws --profile bmu-personal --region us-west-2 logs filter-log-events --log-group-name /serena/dev/web \
@@ -985,7 +994,7 @@ branch on the Mac, signed in (`aws sso login --profile bmu-personal`):
   personal-dev is paused). Under "== 2/3 The simulator's and fake ETL's image", expect a line like
   `[context python:3.11-slim] load metadata for public.ecr.aws/docker/library/python:3.11-slim`, and no
   `docker.io/library/python`. Type `yes` at the plan.
-- [ ] **3. The devtools image still works.** Run `./serena aws etl pahma`. Expect "updated" and sample addresses (the
+- [ ] **3. The devtools image still works.** *Automated:* T92 (`./serena aws test`, section 30). Run `./serena aws etl pahma`. Expect "updated" and sample addresses (the
   fake ETL runs from that image, and the simulator it fills does too).
 - [ ] When done, `./serena aws pause` (or `./serena aws destroy`, type `personal-dev`).
 
@@ -1058,3 +1067,41 @@ this pull request's branch (see "Testing a pull request locally" above), signed 
   bell.
 - [ ] **5. A good value still saves.** Change **ETL poll interval** to `30` with a reason: saved, "changed; default
   value 15". Then **Use default** (any reason).
+
+## 30. The AWS tests, personal-dev with the simulator (about 30 minutes, mostly waiting; before merging the pull request that adds them)
+
+What it checks: decisions D222 to D231 (October 21, 2026). `./serena aws test` runs serenade's AWS tests, T90 to
+T105 (`serenade/aws/`), against personal-dev: the steps of sections 24, 25 and 27 marked *Automated*. You run it,
+signed in; it changes only what it undoes (two fake ETL refreshes and a recall it cancels). From this pull request's
+branch on the Mac (`git switch <the branch> && git pull`), signed in (`aws sso login --profile bmu-personal`), with
+Chrome installed:
+
+Checked by Richard on October 21, 2026: steps 1 to 4, 6 and 7 at commit `a856b05` (`16 passed` twice, in about 4
+minutes each; step 4 by the second run, whose T103 could recall again only because T104 had cancelled the first
+run's recall), and step 5 at `348b090`.
+
+- [x] **1. Deploy this branch.** personal-dev is paused: `./serena aws resume`, then `./serena aws deploy` (T91
+  checks the running image is this branch's commit). Type `yes` at the plan: expect only the four task definitions
+  replaced.
+- [x] **2. The fake ETL's summary as JSON.** Run `./serena aws etl pahma --json`. Expect "Running the fake ETL …" and
+  the task's ID, then one line of JSON starting `{"refresh_id":` with `"state": "updated"`. Run
+  `./serena aws etl pahma --json 2>/dev/null`: only the JSON line. `./serena aws etl pahma` without `--json` prints as
+  before.
+- [x] **3. The tests.** Run `./serena aws test`. Expect it to name the environment, its address, the image and
+  "museum pahma", then pytest: `16 passed` in about 5 to 10 minutes (T101 waits for Logs Insights, up to 5
+  minutes). A failed browser test's screenshot is in `serenade/.run/failures/`. If T90 fails with "firing:
+  serena-dev-web-down" just after the deploy, wait 10 minutes and run it again.
+- [x] **4. It leaves nothing behind.** In the admin app (`<URL>/admin/`, PAHMA, `admin`/`admin`), "Recalls" shows no
+  active recall; "Ended" has "serenade T104: an AWS test cancel"; the Audit log has the recall and its
+  cancellation. Run `./serena aws test` again: `16 passed`.
+- [x] **5. One test.** `./serena aws test -k t99 --headed`: expect `1 passed, 15 deselected` in about a minute (it runs
+  the fake ETL first, for its sample address; T99 needs no browser, so none opens). `./serena aws test -k t100
+  --headed`: Chrome shows the sign-in and Past refreshes, and `1 passed`. A test that builds on an earlier one (T101
+  to T104) is skipped when run alone, as in the local suite: give `-k` both, for example `-k "t96 or t101"`.
+  - Note (October 21, 2026): T100 alone was skipped at `a856b05`, because it waited for T95 without needing it. At
+    `1c4f2eb` it ran but failed: alone, it made its refresh after Past refreshes had loaded, so the list didn't show
+    it. Both fixed after.
+- [x] **6. Only through `./serena aws test`.** Run `serenade/.venv/bin/python -m pytest serenade/aws`. Expect "The AWS
+  tests run only through ./serena aws test (SERENADE_AWS_ENV isn't set)." and no test run.
+- [x] **7. Not while paused.** `./serena aws pause` (type `yes`), then `./serena aws test`. Expect "'personal-dev' is
+  paused: ./serena aws resume first." and no test run. Leave personal-dev paused.

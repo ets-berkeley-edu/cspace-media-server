@@ -16,6 +16,9 @@ from serenade import dataset
 from serenade.stack import ON_TEST_STACK
 
 BASE_URL = os.environ.get("SERENADE_BASE_URL", "http://localhost:5373/admin/")
+# The AWS tests (serenade/aws/) run only through ./serena aws test, which sets SERENADE_AWS_ENV; the local tests
+# (tests/) never run in the same run (serenade/aws/conftest.py).
+collect_ignore = ["tests"] if os.environ.get("SERENADE_AWS_ENV") else ["aws"]
 # Screenshots and page HTML of failed browser tests (synthetic data only: the stack never holds real data).
 FAILURES = Path(__file__).parent / ".run" / "failures"
 
