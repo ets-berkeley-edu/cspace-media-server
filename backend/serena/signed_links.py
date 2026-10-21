@@ -90,14 +90,22 @@ class SigningKeys:
 
 
 def verify(keys: SigningKeys, tenant: str, blob_csid: str, query: Mapping[str, Sequence[str]], now: int) -> Verdict:
-    """Whether the link's query vouches for this file. `query` maps each parameter to all its values."""
+    """Whether the link's query vouches for this file. `query` maps each parameter to all its values.
+
+    No parameters: restricted. Otherwise, a museum with no usable key gets signing_not_set_up (a configuration problem
+    in Serena, not the portal signing badly), before the parameters are checked."""
     values = {name: query.get(name, []) for name in PARAMETERS}
     if not any(values.values()):
         return Verdict(Reason.RESTRICTED)
+    usable = keys.keys(tenant)  # raises SigningKeysUnavailable if the secret can't be read: internal_error
+    if not usable:
+        log.warning("no usable signing key for a museum with signed access: its signed links aren't served",
+                    extra={"museum": tenant})
+        return Verdict(Reason.SIGNING_NOT_SET_UP)
     if any(len(found) != 1 or not _FORMATS[name].fullmatch(found[0]) for name, found in values.items()):
         return Verdict(Reason.SIGNATURE_INVALID)
     exp, uid, kid, sig = (values[name][0] for name in PARAMETERS)
-    key = keys.keys(tenant).get(kid)
+    key = usable.get(kid)
     if key is None:
         return Verdict(Reason.SIGNATURE_INVALID)
     expected = signature(key, tenant, blob_csid, exp, uid)

@@ -154,19 +154,50 @@ def test_the_previous_key_during_a_rotation() -> None:
     assert check(link(NOW + 900, kid=OLD_KID, key=OLD_KEY)) == Reason.SIGNATURE_INVALID  # once it's removed
 
 
+def not_set_up_warning(caplog: pytest.LogCaptureFixture, tenant: str) -> bool:
+    return any(record.getMessage().startswith("no usable signing key") and getattr(record, "museum", None) == tenant
+               for record in caplog.records)
+
+
 def test_a_short_key_is_ignored(caplog: pytest.LogCaptureFixture) -> None:
     short = "only-twenty-chars-xx"
-    assert check(link(NOW + 900, key=short), keys({"kid": KID, "key": short})) == Reason.SIGNATURE_INVALID
+    rotating = keys({"kid": KID, "key": short}, previous={"kid": OLD_KID, "key": OLD_KEY})
+    assert check(link(NOW + 900, key=short), rotating) == Reason.SIGNATURE_INVALID
     assert "too short" in caplog.text and short not in caplog.text
 
 
 @pytest.mark.parametrize("entry", [{"kid": KID}, {"key": KEY}, {"kid": "bad kid", "key": KEY}, "not an object"])
 def test_a_malformed_key_entry_is_ignored(entry: Any) -> None:
-    assert check(link(NOW + 900), keys(entry)) == Reason.SIGNATURE_INVALID
+    rotating = keys(entry, previous={"kid": OLD_KID, "key": OLD_KEY})
+    assert check(link(NOW + 900), rotating) == Reason.SIGNATURE_INVALID
 
 
-def test_a_museum_without_keys() -> None:
-    assert verify(keys(), "pahma", BLOB, link(NOW + 900, tenant="pahma"), NOW).reason == Reason.SIGNATURE_INVALID
+# A museum that allows signed access but has no usable key: a configuration problem in Serena (D232)
+
+@pytest.mark.parametrize("current", [{"kid": KID, "key": "only-twenty-chars-xx"}, {"kid": KID}, "not an object"])
+def test_a_secret_with_no_usable_key(caplog: pytest.LogCaptureFixture, current: Any) -> None:
+    query = link(NOW + 900)
+    assert check(query, keys(current)) == Reason.SIGNING_NOT_SET_UP
+    assert not_set_up_warning(caplog, "cinefiles")
+    assert not any(value in caplog.text for value in (UID, query["sig"][0], query["exp"][0], KEY))
+
+
+def test_a_museum_without_keys(caplog: pytest.LogCaptureFixture) -> None:
+    query = link(NOW + 900, tenant="pahma")
+    assert verify(keys(), "pahma", BLOB, query, NOW).reason == Reason.SIGNING_NOT_SET_UP
+    assert not_set_up_warning(caplog, "pahma")
+    assert UID not in caplog.text and query["sig"][0] not in caplog.text
+
+
+def test_no_usable_key_is_found_before_the_parameters_are_checked() -> None:
+    assert check({"exp": ["x"], "uid": ["x"], "kid": ["x"], "sig": ["x"]}, keys("not an object")) \
+        == Reason.SIGNING_NOT_SET_UP
+
+
+def test_no_parameters_without_a_usable_key_is_still_restricted(caplog: pytest.LogCaptureFixture) -> None:
+    assert check({}, keys("not an object")) == Reason.RESTRICTED
+    assert verify(keys(), "pahma", BLOB, {}, NOW).reason == Reason.RESTRICTED
+    assert not not_set_up_warning(caplog, "cinefiles") and not not_set_up_warning(caplog, "pahma")
 
 
 def test_keys_that_cant_be_read(caplog: pytest.LogCaptureFixture) -> None:
@@ -279,6 +310,52 @@ def test_a_museum_without_signed_access(app_client: TestClient, store: Store, re
     cached(store, tenant="pahma")
     assert unavailable(app_client.get(url("content", tenant="pahma", query=fresh("pahma"))), "pahma")
     assert recorder.counts[("pahma", Reason.RESTRICTED)] == 1
+
+
+def logged_not_set_up(capsys: pytest.CaptureFixture[str], tenant: str) -> list[str]:
+    """The app's log lines (JSON on stderr; the app replaces caplog's handler) saying the museum has no usable key."""
+    lines = [line for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
+    return [line for line in lines if json.loads(line).get("message", "").startswith("no usable signing key")
+            and json.loads(line).get("museum") == tenant]
+
+
+def no_signing_client(store: Store, s3: Any, secretsmanager: Any, recorder: MemoryRecorder,
+                      secret_ids: dict[str, str]) -> TestClient:
+    settings = Settings(tenants=TENANTS, table_prefix="t", buckets={t: f"b-{t}" for t in TENANTS}, local_cdn=True,
+                        dynamodb_endpoint="http://localhost:8000", signing_key_secret_ids=secret_ids, _env_file=None)
+    s3.put_object(Bucket="b-cinefiles", Key=f"objects/{SHA}", Body=PDF, ContentType="application/pdf")
+    return TestClient(create_app(settings, store, recorder, s3=s3, secretsmanager=secretsmanager),
+                      follow_redirects=False)
+
+
+def test_no_secret_configured(store: Store, s3: Any, secretsmanager: Any, recorder: MemoryRecorder,
+                              capsys: pytest.CaptureFixture[str]) -> None:
+    client = no_signing_client(store, s3, secretsmanager, recorder, {})
+    cached(store)
+    capsys.readouterr()
+    query = fresh()
+    assert unavailable(client.get(url(query=query)))
+    assert recorder.counts[("cinefiles", Reason.SIGNING_NOT_SET_UP)] == 1
+    warnings = logged_not_set_up(capsys, "cinefiles")
+    assert len(warnings) == 1 and UID not in warnings[0] and query["sig"][0] not in warnings[0]
+    assert unavailable(client.get(url()))  # no signed link: still restricted
+    assert recorder.counts[("cinefiles", Reason.RESTRICTED)] == 1
+
+
+def test_a_secret_with_no_usable_key_through_the_app(store: Store, s3: Any, secretsmanager: Any,
+                                                     recorder: MemoryRecorder,
+                                                     capsys: pytest.CaptureFixture[str]) -> None:
+    short = "only-twenty-chars-xx"
+    secretsmanager.create_secret(Name=KEYS_NAME, SecretString=json.dumps(
+        {"current": {"kid": KID, "key": short}, "previous": {"kid": "bad kid", "key": KEY}}))
+    client = no_signing_client(store, s3, secretsmanager, recorder, {"cinefiles": KEYS_NAME})
+    cached(store)
+    capsys.readouterr()
+    assert unavailable(client.get(url(query=fresh(key=short))))
+    assert recorder.counts[("cinefiles", Reason.SIGNING_NOT_SET_UP)] == 1
+    err = capsys.readouterr().err
+    assert "no usable signing key" in err and '"museum": "cinefiles"' in err
+    assert short not in err and KEY not in err
 
 
 def test_keys_that_cant_be_read_fail_closed(app_client: TestClient, store: Store, recorder: MemoryRecorder,
