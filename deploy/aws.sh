@@ -584,7 +584,7 @@ deploy() {
   image="$repo:$tag"
 
   echo "== 2/3 Image $image (linux/arm64)"
-  docker build --platform linux/arm64 -f deploy/Dockerfile -t "$image" .
+  docker build --pull --platform linux/arm64 -f deploy/Dockerfile -t "$image" .
   # The registry's short-lived token goes straight from the AWS CLI to Docker; it is never shown or saved here.
   aws_ ecr get-login-password | docker login --username AWS --password-stdin "$registry" >/dev/null
   docker push "$image"
@@ -599,7 +599,7 @@ deploy() {
     case "$base" in
       */*|"") die "backend/Dockerfile's base image ($base) isn't a Docker official image; update deploy/aws.sh." ;;
     esac
-    docker build --platform linux/arm64 --build-context "$base=docker-image://public.ecr.aws/docker/library/$base" \
+    docker build --pull --platform linux/arm64 --build-context "$base=docker-image://public.ecr.aws/docker/library/$base" \
       -f backend/Dockerfile -t "$devtools_image" backend
     docker push "$devtools_image"
   fi
