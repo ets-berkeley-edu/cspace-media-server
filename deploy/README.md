@@ -211,7 +211,8 @@ flowchart LR
 Stage 2 (pre-production): PAHMA's production CollectionSpace, the production ETL's daily servable list (Jira
 CSW-1027), WAF and data protection on, open to campus networks and the VPN until PAHMA's imageserver paths are
 routed to it. Stage 1 (CS-9523) comes first in the same account and looks like the personal-dev diagram above:
-the simulator and the fake ETL, open to campus networks and the VPN, destroyed when it passes.
+the simulator and the fake ETL, open to campus networks and the VPN, destroyed when it passes
+(`docs/testing-checklist.md`, section 31).
 
 ```mermaid
 flowchart LR
@@ -291,10 +292,10 @@ The same Terraform builds every environment; only its settings differ.
 | ETL | Fake ETL (`./serena aws etl`) | Fake ETL | The production ETL (Jira CSW-1027); no fake ETL |
 | WAF (`WAF`) | Off | Off | On |
 | Data protection (`PROTECT_DATA`) | Off: throwaway | Off: destroyed when stage 1 passes | On |
-| App tasks (`WEB_COUNT`) | 1 | 1 or 2 | 2 (D188) |
+| App tasks (`WEB_COUNT`) | 1 | 2 | 2 (D188) |
 | Who can reach it | Richard's addresses (`ALLOWED_CIDRS`) | Campus networks and the VPN | Campus networks and the VPN, and the ETL server for `/etl/` (`ETL_CIDRS`); everyone for files once a museum's paths are routed to it (`OPEN_IMAGES=true`) |
 | Alerts (`ALERT_EMAIL`) | Richard | Richard | The team's mailing list |
-| Settings | `deploy/environments/personal-dev.conf` and `.local.conf` | A settings file | SSM Parameter Store in the account (D273) |
+| Settings | `deploy/environments/personal-dev.conf` and `.local.conf` | `deploy/environments/ucb-stage1.conf` and `.local.conf` (`--env ucb-stage1`) | SSM Parameter Store in the account (D273) |
 | Deployed by | `./serena aws` from Richard's Mac | `./serena aws`, no pipeline (D269) | The deploy pipeline, after a reviewer approves the plan (D268 to D272); secrets set by an admin with `./serena aws` (D274) |
 
 ## What it creates
