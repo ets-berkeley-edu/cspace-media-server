@@ -12,11 +12,15 @@ Each museum is told apart by the host name it's called by (pahma.fakecspace) or 
 User: serena, password serena (synthetic; Serena's read-only service account in development).
 Development hooks:
   POST /_fake/reset                 empty
-  POST /_fake/media                 {"csid", "kind": image|pdf|3D, "state"?, "blob"?, "identification"?}: a Media
-                                    record with sample files, its Blob's CSID and identification number (2026.1.<n>
-                                    unless given). A record it already has is kept as it is (changes made with the
-                                    hooks below, its number and "last changed" included), so each ./serena etl, which
-                                    adds its records first, doesn't make them look changed.
+  POST /_fake/media                 {"csid", "kind": image|pdf|3D, "state"?, "blob"?, "identification"?, "band"?}:
+                                    a Media record with sample files, its Blob's CSID and identification number
+                                    (2026.1.<n> unless given). With a band (an image's only: 100KB, 1MB, 5MB, 20MB or
+                                    100MB), its files are JPEGs of about a real file's size instead of 8x8 PNGs, for
+                                    ./serena aws replay (D283): the original and OriginalJpeg about the band's size,
+                                    the other derivatives about a real one's (see bands.py). A record it already
+                                    has is kept as it is (changes made with the hooks below, its number and "last
+                                    changed" included), so each ./serena etl, which adds its records first, doesn't
+                                    make them look changed.
   POST /_fake/delete/<csid>         soft-delete it (the Media service still returns it, as CollectionSpace does)
   POST /_fake/undelete/<csid>       undo a soft delete, as CollectionSpace's undelete workflow transition does (a record
                                     that isn't deleted is left as it is)
@@ -45,9 +49,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from . import samples
+from . import bands, samples
 
 USERS = {"serena": "serena"}
 # Admins' own accounts, for the admin app's sign-in (design: Admin web app; decided October 10, 2026). Synthetic: each
@@ -64,14 +68,16 @@ DERIVATIVES = ("Thumbnail", "Small", "Medium", "FullHD", "OriginalJpeg")
 class Media:
     csid: str
     state: str = "project"  # CollectionSpace's workflow state; "deleted" when soft-deleted
-    files: dict[str, tuple[bytes, str]] = field(default_factory=dict)  # "content" or a derivative -> (bytes, type)
+    # "content" or a derivative -> (bytes, type); None for bytes: the record's band's file of that name (band below)
+    files: dict[str, tuple[bytes | None, str]] = field(default_factory=dict)
     blob: str | None = None  # its Blob's CSID (blobCsid)
     publish_to: str = "All"  # media_common's publishTo, a vocabulary term (core CollectionSpace)
     approved_for_web: bool = True  # media_pahma's approvedforweb: what PAHMA's ETL reads (for Media look up)
     identification_number: str = ""  # media_common's identificationNumber, as staff know the record (D153)
     updated_at: str = field(default_factory=lambda: _now())  # collectionspace_core's updatedAt
     # Its file and Blob CSID before its first replace, for /_fake/restore; None if never replaced.
-    before_replace: tuple[dict[str, tuple[bytes, str]], str | None] | None = None
+    before_replace: tuple[dict[str, tuple[bytes | None, str]], str | None] | None = None
+    band: str | None = None  # the size band of its files (D283), or None for the 8x8 samples
 
 
 def _now() -> str:
@@ -98,8 +104,14 @@ class Store:
             self.unreachable = False  # an outage: every CollectionSpace call answers 503, the records kept
 
     def add(self, csid: str, kind: str = "image", state: str = "project", shade: int = 128,
-            blob: str | None = None, identification_number: str | None = None) -> Media:
-        if kind in ("image", "card"):
+            blob: str | None = None, identification_number: str | None = None, band: str | None = None) -> Media:
+        files: dict[str, tuple[bytes | None, str]]
+        if band is not None and kind not in ("image", "card"):
+            raise ValueError(f"a size band is for images only, not {kind}")
+        if band is not None:
+            bands.prepare(band)  # made in the background, so the first request for the file waits less
+            files = {name: (None, "image/jpeg") for name in ("content", *DERIVATIVES)}
+        elif kind in ("image", "card"):
             image = samples.png(shade=shade)
             files = {"content": (image, "image/png"), **{name: (image, "image/png") for name in DERIVATIVES}}
         elif kind == "pdf":
@@ -111,7 +123,7 @@ class Store:
         with self.lock:
             # A synthetic identification number unless one is given: 2026.1.1, 2026.1.2, ... (D153)
             number = identification_number if identification_number is not None else f"2026.1.{len(self.media) + 1}"
-            media = Media(csid, state, files, blob, identification_number=number)
+            media = Media(csid, state, files, blob, identification_number=number, band=band)
             self.media[csid] = media
         return media
 
@@ -259,6 +271,13 @@ def _file(request: Request, csid: str, name: str) -> Response:
     if media is None or name not in media.files:
         return Response(status_code=404)
     content, content_type = media.files[name]
+    if content is None:
+        # The band's shared file, made different for each record by a comment naming it, so that no two records'
+        # files are the same bytes (Serena stores files by content hash) without copying the file for each request.
+        shared = bands.band_file(bands.band_of(name, media.band or ""))
+        head = bands.marked_head(media.csid)
+        return StreamingResponse(bands.stream(head, shared), media_type=content_type,
+                                 headers={"Content-Length": str(len(head) + len(shared) - 2)})
     return Response(content, media_type=content_type)
 
 
@@ -305,8 +324,14 @@ async def add_media(request: Request) -> JSONResponse:
     existing = store.media.get(body["csid"])
     if existing is not None:
         return JSONResponse({"csid": existing.csid, "files": sorted(existing.files), "kept": True})
-    media = store.add(body["csid"], body.get("kind", "image"), body.get("state", "project"), blob=body.get("blob"),
-                      identification_number=body.get("identification"))
+    band = body.get("band")
+    if band is not None and band not in bands.ORIGINALS:
+        raise HTTPException(400, f"unknown band {band}: one of {', '.join(bands.ORIGINALS)}")
+    try:
+        media = store.add(body["csid"], body.get("kind", "image"), body.get("state", "project"),
+                          blob=body.get("blob"), identification_number=body.get("identification"), band=band)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
     return JSONResponse({"csid": media.csid, "files": sorted(media.files)})
 
 

@@ -42,7 +42,7 @@ placeholder image's Media record among them. Watermarking (the Botanical Garden)
 | `backend/fakecspace/` | A CollectionSpace simulator for tests and local development, with synthetic files |
 | `backend/serena/museums/` | Each museum's configuration: derivatives served, placeholder image, kinds with signed access, starting settings |
 | `admin/` | The admin web app: Vue, TypeScript and Vuetify, served under `/admin`, its API under `/admin/v1` |
-| `serenade/` | The admin app's Selenium tests (`./serena ui`) |
+| `serenade/` | The admin app's Selenium tests (`./serena ui`), the AWS tests (`./serena aws test`) and the access-log replay (`./serena aws replay`) |
 | `backend/devtools/` | Local-only tools: seeding the AWS stand-in, and a fake ETL |
 | `docker-compose.yml`, `serena` | The local stack and its script (`./serena help`) |
 | `deploy/` | The AWS deployment: the production image, Terraform and `./serena aws` (`deploy/README.md`) |

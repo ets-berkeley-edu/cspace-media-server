@@ -105,14 +105,16 @@ resource "aws_cloudwatch_log_group" "devtools" {
   depends_on        = [aws_kms_key_policy.main] # the key's policy lets CloudWatch Logs use it
 }
 
-# No task role: the simulator calls no AWS service. The execution role pulls its image and writes its logs.
+# No task role: the simulator calls no AWS service. The execution role pulls its image and writes its logs. Half a
+# vCPU and 2 GB leave room for ./serena aws replay's files of about a real file's size (D283): the largest, 100 MB,
+# is made once after a start and served to several fetches at once.
 resource "aws_ecs_task_definition" "fakecspace" {
   count                    = local.simulated
   family                   = "${local.name}-fakecspace"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = 512
+  memory                   = 2048
   execution_role_arn       = aws_iam_role.execution.arn
 
   runtime_platform {

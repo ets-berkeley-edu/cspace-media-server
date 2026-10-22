@@ -99,6 +99,41 @@ October 21, 2026): T90 to T105, from the checklist's AWS sections (24, 25 and 27
   `./serena aws test` asks for the password (D228), which isn't shown or saved. With the simulator it's `admin`/`admin`.
 - **Read-only AWS calls** (D231) use the AWS CLI with the environment's profile: `logs filter-log-events` for T105.
 
+## The access-log replay
+
+`load/replay.py` replays a slice of the legacy imageserver's cleaned access logs against an AWS environment with the
+simulator, to measure how big Serena's tasks need to be (D278 to D288, decided October 22, 2026; checklist sections
+31 and 32). The logs are on Richard's Mac (`rtl/serena/tools/access-logs/out/clean/<month>.tsv.gz`), never in the
+repository.
+
+```
+./serena aws replay --log 2026-09.tsv.gz --busiest hour --dry-run   # the slice, and the fake ETL command for it
+./serena aws etl pahma --env personal-dev --sizes 100KB:5440,1MB:205,5MB:395,20MB:19   # as the dry run printed it
+./serena aws replay --log 2026-09.tsv.gz --busiest hour             # the real rate; --speed 5 for five times
+```
+
+(September 2026's busiest hour: 12,588 requests for 6,059 files, with 3 left out.)
+
+- **Only with the simulator** (D279): `./serena aws replay` refuses any environment without the simulated
+  CollectionSpace and closed image paths, and the script sends nothing unless `./serena aws replay` started it.
+- **What it sends** (D280 to D282, D284): the slice's requests in their order and spacing (the log has whole seconds,
+  so each second's requests are spread across it), all to the environment's museum, each keeping its URL form and
+  method; Cinefiles' PDF links as the file itself; forms Serena doesn't answer are left out and counted. Each logged
+  file is one record, always the same, numbered band by band as the fake ETL's `--sizes` makes them. Redirects aren't
+  followed, except one in `--follow N`.
+- **The records come first.** Run the `./serena aws etl … --sizes …` command the dry run prints before replaying; again
+  after a deploy, pause or resume (the simulator forgets its records). If its servable list check fails on the delta
+  threshold (an earlier refresh had other rows), override the threshold once on the admin app's Refreshes page.
+- **Cold and warm.** Serena's cache is kept by Blob CSID, so the first replay over a set of records is cold (every
+  file's first request is a miss, as at a cutover) and a replay over the same records again is warm (only hits). For
+  another cold replay, give `--first-row` past the records used so far (say 10000, then 20000): the dry run then
+  prints the fake ETL command with the same `--first-row`, which makes new records Serena hasn't cached.
+- **What it reports** (D287): requests sent, how many went more than a second late (the Mac or the network couldn't
+  keep up), the answers by status, latency for first requests (misses, unless an earlier run fetched the file) and for
+  repeats, then, after 3 minutes, the web and worker services' CPU and memory from CloudWatch, a minute at a time
+  (average, busiest minute, highest), as a percentage of the task size.
+- **Tested** in `backend/tests/test_replay.py` (CI's backend job), with logs made up in the tests.
+
 ## Packages
 
 Pinned with hashes in `requirements.txt`; change `requirements.in` and run

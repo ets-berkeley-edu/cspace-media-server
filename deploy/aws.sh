@@ -8,7 +8,7 @@
 #   ./serena aws logs web|worker|devtools   follow a service's logs (the last 30 minutes first)
 #   ./serena aws pause         stop every service to save money (the data stays); ./serena aws resume starts them
 #   ./serena aws allow-my-ip   add this computer's current address to the allowlist
-#   ./serena aws etl MUSEUM [--rows N] [--failed] [--json]   with the simulator: a whole daily refresh by the fake
+#   ./serena aws etl MUSEUM [--rows N | --sizes BAND:COUNT,...] [--failed] [--json]   with the simulator: a whole daily refresh by the fake
 #                              ETL, run once inside the environment; prints the refresh's result and sample image
 #                              addresses (--json: only its summary, as JSON, for ./serena aws test)
 #   ./serena aws list MUSEUM [--limit N] [--kind KIND]   what Serena may serve for a museum (its servability table),
@@ -16,6 +16,11 @@
 #   ./serena aws test [pytest options]   the AWS tests (serenade/aws/) against this running environment: what
 #                              Serena serves through CloudFront, the admin app, a recall that's cancelled, the logs
 #                              (D222-D231); only the tests that look against a real CollectionSpace
+#   ./serena aws replay --log MONTH.tsv.gz (--busiest hour|minute | --from TIME [--minutes N]) [--speed X]
+#                              [--concurrency N] [--follow N] [--dry-run]   with the simulator only: replay a slice of
+#                              the cleaned access logs (serenade/load/replay.py, D278-D288), then the web and worker
+#                              services' CPU and memory from CloudWatch for the run. --dry-run prints the slice and
+#                              the ./serena aws etl --sizes command to run first, sending nothing
 #   ./serena aws cspace-secret MUSEUM   set a museum's read-only CollectionSpace account (asks; nothing is shown or saved)
 #   ./serena aws etl-token MUSEUM       make a museum's new ETL token (the old one keeps working until the next);
 #                              shows it once, for the ETL's token file
@@ -834,12 +839,7 @@ run_tests() {  # run_tests [pytest options]
       read -r -s -p "$SERENADE_ADMIN_USER's password (not shown or saved): " SERENADE_ADMIN_PASSWORD; echo
     fi
   fi
-  py="$(command -v python3.11 || true)"
-  [ -n "$py" ] || die "./serena aws test needs python3.11 (the repository's Python)."
-  if [ ! -x serenade/.venv/bin/python ]; then
-    "$py" -m venv serenade/.venv
-    serenade/.venv/bin/pip install -q --require-hashes -r serenade/requirements.txt
-  fi
+  serenade_venv test
   echo "The AWS tests against $ENV_LABEL: $url (image ${IMAGE##*:}, museum $museum)"
   [ "$SIMULATED_CSPACE" = true ] || echo "A real CollectionSpace: only the tests that look run."
   rm -rf serenade/.run/failures
@@ -848,6 +848,55 @@ run_tests() {  # run_tests [pytest options]
     SERENADE_AWS_LOG_PREFIX="/serena/$SERENA_ENV_NAME" SERENADE_AWS_BUCKET="$NAME-$museum-$ACCOUNT_ID-$AWS_REGION" \
     SERENADE_ADMIN_USER="$SERENADE_ADMIN_USER" SERENADE_ADMIN_PASSWORD="$SERENADE_ADMIN_PASSWORD" \
     serenade/.venv/bin/python -m pytest serenade/aws -p no:cacheprovider "$@"
+}
+
+serenade_venv() {  # serenade_venv COMMAND: makes serenade/.venv once (the AWS tests and the replay use it)
+  local py
+  py="$(command -v python3.11 || true)"
+  [ -n "$py" ] || die "./serena aws $1 needs python3.11 (the repository's Python)."
+  if [ ! -x serenade/.venv/bin/python ]; then
+    "$py" -m venv serenade/.venv
+    serenade/.venv/bin/pip install -q --require-hashes -r serenade/requirements.txt
+  fi
+}
+
+# The access-log replay (D278-D288): only against an environment with the simulator, whose misses fetch from it, never
+# from a museum's CollectionSpace (D279); from this computer, through CloudFront, as visitors' requests come (D286).
+replay_logs() {  # replay_logs [serenade/load/replay.py options]
+  load_env
+  [ "$SIMULATED_CSPACE" = true ] && [ "$OPEN_IMAGES" = false ] ||
+    die "'$ENV' isn't an environment with the simulator and closed images: the replay runs only against one (D279)."
+  local museum arg dry=false url summary metric svc
+  museum="$(museum_names | head -n 1)"
+  for arg in "$@"; do [ "$arg" != --dry-run ] || dry=true; done
+  serenade_venv replay
+  if [ "$dry" = true ]; then
+    serenade/.venv/bin/python -m serenade.load.replay --museum "$museum" --env "$ENV" "$@"
+    return
+  fi
+  check_account; need_terraform; tf_init app; need_deployed
+  [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
+  url="$(app_url)"
+  case "$url" in https://*) ;; *) die "'$ENV' has no address yet: run ./serena aws deploy again." ;; esac
+  summary="$(mktemp)"
+  SERENA_REPLAY_SIMULATED=true serenade/.venv/bin/python -m serenade.load.replay --url "$url" --museum "$museum" \
+    --env "$ENV" --summary "$summary" "$@" || { rm -f "$summary"; die "The replay stopped; nothing was changed."; }
+  local start end
+  start="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["window"]["start"])' "$summary")"
+  end="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["window"]["end"])' "$summary")"
+  rm -f "$summary"
+  echo "Waiting 3 minutes for CloudWatch's figures for the last minutes ..."
+  sleep 180
+  echo "CPU and memory, in percent of the task size, a minute at a time, $start to $end (D287):"
+  for svc in web worker; do
+    for metric in CPUUtilization MemoryUtilization; do
+      retry aws_ cloudwatch get-metric-statistics --namespace AWS/ECS --metric-name "$metric" \
+        --dimensions "Name=ClusterName,Value=$NAME" "Name=ServiceName,Value=$svc" --start-time "$start" \
+        --end-time "$(python3 -c 'import datetime,sys; print((datetime.datetime.fromisoformat(sys.argv[1]) + datetime.timedelta(minutes=2)).isoformat())' "$end")" \
+        --period 60 --statistics Average Maximum --output json |
+        serenade/.venv/bin/python -m serenade.load.metrics "$svc ${metric%Utilization}"
+    done
+  done
 }
 
 retry() {  # retry COMMAND...: a read-only AWS call, tried up to 4 times, 5 seconds apart; its error shown on the last
@@ -926,6 +975,7 @@ case "$CMD" in
   etl) etl "$@" ;;
   list) list_servable "$@" ;;
   test) run_tests "$@" ;;
+  replay) replay_logs "$@" ;;
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
   etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;

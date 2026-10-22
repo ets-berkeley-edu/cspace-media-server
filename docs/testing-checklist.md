@@ -1152,12 +1152,20 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
   alarm's "OK" email about 15 minutes later.
 - [ ] **8. Two web tasks.** Run `./serena aws logs web --env ucb-stage1` while opening a few sample addresses. Expect
   requests answered by both tasks (two different task IDs in the log stream names), and no errors.
-- [ ] **9. Task sizes.** With the access-log replay tool (to-do item 2; its commands are added here by the pull request
-  that adds it), replay a typical hour and the busiest hour of the clean access logs against the address, at their
-  real rate and then faster. Watch the ECS services' CPU and memory in CloudWatch. Expect no 5xx answers other than a
-  504 on a first request whose fetch takes over 60 seconds (D184). Note here the peak CPU and memory of the web and
-  worker tasks at each rate; the task sizes in design.md (Compute) and Terraform are then set from them, in their own
-  pull request.
+- [ ] **9. Task sizes.** Replay the busiest hour and a typical hour of the cleaned access logs (`./serena aws replay`,
+  section 32 and `serenade/README.md`; `LOG=~/dev/src/rtl/serena/tools/access-logs/out/clean/2026-09.tsv.gz`, or a
+  later month). Each run ends with the web and worker services' CPU and memory; note them here, with the run's
+  `sent`, `late` and `statuses`. Expect no 5xx answers other than a 504 on a first request whose fetch takes over 60
+  seconds (D184), and few or no `late` requests (many means the Mac or the VPN couldn't keep up: note it).
+  1. The busiest hour, cold: `./serena aws replay --env ucb-stage1 --log $LOG --busiest hour --dry-run`, then the
+     `./serena aws etl …` command it prints, then the same replay without `--dry-run` (about an hour).
+  2. The same hour, warm and five times faster: add `--speed 5 --follow 100` (about 12 minutes; the followed ones
+     answer 200).
+  3. A typical hour, cold: `--from 2026-09-10T14:00 --minutes 60 --first-row 20000` (3,046 requests in September
+     2026): its dry run, the `./serena aws etl … --first-row 20000` command it prints (if its servable list check
+     fails on the delta threshold, override it once on the Refreshes page and run it again), then the replay.
+  4. Note the highest CPU and memory of each service at each run. The task sizes in design.md (Compute) and
+     Terraform are then set from them, in their own pull request.
 - [ ] **10. Cost.** After about a week, in the AWS console, Billing and Cost Management → Cost Explorer, filtered by
   the tag `project = serena` (or ask Ops if the permission set can't see it): note the daily cost here. It helps
   size stage 2 (WAF on, two web tasks, all day).
@@ -1166,3 +1174,40 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
   2. Expect it to finish with everything destroyed. If it stops with an error about the VPC, run it again.
   3. Tell Ops on CS-9523 that stage 1 is done, and ask for stage 2 (the comment drafted in
      `serena/jira/jira-ops-cs-9523-stages-comment.txt`).
+
+## 32. The access-log replay, personal-dev with the simulator (about 1 hour; before merging the pull request that adds it)
+
+What it checks: decisions D278 to D288 (October 22, 2026). `./serena aws replay` replays a slice of a cleaned access
+log against personal-dev, after the fake ETL has made records with files of about the logged sizes (`--sizes`, D283),
+and reads the services' CPU and memory from CloudWatch. From this pull request's branch on the Mac
+(`git switch <the branch> && git pull`), signed in (`aws sso login --profile bmu-personal`), with
+`LOG=~/dev/src/rtl/serena/tools/access-logs/out/clean/2026-09.tsv.gz`:
+
+- [ ] **1. Deploy this branch.** `./serena aws resume`, then `./serena aws deploy`. At the plan, expect the
+  simulator's task definition replaced (`cpu` 512, `memory` 2048), with the four task definitions as usual.
+- [ ] **2. A dry run.** `./serena aws replay --log $LOG --busiest minute --dry-run`. Expect, with nothing sent and no
+  AWS call: "Slice: 2026-09-18T13:40:00-07:00 for 1 minutes: 1128 requests for 1128 files
+  (100KB:1069,1MB:17,5MB:41,20MB:1)" and "records it needs, first: ./serena aws etl pahma --env personal-dev --sizes
+  100KB:1069,1MB:17,5MB:41,20MB:1".
+- [ ] **3. The records.** Run the printed `./serena aws etl …` command. Expect "updated" with 1,129 rows (the 1,128 records
+  and the placeholder image) in a few minutes. If the check fails on the delta threshold (the last refresh had 20 rows),
+  override it once on the admin app's Refreshes page, then run the command again.
+- [ ] **4. The busiest minute, cold.** `./serena aws replay --log $LOG --busiest minute`. Expect "Replaying against
+  https://…", then a JSON summary: `sent` 1128, `late` 0 or close, `statuses` all or nearly all `302`, and the
+  `first_requests` latency higher than the `repeats` (misses fetch from the simulator); then, after 3 minutes, four
+  lines of CPU and memory (web and worker). Note them.
+- [ ] **5. Warm, faster, following some redirects.** `./serena aws replay --log $LOG --busiest minute --speed 5
+  --follow 50`. Expect the run in about 12 seconds, the latencies lower than in step 4, and about 22 `200`s among the
+  `statuses` (the followed redirects, delivered by CloudFront).
+- [ ] **6. Files of about the logged size.** In `./serena aws logs web`, expect step 4's "fetched" lines, most with a
+  `size` near 100,000 and some of several MB (one near 20,000,000), and no "refused: the image doesn't decode". In
+  `./serena aws logs devtools`, expect no "couldn't be made".
+- [ ] **7. A cold run again.** `./serena aws replay --log $LOG --busiest minute --first-row 10000 --dry-run`: expect
+  the fake ETL command to end with `--first-row 10000`. Run it (override the delta threshold if asked), then the
+  replay with `--first-row 10000`: expect the `first_requests` latency like step 4's again, not step 5's.
+- [ ] **8. Refused where it must be.** Add the line `OPEN_IMAGES=true` to `deploy/environments/personal-dev.local.conf`,
+  run `./serena aws replay --log $LOG --busiest minute --dry-run`: expect "'personal-dev' isn't an environment with the
+  simulator and closed images: the replay runs only against one (D279)." Remove the line. Then
+  `serenade/.venv/bin/python -m serenade.load.replay --log $LOG --busiest minute --url https://example.invalid`:
+  expect "The replay sends requests only through ./serena aws replay …" and nothing sent.
+- [ ] **9. Pause.** `./serena aws pause` (type `yes`).

@@ -76,8 +76,8 @@ The local stack, from the repository's root (Docker only; never AWS or a real Co
 ./serena down          # stop; moto forgets everything
 ```
 
-AWS (`deploy/README.md`): `./serena aws deploy | plan | status | logs | etl <museum> | pause | resume | cdn-key |
-confirm-alerts | destroy`
+AWS (`deploy/README.md`): `./serena aws deploy | plan | status | logs | etl <museum> | replay | pause | resume |
+cdn-key | confirm-alerts | destroy`
 (`deploy/aws.sh`, Terraform in `deploy/terraform/`, the production image `deploy/Dockerfile`). Richard runs every one.
 After changing a `.tf` file, `terraform fmt -recursive deploy/terraform`; after changing a table,
 `python -m serena.tables > ../deploy/terraform/app/tables.json` in `backend/` (`tests/test_deploy.py` checks both
