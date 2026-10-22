@@ -123,15 +123,18 @@ repository.
   followed, except one in `--follow N`.
 - **The records come first.** Run the `./serena aws etl … --sizes …` command the dry run prints before replaying; again
   after a deploy, pause or resume (the simulator forgets its records). If its servable list check fails on the delta
-  threshold (an earlier refresh had other rows), override the threshold once on the admin app's Refreshes page.
+  threshold (the last updated refresh had other records), override the threshold on that refresh on the admin app's
+  Refreshes page; it's then updated from the same list, and the fake ETL needn't run again.
 - **Cold and warm.** Serena's cache is kept by Blob CSID, so the first replay over a set of records is cold (every
   file's first request is a miss, as at a cutover) and a replay over the same records again is warm (only hits). For
   another cold replay, give `--first-row` past the records used so far (say 10000, then 20000): the dry run then
   prints the fake ETL command with the same `--first-row`, which makes new records Serena hasn't cached.
 - **What it reports** (D287): requests sent, how many went more than a second late (the Mac or the network couldn't
-  keep up), the answers by status, latency for first requests (misses, unless an earlier run fetched the file) and for
-  repeats, then, after 3 minutes, the web and worker services' CPU and memory from CloudWatch, a minute at a time
-  (average, busiest minute, highest), as a percentage of the task size.
+  keep up), the answers by status and by what Serena did (`served`: a 302 to a stored file; `unavailable`: a 302 to
+  the unavailable image, as when the records aren't servable), the latency of all answers and of the served ones,
+  then, after 3 minutes, the web and worker services' CPU and memory from CloudWatch, a minute at a time (average,
+  busiest minute, highest), as a percentage of the task size. On personal-dev (one web task of 1 vCPU and 2 GB),
+  September 2026's busiest minute cold took about 25% CPU in the busiest minute and 7% memory (checklist section 32).
 - **Tested** in `backend/tests/test_replay.py` (CI's backend job), with logs made up in the tests.
 
 ## Packages

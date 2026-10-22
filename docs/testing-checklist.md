@@ -1158,12 +1158,14 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
   `sent`, `late` and `statuses`. Expect no 5xx answers other than a 504 on a first request whose fetch takes over 60
   seconds (D184), and few or no `late` requests (many means the Mac or the VPN couldn't keep up: note it).
   1. The busiest hour, cold: `./serena aws replay --env ucb-stage1 --log $LOG --busiest hour --dry-run`, then the
-     `./serena aws etl …` command it prints, then the same replay without `--dry-run` (about an hour).
+     `./serena aws etl …` command it prints (override the delta threshold on that refresh if its check fails, as in
+     section 32, step 3), then the same replay without `--dry-run` (about an hour). Expect `answers` all `served`.
   2. The same hour, warm and five times faster: add `--speed 5 --follow 100` (about 12 minutes; the followed ones
      answer 200).
   3. A typical hour, cold: `--from 2026-09-10T14:00 --minutes 60 --first-row 20000` (3,046 requests in September
-     2026): its dry run, the `./serena aws etl … --first-row 20000` command it prints (if its servable list check
-     fails on the delta threshold, override it once on the Refreshes page and run it again), then the replay.
+     2026): its dry run, the `./serena aws etl … --first-row 20000` command it prints (its servable list check fails
+     on the delta threshold, as every row is new: override the threshold on that refresh on the Refreshes page; don't
+     run the fake ETL again), then the replay.
   4. Note the highest CPU and memory of each service at each run. The task sizes in design.md (Compute) and
      Terraform are then set from them, in their own pull request.
 - [ ] **10. Cost.** After about a week, in the AWS console, Billing and Cost Management → Cost Explorer, filtered by
@@ -1183,31 +1185,51 @@ and reads the services' CPU and memory from CloudWatch. From this pull request's
 (`git switch <the branch> && git pull`), signed in (`aws sso login --profile bmu-personal`), with
 `LOG=~/dev/src/rtl/serena/tools/access-logs/out/clean/2026-09.tsv.gz`:
 
-- [ ] **1. Deploy this branch.** `./serena aws resume`, then `./serena aws deploy`. At the plan, expect the
+Checked by Richard on October 22, 2026, at commit `63f4f36`: every step, as noted under each. The report's `answers`
+and `latency` fields, the fake ETL's override hint, and the override wording in steps 3 and 7 came after, from what
+the run showed: at `63f4f36` the report had `first_requests` and `repeats` (first in that run, so a warm run's hits
+were counted as first requests too), and a 302 to the unavailable image looked like a served one.
+
+- [x] **1. Deploy this branch.** `./serena aws resume`, then `./serena aws deploy`. At the plan, expect the
   simulator's task definition replaced (`cpu` 512, `memory` 2048), with the four task definitions as usual.
-- [ ] **2. A dry run.** `./serena aws replay --log $LOG --busiest minute --dry-run`. Expect, with nothing sent and no
+- [x] **2. A dry run.** `./serena aws replay --log $LOG --busiest minute --dry-run`. Expect, with nothing sent and no
   AWS call: "Slice: 2026-09-18T13:40:00-07:00 for 1 minutes: 1128 requests for 1128 files
   (100KB:1069,1MB:17,5MB:41,20MB:1)" and "records it needs, first: ./serena aws etl pahma --env personal-dev --sizes
   100KB:1069,1MB:17,5MB:41,20MB:1".
-- [ ] **3. The records.** Run the printed `./serena aws etl …` command. Expect "updated" with 1,129 rows (the 1,128 records
-  and the placeholder image) in a few minutes. If the check fails on the delta threshold (the last refresh had 20 rows),
-  override it once on the admin app's Refreshes page, then run the command again.
-- [ ] **4. The busiest minute, cold.** `./serena aws replay --log $LOG --busiest minute`. Expect "Replaying against
-  https://…", then a JSON summary: `sent` 1128, `late` 0 or close, `statuses` all or nearly all `302`, and the
-  `first_requests` latency higher than the `repeats` (misses fetch from the simulator); then, after 3 minutes, four
-  lines of CPU and memory (web and worker). Note them.
-- [ ] **5. Warm, faster, following some redirects.** `./serena aws replay --log $LOG --busiest minute --speed 5
-  --follow 50`. Expect the run in about 12 seconds, the latencies lower than in step 4, and about 22 `200`s among the
-  `statuses` (the followed redirects, delivered by CloudFront).
-- [ ] **6. Files of about the logged size.** In `./serena aws logs web`, expect step 4's "fetched" lines, most with a
-  `size` near 100,000 and some of several MB (one near 20,000,000), and no "refused: the image doesn't decode". In
-  `./serena aws logs devtools`, expect no "couldn't be made".
-- [ ] **7. A cold run again.** `./serena aws replay --log $LOG --busiest minute --first-row 10000 --dry-run`: expect
-  the fake ETL command to end with `--first-row 10000`. Run it (override the delta threshold if asked), then the
-  replay with `--first-row 10000`: expect the `first_requests` latency like step 4's again, not step 5's.
-- [ ] **8. Refused where it must be.** Add the line `OPEN_IMAGES=true` to `deploy/environments/personal-dev.local.conf`,
+- [x] **3. The records.** Run the printed `./serena aws etl …` command. After a refresh with other records (personal-dev's
+  last had 21 rows), expect `check_failed` on the delta threshold, with the hint to override it. Override the delta
+  threshold on that refresh on the admin app's Refreshes page, with a reason: it goes to `checking`, then `updated`
+  (1,108 written). Don't run the fake ETL again: its records are already in the simulator. (A refresh with the same
+  options as the last updated one passes without an override.)
+  - `pahma-2026-10-22-1`: 1,129 rows, 1,108 added (5,276% of the last 21 rows); overridden, then updated.
+- [x] **4. The busiest minute, cold.** `./serena aws replay --log $LOG --busiest minute`. Expect "Replaying against
+  https://…", then a JSON summary: `sent` 1128, `late` 0 or close, `statuses` all `302`, `answers` all `served` (not
+  `unavailable`: that would mean the records aren't servable, as when step 3's override wasn't done); then, after 3
+  minutes, four lines of CPU and memory (web and worker). Count the files fetched; expect 1,128:
+  `aws --profile bmu-personal --region us-west-2 logs filter-log-events --log-group-name /serena/dev/web --start-time "$(( $(date +%s) - 900 ))000" --filter-pattern '"fetched"' --query 'length(events)'`.
+  - 1,128 sent in 60.2 seconds, none late, all 302; latency p50 0.107 s, p95 0.275, p99 0.683, max 1.315. Web CPU
+    average 11.8%, busiest minute 18.9%, highest 33.6%; memory under 7%. Worker idle (CPU 0.1%, memory 6.2%).
+    1,128 "fetched" lines.
+- [x] **5. Warm, faster, following some redirects.** `./serena aws replay --follow 50 --speed 5 --busiest minute --log
+  $LOG`. Expect the run in about 12 seconds, the latencies lower than in step 4 (every file is cached now), and 22
+  `200`s among the `statuses` (one redirect in 50, delivered by CloudFront).
+  - Without `--follow`: 12.1 seconds, none late, p50 0.040 s, max 0.568; web CPU busiest minute 3.4%, highest 10.2%.
+    No new "fetched" lines (all hits). With `--follow 50`: 22 `200`s and 1,106 `302`s; web CPU busiest minute 15.4%,
+    highest 46.2% (one short spike: the followed requests don't reach the task).
+- [x] **6. Files of about the logged size.** No refusals and no files the simulator couldn't make, in the last hour:
+  `aws --profile bmu-personal --region us-west-2 logs filter-log-events --log-group-name /serena/dev/web --start-time "$(( $(date +%s) - 3600 ))000" --filter-pattern '"refused"' --query 'length(events)'`
+  and the same with `--log-group-name /serena/dev/devtools` and `--filter-pattern '"couldn"'`. Expect `0` from each.
+  - `0` and `0`: the 1,128 fetches (41 of about 5 MB and one of about 20 MB among them) were all decoded and stored.
+- [x] **7. A cold run again.** `./serena aws replay --log $LOG --busiest minute --first-row 10000 --dry-run`: expect
+  the fake ETL command to end with `--first-row 10000`. Run it: expect `check_failed` on the delta threshold again
+  (every row is new), and override it as in step 3. Then the replay with `--first-row 10000`: expect latencies like
+  step 4's again, not step 5's, and `answers` all `served`.
+  - `pahma-2026-10-22-2`: 1,128 added, 1,128 removed; overridden. The replay: none late, all 302, p50 0.113 s, p95
+    0.284, max 1.367; web CPU average 13.1%, busiest minute 25.1%, highest 41.3%; memory 7.3%.
+- [x] **8. Refused where it must be.** Add the line `OPEN_IMAGES=true` to `deploy/environments/personal-dev.local.conf`,
   run `./serena aws replay --log $LOG --busiest minute --dry-run`: expect "'personal-dev' isn't an environment with the
   simulator and closed images: the replay runs only against one (D279)." Remove the line. Then
   `serenade/.venv/bin/python -m serenade.load.replay --log $LOG --busiest minute --url https://example.invalid`:
   expect "The replay sends requests only through ./serena aws replay …" and nothing sent.
-- [ ] **9. Pause.** `./serena aws pause` (type `yes`).
+  - Both refused as expected; the line removed (`grep -c` printed 0).
+- [x] **9. Pause.** `./serena aws pause` (type `yes`).

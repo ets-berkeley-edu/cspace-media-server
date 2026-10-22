@@ -211,3 +211,10 @@ def test_a_record_with_a_size_band_is_fetched_checked_and_served(stack: Any, mon
     assert served.status_code == 200 and served.headers["content-type"] == "image/jpeg"
     assert abs(len(served.content) - 20_000) < 8_000
     bands.reset()
+
+
+def test_the_threshold_hint_says_to_override_and_where() -> None:
+    aws = fake_etl.threshold_hint("pahma-2026-10-22-1", in_aws=True)
+    assert "override the delta threshold on pahma-2026-10-22-1 on the admin app's Refreshes page" in aws
+    assert "./serena down" not in aws
+    assert "./serena down and ./serena up" in fake_etl.threshold_hint("pahma-2026-10-22-1", in_aws=False)

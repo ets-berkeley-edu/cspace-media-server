@@ -214,6 +214,17 @@ def repair_hint(museum: str, count: int, in_aws: bool) -> str:
             f"  Repair it with an admin refresh. {where}")
 
 
+def threshold_hint(refresh_id: str, in_aws: bool) -> str:
+    """What a refresh that failed on the delta threshold prints: how to let it through (design: Override the delta
+    threshold), or how to avoid it."""
+    afresh = "" if in_aws else ", or start afresh with ./serena down and ./serena up"
+    return ("  The servable list changes more rows than the delta threshold allows: the last updated refresh had other "
+            "records (--rows, --sizes or --first-row).\n"
+            f"  To let this one through, override the delta threshold on {refresh_id} on the admin app's Refreshes "
+            "page (no need to run this again: its records are in the simulator).\n"
+            f"  Otherwise use the same options as the last updated refresh{afresh}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run one museum's ETL job through Serena's ETL API (the local stack, or AWS with the simulator).")
@@ -275,9 +286,7 @@ def main() -> None:
     for warning in (summary.get("check") or {}).get("warnings", []):
         print(f"  servable list check warning: {warning}")
     if summary["state"] == "check_failed" and threshold_failed(summary):
-        print("  The servable list changes more rows than the delta threshold allows: the last updated refresh had a "
-              "different --rows.\n  Use the same --rows as that refresh, or start afresh with ./serena down and "
-              "./serena up.")
+        print(threshold_hint(summary["refresh_id"], in_aws=settings.secretsmanager_endpoint is None))
     for kind, path in summary["samples"].items():
         print(f"  {kind:<20} {args.public}{path}")
 

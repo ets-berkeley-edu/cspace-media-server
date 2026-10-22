@@ -173,8 +173,22 @@ class Outcome:
     late: float    # how much later it was sent
     status: int    # 0: no answer (a connection error or a timeout)
     seconds: float
-    first: bool    # the first request for its path in this run: a miss unless an earlier run fetched it
+    answer: str    # what Serena's answer was (see answer_of)
     museum: str
+
+
+def answer_of(status: int, location: str | None) -> str:
+    """"served" for a 302 to a stored file (a signed address under /<museum>/objects/), "unavailable" for a 302 to the
+    unavailable image or the placeholder picture (Serena wouldn't or couldn't serve it), "no answer" for a connection
+    error or a timeout, and "other" for anything else."""
+    if status == 0:
+        return "no answer"
+    path = urllib.parse.urlsplit(location or "").path
+    if status == 302 and "/objects/" in path:
+        return "served"
+    if status == 302 and (path.endswith(("/unavailable.svg", "/placeholder.svg")) or path.startswith("/unavailable/")):
+        return "unavailable"
+    return "other"
 
 
 def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, speed: float, concurrency: int,
@@ -184,7 +198,7 @@ def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, s
     """Sends the requests at their times divided by `speed`, at most `concurrency` at once, each thread keeping its
     own connection. Follows one 302 in `follow` (0: none)."""
     target = urllib.parse.urlsplit(base_url)
-    jobs: queue.Queue[tuple[float, str, str, bool, str] | None] = queue.Queue(maxsize=concurrency)
+    jobs: queue.Queue[tuple[float, str, str, str] | None] = queue.Queue(maxsize=concurrency)
     outcomes: list[Outcome] = []
     lock = threading.Lock()
     redirects = [0]
@@ -197,7 +211,7 @@ def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, s
     def work() -> None:
         connection = connect()
         while (job := jobs.get()) is not None:
-            due, method, path, first, museum = job
+            due, method, path, museum = job
             sent = clock()
             status = 0
             try:
@@ -211,6 +225,7 @@ def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, s
                 connection = connect()
                 location = None
             took = clock() - sent
+            answer_is = answer_of(status, location)
             if status == 302 and location and follow:
                 with lock:
                     redirects[0] += 1
@@ -218,22 +233,19 @@ def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, s
                 if check:
                     status = _follow(location, timeout)
             with lock:
-                outcomes.append(Outcome(due, max(0.0, sent - start - due), status, took, first, museum))
+                outcomes.append(Outcome(due, max(0.0, sent - start - due), status, took, answer_is, museum))
         connection.close()
 
     threads = [threading.Thread(target=work, daemon=True) for _ in range(concurrency)]
     for thread in threads:
         thread.start()
-    asked: set[str] = set()
     total = len(requests)
     for n, (offset, method, path, _file, museum) in enumerate(requests, start=1):
         due = offset / speed
         wait = due - (clock() - start)
         if wait > 0:
             sleep(wait)
-        first = path not in asked
-        asked.add(path)
-        jobs.put((due, method, path, first, museum))  # waits while every thread is busy: then requests go late
+        jobs.put((due, method, path, museum))  # waits while every thread is busy: then requests go late
         if progress and n % 1000 == 0:
             progress(f"  {n} of {total} sent")
     for _ in threads:
@@ -267,7 +279,8 @@ def _percentile(values: list[float], p: float) -> float:
 
 
 def report(outcomes: list[Outcome], wall_seconds: float) -> dict[str, object]:
-    """The replay's own figures (D287): what was sent, how late, the answers, and how long they took."""
+    """The replay's own figures (D287): what was sent, how late, the answers (by status, and whether Serena served
+    the file or the unavailable image), and how long they took."""
     def latency(chosen: list[Outcome]) -> dict[str, float]:
         took = [o.seconds for o in chosen]
         return {"count": len(took), "p50": round(_percentile(took, 50), 3), "p95": round(_percentile(took, 95), 3),
@@ -279,8 +292,10 @@ def report(outcomes: list[Outcome], wall_seconds: float) -> dict[str, object]:
         "late": len(late),
         "latest": round(max((o.late for o in outcomes), default=0.0), 1),
         "statuses": dict(sorted(Counter(str(o.status) for o in outcomes).items())),
-        "first_requests": latency([o for o in outcomes if o.first]),
-        "repeats": latency([o for o in outcomes if not o.first]),
+        "answers": dict(sorted(Counter(o.answer for o in outcomes).items())),
+        # Seconds to Serena's answer: on a cold run most are misses (fetched first), on a warm one hits.
+        "latency": latency(outcomes),
+        "latency_served": latency([o for o in outcomes if o.answer == "served"]),
         "by_logged_museum": dict(sorted(Counter(o.museum for o in outcomes).items())),
     }
 

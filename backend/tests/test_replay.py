@@ -191,13 +191,14 @@ def server() -> Iterator[str]:
 
 
 def test_it_sends_every_request_in_order_and_follows_one_redirect_in_n(server: str) -> None:
-    requests = [(n * 0.5, "HEAD" if n == 3 else "GET", f"/pahma/x/{n % 4}", f"f{n % 4}", "bampfa") for n in range(8)]
+    requests = [(n * 0.5, "HEAD" if n == 3 else "GET", f"/pahma/objects/{n % 4}", f"f{n % 4}", "bampfa")
+                for n in range(8)]
     outcomes = replay.replay(server, requests, speed=50, concurrency=4, follow=4)
     assert len(outcomes) == 8 and [o.offset for o in outcomes] == pytest.approx([n * 0.01 for n in range(8)])
-    assert [o.first for o in outcomes] == [True] * 4 + [False] * 4
+    assert {o.answer for o in outcomes} == {"served"}  # the test server's 302s go to /signed/pahma/objects/...
     sent = [p for _, p in Recorder.seen if not p.startswith("/signed/")]
     assert sorted(sent) == sorted(p for _, _, p, _, _ in requests)
-    assert ("HEAD", "/pahma/x/3") in Recorder.seen
+    assert ("HEAD", "/pahma/objects/3") in Recorder.seen
     assert len([p for _, p in Recorder.seen if p.startswith("/signed/")]) == 2  # 8 redirects, one in 4 followed
     assert sorted(o.status for o in outcomes) == [200, 200] + [302] * 6
 
@@ -210,13 +211,25 @@ def test_an_unreachable_server_counts_as_no_answer() -> None:
 
 def test_the_report_counts_late_requests_statuses_and_latency() -> None:
     make = replay.Outcome
-    outcomes = [make(0, 0, 302, 0.1, True, "pahma"), make(1, 3.0, 302, 0.3, False, "pahma"),
-                make(2, 0, 200, 0.2, False, "bampfa"), make(3, 0.5, 0, 9.0, True, "pahma")]
+    outcomes = [make(0, 0, 302, 0.1, "served", "pahma"), make(1, 3.0, 302, 0.3, "unavailable", "pahma"),
+                make(2, 0, 200, 0.2, "served", "bampfa"), make(3, 0.5, 0, 9.0, "no answer", "pahma")]
     figures = replay.report(outcomes, 12.0)
     assert figures["sent"] == 4 and figures["late"] == 1 and figures["latest"] == 3.0
     assert figures["statuses"] == {"0": 1, "200": 1, "302": 2}
-    assert figures["first_requests"] == {"count": 2, "p50": 0.1, "p95": 9.0, "p99": 9.0, "max": 9.0}
-    assert figures["repeats"]["p50"] == 0.2 and figures["by_logged_museum"] == {"bampfa": 1, "pahma": 3}
+    assert figures["answers"] == {"no answer": 1, "served": 2, "unavailable": 1}
+    assert figures["latency"] == {"count": 4, "p50": 0.2, "p95": 9.0, "p99": 9.0, "max": 9.0}
+    assert figures["latency_served"]["count"] == 2 and figures["latency_served"]["p50"] == 0.1
+    assert figures["by_logged_museum"] == {"bampfa": 1, "pahma": 3}
+
+
+def test_a_302_is_served_or_unavailable_by_where_it_points() -> None:
+    signed = "https://d.cloudfront.net/pahma/objects/ab12?Expires=1&Signature=x&Key-Pair-Id=K"
+    assert replay.answer_of(302, signed) == "served"
+    assert replay.answer_of(302, "https://d.cloudfront.net/pahma/unavailable.svg") == "unavailable"
+    assert replay.answer_of(302, "https://d.cloudfront.net/default/placeholder.svg") == "unavailable"
+    assert replay.answer_of(302, "/unavailable/pahma.svg") == "unavailable"  # the local stack's
+    assert replay.answer_of(302, None) == "other" and replay.answer_of(404, None) == "other"
+    assert replay.answer_of(0, None) == "no answer"
 
 
 def test_a_dry_run_plans_and_nothing_is_sent_without_serena_aws_replay(tmp_path: Path, server: str,
