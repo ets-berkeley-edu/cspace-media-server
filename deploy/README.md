@@ -163,10 +163,10 @@ flowchart LR
         alb["Internal load balancer"]
       end
       subgraph public["Public subnets: no NAT; inbound only from the load balancer"]
-        web["ECS service: the app (FastAPI), 1 task"]
-        worker["ECS service: the worker"]
-        sim["ECS service: simulated CollectionSpace (synthetic files and accounts)"]
-        fake["ECS task: fake ETL (./serena aws etl)"]
+        web["ECS Fargate service: the app (FastAPI), 1 task"]
+        worker["ECS Fargate service: the worker"]
+        sim["ECS Fargate service: simulated CollectionSpace (synthetic files and accounts)"]
+        fake["ECS Fargate task: fake ETL (./serena aws etl)"]
       end
       gw["Gateway endpoints: S3, DynamoDB"]
     end
@@ -234,8 +234,8 @@ flowchart LR
         alb["Internal load balancer"]
       end
       subgraph public["Public subnets: no NAT; inbound only from the load balancer"]
-        web["ECS service: the app (FastAPI), 2 tasks"]
-        worker["ECS service: the worker"]
+        web["ECS Fargate service: the app (FastAPI), 2 tasks"]
+        worker["ECS Fargate service: the worker"]
       end
       gw["Gateway endpoints: S3, DynamoDB"]
     end
