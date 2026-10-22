@@ -98,7 +98,7 @@ What Serena improves:
 | The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its placeholder image; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The servable list mirrors these fields, with a kind and an access value per Blob. |
 | Cinefiles staff set a document's access in CollectionSpace: "Access code override" on the document (Object) record, otherwise "Publication access code" on the Organization record named in its Source field. The values are PFA Staff Only, In House Only, Campus (UCB), Education (\*.edu) and World. A document's Record status must be approved for it to be in the public core. Cinefiles' ETL has no Media-level publish flag: every Media record of an included document is in the public core. | For Cinefiles, the access code restricts a PDF and the record status removes a whole document; unpublishing a Media record changes nothing. |
 | Cinefiles' access code is computed into a table (`cinefiles_denorm.doclist_view`, column `code`) by a daily "denorm" job that Lyrasis runs, not RTL; the ETL reads that table. | Restriction for Cinefiles depends on that job having run. The servable list script takes a PDF's access from `code_s` in the public core, so Glimmer and Serena agree. |
-| The ETL runs daily, starting at 03:01 for all museums in parallel. It empties each core and reloads it in place (delete, commit, then the day's CSV posted to Solr 8 on the ETL server); if a load fails it posts the previous day's CSV again. There is no staging core. Its output is immutable. | New files appear, and CollectionSpace-driven recalls take effect, within about 24 hours. |
+| The ETL runs daily: cron starts `one_job.sh` at 21:01 server time (`crontab.app_cspace.PROD`, Jira CSW-1029), and it runs the museums one after another (since CSW-865). It empties each core and reloads it in place (delete, commit, then the day's CSV posted to Solr 8 on the ETL server); if a load fails it posts the previous day's CSV again. There is no staging core. Its output is immutable. | New files appear, and CollectionSpace-driven recalls take effect, within about 24 hours. |
 | CollectionSpace is hosted at Lyrasis. Designs assume only HTTP Basic authentication (newer CollectionSpace versions also have OAuth2, not checked for the hosted version). | Serena uses one read-only service account per museum, password in Secrets Manager. |
 | CollectionSpace generates the image derivatives (Thumbnail, Small, Medium, FullHD, OriginalJpeg) itself. | Serena never resizes. It makes only watermarked copies. |
 | Most CSIDs are UUIDs, but CollectionSpace doesn't require it: a record created by an import keeps the CSID it was given. PAHMA's placeholder image has the shorter CSID `59a733dd-d641-4e1a-8552`. | Serena doesn't require a CSID to be a UUID (see URLs). |
@@ -663,9 +663,10 @@ list), an admin can always bring Serena up to date. The steps go in a runbook, r
 
 ### The ETL API
 
-Under `/etl/v1/`, over HTTPS, not served through CloudFront, and accepted only from the ETL server. Each museum has its
-own bearer token, kept in Secrets Manager on Serena's side and in the ETL server's own secret store; during a rotation
-Serena accepts the old and the new token. Errors are `application/problem+json` with reasons, never internals.
+Under `/etl/v1/`, over HTTPS, through CloudFront like every other path (D183) but never cached there, and accepted only
+from the ETL server's address (`ETL_CIDRS`, checked by the CloudFront Function, D185). Each museum has its own bearer
+token, kept in Secrets Manager on Serena's side and in the ETL server's own secret store; during a rotation Serena
+accepts the old and the new token. Errors are `application/problem+json` with reasons, never internals.
 
 Tokens (decided October 9, 2026): one Secrets Manager secret per museum, `{"current": …, "previous": …}`, each token at
 least 32 characters (a shorter one is never accepted). Each task reads it again every 5 minutes, so a rotation reaches
@@ -919,8 +920,8 @@ Release, once a refresh has kept it.
 After each successful servability update, the worker looks at each of the museum's recalls:
 
 1. **Too early: kept, silently.** The refresh's refresh date isn't after the day the recall was made (Pacific). The
-   ETL reads CollectionSpace at 03:01 and Serena gets the list about half an hour later, so a list for the same day may
-   have been made before staff could change CollectionSpace.
+   ETL job starts reading CollectionSpace at 21:01 server time and Serena gets a museum's list after that museum's Solr
+   refresh, so a list for the same day may have been made before staff changed CollectionSpace.
 2. **CollectionSpace has caught up: ended.** The new servable list no longer lists the recalled Blob as public:
    - not listed at all: the Media record was unpublished, its Object marked sensitive, or (Cinefiles) its document's
      record status changed;
@@ -1100,8 +1101,8 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
 ## Admin web app
 
 Required from the start (decided October 9, 2026). Built as in the BMU: Vue, TypeScript and Vuetify, served by
-Serena's FastAPI app under `/admin`, with its API under `/admin/v1`. It is not served through CloudFront and is
-reachable only from campus networks.
+Serena's FastAPI app under `/admin`, with its API under `/admin/v1`. It is reached through CloudFront, which caches
+only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, checked by the CloudFront Function, D185).
 
 - **Sign-in.** With the admin's own CollectionSpace account, plus a CollectionSpace role that marks a Serena admin, per
   museum. Serena never stores the password. The app shows only the museums where the signed-in user has the role;
@@ -1562,6 +1563,10 @@ The F numbers follow the team's list of follow-ups.
 - **Past requests page queries in AWS.** The Logs Insights query text is tested only as text: run the five queries
   against the QA environment's log group before production, to confirm the JSON fields (`message`, `logger`, `size`,
   `museum`) and `datefloor` behave as expected.
+- **The ETL's schedule.** Since CSW-1029 (October 2026) the ETL job starts at 21:01 server time, not 03:01. To
+  confirm with the ETL team: whether the ETL server's clock is Pacific or UTC, and so whether a museum's refresh can
+  start after midnight Pacific, which gives it the next refresh date. The servable list's name and the watchdog
+  deadline (08:00 Pacific) follow from the refresh date.
 - **Audit retention policy (D99).** Before production, ask the campus information security office (and records
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
   lowest choice to match.
