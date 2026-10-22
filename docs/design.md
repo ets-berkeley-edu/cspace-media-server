@@ -1367,6 +1367,20 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   the built admin app, D190). Both run on ARM: the app with 1 vCPU, 2 GB and 50 GB of ephemeral storage for fetches,
   one task in personal-dev and two elsewhere; the worker with 0.5 vCPU and 1 GB, the old one stopped before the new
   one starts. A deploy that doesn't start rolls back (D188).
+  - **Fargate rather than EC2 (decided October 22, 2026).** The legacy imageserver's access logs (January 2025 to
+    October 2026, all five museums; `docs/access-log-analysis.md`) show a small, bursty load: 0.45 requests a second on
+    average, 6 at the 99th percentile second, 200 at the busiest, the busiest minutes almost always one crawler fetching
+    in bulk. Serena's tasks carry far less of it than the legacy server did: the bytes (16.9 TB over the period) go from
+    S3 through CloudFront and never through a task, a hit is a table lookup and a redirect, and misses are limited by
+    the fetch rate agreed with Lyrasis and the concurrency cap, not by CPU. EC2's lower price per unit of compute pays
+    off only on instances kept busy; here it would buy idle instances in two zones, plus the patching, instance images
+    and capacity planning that Fargate leaves to AWS.
+  - **When to revisit:** sustained heavy load (every museum moved, with crawler traffic far above today's), a need for a
+    large local disk cache shared by tasks, or host-level agents that campus security requires. Moving would change the
+    Terraform's ECS capacity, not the containers or the rest of the design.
+  - **Task sizes are starting values.** 1 vCPU and 2 GB for the app allows for fetching large originals (up to 92 MB in
+    the logs) and for watermarking; the CPU may be more than needed. They are to be measured in stage 1 (the simulator
+    in the UC Berkeley account) by replaying a slice of the access logs, and set from what CloudWatch reports.
 - **Front door (decided October 14, 2026, D183 to D186).** CloudFront, at its own `*.cloudfront.net` address for
   HTTPS until there is a domain (then an alternate name and a certificate on the same distribution), in front of an
   internal load balancer through a VPC origin, as in the BMU; the load balancer is never on the internet, and its
