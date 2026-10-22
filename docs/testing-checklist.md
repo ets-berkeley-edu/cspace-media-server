@@ -1105,3 +1105,64 @@ run's recall), and step 5 at `348b090`.
   tests run only through ./serena aws test (SERENADE_AWS_ENV isn't set)." and no test run.
 - [x] **7. Not while paused.** `./serena aws pause` (type `yes`), then `./serena aws test`. Expect "'personal-dev' is
   paused: ./serena aws resume first." and no test run. Leave personal-dev paused.
+
+## 31. Stage 1 in the UC Berkeley account, with the simulator (about half a day, spread over a week; before stage 1 is destroyed)
+
+What it checks: that Serena deploys and runs in the UC Berkeley test account under the permission set Ops gave for
+Jira CS-9523 (`serena/jira/serena-deployer-policy-mvp.json` in the rtl folder), that only campus networks and the
+campus VPN reach it, and how big its tasks need to be (design.md, Compute). Stage 1 passes when every step below is
+ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are in
+`deploy/environments/ucb-stage1.conf`. Every `./serena aws` command here takes `--env ucb-stage1`.
+
+**Before you start** (once):
+
+1. From Ops (CS-9523): the account number, an IAM Identity Center sign-in to its Serena permission set, the campus
+   network and campus VPN address ranges, any tags the account requires (D251), and whether the VPC's range,
+   `10.41.0.0/16`, is acceptable there.
+2. Set up the AWS CLI profile (it asks questions; name the profile `serena-ucb-test`):
+   `aws configure sso --profile serena-ucb-test`, then `aws sso login --profile serena-ucb-test`.
+3. In the clone on the Mac, on `main` (`git switch main && git pull`), create
+   `deploy/environments/ucb-stage1.local.conf` (not committed) with three lines:
+   `ACCOUNT_ID="<account number>"`, `ALERT_EMAIL="<your address>"` and
+   `ALLOWED_CIDRS="<campus ranges>,<VPN ranges>"` (comma-separated, IPv4 only).
+
+**The steps:**
+
+- [ ] **1. Deploy under Ops's permission set.** Run `./serena aws deploy --env ucb-stage1`. Confirm the account,
+  check the plan, type `yes`. Expect it to finish in about 15–25 minutes and print the address; `<URL>/health`
+  answers `ok`. If any step fails with `AccessDenied`, note the action and resource here: the permission set needs
+  it, and so does the stage 2 policy (`serena-deployer-policy.json`).
+- [ ] **2. Confirm the alert email.** Run `./serena aws confirm-alerts --env ucb-stage1` and paste the link from
+  AWS's "Subscription Confirmation" email (don't click it).
+- [ ] **3. Status.** Run `./serena aws status --env ucb-stage1`. Expect web "running 2 of 2", worker and fakecspace
+  "running 1 of 1", the image's tag ending in `main`'s commit, the allowed addresses from your `.local.conf`, the alert
+  email confirmed, and for PAHMA its CollectionSpace account and ETL token "set".
+- [ ] **4. The AWS tests.** Run `./serena aws test --env ucb-stage1`. Expect `16 passed` (section 30). In the admin
+  app, the header shows "AWS · UC Berkeley stage 1 · simulator".
+- [ ] **5. Campus and VPN only.**
+  1. On a campus network (not the VPN): open `<URL>/health`, `<URL>/admin/` and a sample address the fake ETL
+     printed (`./serena aws etl pahma --env ucb-stage1`). Expect `ok`, the sign-in page and the image.
+  2. Off campus, on the campus VPN: the same three. Expect the same.
+  3. Off campus without the VPN (a phone without Wi-Fi): the same three. Expect 403 "open only to listed addresses"
+     for each.
+- [ ] **6. Someone else.** Ask a colleague on campus or the VPN to open a sample address and the admin app's sign-in
+  page. Expect both to work for them, with nothing set up on their side.
+- [ ] **7. An alert and an alarm by email.** As section 25, steps 12 and 13, with the alarm
+  `serena-stage1-cspace-refused` and `--profile serena-ucb-test`. Expect both emails at `ALERT_EMAIL`, and the
+  alarm's "OK" email about 15 minutes later.
+- [ ] **8. Two web tasks.** Run `./serena aws logs web --env ucb-stage1` while opening a few sample addresses. Expect
+  requests answered by both tasks (two different task IDs in the log stream names), and no errors.
+- [ ] **9. Task sizes.** With the access-log replay tool (to-do item 2; its commands are added here by the pull request
+  that adds it), replay a typical hour and the busiest hour of the clean access logs against the address, at their
+  real rate and then faster. Watch the ECS services' CPU and memory in CloudWatch. Expect no 5xx answers other than a
+  504 on a first request whose fetch takes over 60 seconds (D184). Note here the peak CPU and memory of the web and
+  worker tasks at each rate; the task sizes in design.md (Compute) and Terraform are then set from them, in their own
+  pull request.
+- [ ] **10. Cost.** After about a week, in the AWS console, Billing and Cost Management → Cost Explorer, filtered by
+  the tag `project = serena` (or ask Ops if the permission set can't see it): note the daily cost here. It helps
+  size stage 2 (WAF on, two web tasks, all day).
+- [ ] **11. Take stage 1 down**, when every step above is ticked and its notes are committed:
+  1. Run `./serena aws destroy --env ucb-stage1`. When it asks, type `ucb-stage1`.
+  2. Expect it to finish with everything destroyed. If it stops with an error about the VPC, run it again.
+  3. Tell Ops on CS-9523 that stage 1 is done, and ask for stage 2 (the comment drafted in
+     `serena/jira/jira-ops-cs-9523-stages-comment.txt`).
