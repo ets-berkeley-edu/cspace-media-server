@@ -134,6 +134,164 @@ the next rotation, so the ETL or the portal can switch at its own pace.
   real data.
 - Never with `PROTECT_DATA=true`.
 
+## Diagrams
+
+The same Terraform (`deploy/terraform/app/`) builds every environment; the settings file decides which parts exist
+and who can reach them. These two diagrams show the two kinds of environment, read from that Terraform. The table
+after them lists every difference.
+
+### personal-dev: Richard's personal AWS account
+
+The simulated CollectionSpace and the fake ETL, synthetic data only, reachable only from Richard's addresses. Each
+developer's own environment in their own account looks the same.
+
+```mermaid
+flowchart LR
+  subgraph callers["Richard's addresses only (ALLOWED_CIDRS)"]
+    browser["Richard's browser: the admin app, test images"]
+    mac["Richard's Mac: ./serena aws (Terraform, AWS CLI)"]
+  end
+
+  subgraph edge["CloudFront (global)"]
+    cf["Distribution, HTTPS at its *.cloudfront.net address"]
+    fn["CloudFront Function: allows only Richard's addresses"]
+  end
+
+  subgraph account["Richard's personal AWS account, us-west-2 (beside the BMU's personal-dev)"]
+    subgraph vpc["VPC across two availability zones"]
+      subgraph private["Private subnets"]
+        alb["Internal load balancer"]
+      end
+      subgraph public["Public subnets: no NAT; inbound only from the load balancer"]
+        web["ECS service: the app (FastAPI), 1 task"]
+        worker["ECS service: the worker"]
+        sim["ECS service: simulated CollectionSpace (synthetic files and accounts)"]
+        fake["ECS task: fake ETL (./serena aws etl)"]
+      end
+      gw["Gateway endpoints: S3, DynamoDB"]
+    end
+    subgraph data["Data: synthetic only, throwaway (PROTECT_DATA=false)"]
+      ddb[("DynamoDB: eight tables")]
+      museum[("S3: a private bucket per museum")]
+      static[("S3: static bucket")]
+      secrets["Secrets Manager: ETL tokens, signing keys"]
+    end
+    subgraph ops["Also in the account"]
+      logs["CloudWatch: logs and alarms"]
+      sns["SNS: alert email to Richard"]
+      kms["KMS key"]
+      ecr["ECR: the images"]
+    end
+  end
+
+  browser --> cf
+  cf --- fn
+  cf -->|"VPC origin"| alb
+  alb --> web
+  cf -->|"signed URLs only"| museum
+  cf -->|"unavailable images"| static
+  web --> gw
+  worker --> gw
+  gw --> ddb
+  gw --> museum
+  web --> secrets
+  web -->|"Media service calls"| sim
+  fake -->|"ETL API"| alb
+  fake -->|"adds synthetic records"| sim
+  logs -->|"alarms"| sns
+  mac -.->|"deploys, sets secrets"| account
+```
+
+### The UC Berkeley AWS account: pre-production, then production
+
+Stage 2 (pre-production): PAHMA's production CollectionSpace, the production ETL's daily servable list (Jira
+CSW-1027), WAF and data protection on, open to campus networks and the VPN until PAHMA's imageserver paths are
+routed to it. Stage 1 (CS-9523) comes first in the same account and looks like the personal-dev diagram above:
+the simulator and the fake ETL, open to campus networks and the VPN, destroyed when it passes.
+
+```mermaid
+flowchart LR
+  subgraph callers["Callers"]
+    visitors["Visitors: Glimmer pages and browsers, once PAHMA's paths are routed to Serena"]
+    testers["Testers and admins, on campus networks or the VPN"]
+    etl["Production ETL server"]
+    deployer["Deployer: ./serena aws today; a pipeline proposed (D268)"]
+  end
+
+  subgraph edge["CloudFront (global)"]
+    cf["Distribution, HTTPS at its *.cloudfront.net address"]
+    fn["CloudFront Function: /etl/ only from ETL_CIDRS, /admin only from campus"]
+    waf["WAF web ACL, in us-east-1"]
+  end
+
+  subgraph lyrasis["Lyrasis"]
+    cspace["PAHMA's production CollectionSpace"]
+  end
+
+  subgraph account["UC Berkeley AWS account, us-west-2"]
+    subgraph vpc["VPC across two availability zones"]
+      subgraph private["Private subnets"]
+        alb["Internal load balancer"]
+      end
+      subgraph public["Public subnets: no NAT; inbound only from the load balancer"]
+        web["ECS service: the app (FastAPI), 2 tasks"]
+        worker["ECS service: the worker"]
+      end
+      gw["Gateway endpoints: S3, DynamoDB"]
+    end
+    subgraph data["Data: production images and credentials, protected (PROTECT_DATA=true)"]
+      ddb[("DynamoDB: eight tables")]
+      museum[("S3: a private bucket per museum")]
+      static[("S3: static bucket")]
+      secrets["Secrets Manager: read-only CollectionSpace account, ETL tokens, signing keys"]
+    end
+    subgraph ops["Also in the account"]
+      logs["CloudWatch: logs and alarms"]
+      sns["SNS: alert email to the team's list"]
+      kms["KMS key"]
+      ecr["ECR: the images"]
+    end
+  end
+
+  visitors --> cf
+  testers --> cf
+  etl -->|"/etl/: daily servable list"| cf
+  cf --- fn
+  waf --- cf
+  cf -->|"VPC origin"| alb
+  alb --> web
+  cf -->|"signed URLs only"| museum
+  cf -->|"unavailable images"| static
+  web --> gw
+  worker --> gw
+  gw --> ddb
+  gw --> museum
+  web --> secrets
+  web -->|"HTTPS, read-only account"| cspace
+  logs -->|"alarms"| sns
+  deployer -.->|"deploys, sets secrets"| account
+```
+
+In both, the app's signed URLs send a visitor's browser to `/<museum>/objects/*` on the same distribution, which
+reads the museum's bucket directly, and the worker never calls CollectionSpace. The Terraform state bucket
+(`serena-tfstate-<account>-<region>`) is left out: `./serena aws` creates it once per account.
+
+### What differs between environments
+
+The same Terraform builds every environment; only its settings file differs.
+
+| | personal-dev | UC Berkeley, stage 1 (CS-9523) | UC Berkeley, stage 2: pre-production |
+| --- | --- | --- | --- |
+| AWS account | Richard's personal account, beside the BMU's personal-dev | UC Berkeley test account | To decide: production, or another account not shared with test workloads |
+| CollectionSpace | The simulator (`SIMULATED_CSPACE=true`) | The simulator | PAHMA's production tenant, read-only account (`SIMULATED_CSPACE=false`) |
+| ETL | Fake ETL (`./serena aws etl`) | Fake ETL | The production ETL (Jira CSW-1027); no fake ETL |
+| WAF (`WAF`) | Off | Off | On |
+| Data protection (`PROTECT_DATA`) | Off: throwaway | Off: destroyed when stage 1 passes | On |
+| App tasks (`WEB_COUNT`) | 1 | 1 or 2 | 2 (D188) |
+| Who can reach it | Richard's addresses (`ALLOWED_CIDRS`) | Campus networks and the VPN | Campus networks and the VPN, and the ETL server for `/etl/` (`ETL_CIDRS`); everyone for files once a museum's paths are routed to it (`OPEN_IMAGES=true`) |
+| Alerts (`ALERT_EMAIL`) | Richard | Richard | The team's mailing list |
+| Deployed by | `./serena aws` from Richard's Mac | `./serena aws` | Open: a deploy pipeline is proposed (D268 to D277) |
+
 ## What it creates
 
 - **Network (D187).** A VPC across two zones. The tasks run in public subnets with public addresses and no NAT
