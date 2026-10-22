@@ -108,6 +108,7 @@ def test_a_miss_is_fetched_stored_and_served(client: TestClient, store: Store, s
     add_blob(store, tenant, BLOB, MEDIA, kind=kind)
     media = fake.add(MEDIA, kind=kind)
     content = media.files[size or "content"][0]
+    assert content is not None
     response = client.get(path(tenant, size))
     assert response.status_code == 302
     location = response.headers["location"]

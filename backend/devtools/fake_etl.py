@@ -6,6 +6,9 @@ CollectionSpace (deploy/README.md: ./serena aws etl <museum>), where every museu
                                                          # servable list, then start, upload, check and poll
     python -m devtools.fake_etl --museum pahma --failed  # a failed refresh: Serena is never called, as when it can't
                                                          # be reached; the repair is an admin refresh (D85)
+    python -m devtools.fake_etl --museum pahma --sizes 100KB:900,5MB:90,100MB:2
+                                                         # 992 records whose files are about a real file's size, in
+                                                         # that order, for ./serena aws replay (D283), which prints it
 
 It adds synthetic Media records to the CollectionSpace simulator first (the stand-in for the Solr refresh), and lists
 them in the servable list (the stand-in for the servable list script), so each listed file can then be fetched on a
@@ -31,6 +34,7 @@ import httpx
 from serena.config import get_settings
 from serena.museum import load
 
+BANDS = ("100KB", "1MB", "5MB", "20MB", "100MB")  # the simulator's size bands (fakecspace/bands.py)
 NAMESPACE = uuid.UUID("3f6b0c55-2c4e-4f6e-9d4b-6a1c0b6e5a10")  # for the synthetic CSIDs; not a secret
 DONE = {"check_failed", "updated", "update_failed", "abandoned"}
 
@@ -48,11 +52,12 @@ def csid(tenant: str, what: str, n: int) -> str:
     return str(uuid.uuid5(NAMESPACE, f"{tenant}/{what}/{n}"))
 
 
-def rows(tenant: str, count: int) -> list[tuple[str, str, str, str]]:
-    """The servable list's rows. A museum with a placeholder image gets it too, with no Media CSID, as the real
-    ETL lists it (design: Placeholder image)."""
+def rows(tenant: str, count: int, first: int = 0) -> list[tuple[str, str, str, str]]:
+    """The servable list's rows, records first to first + count - 1. A museum with a placeholder image gets it too,
+    with no Media CSID, as the real ETL lists it (design: Placeholder image)."""
     mix = MIX.get(tenant, [("image", "public")])
-    listed = [(csid(tenant, "blob", n), csid(tenant, "media", n), *mix[n % len(mix)]) for n in range(count)]
+    listed = [(csid(tenant, "blob", n), csid(tenant, "media", n), *mix[n % len(mix)])
+              for n in range(first, first + count)]
     placeholder = load(tenant).placeholder_blob_csid
     if placeholder:
         listed.append((placeholder, "", "image", "public"))
@@ -67,12 +72,29 @@ def tsv(listed: list[tuple[str, str, str, str]]) -> bytes:
 PLACEHOLDER_MEDIA = "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a"
 
 
-def add_to_simulator(cspace: httpx.Client, listed: list[tuple[str, str, str, str]]) -> None:
-    for blob, media, kind, _ in listed:
+def parse_sizes(spec: str) -> list[str]:
+    """--sizes "100KB:900,5MB:90": each row's size band, in order (the first 900 rows 100KB, the next 90 5MB)."""
+    bands: list[str] = []
+    for part in spec.split(","):
+        band, _, count = part.strip().partition(":")
+        if band not in BANDS or not count.isdigit():
+            raise ValueError(f"--sizes takes BAND:COUNT,... with BAND one of {', '.join(BANDS)}, not {part.strip()!r}")
+        bands += [band] * int(count)
+    if not bands:
+        raise ValueError("--sizes lists no rows")
+    return bands
+
+
+def add_to_simulator(cspace: httpx.Client, listed: list[tuple[str, str, str, str]],
+                     bands: list[str] | None = None) -> None:
+    """Adds the listed records to the simulator; with bands, row n's image gets band n's files (D283)."""
+    for n, (blob, media, kind, _) in enumerate(listed):
         # The placeholder image is listed without a Media CSID; its picture comes from the record an admin names.
         record = {"csid": media or PLACEHOLDER_MEDIA, "kind": kind, "blob": blob}
         if not media:
             record["identification"] = "Placeholder"
+        elif bands and n < len(bands) and kind in ("image", "card"):
+            record["band"] = bands[n]
         cspace.post("/_fake/media", json=record).raise_for_status()
 
 
@@ -97,11 +119,11 @@ def _wait(serena: httpx.Client, refresh: dict[str, Any], headers: dict[str, str]
 
 def daily_refresh(serena: httpx.Client, cspace: httpx.Client, tenant: str, token: str, count: int = 20,
                   failed: bool = False, poll: float | None = None, wait: Callable[[float], None] = time.sleep,
-                  timeout: float = 300.0) -> dict[str, Any]:
+                  timeout: float = 300.0, bands: list[str] | None = None, first: int = 0) -> dict[str, Any]:
     """Runs the ETL job in the order of the daily sequence (design: The daily sequence; D70, D81) and returns a
     summary: the refresh's final state (None when Serena wasn't called), its counts, and sample paths to request."""
-    listed = rows(tenant, count)
-    add_to_simulator(cspace, listed)  # the Solr refresh's stand-in; `listed` is the servable list script's
+    listed = rows(tenant, count, first)
+    add_to_simulator(cspace, listed, bands)  # the Solr refresh's stand-in; `listed` is the servable list script's
     refresh: dict[str, Any] = {"refresh_id": None, "state": None}
     if not failed:
         headers = {"Authorization": f"Bearer {token}"}
@@ -192,11 +214,28 @@ def repair_hint(museum: str, count: int, in_aws: bool) -> str:
             f"  Repair it with an admin refresh. {where}")
 
 
+def threshold_hint(refresh_id: str, in_aws: bool) -> str:
+    """What a refresh that failed on the delta threshold prints: how to let it through (design: Override the delta
+    threshold), or how to avoid it."""
+    afresh = "" if in_aws else ", or start afresh with ./serena down and ./serena up"
+    return ("  The servable list changes more rows than the delta threshold allows: the last updated refresh had other "
+            "records (--rows, --sizes or --first-row).\n"
+            f"  To let this one through, override the delta threshold on {refresh_id} on the admin app's Refreshes "
+            "page (no need to run this again: its records are in the simulator).\n"
+            f"  Otherwise use the same options as the last updated refresh{afresh}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run one museum's ETL job through Serena's ETL API (the local stack, or AWS with the simulator).")
     parser.add_argument("--museum", required=True)
-    parser.add_argument("--rows", type=int, default=20)
+    parser.add_argument("--rows", type=int, default=None, help="how many records (20 unless --sizes says)")
+    parser.add_argument("--sizes", default=None,
+                        help="BAND:COUNT,...: the records' files about a real file's size, in that order, with "
+                             f"BAND one of {', '.join(BANDS)} (for ./serena aws replay; sets --rows)")
+    parser.add_argument("--first-row", type=int, default=0,
+                        help="number the records from this one (new records, not yet in Serena's cache, for another "
+                             "cold replay; ./serena aws replay prints it)")
     parser.add_argument("--failed", action="store_true",
                         help="a failed refresh: the Solr refresh's stand-in and the servable list, but Serena is "
                              "never called")
@@ -209,20 +248,30 @@ def main() -> None:
                         help="add the records to the simulator and print the servable list, for the admin app's upload "
                              "page; Serena isn't called")
     args = parser.parse_args()
+    bands = None
+    if args.sizes is not None:
+        try:
+            bands = parse_sizes(args.sizes)
+        except ValueError as error:
+            parser.error(str(error))
+        if args.rows is not None and args.rows != len(bands):
+            parser.error(f"--sizes lists {len(bands)} rows but --rows says {args.rows}: give one or the other")
+    args.rows = len(bands) if bands is not None else (20 if args.rows is None else args.rows)
     settings = get_settings()
     refusal = None if settings.secretsmanager_endpoint is not None else why_not_here(
         None, settings.tenants, args.cspace, os.environ.get("SERENA_SIMULATED_CSPACE", ""))
     if refusal:
         sys.exit(refusal)
     if args.file_only:
-        listed = rows(args.museum, args.rows)
+        listed = rows(args.museum, args.rows, args.first_row)
         with httpx.Client(base_url=args.cspace, timeout=60) as cspace:
-            add_to_simulator(cspace, listed)
+            add_to_simulator(cspace, listed, bands)
         sys.stdout.buffer.write(tsv(listed))
         return
     with httpx.Client(base_url=args.serena, timeout=60) as serena, \
             httpx.Client(base_url=args.cspace, timeout=60) as cspace:
-        summary = daily_refresh(serena, cspace, args.museum, token_for(args.museum), args.rows, args.failed, args.poll)
+        summary = daily_refresh(serena, cspace, args.museum, token_for(args.museum), args.rows, args.failed, args.poll,
+                                bands=bands, first=args.first_row)
     if args.json:
         print(json.dumps(summary))
         return
@@ -237,9 +286,7 @@ def main() -> None:
     for warning in (summary.get("check") or {}).get("warnings", []):
         print(f"  servable list check warning: {warning}")
     if summary["state"] == "check_failed" and threshold_failed(summary):
-        print("  The servable list changes more rows than the delta threshold allows: the last updated refresh had a "
-              "different --rows.\n  Use the same --rows as that refresh, or start afresh with ./serena down and "
-              "./serena up.")
+        print(threshold_hint(summary["refresh_id"], in_aws=settings.secretsmanager_endpoint is None))
     for kind, path in summary["samples"].items():
         print(f"  {kind:<20} {args.public}{path}")
 

@@ -1381,6 +1381,16 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **Task sizes are starting values.** 1 vCPU and 2 GB for the app allows for fetching large originals (up to 92 MB in
     the logs) and for watermarking; the CPU may be more than needed. They are to be measured in stage 1 (the simulator
     in the UC Berkeley account) by replaying a slice of the access logs, and set from what CloudWatch reports.
+  - **The replay (decided October 22, 2026, D278 to D288).** `./serena aws replay` (`serenade/load/replay.py`) sends a
+    slice of a cleaned monthly access log (the busiest hour or minute, or a time and length; the logs stay on the
+    Mac, never in the repository) from the Mac, through CloudFront, in its real order and spacing, at a chosen speed.
+    Every request goes to one simulated museum, and each logged file becomes one of the simulator's records, the same
+    file always the same record, so Serena's hits and misses follow the real pattern. The fake ETL makes the records
+    first, with files of about the logged sizes (`--sizes`, which the replay prints; see The simulator in AWS).
+    Redirects aren't followed, except one in `--follow`. A first replay over a set of records is cold, a repeat warm;
+    `--first-row` maps onto new records for another cold one. It runs only against an environment with the simulator
+    and closed image paths, so a miss never reaches a museum's CollectionSpace, and it ends with the web and worker
+    services' CPU and memory from CloudWatch for the run.
 - **Front door (decided October 14, 2026, D183 to D186).** CloudFront, at its own `*.cloudfront.net` address for
   HTTPS until there is a domain (then an alternate name and a certificate on the same distribution), in front of an
   internal load balancer through a VPC origin, as in the BMU; the load balancer is never on the internet, and its
@@ -1442,7 +1452,11 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   and key rotation.
 - **The simulator in AWS (D189).** An environment can run the CollectionSpace simulator instead of a real one
   (never where data matters): every museum's server is the simulator under the museum's name, and
-  `./serena aws etl <museum>` runs the fake ETL once inside the VPC. The fake ETL refuses to run anywhere else.
+  `./serena aws etl <museum>` runs the fake ETL once inside the VPC. The fake ETL refuses to run anywhere else. For
+  the replay, its `--sizes` gives records size bands (100 KB, 1, 5, 20 or 100 MB, D283): their originals are JPEGs of
+  about that size, their other derivatives about a real one's, made once per simulator start from blurred noise (about
+  a photograph's pixels for its size), each record's file made different by a comment, as Serena stores by content
+  hash. The simulator's task has half a vCPU and 2 GB for them.
 - **Least privilege.** The app's task role can read the servability table; read and write the recall and settings
   tables (the admin app's recalls and settings are served by the app), the cache index (its `last_served` too, D142),
   refreshes, alerts,

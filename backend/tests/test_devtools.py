@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from devtools import fake_etl
 from devtools.seed import seed
+from fakecspace import bands
 from fakecspace.app import app as fake_app
 from fakecspace.app import store as fake
 from serena import museum
@@ -191,3 +192,29 @@ def test_the_simulator_tells_museums_apart_by_path_prefix() -> None:
     # The development hooks and the Media service work under a museum's prefix too.
     assert client.post("/_fake/media", json={"csid": "m-1", "blob": "b-1"}).status_code == 200
     assert client.get("/bampfa/cspace-services/media/m-1", auth=("serena", "serena")).status_code == 200
+
+
+def test_a_record_with_a_size_band_is_fetched_checked_and_served(stack: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D283: a record the fake ETL gives a band (for ./serena aws replay) has a JPEG of about that size, which Serena
+    fetches, decodes and stores like any other on a miss."""
+    bands.reset()
+    for name in bands.SIZES:
+        monkeypatch.setitem(bands.SIZES, name, 20_000)  # small, to be quick
+    serena, cspace, worker, token = stack
+    summary = fake_etl.daily_refresh(serena, cspace, "pahma", token("pahma"), count=3, poll=0,
+                                     wait=lambda seconds: worker.tick(), bands=fake_etl.parse_sizes("1MB:3"))
+    assert summary["state"] == "updated"
+    original = summary["samples"]["image"].replace("derivatives/Medium/content", "derivatives/OriginalJpeg/content")
+    response = serena.get(original)
+    assert response.status_code == 302
+    served = serena.get(response.headers["location"])
+    assert served.status_code == 200 and served.headers["content-type"] == "image/jpeg"
+    assert abs(len(served.content) - 20_000) < 8_000
+    bands.reset()
+
+
+def test_the_threshold_hint_says_to_override_and_where() -> None:
+    aws = fake_etl.threshold_hint("pahma-2026-10-22-1", in_aws=True)
+    assert "override the delta threshold on pahma-2026-10-22-1 on the admin app's Refreshes page" in aws
+    assert "./serena down" not in aws
+    assert "./serena down and ./serena up" in fake_etl.threshold_hint("pahma-2026-10-22-1", in_aws=False)
