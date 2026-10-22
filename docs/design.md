@@ -1401,12 +1401,41 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
 - **Routing.** The legacy imageserver's paths on each museum's webapps host are sent on to Serena's CloudFront
   address, one museum at a time.
 - **Infrastructure as code.** Terraform, in `deploy/terraform/` (the image repositories, then the app), with state
-  in an S3 bucket in each account, applied by `./serena aws` (`deploy/aws.sh`, modeled on the BMU's; D181) from
-  Richard's Mac only (D193). CI checks the Terraform code and that its tables and settings match the app, with no
+  in an S3 bucket in each account, applied by `./serena aws` (`deploy/aws.sh`, modeled on the BMU's; D181); who
+  runs it, and where, is under Deploys. CI checks the Terraform code and that its tables and settings match the app, with no
   AWS credentials. No secrets in Terraform files or state: Terraform creates each secret empty, and `./serena aws`
   sets it (D191): a museum's CollectionSpace account as typed, a random ETL token or portal signing key shown once
   for the ETL or the portal, the old one kept as "previous". The first environment is personal-dev, in Richard's
   personal account (D182); QA and production follow in the UC Berkeley account. `deploy/README.md` has the commands.
+- **Deploys (decided October 22, 2026, D268 to D277).** An environment with real data (stage 2, pre-production, then
+  production) is deployed only by a pipeline, never from someone's laptop (D268; D193 now covers only personal-dev).
+  - **How it runs.** After the approval, a GitHub Actions job signs in to AWS through OIDC with a role per environment
+    whose trust policy accepts only `repo:ets-berkeley-edu/cspace-media-server:environment:<env>` (never
+    `pull_request_target`, so fork pull requests can't assume it); that role can only start the environment's AWS
+    CodeBuild project and read its logs (D271). Terraform's plan and apply run in CodeBuild, under a role with the
+    scoped deployer policy, so the plan, which shows the account ID, ARNs and allowed addresses, stays in CloudWatch
+    in that account and never reaches the public repository's Actions logs (D270).
+  - **Approval.** GitHub environments with protection rules: deploys only from `main`; the plan runs first and the
+    apply waits for a reviewer (Richard or one other person, never whoever merged), who reads the plan; production
+    takes only a commit already deployed to pre-production (D272).
+  - **Settings and secrets.** An environment's non-secret settings (the museums, `ALLOWED_CIDRS`, `ETL_CIDRS`,
+    `ADMIN_CIDRS`, `ALERT_EMAIL`, `WEB_COUNT` …) are in SSM Parameter Store in its account, not in the public
+    repository; changing one is an admin action that the next deploy picks up (D273). Secret values never pass
+    through the pipeline: Terraform creates each secret empty, and an admin sets it with `./serena aws cspace-secret`,
+    `etl-token`, `portal-key` or `cdn-key`, signed in with their own SSO, from any machine; CloudTrail records it
+    (D274).
+  - **The ETL's token.** Where the ETL server has an EC2 instance role, the ETL reads its museum's token from Serena's
+    Secrets Manager on each run (cross-account through the secret's resource policy and the KMS key's policy,
+    read-only, that one secret), so no person sees or copies it and a rotation needs no change on the ETL server; a
+    token file stays the fallback (D275). The ETL's side is decided in the CSpace ETL Process project (Jira CSW-1027).
+  - **Break-glass.** If the pipeline is broken when a deploy is urgent, a named admin runs `./serena aws`, signed in
+    through a separate, time-limited break-glass permission set (audited in CloudTrail) and following the recovery
+    runbook (F2); the next pipeline run confirms the environment matches `main` (D276).
+  - **When.** Stage 1 (Jira CS-9523: the simulator, throwaway) is deployed with `./serena aws`, with no pipeline. The
+    pipeline is built before stage 2, the first environment with real data, and proven there, so production's first
+    deploy isn't the pipeline's first run (D269).
+  - **personal-dev** and each developer's own account are unchanged: `./serena aws` from the developer's own
+    machine, the simulator and the fake ETL only (D182, D193, D277).
 - **Protecting data (D192).** Where the data matters (QA, production), tables can't be deleted, a destroy won't
   empty the buckets, and deleted secrets and the key wait 30 days; personal-dev can be thrown away. Everywhere:
   point-in-time recovery on every table but the admin sessions, bucket versioning, no lifecycle rule that deletes,
@@ -1581,6 +1610,9 @@ The F numbers follow the team's list of follow-ups.
   confirm with the ETL team: whether the ETL server's clock is Pacific or UTC, and so whether a museum's refresh can
   start after midnight Pacific, which gives it the next refresh date. The servable list's name and the watchdog
   deadline (08:00 Pacific) follow from the refresh date.
+- **Deploy pipeline prerequisites (D268 to D277).** From Ops: whether the production ETL server (cspace-prod-01)
+  has an EC2 instance profile, and in which AWS account (D275); the break-glass permission set (D276). For the
+  repository: a second person with reviewer rights on its GitHub environments (D272).
 - **Audit retention policy (D99).** Before production, ask the campus information security office (and records
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
   lowest choice to match.

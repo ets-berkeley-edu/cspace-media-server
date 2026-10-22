@@ -4,13 +4,17 @@
 modeled on the BMU's `./bmu aws`, and the commands are the same where they can be.
 
 - **One environment per settings file** in `deploy/environments/`. `personal-dev.conf` is Richard's personal
-  account (us-west-2) and the default. A QA and a production file come with the UC Berkeley account (D182).
+  account (us-west-2) and the default. Stage 1 in the UC Berkeley account (CS-9523) has a file too; stage 2 and production keep their settings in
+  SSM Parameter Store in their account instead (D273).
 - **Infrastructure as code.** Terraform (`deploy/terraform/`) creates everything, so nothing is clicked together in
   the console, and the whole environment can be deleted and created again.
 - **No keys or passwords in files.** You sign in with IAM Identity Center (`aws sso login`). Terraform creates
   every secret empty, and `./serena aws` sets them (D191), so no secret is in Terraform's state, a file or the
   shell's history.
-- **Only Richard deploys,** from his Mac (D193). CI checks the Terraform code with no AWS sign-in.
+- **Who deploys (D268 to D277).** personal-dev and stage 1: `./serena aws` from the deployer's own machine. Stage 2
+  and production: only the deploy pipeline (GitHub Actions starts AWS CodeBuild in the account after a reviewer
+  approves the plan; not built yet), with `./serena aws` kept for setting secrets and for break-glass. See
+  `docs/design.md`, Infrastructure and operations › Deploys. CI checks the Terraform code with no AWS sign-in.
 
 What it builds: the app and the worker on ECS Fargate, CloudFront (HTTPS, the address rules, WAF where it's on) in
 front of an internal load balancer, the tables, a bucket per museum, the KMS key, the secrets and the logs (pull
@@ -215,7 +219,7 @@ flowchart LR
     visitors["Visitors: Glimmer pages and browsers, once PAHMA's paths are routed to Serena"]
     testers["Testers and admins, on campus networks or the VPN"]
     etl["Production ETL server"]
-    deployer["Deployer: ./serena aws today; a pipeline proposed (D268)"]
+    deployer["Deploy pipeline: GitHub Actions, then CodeBuild in the account (D268); admins set secrets"]
   end
 
   subgraph edge["CloudFront (global)"]
@@ -278,7 +282,7 @@ reads the museum's bucket directly, and the worker never calls CollectionSpace. 
 
 ### What differs between environments
 
-The same Terraform builds every environment; only its settings file differs.
+The same Terraform builds every environment; only its settings differ.
 
 | | personal-dev | UC Berkeley, stage 1 (CS-9523) | UC Berkeley, stage 2: pre-production |
 | --- | --- | --- | --- |
@@ -290,7 +294,8 @@ The same Terraform builds every environment; only its settings file differs.
 | App tasks (`WEB_COUNT`) | 1 | 1 or 2 | 2 (D188) |
 | Who can reach it | Richard's addresses (`ALLOWED_CIDRS`) | Campus networks and the VPN | Campus networks and the VPN, and the ETL server for `/etl/` (`ETL_CIDRS`); everyone for files once a museum's paths are routed to it (`OPEN_IMAGES=true`) |
 | Alerts (`ALERT_EMAIL`) | Richard | Richard | The team's mailing list |
-| Deployed by | `./serena aws` from Richard's Mac | `./serena aws` | Open: a deploy pipeline is proposed (D268 to D277) |
+| Settings | `deploy/environments/personal-dev.conf` and `.local.conf` | A settings file | SSM Parameter Store in the account (D273) |
+| Deployed by | `./serena aws` from Richard's Mac | `./serena aws`, no pipeline (D269) | The deploy pipeline, after a reviewer approves the plan (D268 to D272); secrets set by an admin with `./serena aws` (D274) |
 
 ## What it creates
 
