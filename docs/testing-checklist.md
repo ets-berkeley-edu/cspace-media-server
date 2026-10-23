@@ -1233,3 +1233,10 @@ were counted as first requests too), and a 302 to the unavailable image looked l
   expect "The replay sends requests only through ./serena aws replay …" and nothing sent.
   - Both refused as expected; the line removed (`grep -c` printed 0).
 - [x] **9. Pause.** `./serena aws pause` (type `yes`).
+
+**After a replay, before `./serena aws test`** (added October 22, 2026, after the AWS tests failed following this
+section): the replay leaves Serena's servable list on the replay's records, so the tests' fake ETL refresh (20 rows)
+fails on the delta threshold and their sample file gets the unavailable image (T92, T95 to T98). Run
+`./serena aws etl pahma`, then override the delta threshold on that refresh on the admin app's Refreshes page
+(or override it on the tests' own failed refresh, then run the tests again). Also deploy the checked-out commit first:
+T91 checks that the running image is it.
