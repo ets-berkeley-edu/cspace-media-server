@@ -125,6 +125,9 @@ repository.
   after a deploy, pause or resume (the simulator forgets its records). If its servable list check fails on the delta
   threshold (the last updated refresh had other records), override the threshold on that refresh on the admin app's
   Refreshes page; it's then updated from the same list, and the fake ETL needn't run again.
+- **Put it back before `./serena aws test`.** The replay's records stay Serena's servable list, so the AWS tests' own
+  refresh (20 rows) fails on the delta threshold. Run `./serena aws etl pahma` and override the threshold on that
+  refresh first (checklist section 32, "After a replay").
 - **Cold and warm.** Serena's cache is kept by Blob CSID, so the first replay over a set of records is cold (every
   file's first request is a miss, as at a cutover) and a replay over the same records again is warm (only hits). For
   another cold replay, give `--first-row` past the records used so far (say 10000, then 20000): the dry run then
