@@ -107,6 +107,24 @@ Museum users' tolerances: up to 24 hours for new content to appear; 1 to 2 hours
 recall window through CollectionSpace is accepted for now (October 8, 2026); the admin app's recall covers the
 urgent case.
 
+### The Media service's paths
+
+Each path below names a record, and a `GET` returns that record's fields (XML), not a file; adding `/content` to a
+Blob's path returns the file itself (Richard, October 24, 2026). The service names are lowercase.
+
+| `GET /cspace-services/…` | Returns |
+| --- | --- |
+| `media/<media CSID>` | The Media record's fields, with its `blobCsid`; not its file |
+| `media/<media CSID>/blob` | The fields of the Media record's Blob record; not its file |
+| `media/<media CSID>/blob/content` | The original file (image or document) |
+| `media/<media CSID>/blob/derivatives` | The list of the Blob's derivative Blob records |
+| `media/<media CSID>/blob/derivatives/<derivative>` | The fields of one derivative's Blob record (for example `Medium`) |
+| `media/<media CSID>/blob/derivatives/<derivative>/content` | That derivative's file |
+
+Serena calls the first for its light check, and the third and last to fetch files (see Image fetch). On a museum's QA
+instance, which holds a recent copy of production's records but not their files, a copied record's
+`media/<media CSID>` answers normally and its `…/blob/content` answers 500.
+
 ## Goals, non-goals and constraints
 
 Goals:
