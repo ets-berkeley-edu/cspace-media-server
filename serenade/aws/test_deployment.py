@@ -164,7 +164,7 @@ def test_t98_the_bucket_only_through_cloudfront(target: Target, sample: str) -> 
 def test_t99_the_unavailable_images(target: Target, sample: str) -> None:
     """Checklist section 25, step 9: a Blob CSID Serena doesn't list gets the museum's unavailable image, which (with
     the generic placeholder) needs no signature."""
-    blob = re.search(r"/blobs/([0-9a-f-]{36})/", sample)
+    blob = re.search(r"/blobs/([A-Za-z0-9-]{1,64})/", sample)  # a CSID (design: URLs): PAHMA's are shorter than UUIDs
     assert blob
     csid = blob.group(1)
     unknown = csid[:-1] + ("0" if csid[-1] != "0" else "1")
