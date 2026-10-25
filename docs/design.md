@@ -1657,4 +1657,5 @@ Cinefiles PDFs (signed links), admin actions on refreshes (F5).
 
 Unit and integration tests run in CI against the CollectionSpace simulator and local stand-ins for AWS; the admin app
 has its own unit tests and Selenium tests. Checks that need a real CollectionSpace tenant or AWS are in
-`docs/testing-checklist.md`.
+`docs/testing-checklist.md`. `docs/testing.md` describes every testing scheme, from CI to a museum's cutover: what each
+sets up, its steps in order, and what it proves.
