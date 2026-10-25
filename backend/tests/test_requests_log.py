@@ -226,7 +226,10 @@ def client(store: Store, s3: Any, secretsmanager: Any, log_file: Path) -> TestCl
 
 
 def test_the_report(client: TestClient, log_file: Path) -> None:
-    now = datetime.now(UTC)
+    # A fixed clock: with the real one, lines written a few minutes before a run just after midnight UTC fell on the
+    # previous day, and the days didn't match (CI on October 25, 2026, 00:01 UTC).
+    now = NOW
+    client.app.state.requests_log.clock = lambda: now  # type: ignore[attr-defined]
     write(log_file, [served(now - timedelta(minutes=2), 1), unserved(now - timedelta(minutes=1), "too_large"),
                      served(now - timedelta(minutes=1), 1, museum="bampfa"),
                      served(now - timedelta(minutes=3), 3, size="Thumbnail"),
