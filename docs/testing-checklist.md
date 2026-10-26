@@ -1109,7 +1109,7 @@ run's recall), and step 5 at `348b090`.
 ## 31. Stage 1 in the UC Berkeley account, with the simulator (about half a day, spread over a week; before stage 1 is destroyed)
 
 What it checks: that Serena deploys and runs in the UC Berkeley test account under the permission set Ops gave for
-Jira CS-9523 (`serena/jira/serena-deployer-policy-mvp.json` in the rtl folder), that only campus networks and the
+Jira CS-9523 (`deploy/iam/serena-deployer-policy-mvp.json`; see `deploy/iam/README.md`), that only campus networks and the
 campus VPN reach it, and how big its tasks need to be (design.md, Compute). Stage 1 passes when every step below is
 ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are in
 `deploy/environments/ucb-stage1.conf`. Every `./serena aws` command here takes `--env ucb-stage1`.
@@ -1119,6 +1119,9 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
 1. From Ops (CS-9523): the account number, an IAM Identity Center sign-in to its Serena permission set, the campus
    network and campus VPN address ranges, any tags the account requires (D251), and whether the VPC's range,
    `10.41.0.0/16`, is acceptable there.
+   Also from Ops: the service-linked roles, if the permission set can't create them (`AWSServiceRoleForECS`,
+   `AWSServiceRoleForElasticLoadBalancing`, CloudFront's for VPC origins), and, if the account is new, whether AWS has
+   verified it for CloudFront (if a deploy is refused for that, Ops opens the AWS Support case and step 1 waits).
 2. Set up the AWS CLI profile (it asks questions; name the profile `serena-ucb-test`):
    `aws configure sso --profile serena-ucb-test`, then `aws sso login --profile serena-ucb-test`.
 3. In the clone on the Mac, on `main` (`git switch main && git pull`), create
@@ -1131,7 +1134,7 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
 - [ ] **1. Deploy under Ops's permission set.** Run `./serena aws deploy --env ucb-stage1`. Confirm the account,
   check the plan, type `yes`. Expect it to finish in about 15–25 minutes and print the address; `<URL>/health`
   answers `ok`. If any step fails with `AccessDenied`, note the action and resource here: the permission set needs
-  it, and so does the stage 2 policy (`serena-deployer-policy.json`).
+  it, and so does the stage 2 policy (`deploy/iam/serena-deployer-policy.json`): change both files in one pull request.
 - [ ] **2. Confirm the alert email.** Run `./serena aws confirm-alerts --env ucb-stage1` and paste the link from
   AWS's "Subscription Confirmation" email (don't click it).
 - [ ] **3. Status.** Run `./serena aws status --env ucb-stage1`. Expect web "running 2 of 2", worker and fakecspace
@@ -1174,8 +1177,7 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
 - [ ] **11. Take stage 1 down**, when every step above is ticked and its notes are committed:
   1. Run `./serena aws destroy --env ucb-stage1`. When it asks, type `ucb-stage1`.
   2. Expect it to finish with everything destroyed. If it stops with an error about the VPC, run it again.
-  3. Tell Ops on CS-9523 that stage 1 is done, and ask for stage 2 (the comment drafted in
-     `serena/jira/jira-ops-cs-9523-stages-comment.txt`).
+  3. Tell Ops on CS-9523 that stage 1 is done, and ask for stage 2.
 
 ## 32. The access-log replay, personal-dev with the simulator (about 1 hour; before merging the pull request that adds it)
 

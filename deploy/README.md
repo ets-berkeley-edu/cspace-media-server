@@ -346,6 +346,12 @@ The same Terraform builds every environment; only its settings differ.
 secrets and the key wait 30 days. `false` (personal-dev): `destroy` removes everything. Always, whatever the setting:
 point-in-time recovery on every table but the admin sessions, bucket versioning, no rule that deletes, key rotation.
 
+## The deployer's permissions
+
+The IAM policies `./serena aws` needs in a UC Berkeley account are in [`iam/`](iam/README.md): stage 1's permission
+set (`serena-deployer-policy-mvp.json`) and stage 2's draft (`serena-deployer-policy.json`), with what else Operations
+provides (service-linked roles, CloudFront verification on a new account). personal-dev runs as an administrator.
+
 ## Terraform
 
 - **Two configurations.** `registry` (the image repositories) and `app` (everything else), applied in turn, with
