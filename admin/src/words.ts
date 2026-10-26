@@ -20,6 +20,20 @@ export function overrideReason(reason: string): string {
   return `delta threshold overridden by an admin: ${reason}`
 }
 
+/** The states that need an admin: shown in red, with a failure icon so the cue isn't colour alone (issue #107). */
+export const FAILED_STATES = new Set(['check_failed', 'update_failed'])
+
+/**
+ * A state's colour, as the mockup's pills (version 43): Updated green, a failed state red, Abandoned grey, and a
+ * refresh still running blue. An unknown state is grey.
+ */
+export function toneOf(state: string): string {
+  if (FAILED_STATES.has(state)) {
+    return 'error'
+  }
+  return {updated: 'success', started: 'info', received: 'info', checking: 'info', updating: 'info'}[state] || ''
+}
+
 /** How the audit retention's choices read (D97). */
 export const RETENTION_LABELS: Record<number, string> = {
   90: '90 days', 183: '6 months', 365: '12 months', 548: '18 months', 730: '24 months', 1095: '36 months'
