@@ -18,6 +18,7 @@ const REPORT = {
   top_paths: [{path: '/pahma/imageserver/blobs/b1/content', requests: 3}],
   sizes: ['Thumbnail', 'Small', 'Medium', 'FullHD', 'OriginalJpeg', 'original'],
   served_by_size: [{size: 'Medium', requests: 2}, {size: 'original', requests: 1}],
+  served_by_cache: {hit: 1, miss: 1},
   lines: [
     line('2026-10-12T17:00:00.000+00:00', 'served'),
     line('2026-10-12T17:01:00.000+00:00', 'unserved', 'not_listed', 2),
@@ -47,6 +48,7 @@ describe('the Past requests page', () => {
     expect(wrapper.find('#requests-top-paths').text()).toContain('b1original') // its Blob CSID, then its size (October 14)
     // The Served card counts every served request in the range by size, smallest to largest (October 14, 2026).
     expect(wrapper.find('#requests-by-size').text()).toBe('by size: Medium\u00a02 · original\u00a01')
+    expect(wrapper.find('#requests-by-cache').text()).toBe('from the cache 1 · from CollectionSpace 1') // issue #96
     expect(wrapper.find('#requests-top-paths [title="/pahma/imageserver/blobs/b1/content"]').exists()).toBe(true)
     const times = () => wrapper.findAll('#requests-table tbody tr').map(row => row.find('td').text())
     expect(times()[0]).toBe('2026-10-12 17:03:00 UTC') // newest first
@@ -54,7 +56,10 @@ describe('the Past requests page', () => {
     const sevenDays = wrapper.findAll('#request-range button').find(b => b.text() === 'Last 7 days')
     await sevenDays?.trigger('click')
     await flushPromises()
-    expect(calls.map(c => c.path)).toEqual(['/museums/pahma/requests?range=24h', '/museums/pahma/requests?range=7d'])
+    expect(calls.map(c => c.path).filter(p => p.includes('?range='))).toEqual(
+      ['/museums/pahma/requests?range=24h', '/museums/pahma/requests?range=7d'])
+    // The counts from the cache or CollectionSpace don't follow the range: read once (issue #96).
+    expect(calls.filter(c => c.path.includes('/requests/counts')).length).toBe(1)
     expect(wrapper.find('#requests-truncated').text()).toContain('the table lists the newest 10,000')
     expect(wrapper.find('#export-requests').attributes('href')).toBe('/admin/v1/museums/pahma/requests/export.csv?range=7d')
     wrapper.unmount()

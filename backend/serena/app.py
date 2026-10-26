@@ -37,6 +37,7 @@ from .cspace.clients import CSpaceClients, HttpFactory
 from .fetch import Fetcher
 from .museum_settings import MuseumSettings
 from .refreshes import Refreshes
+from .request_counts import RequestCounts
 from .secret_cache import SecretCache, secretsmanager_client
 from .store import Store, dynamodb_client
 from .tokens import Tokens
@@ -117,7 +118,11 @@ def create_app(settings: Settings | None = None, store: Store | None = None, uns
     audit = Audit(store)  # real time: entries are ordered by it
     app.state.admin_refreshes = admin_refreshes.RefreshServices(
         Refreshes(store, clock) if clock else Refreshes(store), app_alerts, s3)
-    app.state.requests_log = requests_log.Requests(log_reader or _log_reader(settings))
+    reader = log_reader or _log_reader(settings)
+    app.state.requests_log = requests_log.Requests(reader)
+    # The Past requests page's counts from the cache or CollectionSpace (issue #96): the worker's daily counts, and
+    # today's from the log.
+    app.state.request_counts = RequestCounts(store, reader, settings.log_retention_days)
     app.state.admin_recalls = admin_recalls.RecallServices(
         store, app.state.fetcher.clients, audit, app_alerts, Refreshes(store, clock) if clock else Refreshes(store),
         app.state.museum_settings, s3, settings.buckets, *((clock,) if clock else ()))

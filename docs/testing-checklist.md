@@ -1261,3 +1261,25 @@ log. From this pull request's branch on the Mac, signed in (`aws sso login --pro
   "requests counted" line per museum, with `days` 1, and an item for the day just ended.
 - [ ] **5. A restart counts nothing again.** Stop the worker's task (the service starts another). Expect no
   "requests counted" line from the new task: every day is counted already.
+
+## 34. From the cache or CollectionSpace on Past requests, in AWS (15 minutes, after section 33's backfill; before merging the pull request that adds it)
+
+What it checks: issue #96's card and the Served card's split, against the stored counts. On personal-dev or
+personal-prod, deployed from this pull request's branch (`./serena aws --env <env> deploy`; at the plan, expect the
+web role's policy with a `RequestCountsRead` statement, and the task definitions replaced):
+
+- [ ] **1. The Served card's split.** Open Past requests with "Last 24 hours". Under "by size", expect "from the cache
+  <n> · from CollectionSpace <m>", the two adding up to the Served total.
+- [ ] **2. Collapsed to start.** Below By day and Most requested, expect "▸ From the cache or CollectionSpace" and one
+  line: "Since <the first day counted>: <n> served · from the cache … (…%) · from CollectionSpace … (…%) · unserved
+  …", with a bar. No table, no Day / Week / Month / Year switch.
+- [ ] **3. Opened.** Click the title. Expect the switch (Day selected) and a table, newest first: today's row first,
+  "(today, so far)", then the stored days. Compare yesterday's row with the stored item (section 33, step 3): the
+  same hits ("From the cache"), misses ("From CollectionSpace") and unserved count.
+- [ ] **4. Week, Month, Year.** Click each. Expect weeks labelled "2026-W44 (Oct 26 – Nov 1)", the current one "(so
+  far)", and the first one counted "(from <day>)" when counting began after its Monday; months as "October 2026";
+  the address gains `counts=week` (and so on). Change the page's range: the card doesn't reload or change.
+- [ ] **5. Remembered.** Reload the page: the card is still open. Collapse it and reload: collapsed.
+- [ ] **6. Fresh requests.** Browse a few Thumbnails (some new, some seen before), wait a minute, reload. Expect
+  today's row and the totals to have grown by those requests, new ones as "From CollectionSpace".
+

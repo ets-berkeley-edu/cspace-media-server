@@ -1357,15 +1357,15 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **Range** (D106). The last hour, 24 hours or 7 days; 24 hours to start.
   - **More than 10,000 lines** (D107). A Logs Insights query returns at most 10,000 rows: the table lists the newest
     10,000 and says so; the counts and the most-requested paths cover every request.
-  - **Queries** (D108). The admin API runs five fixed queries (lines, served by day, unserved by day and reason, most
-    requested, and served by size, from the "served" line's size) with CloudWatch Logs Insights on the app's log group, at the same time, and waits for them, polling
+  - **Queries** (D108). The admin API runs six fixed queries (lines, served by day, unserved by day and reason, most
+    requested, served by size, from the "served" line's size, and served by cache, hit or miss, issue #96) with CloudWatch Logs Insights on the app's log group, at the same time, and waits for them, polling
     every second, for up to 30 seconds; past that it stops them and asks the admin for a shorter range (504). Each
     report is kept a minute per museum and range, so reloads don't start new queries. The page shows a spinner while
     it waits. Logs Insights can't limit a query to one museum: every query filters on the signed-in museum, which comes
     from Serena's list of museums and is checked to be lowercase letters before it goes into the query, so nothing an
     admin types reaches a query.
   - **Locally** (D109). With `SERENA_LOG_FILE` (allowed only with a local DynamoDB endpoint), the app also writes its
-    log lines to that file (20 MB and one rotated copy), and the admin API runs the same five queries in Python over
+    log lines to that file (20 MB and one rotated copy), and the admin API runs the same six queries in Python over
     it, in place of CloudWatch. Tests use the same stand-in; a separate test checks the Logs Insights query text.
   - **Who** (D111). Any admin of the museum; reading the page isn't audited (it holds no personal data).
   - **CSV export** (D112, D113). "Export CSV" saves the lines matching the page's range and filters (at most
@@ -1386,8 +1386,18 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
       cache, and unserved requests by day and reason, on the app's log group, with the page's museum filter. The
       worker waits up to 5 minutes for them. Locally, the worker can't read the web container's log file, so it
       counts nothing; tests count from a log file.
-    - **Still to come** (issue #96): the admin API (counts by day, week, month or year for a range, with today's
-      counts read live from the log) and their place in the admin app, mockup first.
+    - **On the page** (mockup version 43, Richard, October 26, 2026). A card below By day and Most requested, "From
+      the cache or CollectionSpace", collapsed to start: one line of totals since the first day counted ("Since Apr
+      14, 2026: 6,858 served · from the cache 5,493 (80%) · from CollectionSpace 1,365 (20%) · unserved 126") and a
+      bar of the two. Opened (remembered in the browser), it adds a Day / Week / Month / Year switch (in the address,
+      `counts=`) and a table, newest first: the last 31 days, 13 weeks, 12 months or 10 years, each with served, from
+      the cache, from CollectionSpace, the share from the cache, a bar, and unserved. Today's row (and yesterday's,
+      until the worker has counted it) is read from the log as the page asks, marked "today, so far"; the first week,
+      month or year counted says when counting began ("from Apr 14"). It doesn't follow the page's range. The admin
+      API's `GET /admin/v1/museums/<museum>/requests/counts?by=day|week|month|year` serves it, each museum's answer
+      kept a minute; when the log can't be read, the stored counts still come, with why today's are missing. The
+      Served card at the top splits the range's served requests the same way ("from the cache 15 · from
+      CollectionSpace 7"), from a sixth query of the report.
 - **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
   objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October
   10, 2026). Not in CI yet. A second set, `serenade/aws/`, checks a deployed environment after a deploy or resume
@@ -1500,7 +1510,8 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   uploaded servable lists; use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
   check, fetches, the recall form's lookups and thumbnails, and Media look up's read of the Media record, and the
   CloudFront signing key); and run Logs Insights queries on its own log group
-  only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110). The worker's role can read and write
+  only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110), and read
+  the request counts (issue #96). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
   update and delete recalls (D119), read, put and delete audit entries (the entries for ended recalls, and the daily removal,
   D98), read and write the request counts and run Logs Insights queries on the app's log group, for the daily request
@@ -1654,7 +1665,7 @@ The F numbers follow the team's list of follow-ups.
 - **The Media record behind a Blob.** Confirm against a real museum's CollectionSpace how the recall form finds the
   Media record whose `blobCsid` is a given Blob CSID (a search on the Media service), and whether CollectionSpace makes
   a thumbnail for a PDF.
-- **Past requests page queries in AWS.** The Logs Insights query text is tested only as text: run the five queries
+- **Past requests page queries in AWS.** The Logs Insights query text is tested only as text: run the six queries
   against the QA environment's log group before production, to confirm the JSON fields (`message`, `logger`, `size`,
   `museum`) and `datefloor` behave as expected.
 - **The ETL's schedule.** Since CSW-1029 (October 2026) the ETL job starts at 21:01 server time, not 03:01. To

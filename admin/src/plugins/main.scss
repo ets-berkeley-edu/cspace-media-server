@@ -10,3 +10,20 @@
   -webkit-user-select: all;
   user-select: all;
 }
+
+// The colour key for served requests from Serena's cache and from CollectionSpace (issue #96), beside their words on
+// Past requests; SplitBar draws the same two colours.
+.key {
+  border-radius: 2px;
+  display: inline-block;
+  height: 10px;
+  margin-right: 4px;
+  vertical-align: -1px;
+  width: 10px;
+}
+.key.hit {
+  background: rgb(var(--v-theme-primary));
+}
+.key.miss {
+  background: rgb(var(--v-theme-warning));
+}

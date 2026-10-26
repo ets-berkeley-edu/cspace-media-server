@@ -6,17 +6,22 @@ count in the request-counts table for good (one item per museum per day: pk <mus
 Monday start), months and years are sums of days, all in UTC. Once an hour until it succeeds, and then once a UTC
 day, it counts every day still in the log that has no item yet: so its first run backfills the days the log still
 holds, and a day missed while the worker was down is counted on its next run. Each count is two Logs Insights queries
-for a museum, however many days they cover; a day already counted is never counted again."""
+for a museum, however many days they cover; a day already counted is never counted again.
+
+The admin app's Past requests page reads them by day, ISO week, month or year (summary()): the stored days, and the
+days not counted yet (today, and yesterday until the worker has counted it) tallied from the log as the page asks,
+each summary kept LIVE_CACHE_SECONDS."""
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from . import tables
-from .requests_log import LogUnavailable, Reader, Tally
+from .requests_log import LogUnavailable, Reader, Tally, TooSlow
 from .store import Store
 
 log = logging.getLogger("serena.request_counts")
@@ -25,6 +30,11 @@ log = logging.getLogger("serena.request_counts")
 SETTLE = timedelta(hours=1)
 # Days whose oldest lines are this close to the log's retention aren't counted: part of them may be gone already.
 RETENTION_MARGIN_DAYS = 2
+# The page's summaries are kept this long per museum, so reloads and the Day / Week / Month / Year switch don't start
+# new queries of the log (as D108 for the rest of the page).
+LIVE_CACHE_SECONDS = 60.0
+# How many periods the page lists, newest first: 31 days, 13 weeks, 12 months, 10 years.
+SHOWN = {"day": 31, "week": 13, "month": 12, "year": 10}
 
 
 @dataclass(frozen=True)
@@ -34,6 +44,7 @@ class DayCount:
     misses: int = 0
     unserved: dict[str, int] = field(default_factory=dict)  # by reason
     counted_at: str = ""  # ISO time, UTC
+    live: bool = False  # tallied from the log just now, not stored: today, or a day the worker hasn't counted yet
 
     @property
     def served(self) -> int:
@@ -71,13 +82,88 @@ def _midnight(day: date) -> datetime:
     return datetime.combine(day, time(), tzinfo=UTC)
 
 
+@dataclass(frozen=True)
+class PeriodCount:
+    period: str  # "2026-10-25", "2026-W43", "2026-10" or "2026"
+    first_day: str  # the period's first and last days (a whole week, month or year)
+    last_day: str
+    hits: int
+    misses: int
+    unserved: int
+    live: bool  # holds a day not counted yet: today's period, so far
+    partial: bool  # the first period counted, and counting began after its first day
+
+
+@dataclass(frozen=True)
+class Summary:
+    period: str
+    today: str
+    since: str | None  # the first day counted; None before any count
+    hits: int  # every day counted, and the live days
+    misses: int
+    unserved: int
+    rows: list[PeriodCount]  # newest first, SHOWN[period] at most
+    live_unavailable: str | None = None  # why today's (and any uncounted day's) counts couldn't be read
+
+
 class RequestCounts:
     def __init__(self, store: Store, reader: Reader | None, retention_days: int,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)):
+                 clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+                 cache_seconds: float = LIVE_CACHE_SECONDS):
         self.store = store
         self.reader = reader
         self.retention_days = retention_days
         self.clock = clock
+        self.cache_seconds = cache_seconds
+        self._cache: dict[str, tuple[datetime, list[DayCount], str | None]] = {}
+        self._lock = threading.Lock()
+
+    def summary(self, tenant: str, period: str) -> Summary:
+        """The museum's counts by period for the Past requests page, newest first, with the totals of every day."""
+        if period not in PERIODS:
+            raise ValueError(f"period must be one of {', '.join(PERIODS)}")
+        now = self.clock()
+        days, unavailable = self._all_days(tenant, now)
+        rows: dict[str, list[DayCount]] = {}
+        for count in days:
+            rows.setdefault(period_of(count.day, period), []).append(count)
+        since = days[0].day if days else None
+        shown = [PeriodCount(key, *period_bounds(key, period), sum(d.hits for d in kept), sum(d.misses for d in kept),
+                             sum(sum(d.unserved.values()) for d in kept), any(d.live for d in kept),
+                             since is not None and period != "day" and since in {d.day for d in kept}
+                             and since != period_bounds(key, period)[0])
+                 for key, kept in sorted(rows.items(), reverse=True)][:SHOWN[period]]
+        return Summary(period, now.astimezone(UTC).date().isoformat(), since, sum(d.hits for d in days),
+                       sum(d.misses for d in days), sum(sum(d.unserved.values()) for d in days), shown, unavailable)
+
+    def _all_days(self, tenant: str, now: datetime) -> tuple[list[DayCount], str | None]:
+        with self._lock:
+            kept = self._cache.get(tenant)
+            if kept is not None and kept[0] > now:
+                return kept[1], kept[2]
+        today = now.astimezone(UTC).date()
+        stored = self.days(tenant, date(2000, 1, 1), today)
+        # Not counted yet: today, and yesterday until the worker has counted it (an hour after it ends).
+        first_live = today - timedelta(days=1)
+        if stored and date.fromisoformat(stored[-1].day) >= first_live:
+            first_live = date.fromisoformat(stored[-1].day) + timedelta(days=1)
+        live: list[DayCount] = []
+        unavailable = None
+        try:
+            if self.reader is None:
+                raise LogUnavailable("The request log isn't available in this environment.")
+            tallies = self.reader.tally(tenant, _midnight(first_live), now)
+            for day in _each_day(first_live, today):
+                tally = tallies.get(day.isoformat())
+                if tally is not None or day == today or stored:  # a day before Serena ran here isn't shown
+                    tally = tally or Tally()
+                    live.append(DayCount(day.isoformat(), tally.hits, tally.misses, dict(tally.unserved), live=True))
+        except (LogUnavailable, TooSlow) as error:
+            unavailable = str(error)
+        days = stored + live
+        with self._lock:
+            self._cache[tenant] = (now + timedelta(seconds=self.cache_seconds), days, unavailable)
+        return days, unavailable
 
     def days(self, tenant: str, first: date, last: date) -> list[DayCount]:
         """The stored counts from first to last (inclusive), oldest first. A day with no item isn't listed."""
@@ -148,6 +234,23 @@ def period_of(day: str, period: str) -> str:
         return day[:7]
     if period == "year":
         return day[:4]
+    raise ValueError(f"period must be one of {', '.join(PERIODS)}")
+
+
+def period_bounds(key: str, period: str) -> tuple[str, str]:
+    """A period's first and last days, from period_of()'s key."""
+    if period == "day":
+        return key, key
+    if period == "week":
+        year, _, week = key.partition("-W")
+        monday = date.fromisocalendar(int(year), int(week), 1)
+        return monday.isoformat(), (monday + timedelta(days=6)).isoformat()
+    if period == "month":
+        first = date.fromisoformat(f"{key}-01")
+        following = date(first.year + first.month // 12, first.month % 12 + 1, 1)
+        return first.isoformat(), (following - timedelta(days=1)).isoformat()
+    if period == "year":
+        return f"{key}-01-01", f"{key}-12-31"
     raise ValueError(f"period must be one of {', '.join(PERIODS)}")
 
 

@@ -6,13 +6,23 @@ from typing import Any
 
 import pytest
 from conftest import TENANTS
+from fastapi.testclient import TestClient
+from test_admin import Clock, make_app, sign_in
 from test_requests_log import FakeLogs, cells, served, unserved, write
 
 from serena import museum, tables
 from serena.config import Settings
 from serena.museum_settings import MuseumSettings
 from serena.refreshes import Refreshes
-from serena.request_counts import DayCount, RequestCounts, by_period, earliest_countable, latest_countable, period_of
+from serena.request_counts import (
+    DayCount,
+    RequestCounts,
+    by_period,
+    earliest_countable,
+    latest_countable,
+    period_bounds,
+    period_of,
+)
 from serena.requests_log import MAX_LINES, CloudWatchReader, FileReader, LogUnavailable, tally_texts
 from serena.store import Store
 from serena.worker import COUNT_RETRY_SECONDS, Worker, WorkerServices
@@ -211,3 +221,92 @@ def test_a_failed_count_is_tried_again_an_hour_later(store: Store, s3: Any, log_
 
 def test_no_log_no_counting(store: Store, s3: Any) -> None:
     assert worker_with(store, s3, None, Ticking()).count_requests(NOW) == 0
+
+
+# --- the Past requests page's summary
+
+def stored(store: Store, tenant: str, *days: DayCount) -> None:
+    for day in days:
+        store.client.put_item(TableName=store.table(tables.REQUEST_COUNTS), Item=day.item(tenant))
+
+
+def test_period_bounds() -> None:
+    assert period_bounds("2026-W43", "week") == ("2026-10-19", "2026-10-25")
+    assert period_bounds("2026-02", "month") == ("2026-02-01", "2026-02-28")
+    assert period_bounds("2026-12", "month") == ("2026-12-01", "2026-12-31")
+    assert period_bounds("2026", "year") == ("2026-01-01", "2026-12-31")
+    assert period_bounds("2026-10-25", "day") == ("2026-10-25", "2026-10-25")
+
+
+def test_the_summary_adds_today_from_the_log(store: Store, log_file: Path) -> None:
+    stored(store, "pahma", DayCount("2026-10-20", 5, 1, {"recalled": 2}), DayCount("2026-10-25", 7, 1))
+    write(log_file, [served(NOW - timedelta(hours=1)), served(NOW - timedelta(hours=2), cache="miss"),
+                     unserved(NOW - timedelta(hours=1)), served(YESTERDAY)])  # yesterday's is counted already
+    summary = counts(store, log_file).summary("pahma", "day")
+    assert (summary.today, summary.since) == ("2026-10-26", "2026-10-20")
+    assert [(r.period, r.hits, r.misses, r.unserved, r.live) for r in summary.rows] == [
+        ("2026-10-26", 1, 1, 1, True), ("2026-10-25", 7, 1, 0, False), ("2026-10-20", 5, 1, 2, False)]
+    assert (summary.hits, summary.misses, summary.unserved, summary.live_unavailable) == (13, 3, 3, None)
+    weeks = counts(store, log_file).summary("pahma", "week")
+    assert [(r.period, r.first_day, r.last_day, r.hits, r.live, r.partial) for r in weeks.rows] == [
+        ("2026-W44", "2026-10-26", "2026-11-01", 1, True, False),
+        ("2026-W43", "2026-10-19", "2026-10-25", 12, False, True)]  # counting began on Tuesday, Oct 20
+    assert [(r.period, r.hits) for r in counts(store, log_file).summary("pahma", "month").rows] == [("2026-10", 13)]
+    with pytest.raises(ValueError):
+        counts(store, log_file).summary("pahma", "fortnight")
+
+
+def test_yesterday_is_read_from_the_log_until_counted(store: Store, log_file: Path) -> None:
+    stored(store, "pahma", DayCount("2026-10-24", 3))
+    write(log_file, [served(YESTERDAY), served(YESTERDAY, cache="miss")])
+    early = datetime(2026, 10, 26, 0, 30, tzinfo=UTC)  # before the worker counts the 25th
+    rows = counts(store, log_file, early).summary("pahma", "day").rows
+    assert [(r.period, r.hits, r.misses, r.live) for r in rows] == [
+        ("2026-10-26", 0, 0, True), ("2026-10-25", 1, 1, True), ("2026-10-24", 3, 0, False)]
+
+
+def test_no_counts_yet(store: Store, log_file: Path) -> None:
+    summary = counts(store, log_file).summary("pahma", "year")
+    assert summary.since == "2026-10-26"  # only today, live
+    assert [(r.period, r.hits, r.live, r.partial) for r in summary.rows] == [("2026", 0, True, True)]
+
+
+def test_when_the_log_cant_be_read_the_stored_counts_still_show(store: Store) -> None:
+    stored(store, "pahma", DayCount("2026-10-25", 7, 1))
+    summary = RequestCounts(store, None, 30, clock=lambda: NOW).summary("pahma", "day")
+    assert [(r.period, r.hits) for r in summary.rows] == [("2026-10-25", 7)]
+    assert summary.live_unavailable == "The request log isn't available in this environment."
+
+
+def test_the_summary_is_kept_a_minute(store: Store, log_file: Path) -> None:
+    now = [NOW]
+    request_counts = RequestCounts(store, FileReader(log_file), 30, clock=lambda: now[0])
+    assert request_counts.summary("pahma", "day").hits == 0
+    write(log_file, [served(NOW)])
+    assert request_counts.summary("pahma", "week").hits == 0  # the same days, by week: no new query
+    now[0] = NOW + timedelta(seconds=61)
+    assert request_counts.summary("pahma", "day").hits == 1
+
+
+def test_the_api(store: Store, s3: Any, secretsmanager: Any, log_file: Path) -> None:
+    app = make_app(store, s3, secretsmanager)
+    app.state.admin.sessions.clock = Clock()
+    app.state.request_counts = RequestCounts(store, FileReader(log_file), 30, clock=lambda: NOW)
+    client = TestClient(app, base_url="http://testserver")
+    stored(store, "pahma", DayCount("2026-10-25", 7, 1, {"not_listed": 1}))
+    stored(store, "bampfa", DayCount("2026-10-25", 99, 99))
+    url = "/admin/v1/museums/pahma/requests/counts"
+    assert client.get(url).status_code == 401
+    sign_in(client)
+    body = client.get(url).json()
+    assert body == {
+        "by": "day", "today": "2026-10-26", "since": "2026-10-25",
+        "totals": {"hits": 7, "misses": 1, "unserved": 1},
+        "rows": [{"period": "2026-10-26", "first_day": "2026-10-26", "last_day": "2026-10-26", "hits": 0, "misses": 0,
+                  "unserved": 0, "live": True, "partial": False},
+                 {"period": "2026-10-25", "first_day": "2026-10-25", "last_day": "2026-10-25", "hits": 7, "misses": 1,
+                  "unserved": 1, "live": False, "partial": False}],
+        "live_unavailable": None}
+    assert client.get(url, params={"by": "month"}).json()["rows"][0]["period"] == "2026-10"
+    assert client.get(url, params={"by": "decade"}).status_code == 422
+    assert client.get("/admin/v1/museums/bampfa/requests/counts").status_code in (401, 403)  # signed in to PAHMA

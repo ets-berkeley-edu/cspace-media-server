@@ -138,6 +138,17 @@
   .card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); min-width: 0; }
   .card .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
   .card .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  /* From the cache or CollectionSpace (version 43): each row's served requests as one bar, cache then CollectionSpace */
+  .split { display: flex; height: 10px; min-width: 120px; border-radius: 5px; overflow: hidden; background: var(--bg-neutral); }
+  .split .hit { background: var(--text-accent); }
+  .split .miss { background: var(--text-warning); }
+  .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+  .key.hit { background: var(--text-accent); } .key.miss { background: var(--text-warning); }
+  .disclose { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .disclose .chev { display: inline-block; width: 1em; transition: transform 0.15s; }
+  .disclose[aria-expanded="true"] .chev { transform: rotate(90deg); }
+  .totals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 6px; }
+  .totals .split { flex: 1 1 160px; max-width: 320px; }
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
   .toolbar .spacer { flex: 1; }
   .pager { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; justify-content: flex-end; font-size: 12px; color: var(--text-secondary); padding: 6px 10px; border-top: 1px solid var(--border); }
@@ -316,6 +327,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 43 (October 26, 2026, issue #96):</strong> <strong>Past requests</strong> has a new card below By day and Most requested, <strong>From the cache or CollectionSpace</strong>: served requests answered from Serena's cached copy (hits) and fetched from CollectionSpace (misses), with the share from the cache and a bar for each row, and the unserved requests. It starts <strong>collapsed</strong>, showing the totals since counting began in one line and one bar (for PAHMA, "Since Apr 14, 2026: 6,858 served · from the cache 5,493 (80%) · from CollectionSpace 1,365 (20%) · unserved 126"); ▸ opens it (the app remembers the choice in this browser), and the totals stay above the table. It reads the daily counts the worker keeps (counted an hour after each UTC day ends, kept for good), not the range above, so it has its own <strong>Day / Week / Month / Year</strong> switch: the last 31 days, 13 weeks (ISO, Monday start), 12 months or every year, newest first. Today's row is read from the log as the page loads ("today, so far"); the first week, month or year counted says where the counts start ("from Apr 14"). The <strong>Served</strong> card at the top also splits the range's served requests: "from the cache 3 · from CollectionSpace 2". Sample data: the days the sample log covers (Oct 7 to 13) come from it and agree with By day; the days before, back to Apr 14, are invented, a few dozen a day for PAHMA and fewer for the others, the cache's share growing over the months. Try PAHMA with Week, then Month; and Cinefiles.</li>
       <li><strong>Version 42 (October 20, 2026, D219 to D221):</strong> <strong>Settings</strong>: the Change dialog checks the value when you click Save, before anything is sent, and says what's wrong under the field in words ("Give a number from 0.1 to 100.", "Give a whole number from 5 to 300.", "Give a time as HH:MM, from 00:00 to 23:59."), the dialog left open; try "5d" for the delta threshold. In the app, the bounds come from Serena with the settings (and show as each field's hint), and a value Serena refuses anyway is said under the field too, for every setting.</li>
       <li><strong>Version 41 (October 20, 2026, D216 to D218, Richard's review of Acknowledge all):</strong> In the Acknowledge all dialog, each listed alert also says what it's about and when it was raised (its date only when it isn't today), so alerts with the same title can be told apart; the reminder comes before the list, and only the list scrolls (about 12 lines), so the title, the reminder and the buttons stay in view however many wait. In the app, with more than 500 waiting, the dialog lists and acknowledges the newest 500 ("Acknowledge the newest 500 of &lt;n&gt; alerts?", "Acknowledge the newest 500") and says to click again for the rest; the mockup never has that many.</li>
       <li><strong>Version 40 (October 20, 2026, D207 to D211):</strong> <strong>Alerts</strong> has "Acknowledge all (&lt;n&gt;)" above the table, at the right, while 2 or more alerts wait (choose an Alerts scenario in Mockup settings: 1 or 3 waiting, or 2 or 3 pages of alerts with waiting ones on every page; "Reset everything" starts the mockup over). It asks first, listing the alerts it will acknowledge, all of them on every page of the table (each a link: it closes the dialog and shows that alert in the table, on its page, marked), and repeats that a problem still there is raised again the next day; no reason is asked, as for one alert. Each alert gets its own "alert acknowledge" entry in the Audit log. The alert banner keeps "Open alerts" only. <strong>Finding the waiting ones (D212 to D214):</strong> "All · Waiting (&lt;n&gt;)" at the left above the table shows every alert or only those waiting (All is the default; sorting and paging work in both, and "No alerts waiting." when there are none); the bell and the banner's "Open alerts" open Alerts on Waiting, every other way in on All; and in All, a waiting alert's row has a red bar down its left edge. In the app the choice is kept in the address, like sorting and paging.</li>
@@ -362,7 +374,7 @@
 <script>
 (() => {
   const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
-  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: ""};
+  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: "", countsBy: "day", countsOpen: false};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
@@ -712,6 +724,79 @@
 
   const RANGES = {"1h": 3600e3, "24h": DAY, "7d": 7 * DAY};
   const inRange = () => LOG.filter(l => l.museum === S.museum && ms(l.at) > ms(NOW) - RANGES[S.range] && ms(l.at) <= ms(NOW));
+
+  // ---- Daily request counts (version 43, issue #96): what the worker keeps, one item per museum per UTC day, an hour
+  // after the day ends; today's row is read from the log as the page loads. Days the sample log covers come from it,
+  // so they agree with By day; the days before are invented (a few dozen a day for PAHMA, the cache's share growing),
+  // back to the first day counted.
+  const COUNTS_FROM = "2026-04-14", LOG_FROM = "2026-10-07", TODAY = NOW.slice(0, 10);
+  const dayAfter = d => new Date(ms(d + "T00:00:00Z") + DAY).toISOString().slice(0, 10);
+  function dailyCounts(museum) {
+    const days = [];
+    let seed = [...museum].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const rnd = () => (seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32;
+    const scale = {pahma: 40, cinefiles: 6, bampfa: 4, botgarden: 3, ucjeps: 2}[museum] || 2;
+    for (let d = COUNTS_FROM, i = 0; d <= TODAY; d = dayAfter(d), i++) {
+      if (d >= LOG_FROM) {
+        const lines = LOG.filter(l => l.museum === museum && l.at.slice(0, 10) === d && ms(l.at) <= ms(NOW));
+        const why = {};
+        lines.filter(l => l.outcome !== "served").forEach(l => why[l.reason] = (why[l.reason] || 0) + 1);
+        days.push({day: d, hits: lines.filter(l => l.cache === "hit").length, misses: lines.filter(l => l.cache === "miss").length, why, live: d === TODAY});
+        continue;
+      }
+      const weekend = [0, 6].includes(new Date(d + "T12:00:00Z").getUTCDay());
+      const served = Math.round(scale * (weekend ? 0.5 : 1) * (0.6 + rnd()));
+      const rate = Math.min(0.97, 0.55 + i / 400 + rnd() * 0.08);  // the cache fills up over the months
+      const hits = Math.round(served * rate), unserved = rnd() < 0.3 ? Math.ceil(rnd() * 3) : 0;
+      days.push({day: d, hits, misses: served - hits, why: unserved ? {[rnd() < 0.7 ? "not listed" : "recalled"]: unserved} : {}});
+    }
+    return days;
+  }
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const SHORT = d => `${MONTHS[+d.slice(5, 7) - 1].slice(0, 3)} ${+d.slice(8, 10)}`;
+  // The period a day is in: the day, its ISO week (Monday start), month or year; the key sorts, the label is shown.
+  function periodOf(d, by) {
+    if (by === "day") return [d, d];
+    if (by === "month") return [d.slice(0, 7), `${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`];
+    if (by === "year") return [d.slice(0, 4), d.slice(0, 4)];
+    const t = new Date(d + "T00:00:00Z"), monday = new Date(ms(d + "T00:00:00Z") - ((t.getUTCDay() + 6) % 7) * DAY);
+    const thursday = new Date(monday.getTime() + 3 * DAY), year = thursday.getUTCFullYear();
+    const week = Math.floor((thursday - Date.UTC(year, 0, 1)) / (7 * DAY)) + 1;
+    const first = monday.toISOString().slice(0, 10), last = new Date(monday.getTime() + 6 * DAY).toISOString().slice(0, 10);
+    return [`${year}-W${String(week).padStart(2, "0")}`, `${year}-W${String(week).padStart(2, "0")} (${SHORT(first)} – ${SHORT(last)})`];
+  }
+  const COUNTS_SHOWN = {day: 31, week: 13, month: 12, year: 10};
+  function countRows(museum, by) {
+    const rows = {};
+    for (const d of dailyCounts(museum)) {
+      const [key, label] = periodOf(d.day, by);
+      const r = (rows[key] ||= {key, label, first: d.day, hits: 0, misses: 0, unserved: 0, live: false});
+      r.hits += d.hits; r.misses += d.misses; r.unserved += Object.values(d.why).reduce((a, n) => a + n, 0); r.live ||= !!d.live;
+    }
+    const all = Object.values(rows).sort((x, y) => y.key.localeCompare(x.key));
+    return all.slice(0, COUNTS_SHOWN[by]).map(r => ({...r, partial: periodOf(COUNTS_FROM, by)[0] === r.key && by !== "day"}));
+  }
+  const pct = (n, of) => of ? `${Math.round(100 * n / of)}%` : "–";
+  function countsCard() {
+    const by = S.countsBy, open = S.countsOpen;
+    // Collapsed (the default): the totals since counting began, in one line and one bar.
+    const all = dailyCounts(S.museum), hits = all.reduce((a, d) => a + d.hits, 0), misses = all.reduce((a, d) => a + d.misses, 0);
+    const unserved = all.reduce((a, d) => a + Object.values(d.why).reduce((x, n) => x + n, 0), 0), served = hits + misses;
+    const bar = (h, m) => `<div class="split" role="img" aria-label="${pct(h, h + m)} from the cache, ${pct(m, h + m)} from CollectionSpace" title="${h.toLocaleString("en-US")} from the cache, ${m.toLocaleString("en-US")} from CollectionSpace">${h + m ? `<span class="hit" style="width:${100 * h / (h + m)}%"></span><span class="miss" style="width:${100 * m / (h + m)}%"></span>` : ""}</div>`;
+    const head = `<div class="toolbar" style="margin:0"><button type="button" class="disclose label" id="countsToggle" aria-expanded="${open}" aria-controls="countsBody"><span class="chev" aria-hidden="true">▸</span>From the cache or CollectionSpace</button><span class="spacer" style="flex:1"></span>
+      ${open ? `<div role="group" aria-label="Counts by">${[["day", "Day"], ["week", "Week"], ["month", "Month"], ["year", "Year"]].map(([k, v]) => `<button type="button" data-counts-by="${k}" class="${by === k ? "primary" : ""}" aria-pressed="${by === k}">${v}</button>`).join(" ")}</div>` : ""}</div>`;
+    const totals = `<div class="totals"><span><strong>Since ${SHORT(COUNTS_FROM)}, ${COUNTS_FROM.slice(0, 4)}:</strong> ${served.toLocaleString("en-US")} served</span>
+      <span><span class="key hit"></span>from the cache ${hits.toLocaleString("en-US")} (${pct(hits, served)})</span>
+      <span><span class="key miss"></span>from CollectionSpace ${misses.toLocaleString("en-US")} (${pct(misses, served)})</span>
+      <span>unserved ${unserved.toLocaleString("en-US")}</span>${bar(hits, misses)}</div>`;
+    if (!open) return `<div class="card">${head}${totals}</div>`;
+    const rows = countRows(S.museum, by);
+    const note = r => r.live ? ` <span class="secondary">(${by === "day" ? "today, so far" : "so far"})</span>` : r.partial ? ` <span class="secondary">(from ${SHORT(COUNTS_FROM)})</span>` : "";
+    return `<div class="card">${head}${totals}<div id="countsBody">
+      <p class="secondary" style="margin:10px 0 8px">Not the range above: Serena counts each day (UTC) an hour after it ends and keeps the counts; today's are read from the log now. Weeks start on Monday. <span class="key hit"></span>From the cache: served from Serena's copy (a hit). <span class="key miss"></span>From CollectionSpace: fetched just then (a miss), and cached.</p>
+      <div class="tw"><table><thead><tr><th>${{day: "Day (UTC)", week: "Week (UTC)", month: "Month (UTC)", year: "Year (UTC)"}[by]}</th><th>Served</th><th>From the cache</th><th>From CollectionSpace</th><th>From the cache, %</th><th style="min-width:140px"></th><th>Unserved</th></tr></thead>
+      <tbody>${rows.map(r => { const n = r.hits + r.misses; return `<tr><td class="nowrap">${esc(r.label)}${note(r)}</td><td class="num">${n.toLocaleString("en-US")}</td><td class="num">${r.hits.toLocaleString("en-US")}</td><td class="num">${r.misses.toLocaleString("en-US")}</td><td class="num">${pct(r.hits, n)}</td><td>${bar(r.hits, r.misses)}</td><td class="num">${r.unserved.toLocaleString("en-US")}</td></tr>`; }).join("") || '<tr><td colspan="7">No counts yet.</td></tr>'}</tbody></table></div></div></div>`;
+  }
   const here24 = () => LOG.filter(l => l.museum === S.museum && ms(l.at) > ms(NOW) - DAY && ms(l.at) <= ms(NOW));
   const here = list => S.museum === "pahma" ? list : [];
   // ---- rendering
@@ -723,7 +808,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 42</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 43</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -740,7 +825,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 42</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 43</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" ${open ? 'data-show="waiting"' : ""} aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -848,11 +933,12 @@
       return `<div class="toolbar">${title(`${esc(name())} Past requests`)}<span class="spacer"></span>
       <div role="group" aria-label="Range">${[["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"]].map(([k, v]) => `<button type="button" data-range="${k}" class="${S.range === k ? "primary" : ""}" aria-pressed="${S.range === k}">${v}</button>`).join(" ")}</div></div>
       <p class="lead">What Serena served and couldn't serve for this museum, read from its log. Times are UTC. The counts cover every request in the range; the table below lists the newest requests. Click a column's name to sort by it; hover over it for what it holds.</p>
-      <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div><div class="secondary">${bySizeHtml(lines.filter(l => l.outcome === "served"))}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
+      <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div><div class="secondary">${bySizeHtml(lines.filter(l => l.outcome === "served"))}</div><div class="secondary"><span class="key hit"></span>from the cache ${lines.filter(l => l.cache === "hit").length} · <span class="key miss"></span>from CollectionSpace ${lines.filter(l => l.cache === "miss").length}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
       <div class="cards" style="grid-template-columns:repeat(auto-fit, minmax(440px, 1fr))">
       <div class="card"><div class="label">By day</div><div class="tw"><table><thead><tr><th>Day (UTC)</th><th>Served</th><th>Unserved</th><th>Unserved, by reason</th></tr></thead><tbody>${days.map(d => `<tr><td class="nowrap">${d.day}</td><td>${d.served}</td><td>${d.unserved}</td><td>${Object.entries(d.why).sort().map(([k, n]) => `${esc(k)} ${n}`).join(", ")}</td></tr>`).join("") || '<tr><td colspan="4">No requests in this range.</td></tr>'}</tbody></table></div></div>
       <div class="card"><div class="label">Most requested</div><div class="tw"><table><thead><tr><th>Blob CSID</th><th>Size</th><th>Requests</th></tr></thead><tbody>${top.map(r => `<tr><td>${pathCell(r)}</td><td>${sizeHtml(sizeOfPath(r.path))}</td><td class="num">${r.n.toLocaleString("en-US")}</td></tr>`).join("") || '<tr><td colspan="3">No requests in this range.</td></tr>'}</tbody></table></div></div>
       </div>
+      <div class="cards" style="grid-template-columns:1fr">${countsCard()}</div>
       <div class="toolbar"><label>Outcome <select id="reqOutcome"><option value="">All</option>${[["served", "Served"], ["unserved", "Unserved"]].map(([o, t]) => `<option value="${o}" ${S.outcome === o ? "selected" : ""}>${t}</option>`).join("")}</select></label>
         <label>Reason <select id="reqReason" ${S.outcome === "served" ? "disabled" : ""}><option value="">Any</option>${reasons.map(([k]) => k).sort().map(k => `<option ${S.reason === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></label><span class="spacer"></span><button>Export CSV</button></div>
       ${table("lines", [
@@ -1224,6 +1310,8 @@
       };
     };
     document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { S.range = clean(b.dataset.range); S.reason = ""; render(); });
+    document.querySelectorAll("[data-counts-by]").forEach(b => b.onclick = () => { S.countsBy = clean(b.dataset.countsBy); render(); });
+    const ct = $("#countsToggle"); if (ct) ct.onclick = () => { S.countsOpen = !S.countsOpen; render(); $("#countsToggle")?.focus(); };
     const ro = $("#reqOutcome"); if (ro) ro.onchange = () => { S.outcome = clean(ro.value); render(); };
     const rr = $("#reqReason"); if (rr) rr.onchange = () => { S.reason = clean(rr.value); render(); };
     document.querySelectorAll("[data-example]").forEach(b => b.onclick = () => openLookup(EXAMPLES[+clean(b.dataset.example)].input));
