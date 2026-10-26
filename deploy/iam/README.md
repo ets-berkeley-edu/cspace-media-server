@@ -6,7 +6,7 @@ limited to resources named `serena-*` (or tagged `project=serena`, for the KMS k
 
 | File | For | What it covers |
 | --- | --- | --- |
-| `serena-deployer-policy-mvp.json` | Stage 1 (Jira CS-9523): the IAM Identity Center permission set in the test account | us-west-2 only; no WAF; includes `SimulatorServiceDiscovery` (Cloud Map and a private Route 53 zone), which only an environment running the simulated CollectionSpace needs |
+| `serena-deployer-policy-mvp.json` | Stage 1 (Jira CS-9523): the `SerenaStage1Deployer` role Ops created in the cspace account | us-west-2 only; no WAF; includes `SimulatorServiceDiscovery` (Cloud Map and a private Route 53 zone), which only an environment running the simulated CollectionSpace needs |
 | `serena-deployer-policy.json` | Stage 2 and production (draft) | The stage 1 policy plus AWS WAF and its log delivery in us-east-1 (as CloudFront requires), and Cost Explorer read access (`CostVisibility`) |
 
 **Stage 2's policy is a draft.** It still describes CloudFront in front of everything. Since Operations said on
@@ -27,11 +27,14 @@ CodeBuild). Stage 1 keeps CloudFront in front, so its policy is unaffected.
 - The deployer can read and write Serena's own secrets: `./serena aws` sets them (a museum's service account, ETL
   tokens, signing keys) without showing or storing them.
 
+**Size.** Each policy is over 10,240 characters, the limit for a role's inline policies, so on a role it goes in
+as two customer managed policies (6,144 characters each at most), split between statements.
+
 If the account requires a permissions boundary on roles that Terraform creates, tell us its name: it's a small change.
 
 ## Also needed from Operations, outside the policy
 
-- **Service-linked roles.** If guardrails stop the permission set creating them, create these once:
+- **Service-linked roles.** If guardrails stop the deployer creating them, create these once:
   `AWSServiceRoleForECS`, `AWSServiceRoleForElasticLoadBalancing`, and CloudFront's for VPC origins
   (`vpcorigin.cloudfront.amazonaws.com`).
 - **CloudFront on a new account.** AWS sometimes refuses CloudFront distributions until it has verified a new
@@ -40,6 +43,6 @@ If the account requires a permissions boundary on roles that Terraform creates, 
 ## When a deploy fails with `AccessDenied`
 
 Note the action and resource in `docs/testing-checklist.md` (section 31 for stage 1). The fix goes into the
-permission set and into both files here, in the same pull request.
+deployer role (or permission set) and into both files here, in the same pull request.
 
 What the deploy creates is in [`../README.md`](../README.md) ("What it creates") and in `../terraform/`.
