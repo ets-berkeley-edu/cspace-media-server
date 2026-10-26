@@ -17,6 +17,7 @@ from test_signed_redirect import BLOB, BYTES, MEDIA, SHA, cache
 from serena import logs, requests_log
 from serena.requests_log import (
     MAX_LINES,
+    TOP_PATHS,
     CloudWatchReader,
     FileReader,
     LogUnavailable,
@@ -61,7 +62,7 @@ def test_every_query_is_limited_to_the_museum_and_the_two_lines() -> None:
         assert 'message = "served" and logger = "serena.imageserver"' in text
         assert 'message = "unserved" and logger = "serena.unserved"' in text
     assert query_text(QueryKind.LINES, "pahma").endswith(f"| sort @timestamp desc | limit {MAX_LINES}")
-    assert "| limit 20" in query_text(QueryKind.TOP_PATHS, "pahma")
+    assert f"| limit {TOP_PATHS}" in query_text(QueryKind.TOP_PATHS, "pahma")
 
 
 @pytest.mark.parametrize("museum", ['pahma" or museum = "bampfa', "PAHMA", "", "pahma "])
@@ -139,8 +140,9 @@ def cells(**fields: str) -> list[dict[str, str]]:
 class FakeLogs:
     """A stand-in for boto3's CloudWatch Logs client: each query runs for `polls` polls, then ends with `status`."""
 
-    def __init__(self, polls: int = 1, status: str = "Complete", fail_start: bool = False):
+    def __init__(self, polls: int = 1, status: str = "Complete", fail_start: bool = False, paths: int = 1):
         self.polls = polls
+        self.paths = paths
         self.status = status
         self.fail_start = fail_start
         self.started: list[dict[str, Any]] = []
@@ -169,7 +171,9 @@ class FakeLogs:
         elif text.endswith("by size"):
             rows = [cells(size="Medium", requests="5"), cells(size="original", requests="2")]
         else:
-            rows = [cells(path="/pahma/imageserver/blobs/b1/content", requests="7")]
+            # like Logs Insights, ignores the query's own limit (issue #95)
+            rows = [cells(path=f"/pahma/imageserver/blobs/b{n}/content", requests=str(8 - n if n < 8 else 1))
+                    for n in range(1, self.paths + 1)]
         return {"status": self.status, "results": rows}
 
     def stop_query(self, queryId: str) -> dict[str, bool]:
@@ -195,6 +199,16 @@ def test_cloudwatch_runs_the_five_queries_on_the_app_log_group() -> None:
     assert [(d.day, d.served, d.unserved) for d in report.days] == [("2026-10-12", 7, {"recalled": 4})]
     assert report.top_paths == [("/pahma/imageserver/blobs/b1/content", 7)]
     assert report.by_size == {"Medium": 5, "original": 2}
+
+
+def test_most_requested_keeps_only_the_top_paths() -> None:
+    client = FakeLogs(paths=35)
+    report = Requests(reader(client), clock=lambda: NOW).report("pahma", "24h")
+    assert len(report.top_paths) == TOP_PATHS == 10
+    assert report.top_paths[0] == ("/pahma/imageserver/blobs/b1/content", 7)
+    top = [q for q in client.started if "by path" in q["queryString"]]
+    assert [q["limit"] for q in top] == [TOP_PATHS]
+    assert {q["limit"] for q in client.started if q not in top} == {MAX_LINES}
 
 
 def test_a_slow_query_is_stopped() -> None:

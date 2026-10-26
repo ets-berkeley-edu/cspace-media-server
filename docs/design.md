@@ -1348,7 +1348,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     fetch lines: a failed fetch ends in an unserved request with its reason (D104).
   - **Layout** (D105). At the top, the range's totals: "Served", with the served requests by size, smallest to largest
     ("by size: Thumbnail 9 · Medium 4 · original 1"; Richard, October 14, 2026), and "Unserved", with its reasons;
-    then counts by day (served; unserved by reason) and the 20 most-requested paths; below, a table of lines, newest
+    then counts by day (served; unserved by reason) and the 10 most-requested paths; below, a table of lines, newest
     first, sorted by a column's name and paged like the other tables, filtered by outcome and by reason. Times are
     UTC. A Blob CSID (in the table and the most-requested list) reads as text until hovered or focused, then as a link
     that opens that size of the file in a dialog, with the request's outcome, "Media look up" (on that path) and
