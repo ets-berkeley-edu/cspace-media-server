@@ -23,6 +23,8 @@ class RefreshesPage(Page):
     STATE = by_id("refresh-state")
     REASONS = by_id("refresh-reasons")
     CHECK_PROBLEMS = by_id("check-problems")
+    OVERRIDE_BANNER = by_id("override-banner")  # issue #108: who overrode the delta threshold, when and why
+    CHECK_OVERRIDDEN = by_id("check-overridden")
     OVERRIDE = by_id("override-threshold")
     CONFIRM = by_id("confirm-action")
     REASON = by_id("reason")  # the action's reason (ReasonField's own id)

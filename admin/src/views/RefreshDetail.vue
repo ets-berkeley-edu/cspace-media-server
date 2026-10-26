@@ -7,6 +7,20 @@
         for {{ refresh.admin_refresh_date }}</span> · last change {{ when(refresh.updated_at) }}
       <span v-if="!refresh.newest"> · a later refresh has started</span>
     </p>
+    <!-- Who overrode the delta threshold, when and why, for as long as the refresh is shown (issue #108). -->
+    <v-alert
+      v-if="refresh?.override"
+      id="override-banner"
+      color="warning"
+      variant="tonal"
+      :icon="mdiShieldAlert"
+      density="compact"
+      class="mb-4"
+    >
+      <strong>Delta threshold overridden</strong> by {{ overrideBy(refresh.override) }} at {{ when(refresh.override.at) }}.
+      <div v-if="refresh.override.reason" id="override-reason">Reason: {{ refresh.override.reason }}</div>
+      <div>{{ afterOverride }}</div>
+    </v-alert>
     <v-alert
       v-if="error"
       type="error"
@@ -39,8 +53,8 @@
 
     <template v-if="refresh">
       <h2 class="text-h6 mb-2">Reasons</h2>
-      <ul v-if="refresh.reasons.length" id="refresh-reasons" class="mb-4 ml-6">
-        <li v-for="(line, i) in refresh.reasons" :key="i">{{ line }}</li>
+      <ul v-if="reasons.length" id="refresh-reasons" class="mb-4 ml-6">
+        <li v-for="(line, i) in reasons" :key="i">{{ line }}</li>
       </ul>
       <p v-else class="mb-4">None recorded.</p>
 
@@ -51,12 +65,33 @@
       <p v-else class="mb-4">Not received.</p>
 
       <template v-if="refresh.check">
-        <h2 class="text-h6 mb-2">Servable list check: {{ refresh.check.result }}</h2>
+        <h2 id="check-heading" class="text-h6 mb-2">
+          Servable list check: {{ refresh.check.result }}
+          <v-chip
+            v-if="refresh.override"
+            id="check-overridden"
+            color="warning"
+            size="small"
+            variant="tonal"
+            class="ml-2"
+          >
+            <v-icon
+              :icon="mdiShieldAlert"
+              size="small"
+              class="mr-1"
+              aria-hidden="true"
+            />{{ overriddenFailure ? 'Overridden' : 'Delta threshold overridden' }}
+          </v-chip>
+        </h2>
         <p class="mb-2">
           {{ refresh.check.rows }} rows; {{ refresh.check.added }} added, {{ refresh.check.removed }} removed,
           {{ refresh.check.changed }} changed<span v-if="refresh.check.previous_rows !== null">
             ({{ refresh.check.delta_percent }}% of the {{ refresh.check.previous_rows }} rows of the last servability update; the
             threshold is {{ refresh.check.threshold_percent }}%)</span>.
+        </p>
+        <p v-if="overriddenFailure" class="mb-2 text-medium-emphasis">
+          The check below is the one the override answered: its delta threshold problem no longer stops the refresh. The new
+          check's result replaces it when Serena is done.
         </p>
         <ul v-if="refresh.check.warnings.length" class="mb-2 ml-6">
           <li v-for="(warning, i) in refresh.check.warnings" :key="i">Warning: {{ warning }}</li>
@@ -71,8 +106,14 @@
             <tr><th>Line</th><th>Field</th><th>Problem</th></tr>
           </thead>
           <tbody>
-            <tr v-for="(problem, i) in refresh.check.errors" :key="i">
-              <td>{{ problem.line || '' }}</td><td>{{ problem.field }}</td><td>{{ problem.problem }}</td>
+            <tr
+              v-for="(problem, i) in refresh.check.errors"
+              :key="i"
+              :class="{'overridden-problem': overriddenFailure && isThreshold(problem.problem)}"
+            >
+              <td>{{ problem.line || '' }}</td><td>{{ problem.field }}</td>
+              <td v-if="overriddenFailure && isThreshold(problem.problem)"><s>{{ problem.problem }}</s> (overridden)</td>
+              <td v-else>{{ problem.problem }}</td>
             </tr>
           </tbody>
         </v-table>
@@ -121,13 +162,14 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref, watch} from 'vue'
+import {computed, onBeforeUnmount, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
+import {mdiShieldAlert} from '@mdi/js'
 import type {Refresh, RefreshAction} from '@/api'
 import {ApiError, api, problem as failure} from '@/api'
 import ReasonField from '@/components/ReasonField.vue'
 import {alertsChanged, museumName} from '@/session'
-import {stateOf, when} from '@/words'
+import {overrideBy, overrideReason, stateOf, when} from '@/words'
 
 const titles: Record<RefreshAction, string> = {
   retry_update: 'Retry the servability update',
@@ -152,13 +194,52 @@ const museum = computed(() => String(route.params.museum))
 // Every action needs a reason (D62): its button stays enabled, and ReasonField says what's missing.
 const reasonField = ref<InstanceType<typeof ReasonField> | null>(null)
 
-async function load() {
+// While the worker checks or updates, the page checks again by itself (issue #108), so an override's re-check and
+// update show without a reload. These checks don't count as activity: an open tab still signs out when idle.
+const WORKING = ['checking', 'updating']
+const AGAIN_MS = 5000
+let again: ReturnType<typeof setTimeout> | undefined
+
+// The override's reason is in the banner, so Reasons leaves out the line Serena adds for it.
+const reasons = computed(() => {
+  const given = refresh.value?.override?.reason
+  return (refresh.value?.reasons || []).filter(line => !given || line !== overrideReason(given))
+})
+// The failed check an override answered, still shown while Serena checks the servable list again. A re-check that
+// fails on something else replaces it, and isn't marked.
+const overriddenFailure = computed(() => !!refresh.value?.override && refresh.value.state === 'checking' &&
+  refresh.value.check?.result === 'failed')
+const afterOverride = computed(() => {
+  const state = refresh.value?.state || ''
+  if (WORKING.includes(state)) {
+    return 'Serena is checking the same servable list again without the delta threshold (every other check still ' +
+      'applies) and, if it passes, updates. This page checks again every few seconds until it\'s done.'
+  }
+  return 'Serena checked the same servable list again without the delta threshold (every other check still applied)' +
+    `${state === 'updated' ? ' and updated from it' : ''}. The team was emailed.`
+})
+
+function isThreshold(problem: string): boolean {
+  return problem.includes('threshold is')
+}
+
+function checkAgain() {
+  clearTimeout(again)
+  if (refresh.value && WORKING.includes(refresh.value.state)) {
+    again = setTimeout(() => load(true), AGAIN_MS)
+  }
+}
+
+async function load(background = false) {
   try {
-    refresh.value = await api.refresh(museum.value, String(route.params.refreshId))
+    refresh.value = await api.refresh(museum.value, String(route.params.refreshId), background)
   } catch (e) {
     error.value = failure(e)
   }
+  checkAgain()
 }
+
+onBeforeUnmount(() => clearTimeout(again))
 
 function open(which: RefreshAction) {
   action.value = which
@@ -182,6 +263,7 @@ async function act() {
       alertsChanged.value++ // the override's alert
     }
     dialog.value = false
+    checkAgain()
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'That didn\'t work.'
     dialog.value = false
@@ -190,5 +272,11 @@ async function act() {
   }
 }
 
-watch(() => [route.params.museum, route.params.refreshId], load, {immediate: true})
+watch(() => [route.params.museum, route.params.refreshId], () => load(), {immediate: true})
 </script>
+
+<style scoped>
+.overridden-problem td {
+  color: rgb(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+</style>

@@ -172,6 +172,11 @@ def test_override_the_delta_threshold(admin: TestClient, etl: TestClient, worker
     response = admin.post(url, headers=CHANGES, json={"reason": "PAHMA republished half its images"})
     assert response.status_code == 200, response.text
     assert response.json()["state"] == "checking" and response.json()["actions"] == []
+    # Who overrode it and why, with when, so the app can say so on every page (issue #108).
+    override = response.json()["override"]
+    assert (override["by"], override["reason"]) == ("admin", "PAHMA republished half its images") and override["at"]
+    listed = admin.get("/admin/v1/museums/pahma/refreshes").json()["refreshes"]
+    assert next(x for x in listed if x["refresh_id"] == failed["refresh_id"])["override"] == override
     assert admin.post(url, headers=CHANGES, json={"reason": "twice"}).status_code == 409
     status = admin.get("/admin/v1/museums/pahma/status").json()
     assert "override" not in status and status["unacknowledged"] == 1  # the override's alert (D62)
@@ -186,6 +191,7 @@ def test_override_the_delta_threshold(admin: TestClient, etl: TestClient, worker
     assert after["state"] == "updated" and after["update"]["written"] == len(BLOBS) // 2
     assert any("overridden by an admin" in w for w in after["check"]["warnings"])
     assert "delta threshold overridden by an admin: PAHMA republished half its images" in after["reasons"]
+    assert after["override"] == override  # kept once the refresh is updated
     done = [r for r in caplog.records if r.getMessage() == "servable list check done"]
     assert done[-1].threshold_overridden is True  # type: ignore[attr-defined]
     assert worker.tick() == 0  # nothing left armed
