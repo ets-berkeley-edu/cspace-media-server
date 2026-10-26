@@ -1289,10 +1289,22 @@ web role's policy with a `RequestCountsRead` statement, and the task definitions
 - [ ] **6. Fresh requests.** Browse a few Thumbnails (some new, some seen before), wait a minute, reload. Expect
   today's row and the totals to have grown by those requests, new ones as "From CollectionSpace".
 
+## 35. A refresh's state as a pill, on the local stack (5 minutes; before merging the pull request that adds it)
+
+What it checks: issue #107. With `./serena up`, run `./serena etl pahma`, then `./serena etl pahma --rows 3` (fewer rows
+than the delta threshold allows, so its check fails; `--failed` doesn't call Serena at all), and sign in to PAHMA:
+
+- [ ] **1. Past refreshes.** Expect the failed refresh's State as a red pill, "Servable list check failed", with a
+  failure icon before it; the other refresh's as a green "Updated" pill, with no icon.
+- [ ] **2. The refresh's page.** Open the failed refresh: expect the same red pill, with its icon, at the start of the
+  state line.
+- [ ] **3. Overview.** Expect "Newest refresh:" followed by the newest refresh's ID and its pill.
+- [ ] **4. A screen reader.** With VoiceOver on the failed row, expect only "Servable list check failed" read out for
+  the State cell, not the icon.
 ## 36. An overridden delta threshold, on the local stack (10 minutes; before merging the pull request that adds it)
 
-What it checks: issue #108. With `./serena up`, run `./serena etl pahma`, then `./serena etl pahma --failed`, and
-sign in to PAHMA:
+What it checks: issue #108. With `./serena up`, run `./serena etl pahma`, then `./serena etl pahma --rows 3` (its check
+fails on the delta threshold alone), and sign in to PAHMA:
 
 - [ ] **1. Override.** Open the failed refresh and click "Override the delta threshold". Give a reason and confirm.
   Expect a banner under the state line, in orange with a shield: "Delta threshold overridden by <you> at <time> UTC.",

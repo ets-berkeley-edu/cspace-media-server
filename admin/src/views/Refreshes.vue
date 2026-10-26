@@ -34,7 +34,7 @@
       <template #[`item.refresh_date`]="{item}">
         {{ item.refresh_date }}<span v-if="item.admin_refresh_date"> (admin refresh, list for {{ item.admin_refresh_date }})</span>
       </template>
-      <template #[`item.state`]="{item}">{{ stateOf(item.state) }}<OverrideMark :override="item.override" /></template>
+      <template #[`item.state`]="{item}"><RefreshState :state="item.state" /><OverrideMark :override="item.override" /></template>
       <template #[`item.updated_at`]="{item}"><WhenText :at="item.updated_at" /></template>
     </v-data-table>
   </v-container>
@@ -49,6 +49,7 @@ import {api, problem} from '@/api'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import LoadError from '@/components/LoadError.vue'
 import OverrideMark from '@/components/OverrideMark.vue'
+import RefreshState from '@/components/RefreshState.vue'
 import WhenText from '@/components/WhenText.vue'
 import {PAGE_SIZES, stateOf} from '@/words'
 import {useTableState} from '@/tableState'

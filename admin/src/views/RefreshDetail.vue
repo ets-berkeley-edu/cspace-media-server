@@ -2,7 +2,7 @@
   <v-container fluid>
     <h1 id="page-title" class="text-h5 mb-1">{{ museumName(museum) }} refresh {{ refresh?.refresh_id }}</h1>
     <p v-if="refresh" class="mb-4">
-      <span id="refresh-state" class="font-weight-bold">{{ stateOf(refresh.state) }}</span>
+      <RefreshState id="refresh-state" :state="refresh.state" />
       · refresh date {{ refresh.refresh_date }}<span v-if="refresh.admin_refresh_date"> · an admin refresh, with the servable list
         for {{ refresh.admin_refresh_date }}</span> · last change {{ when(refresh.updated_at) }}
       <span v-if="!refresh.newest"> · a later refresh has started</span>
@@ -168,8 +168,9 @@ import {mdiShieldAlert} from '@mdi/js'
 import type {Refresh, RefreshAction} from '@/api'
 import {ApiError, api, problem as failure} from '@/api'
 import ReasonField from '@/components/ReasonField.vue'
+import RefreshState from '@/components/RefreshState.vue'
 import {alertsChanged, museumName} from '@/session'
-import {overrideBy, overrideReason, stateOf, when} from '@/words'
+import {overrideBy, overrideReason, when} from '@/words'
 
 const titles: Record<RefreshAction, string> = {
   retry_update: 'Retry the servability update',

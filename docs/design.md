@@ -1205,6 +1205,10 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **Column help** (D164). A column's name with a dotted underline has a description, shown on hover or keyboard
     focus (a Vuetify tooltip): every column of the Past refreshes, Alerts, Past requests, Recalls and Audit log
     tables.
+  - **A refresh's state is a pill** (issue #107, as the mockup's version 43), the same on Past refreshes, the
+    refresh's page and Overview: Updated in green; a failed state (Servable list check failed, Servability update
+    failed) in red, with a failure icon so the cue isn't colour alone; a refresh still running in blue; Abandoned in
+    grey. The label is what a screen reader reads; the icon is hidden from it.
   - **Links** (D157, D158). A refresh ID opens that refresh's page wherever it appears: in an alert's text and its
     About, in the Audit log, under "kept by" on Recalls and in "Ended by refresh" there. An Audit log target that's a
     Media CSID opens Media look up; a setting, the Settings page; an acknowledged alert, the Alerts page, but only for

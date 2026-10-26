@@ -229,3 +229,30 @@ describe('a page that can\'t load', () => {
     wrapper.unmount()
   })
 })
+
+describe('a refresh\'s state', () => {
+  it('shows a failed refresh in red with a failure icon, and an updated one in green without', async () => {
+    const row = (n: number, state: string) => ({...REFRESH, refresh_id: `pahma-2026-10-1${n}-1`, refresh_date: `2026-10-1${n}`,
+      state, updated_at: `2026-10-1${n}T11:00:00+00:00`, admin_refresh_date: null})
+    fakeApi({'GET /museums/pahma/refreshes': {body: {days: 30, refreshes: [row(2, 'check_failed'), row(1, 'updated')]}}})
+    const {wrapper} = await at('/pahma/refreshes', Refreshes)
+    const [failed, updated] = wrapper.findAll('#refreshes-table tbody .refresh-state')
+    expect(failed.text()).toBe('Servable list check failed') // the label alone is read out
+    expect(failed.classes()).toContain('text-error')
+    expect(failed.find('.refresh-state-icon').attributes('aria-hidden')).toBe('true')
+    expect(updated.text()).toBe('Updated')
+    expect(updated.classes()).toContain('text-success')
+    expect(updated.classes()).not.toContain('text-error')
+    expect(updated.find('.refresh-state-icon').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('says the same on the refresh\'s page', async () => {
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: REFRESH}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#refresh-state').text()).toBe('Servability update failed')
+    expect(wrapper.find('#refresh-state').classes()).toContain('text-error')
+    expect(wrapper.find('#refresh-state .refresh-state-icon').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})
