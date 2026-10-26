@@ -297,6 +297,7 @@
         "cloudwatch:DisableAlarmActions",
         "cloudwatch:EnableAlarmActions",
         "cloudwatch:PutMetricAlarm",
+        "cloudwatch:SetAlarmState",
         "cloudwatch:TagResource",
         "cloudwatch:UntagResource"
       ],
@@ -335,6 +336,7 @@
         "dynamodb:DescribeContinuousBackups",
         "dynamodb:DescribeTable",
         "dynamodb:DescribeTimeToLive",
+        "dynamodb:GetItem",
         "dynamodb:ListTagsOfResource",
         "dynamodb:Query",
         "dynamodb:TagResource",

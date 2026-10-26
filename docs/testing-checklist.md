@@ -1108,7 +1108,7 @@ run's recall), and step 5 at `348b090`.
 
 ## 31. Stage 1 in the UC Berkeley account, with the simulator (about half a day, spread over a week; before stage 1 is destroyed)
 
-What it checks: that Serena deploys and runs in the UC Berkeley test account under the permission set Ops gave for
+What it checks: that Serena deploys and runs in the UC Berkeley test account under the deployer role Ops created for
 Jira CS-9523 (`deploy/iam/serena-deployer-policy-mvp.json`; see `deploy/iam/README.md`), that only campus networks and the
 campus VPN reach it, and how big its tasks need to be (design.md, Compute). Stage 1 passes when every step below is
 ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are in
@@ -1116,14 +1116,18 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
 
 **Before you start** (once):
 
-1. From Ops (CS-9523): the account number, an IAM Identity Center sign-in to its Serena permission set, the campus
-   network and campus VPN address ranges, any tags the account requires (D251), and whether the VPC's range,
-   `10.41.0.0/16`, is acceptable there.
-   Also from Ops: the service-linked roles, if the permission set can't create them (`AWSServiceRoleForECS`,
+1. From Ops (CS-9523): the account number and the deployer role (`SerenaStage1Deployer`, with
+   `deploy/iam/serena-deployer-policy-mvp.json`), assumed from your existing cspace SSO profile; the campus network
+   and campus VPN address ranges; any tags the account requires (D251); and whether Serena should create its own VPC
+   (`10.41.0.0/16`, public subnets, no NAT gateway) or use the account's shared dev/QA VPC.
+   Also from Ops: the service-linked roles, if the role can't create them (`AWSServiceRoleForECS`,
    `AWSServiceRoleForElasticLoadBalancing`, CloudFront's for VPC origins), and, if the account is new, whether AWS has
    verified it for CloudFront (if a deploy is refused for that, Ops opens the AWS Support case and step 1 waits).
-2. Set up the AWS CLI profile (it asks questions; name the profile `serena-ucb-test`):
-   `aws configure sso --profile serena-ucb-test`, then `aws sso login --profile serena-ucb-test`.
+2. Add the profile Ops gave in CS-9523 to `~/.aws/config`, named `serena-stage1-deploy`, with `source_profile` set
+   to your existing cspace SSO profile. Sign in with `aws sso login --profile <your cspace profile>`, then check with
+   `aws sts get-caller-identity --profile serena-stage1-deploy` (expect the `SerenaStage1Deployer` role). The role's
+   sessions last an hour; the AWS CLI and Terraform should renew them from the SSO sign-in during a long run (if
+   one stops with an expired-token error, sign in again and rerun it).
 3. In the clone on the Mac, on `main` (`git switch main && git pull`), create
    `deploy/environments/ucb-stage1.local.conf` (not committed) with three lines:
    `ACCOUNT_ID="<account number>"`, `ALERT_EMAIL="<your address>"` and
@@ -1131,9 +1135,9 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
 
 **The steps:**
 
-- [ ] **1. Deploy under Ops's permission set.** Run `./serena aws deploy --env ucb-stage1`. Confirm the account,
+- [ ] **1. Deploy under Ops's deployer role.** Run `./serena aws deploy --env ucb-stage1`. Confirm the account,
   check the plan, type `yes`. Expect it to finish in about 15–25 minutes and print the address; `<URL>/health`
-  answers `ok`. If any step fails with `AccessDenied`, note the action and resource here: the permission set needs
+  answers `ok`. If any step fails with `AccessDenied`, note the action and resource here: the role needs
   it, and so does the stage 2 policy (`deploy/iam/serena-deployer-policy.json`): change both files in one pull request.
 - [ ] **2. Confirm the alert email.** Run `./serena aws confirm-alerts --env ucb-stage1` and paste the link from
   AWS's "Subscription Confirmation" email (don't click it).
@@ -1151,7 +1155,7 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
 - [ ] **6. Someone else.** Ask a colleague on campus or the VPN to open a sample address and the admin app's sign-in
   page. Expect both to work for them, with nothing set up on their side.
 - [ ] **7. An alert and an alarm by email.** As section 25, steps 12 and 13, with the alarm
-  `serena-stage1-cspace-refused` and `--profile serena-ucb-test`. Expect both emails at `ALERT_EMAIL`, and the
+  `serena-stage1-cspace-refused` and `--profile serena-stage1-deploy`. Expect both emails at `ALERT_EMAIL`, and the
   alarm's "OK" email about 15 minutes later.
 - [ ] **8. Two web tasks.** Run `./serena aws logs web --env ucb-stage1` while opening a few sample addresses. Expect
   requests answered by both tasks (two different task IDs in the log stream names), and no errors.
@@ -1172,7 +1176,7 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
   4. Note the highest CPU and memory of each service at each run. The task sizes in design.md (Compute) and
      Terraform are then set from them, in their own pull request.
 - [ ] **10. Cost.** After about a week, in the AWS console, Billing and Cost Management → Cost Explorer, filtered by
-  the tag `project = serena` (or ask Ops if the permission set can't see it): note the daily cost here. It helps
+  the tag `project = serena` (or ask Ops if the role can't see it): note the daily cost here. It helps
   size stage 2 (WAF on, two web tasks, all day).
 - [ ] **11. Take stage 1 down**, when every step above is ticked and its notes are committed:
   1. Run `./serena aws destroy --env ucb-stage1`. When it asks, type `ucb-stage1`.

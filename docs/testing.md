@@ -291,8 +291,8 @@ hundred thousand rows) or its nightly timing, the split front door, Apache, or p
 
 ## 6. Stage 1 in the UC Berkeley test account (Jira CS-9523)
 
-**What:** Serena with the simulator in the Berkeley test account, deployed by Richard with Ops under the permission
-set Ops gave (`deploy/environments/ucb-stage1.conf`, profile `serena-ucb-test`, every command with
+**What:** Serena with the simulator in the Berkeley test account, deployed by Richard with Ops under the deployer
+role Ops created (`deploy/environments/ucb-stage1.conf`, profile `serena-stage1-deploy`, every command with
 `--env ucb-stage1`). CloudFront in front of everything, no pipeline (D269).
 
 **Steps:** checklist section 31, which has the setup and every command: steps 1 to 8 with Ops (deploy, status,
