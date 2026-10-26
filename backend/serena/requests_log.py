@@ -31,7 +31,7 @@ log = logging.getLogger("serena.requests_log")
 RANGES = {"1h": timedelta(hours=1), "24h": timedelta(hours=24), "7d": timedelta(days=7)}  # D106
 DEFAULT_RANGE = "24h"
 MAX_LINES = 10_000  # the most a Logs Insights query returns (D107)
-TOP_PATHS = 20
+TOP_PATHS = 10  # Most requested (issue #95)
 CACHE_SECONDS = 60.0  # D108: reloads within a minute don't start new queries
 WAIT_SECONDS = 30.0  # D108: past this, the queries are stopped and the admin is asked for a shorter range
 LOGGERS = {"served": "serena.imageserver", "unserved": "serena.unserved"}
@@ -138,7 +138,9 @@ class CloudWatchReader:
             for kind in QueryKind:
                 ids[kind] = self.client.start_query(
                     logGroupName=self.log_group, startTime=int(start.timestamp()), endTime=int(end.timestamp()),
-                    queryString=query_text(kind, museum), limit=MAX_LINES)["queryId"]
+                    queryString=query_text(kind, museum),
+                    # the API's limit, not the query's, decides how many rows come back (issue #95)
+                    limit=TOP_PATHS if kind is QueryKind.TOP_PATHS else MAX_LINES)["queryId"]
             return self._wait(ids)
         except LogUnavailable:
             raise
@@ -268,7 +270,8 @@ def build(museum: str, range_: str, start: datetime, end: datetime, rows: dict[Q
         museum=museum, range=range_, start=start, end=end,
         days=[Day(day, served, dict(sorted(unserved.items()))) for day, (served, unserved) in sorted(days.items(),
                                                                                                    reverse=True)],
-        top_paths=[(row.get("path", ""), int(row.get("requests", "0"))) for row in rows[QueryKind.TOP_PATHS]],
+        top_paths=[(row.get("path", ""), int(row.get("requests", "0")))
+                   for row in rows[QueryKind.TOP_PATHS][:TOP_PATHS]],
         lines=lines,
         by_size={row.get("size", ""): int(row.get("requests", "0")) for row in rows.get(QueryKind.SERVED_BY_SIZE, [])})
 
