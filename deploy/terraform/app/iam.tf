@@ -90,6 +90,13 @@ data "aws_iam_policy_document" "web" {
     local.table_arns[t]])
   }
 
+  # The Past requests page's counts from the cache or CollectionSpace (issue #96); the worker writes them.
+  statement {
+    sid       = "RequestCountsRead"
+    actions   = local.table_read
+    resources = local.table_arns["request-counts"]
+  }
+
   statement {
     sid       = "AuditReadAndAdd"
     actions   = concat(local.table_read, ["dynamodb:PutItem"])

@@ -34,6 +34,11 @@
             <div v-if="report.served_by_size.length" id="requests-by-size" class="text-medium-emphasis">
               by size: {{ bySize }}
             </div>
+            <!-- From Serena's cache or fetched from CollectionSpace (issue #96). -->
+            <div v-if="servedTotal" id="requests-by-cache" class="text-medium-emphasis">
+              <span class="key hit" />from the cache {{ report.served_by_cache.hit.toLocaleString('en-US') }} ·
+              <span class="key miss" />from CollectionSpace {{ report.served_by_cache.miss.toLocaleString('en-US') }}
+            </div>
           </v-card-text>
         </v-card>
         <v-card id="requests-unserved" variant="outlined" class="summary-card">
@@ -81,6 +86,10 @@
           </v-card-text>
         </v-card>
       </div>
+    </template>
+    <!-- Kept mounted across ranges: it reads the daily counts, not the range (issue #96). -->
+    <CacheCounts v-show="report && !loading" :museum="museum" />
+    <template v-if="report && !loading">
       <v-alert
         v-if="report.truncated"
         id="requests-truncated"
@@ -159,6 +168,7 @@ import type {RequestLine, RequestRange, RequestsReport} from '@/api'
 import {api, problem} from '@/api'
 import FileDialog from '@/components/FileDialog.vue'
 import type {ShownFile} from '@/components/FileDialog.vue'
+import CacheCounts from '@/components/CacheCounts.vue'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import LoadError from '@/components/LoadError.vue'
 import RequestPath from '@/components/RequestPath.vue'

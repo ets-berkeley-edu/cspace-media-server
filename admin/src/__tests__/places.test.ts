@@ -113,7 +113,7 @@ describe('a list page in the address', () => {
     await router.push('/pahma/requests?range=7d&outcome=unserved&reason=recalled')
     const wrapper = mount(Requests, {global: {plugins: [router]}, attachTo: document.body})
     await flushPromises()
-    expect(calls.map(c => c.path)).toEqual(['/museums/pahma/requests?range=7d'])
+    expect(calls.map(c => c.path).filter(p => !p.includes('/requests/counts'))).toEqual(['/museums/pahma/requests?range=7d'])
     expect(router.currentRoute.value.query).toEqual({range: '7d', outcome: 'unserved', reason: 'recalled'}) // kept
     expect(wrapper.findAll('#requests-table th').map(th => th.text())).not.toContain('Signed link') // not Cinefiles
     expect(wrapper.find('#requests-table .file-link').exists()).toBe(false) // '/p' has no CSID: plain text

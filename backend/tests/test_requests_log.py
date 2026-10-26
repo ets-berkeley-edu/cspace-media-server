@@ -75,7 +75,7 @@ def test_a_museum_that_isnt_a_key_never_reaches_a_query(museum: str) -> None:
 
 # --- the local stand-in, and the report
 
-def test_the_file_reader_answers_the_five_queries(tmp_path: Path) -> None:
+def test_the_file_reader_answers_the_six_queries(tmp_path: Path) -> None:
     log_file = tmp_path / "serena.log"
     write(Path(f"{log_file}.1"), [served(NOW - timedelta(days=1, hours=2), 1)])  # the rotated copy is read too
     write(log_file, [
@@ -102,6 +102,7 @@ def test_the_file_reader_answers_the_five_queries(tmp_path: Path) -> None:
     assert report.top_paths == [("/pahma/imageserver/blobs/b1/content", 2), ("/pahma/imageserver/blobs/b9/content", 2),
                                 ("/pahma/imageserver/blobs/b2/derivatives/Medium/content", 1)]
     assert report.by_size == {"original": 2, "Medium": 1}  # served requests only
+    assert report.by_cache == {"hit": 2, "miss": 1}
     assert not report.truncated
     last_hour = Requests(FileReader(log_file), clock=lambda: NOW).report("pahma", "1h")
     assert len(last_hour.lines) == 2  # from exactly an hour ago
@@ -168,6 +169,8 @@ class FakeLogs:
             rows = [cells(day="2026-10-12 00:00:00.000", reason="recalled", requests="4")]
         elif "by datefloor" in text:
             rows = [cells(day="2026-10-12 00:00:00.000", requests="7")]
+        elif text.endswith("by cache"):
+            rows = [cells(cache="hit", requests="6"), cells(cache="miss", requests="1")]
         elif text.endswith("by size"):
             rows = [cells(size="Medium", requests="5"), cells(size="original", requests="2")]
         else:
@@ -187,18 +190,19 @@ def reader(client: FakeLogs, wait: float = 30) -> CloudWatchReader:
                             monotonic=lambda: float(next(ticks)))
 
 
-def test_cloudwatch_runs_the_five_queries_on_the_app_log_group() -> None:
+def test_cloudwatch_runs_the_six_queries_on_the_app_log_group() -> None:
     client = FakeLogs(polls=2)
     report = Requests(reader(client), clock=lambda: NOW).report("pahma", "24h")
     assert {q["logGroupName"] for q in client.started} == {"/serena/app"}
     assert {(q["startTime"], q["endTime"]) for q in client.started} == {
         (int((NOW - timedelta(hours=24)).timestamp()), int(NOW.timestamp()))}
-    assert len(client.started) == 5
+    assert len(client.started) == 6
     assert [(ln.outcome, ln.path, ln.signed) for ln in report.lines] == [
         ("served", "/pahma/imageserver/blobs/b1/content", True)]
     assert [(d.day, d.served, d.unserved) for d in report.days] == [("2026-10-12", 7, {"recalled": 4})]
     assert report.top_paths == [("/pahma/imageserver/blobs/b1/content", 7)]
     assert report.by_size == {"Medium": 5, "original": 2}
+    assert report.by_cache == {"hit": 6, "miss": 1}
 
 
 def test_most_requested_keeps_only_the_top_paths() -> None:
@@ -215,7 +219,7 @@ def test_a_slow_query_is_stopped() -> None:
     client = FakeLogs(polls=1000)
     with pytest.raises(TooSlow):
         reader(client, wait=5).run("pahma", NOW - timedelta(hours=1), NOW)
-    assert sorted(client.stopped) == ["q1", "q2", "q3", "q4", "q5"]
+    assert sorted(client.stopped) == [f"q{n}" for n in range(1, 7)]
 
 
 @pytest.mark.parametrize("client", [FakeLogs(status="Failed"), FakeLogs(fail_start=True)])
@@ -262,6 +266,7 @@ def test_the_report(client: TestClient, log_file: Path) -> None:
     assert body["served_by_size"] == [{"size": "Thumbnail", "requests": 1}, {"size": "FullHD", "requests": 1},
                                       {"size": "original", "requests": 1}]
     assert body["top_paths"][0] == {"path": "/pahma/imageserver/blobs/b1/content", "requests": 1}
+    assert body["served_by_cache"] == {"hit": 3, "miss": 0}  # issue #96
     assert client.get(URL, params={"range": "7d"}).status_code == 200
     assert client.get(URL, params={"range": "30d"}).status_code == 422
     sign_in(client, "cinefiles")

@@ -3,9 +3,10 @@ Past requests page; decided October 12, 2026, D100 to D113).
 
 The app logs one line per request: "served" (with the path, kind, cache hit or miss and whether a signed link was
 used) or "unserved" (with the reason and the path). Paths never carry the PDF link suffix or a query string, and no
-line holds an IP address, a signed link's uid or sig, or an email address. A report runs five fixed queries for one
+line holds an IP address, a signed link's uid or sig, or an email address. A report runs six fixed queries for one
 museum over one range: the lines, newest first (at most MAX_LINES), served requests by day, unserved requests by day
-and reason, the most-requested paths, and served requests by size (Richard, October 14, 2026). A tally, for the
+and reason, the most-requested paths, served requests by size (Richard, October 14, 2026), and served requests by
+cache, hit or miss (issue #96). A tally, for the
 worker's daily request counts (issue #96), runs two more: served requests by day and cache (hit or miss), and unserved
 requests by day and reason.
 
@@ -46,6 +47,7 @@ class QueryKind(StrEnum):
     UNSERVED_BY_DAY = "unserved_by_day"
     TOP_PATHS = "top_paths"
     SERVED_BY_SIZE = "served_by_size"
+    SERVED_BY_CACHE = "served_by_cache"
 
 
 class LogUnavailable(Exception):
@@ -96,6 +98,7 @@ class Report:
     top_paths: list[tuple[str, int]]
     lines: list[Line]
     by_size: dict[str, int] = field(default_factory=dict)  # served requests; "" for a line logged without its size
+    by_cache: dict[str, int] = field(default_factory=dict)  # served requests: hit or miss (issue #96)
 
     @property
     def truncated(self) -> bool:
@@ -138,6 +141,8 @@ def query_text(kind: QueryKind, museum: str) -> str:
                 "| stats count(*) as requests by datefloor(@timestamp, 1d) as day, reason")
     if kind is QueryKind.SERVED_BY_SIZE:
         return f'{base} | filter message = "served" | stats count(*) as requests by size'
+    if kind is QueryKind.SERVED_BY_CACHE:
+        return f'{base} | filter message = "served" | stats count(*) as requests by cache'
     return f"{base} | stats count(*) as requests by path | sort requests desc | limit {TOP_PATHS}"
 
 
@@ -166,7 +171,7 @@ def tallies(served: Iterable[Row], unserved: Iterable[Row]) -> dict[str, Tally]:
 
 
 class CloudWatchReader:
-    """Runs the five queries with CloudWatch Logs Insights, at the same time, and waits for them (D108)."""
+    """Runs the six queries with CloudWatch Logs Insights, at the same time, and waits for them (D108)."""
 
     def __init__(self, client: Any, log_group: str, wait_seconds: float = WAIT_SECONDS, poll_seconds: float = 1.0,
                  sleep: Callable[[float], None] = time.sleep, monotonic: Callable[[], float] = time.monotonic):
@@ -184,11 +189,12 @@ class CloudWatchReader:
             for kind in QueryKind})
 
     def tally(self, museum: str, start: datetime, end: datetime) -> dict[str, Tally]:
-        """Requests by UTC day from start (inclusive) to end (exclusive; a day starting at end is left out)."""
+        """Requests by UTC day from start (inclusive) to end (exclusive): a day starting at end is left out, and the
+        day end falls in is kept when end is later than its midnight (today, so far)."""
         texts = {name: (text, MAX_LINES) for name, text in tally_texts(museum).items()}
         rows = self._queries(museum, start, end, texts)
         return {day: tally for day, tally in tallies(rows["served"], rows["unserved"]).items()
-                if start.date().isoformat() <= day < end.date().isoformat()}
+                if start.date().isoformat() <= day <= (end - timedelta(microseconds=1)).date().isoformat()}
 
     def _queries(self, museum: str, start: datetime, end: datetime,
                  texts: dict[K, tuple[str, int]]) -> dict[K, list[Row]]:
@@ -236,7 +242,7 @@ class CloudWatchReader:
 
 
 class FileReader:
-    """Local development and tests (D109): the same five queries, in Python, over the JSON lines the app writes to
+    """Local development and tests (D109): the same six queries, in Python, over the JSON lines the app writes to
     a file (and its one rotated copy, <file>.1)."""
 
     def __init__(self, path: str | Path):
@@ -294,11 +300,13 @@ class FileReader:
         unserved: Counter[tuple[str, str]] = Counter()
         paths: Counter[str] = Counter()
         sizes: Counter[str] = Counter()
+        caches: Counter[str] = Counter()
         for at, entry in chosen:
             day = f"{at.astimezone(UTC).date().isoformat()} 00:00:00.000"
             if entry["message"] == "served":
                 served[day] += 1
                 sizes[_text(entry.get("size"))] += 1
+                caches[_text(entry.get("cache"))] += 1
             else:
                 unserved[(day, _text(entry.get("reason")))] += 1
             paths[_text(entry.get("path"))] += 1
@@ -310,6 +318,7 @@ class FileReader:
             QueryKind.TOP_PATHS: [{"path": path, "requests": str(n)}
                                   for path, n in sorted(paths.items(), key=lambda p: (-p[1], p[0]))[:TOP_PATHS]],
             QueryKind.SERVED_BY_SIZE: [{"size": size, "requests": str(n)} for size, n in sizes.items()],
+            QueryKind.SERVED_BY_CACHE: [{"cache": cache, "requests": str(n)} for cache, n in caches.items()],
         }
 
 
@@ -348,7 +357,9 @@ def build(museum: str, range_: str, start: datetime, end: datetime, rows: dict[Q
         top_paths=[(row.get("path", ""), int(row.get("requests", "0")))
                    for row in rows[QueryKind.TOP_PATHS][:TOP_PATHS]],
         lines=lines,
-        by_size={row.get("size", ""): int(row.get("requests", "0")) for row in rows.get(QueryKind.SERVED_BY_SIZE, [])})
+        by_size={row.get("size", ""): int(row.get("requests", "0")) for row in rows.get(QueryKind.SERVED_BY_SIZE, [])},
+        by_cache={row.get("cache", ""): int(row.get("requests", "0"))
+                  for row in rows.get(QueryKind.SERVED_BY_CACHE, [])})
 
 
 @dataclass

@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from .admin_api import SignedIn, csv_cell
+from .request_counts import RequestCounts
 from .requests_log import MAX_LINES, LogUnavailable, Report, Requests, TooSlow, lines_matching
 
 log = logging.getLogger("serena.admin_requests")
@@ -20,6 +21,7 @@ log = logging.getLogger("serena.admin_requests")
 Range = Annotated[Literal["1h", "24h", "7d"], Query(alias="range")]
 Outcome = Annotated[Literal["served", "unserved"] | None, Query()]
 ReasonFilter = Annotated[str | None, Query(pattern=r"^[a-z_]+$", max_length=64)]
+Period = Annotated[Literal["day", "week", "month", "year"], Query(alias="by")]
 
 
 def _report(request: Request, tenant: str, range_: str) -> Report:
@@ -61,8 +63,30 @@ def create_router() -> APIRouter:
             "sizes": sizes,
             # The Served card's "by size" (Richard, October 14, 2026): every served request in the range.
             "served_by_size": [{"size": size, "requests": n} for size, n in by_size],
+            # The Served card's split (issue #96): served from Serena's cache (hit) or fetched from CollectionSpace
+            # (miss).
+            "served_by_cache": {"hit": report.by_cache.get("hit", 0), "miss": report.by_cache.get("miss", 0)},
             "lines": [{"at": line.at, "outcome": line.outcome, "reason": line.reason, "path": line.path,
                        "kind": line.kind, "cache": line.cache, "signed": line.signed} for line in report.lines],
+        }
+
+    @router.get("/requests/counts")
+    def request_counts(request: Request, session: SignedIn, period: Period = "day") -> dict[str, Any]:
+        """From the cache or CollectionSpace (issue #96): served requests that were cache hits and misses, and
+        unserved requests, by day, ISO week, month or year (UTC), newest first, from the worker's daily counts, with
+        today's (and yesterday's, until counted) read from the log. Not the page's range: the counts go back to the
+        first day counted. When the log can't be read, the stored counts come back with `live_unavailable`."""
+        counts: RequestCounts = request.app.state.request_counts
+        summary = counts.summary(session.tenant, period)
+        return {
+            "by": summary.period,
+            "today": summary.today,
+            "since": summary.since,
+            "totals": {"hits": summary.hits, "misses": summary.misses, "unserved": summary.unserved},
+            "rows": [{"period": row.period, "first_day": row.first_day, "last_day": row.last_day, "hits": row.hits,
+                      "misses": row.misses, "unserved": row.unserved, "live": row.live, "partial": row.partial}
+                     for row in summary.rows],
+            "live_unavailable": summary.live_unavailable,
         }
 
     @router.get("/requests/export.csv")

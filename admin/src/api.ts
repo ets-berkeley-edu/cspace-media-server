@@ -214,7 +214,31 @@ export interface RequestsReport {
   top_paths: {path: string, requests: number}[]
   sizes: string[] // the museum's sizes, smallest to largest: its derivatives, then "original" (October 14, 2026)
   served_by_size: {size: string, requests: number}[] // every served request in the range, in that order
+  served_by_cache: {hit: number, miss: number} // from Serena's cache, or fetched from CollectionSpace (issue #96)
   lines: RequestLine[]
+}
+
+export type CountsPeriod = 'day' | 'week' | 'month' | 'year'
+
+/** One period's counts from the cache or CollectionSpace (issue #96): hits, misses and unserved requests. */
+export interface PeriodCount {
+  period: string // "2026-10-25", "2026-W43", "2026-10" or "2026" (UTC; ISO weeks start on Monday)
+  first_day: string
+  last_day: string
+  hits: number
+  misses: number
+  unserved: number
+  live: boolean // holds today (so far), read from the log now
+  partial: boolean // the first period counted, which counting began partway through
+}
+
+export interface RequestCounts {
+  by: CountsPeriod
+  today: string
+  since: string | null // the first day counted
+  totals: {hits: number, misses: number, unserved: number} // every day counted, and today so far
+  rows: PeriodCount[] // newest first
+  live_unavailable: string | null // why today's counts couldn't be read from the log
 }
 
 /** A Media record a recall would recall, and how Serena found it (D116). */
@@ -341,6 +365,8 @@ export const api = {
     call<Lookup>('GET', `/museums/${museum}/lookup?${new URLSearchParams({q})}`),
   requests: (museum: string, range: RequestRange) =>
     call<RequestsReport>('GET', `/museums/${museum}/requests?range=${range}`),
+  requestCounts: (museum: string, by: CountsPeriod) =>
+    call<RequestCounts>('GET', `/museums/${museum}/requests/counts?by=${by}`),
   // The lines matching the page's range and filters, as CSV: a plain link, so the browser saves the file (D113).
   requestsExportUrl: (museum: string, range: RequestRange, outcome: string, reason: string) => {
     const query = new URLSearchParams({range})
