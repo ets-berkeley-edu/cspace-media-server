@@ -60,6 +60,13 @@ export interface Check {
 
 export type RefreshAction = 'retry_update' | 'override_threshold'
 
+/** An admin's override of the delta threshold for a refresh's servable list (D83): one made before issue #108 has only `at`. */
+export interface Override {
+  at: string
+  by?: string // the admin's CollectionSpace username
+  reason?: string
+}
+
 export interface RefreshSummary {
   refresh_id: string
   refresh_date: string
@@ -69,6 +76,7 @@ export interface RefreshSummary {
   rows: number | null
   reasons: string[]
   admin_refresh_date: string | null // an admin refresh: the refresh date its servable list is for
+  override: Override | null
 }
 
 export interface Refresh extends RefreshSummary {
@@ -77,7 +85,6 @@ export interface Refresh extends RefreshSummary {
   upload: {rows: number, bytes: number, sha256: string, uploaded_at: string} | null
   check: Check | null
   update: {deleted: number, written: number, unchanged: number, recalls_ended?: number, recalls_kept?: number} | null
-  override: {at: string} | null // an admin overrode the delta threshold for this servable list (D83)
   actions: RefreshAction[]
 }
 
@@ -386,7 +393,9 @@ export const api = {
   etlApiUrl: (museum: string) => `${PREFIX}/museums/${museum}/etl-api.json`,
   status: (museum: string) => call<Status>('GET', `/museums/${museum}/status`),
   refreshes: (museum: string) => call<{refreshes: RefreshSummary[]}>('GET', `/museums/${museum}/refreshes`),
-  refresh: (museum: string, refreshId: string) => call<Refresh>('GET', `/museums/${museum}/refreshes/${refreshId}`),
+  // background: the refresh's page checking again while Serena works (issue #108), which doesn't count as activity
+  refresh: (museum: string, refreshId: string, background = false) => call<Refresh>('GET',
+    `/museums/${museum}/refreshes/${refreshId}`, undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),
   retryUpdate: (museum: string, refreshId: string, reason: string) =>
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/retry-update`, {reason}),
   overrideThreshold: (museum: string, refreshId: string, reason: string) =>

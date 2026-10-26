@@ -805,7 +805,15 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   back to `checking`, and the worker checks the same servable list again, skipping only the delta threshold (every
   other check still applies); on a pass it does the servability update. The refresh's reasons and its check's warnings
   say so. Nothing is left armed, so there is nothing to expire or cancel, and an override only ever applies to a
-  servable list an admin has looked at. Each override raises an alert, so the team is emailed every time.
+  servable list an admin has looked at. Each override raises an alert, so the team is emailed every time. The refresh
+  keeps the override's time, admin and reason (`override`: `at`, `by`, `reason`; an override made before October 26,
+  2026 has only `at`), and the admin API returns it with every refresh, in lists too (issue #108, decided October 26,
+  2026, mockup version 44). The refresh's page shows it in a banner under the state line, in the warning colour with a
+  shield icon, and leaves the reason out of Reasons; while the worker checks again, the failed check's heading has an
+  "Overridden" chip and its delta threshold problem is struck through with "(overridden)"; once the check passes, a
+  "Delta threshold overridden" chip. While a refresh is `checking` or `updating`, its page loads it again every 5
+  seconds, as background requests (they don't count as activity). Past refreshes and Overview show a shield after the
+  state, with who and when in a tooltip and for screen readers.
 - **Start an admin refresh** (`POST /admin/v1/museums/{tenant}/refreshes`, the app's "Start a refresh" page). When a
   servable list didn't reach Serena, or needs replacing: the admin runs the servable list script on the ETL server,
   then sends the list (plain or gzip, under the same size limit as the ETL's uploads), gives the refresh date it is

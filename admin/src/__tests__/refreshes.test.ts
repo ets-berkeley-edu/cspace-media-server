@@ -80,6 +80,78 @@ describe('overriding the delta threshold', () => {
   })
 })
 
+// Issue #108: an override says who, when and why, marks the check it answered, and the page checks again while
+// Serena works.
+const THRESHOLD = '50% of the rows would change; the threshold is 5.0%'
+const FAILED_CHECK = {result: 'failed', rows: 40, added: 0, removed: 20, changed: 0, previous_rows: 40, threshold_percent: 5,
+  delta_percent: 50, error_count: 1, errors: [{line: 0, field: 'file', problem: THRESHOLD}], warnings: []}
+const OVERRIDE = {at: '2026-10-10T16:00:00+00:00', by: 'pahma-admin', reason: 'PAHMA republished many images'}
+const OVERRIDDEN = {...REFRESH, state: 'checking', actions: [], check: FAILED_CHECK, override: OVERRIDE,
+  reasons: ['1 problem in the servable list', 'delta threshold overridden by an admin: PAHMA republished many images']}
+
+describe('an overridden refresh', () => {
+  it('says who overrode it, when and why, and marks the check it answered', async () => {
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: OVERRIDDEN}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    const banner = wrapper.find('#override-banner')
+    expect(banner.text()).toContain('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC.')
+    expect(wrapper.find('#override-reason').text()).toBe('Reason: PAHMA republished many images')
+    expect(banner.text()).toContain('This page checks again every few seconds')
+    // The reason is in the banner, not one more line under Reasons.
+    expect(wrapper.find('#refresh-reasons').text()).toBe('1 problem in the servable list')
+    expect(wrapper.find('#check-overridden').text()).toBe('Overridden')
+    const row = wrapper.find('#check-problems tbody tr')
+    expect(row.classes()).toContain('overridden-problem')
+    expect(row.find('s').text()).toBe(THRESHOLD)
+    expect(row.text()).toContain('(overridden)')
+    wrapper.unmount()
+  })
+
+  it('checks again by itself, in the background, until the update is done', async () => {
+    vi.useFakeTimers()
+    try {
+      const answers = {'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: OVERRIDDEN as unknown}}
+      const calls = fakeApi(answers)
+      const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+      answers['GET /museums/pahma/refreshes/pahma-2026-10-10-1'] = {body: {...OVERRIDDEN, state: 'updated',
+        check: {...FAILED_CHECK, result: 'passed', error_count: 0, errors: [], warnings: ['the delta threshold was overridden']},
+        update: {deleted: 20, written: 0, unchanged: 20}}}
+      await vi.advanceTimersByTimeAsync(5000)
+      await flushPromises()
+      expect(wrapper.find('#refresh-state').text()).toBe('Updated')
+      expect(calls.at(-1)?.headers['X-Serena-Background']).toBe('1') // not activity: an idle tab still signs out
+      expect(wrapper.find('#check-overridden').text()).toBe('Delta threshold overridden')
+      expect(wrapper.find('#check-problems').exists()).toBe(false)
+      expect(wrapper.find('#override-banner').text()).toContain('and updated from it. The team was emailed.')
+      const made = calls.length
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(calls).toHaveLength(made) // done: no more checks
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('says "an admin" for an override made before it recorded who', async () => {
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...OVERRIDDEN, state: 'updated', override: {at: OVERRIDE.at}}}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#override-banner').text()).toContain('overridden by an admin at')
+    expect(wrapper.find('#override-reason').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('has a shield on Past refreshes, with its words for screen readers; a refresh without one has none', async () => {
+    const row = (n: number, override: unknown) => ({...REFRESH, refresh_id: `pahma-2026-10-1${n}-1`, refresh_date: `2026-10-1${n}`,
+      state: 'updated', updated_at: `2026-10-1${n}T11:00:00+00:00`, admin_refresh_date: null, override})
+    fakeApi({'GET /museums/pahma/refreshes': {body: {days: 30, refreshes: [row(2, OVERRIDE), row(1, null)]}}})
+    const {wrapper} = await at('/pahma/refreshes', Refreshes)
+    const [overridden, plain] = wrapper.findAll('#refreshes-table tbody tr')
+    expect(overridden.find('.override-mark').text()).toBe('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC')
+    expect(plain.find('.override-mark').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
 describe('the alert banner', () => {
   it('shows one line while alerts wait, newest first, with a way to the Alerts page', async () => {
     const alert = {key: '2026-10-10#missed_deadline#2026-10-10', refresh_date: '2026-10-10', kind: 'missed_deadline',

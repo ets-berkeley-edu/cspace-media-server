@@ -79,8 +79,12 @@ def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) ->
     assert page.refresh(UCJEPS, failed)["state"] == "check_failed", "overridden without a reason"
     page.type(page.REASON, OVERRIDE_REASON)
     page.click(page.CONFIRM)
-    page.wait_for_state(UCJEPS, failed, "Updated")
-    assert f"delta threshold overridden by an admin: {OVERRIDE_REASON}" in page.text_of(page.REASONS)
+    # Issue #108: the banner says who, when and why at once, and the page checks again by itself until it's updated.
+    banner = page.wait_for_text(page.OVERRIDE_BANNER, f"Reason: {OVERRIDE_REASON}").text
+    assert banner.startswith("Delta threshold overridden by "), banner
+    page.wait_for_text(page.STATE, "Updated", timeout=60)
+    assert page.text_of(page.CHECK_OVERRIDDEN) == "Delta threshold overridden"
+    assert OVERRIDE_REASON not in page.text_of(page.REASONS), "the reason is in the banner, not under Reasons"
 
 
 @pytest.mark.after("test_t18_overriding_the_delta_threshold")

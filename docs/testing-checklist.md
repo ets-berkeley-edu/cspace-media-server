@@ -1289,3 +1289,21 @@ web role's policy with a `RequestCountsRead` statement, and the task definitions
 - [ ] **6. Fresh requests.** Browse a few Thumbnails (some new, some seen before), wait a minute, reload. Expect
   today's row and the totals to have grown by those requests, new ones as "From CollectionSpace".
 
+## 36. An overridden delta threshold, on the local stack (10 minutes; before merging the pull request that adds it)
+
+What it checks: issue #108. With `./serena up`, run `./serena etl pahma`, then `./serena etl pahma --failed`, and
+sign in to PAHMA:
+
+- [ ] **1. Override.** Open the failed refresh and click "Override the delta threshold". Give a reason and confirm.
+  Expect a banner under the state line, in orange with a shield: "Delta threshold overridden by <you> at <time> UTC.",
+  then "Reason: <your reason>", then that Serena is checking the same list again. Expect your reason not to be under
+  Reasons.
+- [ ] **2. While it checks.** If you catch it while the state is "Checking the servable list", expect "Servable list
+  check: failed" with an "Overridden" chip, and the threshold problem struck through with "(overridden)".
+- [ ] **3. It finishes by itself.** Without reloading, within about 10 seconds expect "Updated", "Servable list check:
+  passed" with a "Delta threshold overridden" chip, the check's warning, and the servability update. The banner ends
+  "and updated from it. The team was emailed."
+- [ ] **4. Past refreshes and Overview.** Expect a shield after the refresh's state on both. Hover over it (or tab to
+  it): "Delta threshold overridden by <you> at <time> UTC". With VoiceOver, expect the same words read out.
+- [ ] **5. Not activity.** Before step 1, open the browser's developer tools on Network. Expect each GET of the refresh
+  the page makes by itself while it checks to carry `X-Serena-Background: 1`, so an open tab still signs out when idle.

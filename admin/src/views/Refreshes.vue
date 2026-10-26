@@ -34,6 +34,7 @@
       <template #[`item.refresh_date`]="{item}">
         {{ item.refresh_date }}<span v-if="item.admin_refresh_date"> (admin refresh, list for {{ item.admin_refresh_date }})</span>
       </template>
+      <template #[`item.state`]="{item}">{{ stateOf(item.state) }}<OverrideMark :override="item.override" /></template>
       <template #[`item.updated_at`]="{item}"><WhenText :at="item.updated_at" /></template>
     </v-data-table>
   </v-container>
@@ -47,6 +48,7 @@ import type {RefreshSummary} from '@/api'
 import {api, problem} from '@/api'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import LoadError from '@/components/LoadError.vue'
+import OverrideMark from '@/components/OverrideMark.vue'
 import WhenText from '@/components/WhenText.vue'
 import {PAGE_SIZES, stateOf} from '@/words'
 import {useTableState} from '@/tableState'
@@ -55,7 +57,7 @@ import {useTableState} from '@/tableState'
 const headers = [
   {title: 'Refresh', key: 'refresh_id', help: 'The refresh\'s ID: <museum>-<refresh date>-<number>. Opens its page.'},
   {title: 'Refresh date', key: 'refresh_date', help: 'The day, in Pacific time, whose servable list it brings in. An admin refresh says which day\'s list it used.'},
-  {title: 'State', key: 'state', value: (item: RefreshSummary) => stateOf(item.state), help: 'How far it got: Updated is done; a failed check or update says so, and its page says what an admin can do.'},
+  {title: 'State', key: 'state', value: (item: RefreshSummary) => stateOf(item.state), help: 'How far it got: Updated is done; a failed check or update says so, and its page says what an admin can do. A shield: an admin overrode the delta threshold.'},
   {title: 'Rows', key: 'rows', help: 'Rows in its servable list: one per Blob the ETL lists.'},
   {title: 'Last change', key: 'updated_at', help: 'When its state last changed (UTC).'}
 ]

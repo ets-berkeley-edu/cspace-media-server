@@ -10,6 +10,16 @@ export const STATES: Record<string, string> = {
   abandoned: 'Abandoned'
 }
 
+/** Who overrode a refresh's delta threshold: an override made before issue #108 doesn't say. */
+export function overrideBy(override: {by?: string}): string {
+  return override.by || 'an admin'
+}
+
+/** The line Serena adds to a refresh's reasons on an override: its page shows the reason in its banner instead (issue #108). */
+export function overrideReason(reason: string): string {
+  return `delta threshold overridden by an admin: ${reason}`
+}
+
 /** How the audit retention's choices read (D97). */
 export const RETENTION_LABELS: Record<number, string> = {
   90: '90 days', 183: '6 months', 365: '12 months', 548: '18 months', 730: '24 months', 1095: '36 months'

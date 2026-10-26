@@ -78,15 +78,17 @@ def summary(refresh: Refresh) -> dict[str, Any]:
             "rows": refresh.upload.rows if refresh.upload else None, "reasons": refresh.reasons,
             # An admin refresh: the refresh date its servable list is for, which may be earlier than the refresh's
             # own (D66, D75).
-            "admin_refresh_date": (refresh.admin_refresh or {}).get("refresh_date")}
+            "admin_refresh_date": (refresh.admin_refresh or {}).get("refresh_date"),
+            # An admin's override of the delta threshold (D83): when, by whom and why, so every page can say so
+            # (issue #108). An override made before October 26, 2026 has only `at`.
+            "override": refresh.override}
 
 
 def detail(refresh: Refresh, newest: bool) -> dict[str, Any]:
     return {**summary(refresh), "newest": newest, "file_name": refresh.file_name,
             "upload": {"rows": refresh.upload.rows, "bytes": refresh.upload.bytes, "sha256": refresh.upload.sha256,
                        "uploaded_at": refresh.upload.uploaded_at} if refresh.upload else None,
-            "check": refresh.check, "update": refresh.update, "override": refresh.override,
-            "actions": actions(refresh, newest)}
+            "check": refresh.check, "update": refresh.update, "actions": actions(refresh, newest)}
 
 
 def threshold_only(refresh: Refresh) -> bool:
@@ -172,7 +174,8 @@ def create_router() -> APIRouter:
         reason = _clean(body.reason)
         at = r.refreshes.now()
         try:
-            refresh = r.refreshes.transition(refresh, State.CHECKING, results={"override": {"at": at}},
+            override = {"at": at, "by": session.user, "reason": reason}
+            refresh = r.refreshes.transition(refresh, State.CHECKING, results={"override": override},
                                              reason=f"delta threshold overridden by an admin: {reason}")
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
