@@ -606,6 +606,7 @@ where the table is read as a list, a sort key:
 | Cache index | see Storage | | |
 | Audit log | `<tenant>` | `<time>#<admin>#<random>` (the random part keeps two actions in the same microsecond apart) | the admin action, its target, details (before and after, for a setting); kept for the museum's audit retention (90 days to start; an admin's setting: 90 days, or 6, 12, 18, 24 or 36 months), the worker removing older entries once a day by the setting then in force (decided October 12, 2026, D97, D98) |
 | Admin sessions | SHA-256 of the session's token | | museum, admin, started, last seen; expire by TTL after 8 hours |
+| Request counts | `<tenant>` | `<YYYY-MM-DD>` (a UTC day) | the day's served requests that were cache hits and misses, its unserved requests by reason, and when the worker counted them; kept for good (see The Past requests page, Daily request counts; issue #96) |
 
 A Blob is servable when its servability record exists, its kind is served, its access is public (or restricted, with a
 valid signed link where the museum allows it), and its Media CSID has no active recall. The table holds the Blobs in
@@ -1370,6 +1371,23 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **CSV export** (D112, D113). "Export CSV" saves the lines matching the page's range and filters (at most
     10,000), newest first (time, outcome, reason, path, kind, cache, signed link), formula-safe like the audit log's
     export: `serena-requests-<museum>-<date>.csv`.
+  - **Daily request counts** (decided October 26, 2026, issue #96). The log is kept only 30 days, so for counts over
+    weeks, months and years the worker counts each museum's requests per UTC day and keeps them in the Request counts
+    table for good: served requests that were cache hits (answered from the cache) and misses (fetched from
+    CollectionSpace), and unserved requests by reason. The hit rate is hits / served. Weeks (ISO, starting Monday),
+    months and years are sums of days, all in UTC.
+    - **When.** A day is counted an hour after it ends (so the log has all its lines); the worker looks once a UTC day,
+      and again an hour later for a museum whose count failed. Each time, it counts every day still wholly in the
+      log (the last `log_retention_days` less 2: 28 days in AWS) that has no count yet: its first run backfills those
+      days, and a day missed while the worker was down is counted on its next run. A stored day is never counted
+      again (a conditional write), so lines logged after its count are left out. A day with no requests is stored
+      with zeros; so is a day before the environment existed, within those 28.
+    - **How.** Two Logs Insights queries per museum, however many days are missing: served requests by day and
+      cache, and unserved requests by day and reason, on the app's log group, with the page's museum filter. The
+      worker waits up to 5 minutes for them. Locally, the worker can't read the web container's log file, so it
+      counts nothing; tests count from a log file.
+    - **Still to come** (issue #96): the admin API (counts by day, week, month or year for a range, with today's
+      counts read live from the log) and their place in the admin app, mockup first.
 - **Browser tests.** `serenade/`, written as the team writes them for BOA, Damien and Diablo (pytest and page
   objects), run with `./serena ui` against the local stack and the simulator's synthetic accounts (decided October
   10, 2026). Not in CI yet. A second set, `serenade/aws/`, checks a deployed environment after a deploy or resume
@@ -1485,7 +1503,8 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110). The worker's role can read and write
   servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
   update and delete recalls (D119), read, put and delete audit entries (the entries for ended recalls, and the daily removal,
-  D98), read and put the servable lists in S3, and publish to the alert topic. Neither can delete S3
+  D98), read and write the request counts and run Logs Insights queries on the app's log group, for the daily request
+  counts (issue #96), read and put the servable lists in S3, and publish to the alert topic. Neither can delete S3
   objects or create or delete tables. With the simulator, the fake ETL's role reads its museums' ETL tokens and
   nothing else.
 - **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30

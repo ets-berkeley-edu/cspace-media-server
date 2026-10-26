@@ -46,7 +46,12 @@ locals {
       SERENA_CDN_BASE_URL             = "https://${aws_cloudfront_distribution.main.domain_name}"
       SERENA_CLOUDFRONT_KEY_SECRET_ID = aws_secretsmanager_secret.cdn_key.name
   } : {})
-  worker_environment = merge(local.app_environment, { SERENA_ALERT_TOPIC_ARN = aws_sns_topic.alerts.arn })
+  # The worker counts each day's requests from the app's log group (issue #96), so it needs the log's retention.
+  worker_environment = merge(local.app_environment, {
+    SERENA_ALERT_TOPIC_ARN    = aws_sns_topic.alerts.arn
+    SERENA_LOG_GROUP          = aws_cloudwatch_log_group.web.name
+    SERENA_LOG_RETENTION_DAYS = tostring(var.log_retention_days)
+  })
 }
 
 resource "aws_ecs_task_definition" "web" {

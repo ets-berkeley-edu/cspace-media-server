@@ -5,7 +5,9 @@ The app logs one line per request: "served" (with the path, kind, cache hit or m
 used) or "unserved" (with the reason and the path). Paths never carry the PDF link suffix or a query string, and no
 line holds an IP address, a signed link's uid or sig, or an email address. A report runs five fixed queries for one
 museum over one range: the lines, newest first (at most MAX_LINES), served requests by day, unserved requests by day
-and reason, the most-requested paths, and served requests by size (Richard, October 14, 2026).
+and reason, the most-requested paths, and served requests by size (Richard, October 14, 2026). A tally, for the
+worker's daily request counts (issue #96), runs two more: served requests by day and cache (hit or miss), and unserved
+requests by day and reason.
 
 In AWS, CloudWatchReader runs them with CloudWatch Logs Insights on the app's log group. Locally and in tests,
 FileReader runs the same queries in Python over the JSON lines the app also writes to a file (SERENA_LOG_FILE).
@@ -24,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 log = logging.getLogger("serena.requests_log")
 
@@ -72,6 +74,18 @@ class Day:
     unserved: dict[str, int]  # by reason
 
 
+@dataclass
+class Tally:
+    """One museum's requests in one UTC day (issue #96): served requests by cache, unserved requests by reason."""
+    hits: int = 0
+    misses: int = 0
+    unserved: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def served(self) -> int:
+        return self.hits + self.misses
+
+
 @dataclass(frozen=True)
 class Report:
     museum: str
@@ -89,10 +103,13 @@ class Report:
 
 
 Row = dict[str, str]
+K = TypeVar("K", bound=str)  # a query's name: a QueryKind, or a tally's "served" or "unserved"
 
 
 class Reader(Protocol):
     def run(self, museum: str, start: datetime, end: datetime) -> dict[QueryKind, list[Row]]: ...
+
+    def tally(self, museum: str, start: datetime, end: datetime) -> dict[str, Tally]: ...
 
 
 def _checked(museum: str) -> str:
@@ -101,12 +118,16 @@ def _checked(museum: str) -> str:
     return museum
 
 
+def _base(museum: str) -> str:
+    return (f'filter museum = "{_checked(museum)}" and '
+            f'((message = "served" and logger = "{LOGGERS["served"]}") or '
+            f'(message = "unserved" and logger = "{LOGGERS["unserved"]}"))')
+
+
 def query_text(kind: QueryKind, museum: str) -> str:
     """The Logs Insights query. `museum` comes from Serena's list of museums and is checked again here, so nothing
     an admin types can change a query."""
-    base = (f'filter museum = "{_checked(museum)}" and '
-            f'((message = "served" and logger = "{LOGGERS["served"]}") or '
-            f'(message = "unserved" and logger = "{LOGGERS["unserved"]}"))')
+    base = _base(museum)
     if kind is QueryKind.LINES:
         return (f"fields time, message, reason, path, kind, cache, signed | {base} "
                 f"| sort @timestamp desc | limit {MAX_LINES}")
@@ -118,6 +139,30 @@ def query_text(kind: QueryKind, museum: str) -> str:
     if kind is QueryKind.SERVED_BY_SIZE:
         return f'{base} | filter message = "served" | stats count(*) as requests by size'
     return f"{base} | stats count(*) as requests by path | sort requests desc | limit {TOP_PATHS}"
+
+
+def tally_texts(museum: str) -> dict[str, str]:
+    """The tally's two Logs Insights queries (issue #96): served requests by day and cache, and unserved requests by
+    day and reason (the same query as the report's)."""
+    return {"served": f'{_base(museum)} | filter message = "served" '
+                      f"| stats count(*) as requests by datefloor(@timestamp, 1d) as day, cache",
+            "unserved": query_text(QueryKind.UNSERVED_BY_DAY, museum)}
+
+
+def tallies(served: Iterable[Row], unserved: Iterable[Row]) -> dict[str, Tally]:
+    """The tally's rows, by UTC day (YYYY-MM-DD). A served line's cache is hit or miss; any other is left out."""
+    days: dict[str, Tally] = {}
+    for row in served:
+        tally = days.setdefault(_day(row.get("day", "")), Tally())
+        if row.get("cache") == "hit":
+            tally.hits += int(row.get("requests", "0"))
+        elif row.get("cache") == "miss":
+            tally.misses += int(row.get("requests", "0"))
+    for row in unserved:
+        tally = days.setdefault(_day(row.get("day", "")), Tally())
+        reason = row.get("reason", "")
+        tally.unserved[reason] = tally.unserved.get(reason, 0) + int(row.get("requests", "0"))
+    return days
 
 
 class CloudWatchReader:
@@ -133,14 +178,26 @@ class CloudWatchReader:
         self.monotonic = monotonic
 
     def run(self, museum: str, start: datetime, end: datetime) -> dict[QueryKind, list[Row]]:
-        ids: dict[QueryKind, str] = {}
+        return self._queries(museum, start, end, {
+            # the API's limit, not the query's, decides how many rows come back (issue #95)
+            kind: (query_text(kind, museum), TOP_PATHS if kind is QueryKind.TOP_PATHS else MAX_LINES)
+            for kind in QueryKind})
+
+    def tally(self, museum: str, start: datetime, end: datetime) -> dict[str, Tally]:
+        """Requests by UTC day from start (inclusive) to end (exclusive; a day starting at end is left out)."""
+        texts = {name: (text, MAX_LINES) for name, text in tally_texts(museum).items()}
+        rows = self._queries(museum, start, end, texts)
+        return {day: tally for day, tally in tallies(rows["served"], rows["unserved"]).items()
+                if start.date().isoformat() <= day < end.date().isoformat()}
+
+    def _queries(self, museum: str, start: datetime, end: datetime,
+                 texts: dict[K, tuple[str, int]]) -> dict[K, list[Row]]:
+        ids: dict[K, str] = {}
         try:
-            for kind in QueryKind:
-                ids[kind] = self.client.start_query(
+            for name, (text, limit) in texts.items():
+                ids[name] = self.client.start_query(
                     logGroupName=self.log_group, startTime=int(start.timestamp()), endTime=int(end.timestamp()),
-                    queryString=query_text(kind, museum),
-                    # the API's limit, not the query's, decides how many rows come back (issue #95)
-                    limit=TOP_PATHS if kind is QueryKind.TOP_PATHS else MAX_LINES)["queryId"]
+                    queryString=text, limit=limit)["queryId"]
             return self._wait(ids)
         except LogUnavailable:
             raise
@@ -149,9 +206,9 @@ class CloudWatchReader:
             self._stop(ids)
             raise LogUnavailable("Serena couldn't read its log just now. Try again in a minute.") from error
 
-    def _wait(self, ids: dict[QueryKind, str]) -> dict[QueryKind, list[Row]]:
+    def _wait(self, ids: dict[K, str]) -> dict[K, list[Row]]:
         deadline = self.monotonic() + self.wait_seconds
-        done: dict[QueryKind, list[Row]] = {}
+        done: dict[K, list[Row]] = {}
         while True:
             for kind, query_id in ids.items():
                 if kind in done:
@@ -170,7 +227,7 @@ class CloudWatchReader:
                 raise TooSlow("Reading the log took too long. Choose a shorter range, or try again in a minute.")
             self.sleep(self.poll_seconds)
 
-    def _stop(self, ids: dict[QueryKind, str]) -> None:
+    def _stop(self, ids: dict[K, str]) -> None:
         for query_id in ids.values():
             try:
                 self.client.stop_query(queryId=query_id)
@@ -198,7 +255,9 @@ class FileReader:
                     if isinstance(entry, dict):
                         yield entry
 
-    def run(self, museum: str, start: datetime, end: datetime) -> dict[QueryKind, list[Row]]:
+    def _chosen(self, museum: str, start: datetime, end: datetime,
+                inclusive: bool = True) -> list[tuple[datetime, dict[str, Any]]]:
+        """The museum's served and unserved lines from start to end, newest first."""
         _checked(museum)
         chosen = []
         for entry in self.entries():
@@ -209,9 +268,25 @@ class FileReader:
                 at = datetime.fromisoformat(str(entry["time"]))
             except (KeyError, ValueError):
                 continue
-            if start <= at <= end:
+            if start <= at and (at <= end if inclusive else at < end):
                 chosen.append((at, entry))
         chosen.sort(key=lambda pair: pair[0], reverse=True)
+        return chosen
+
+    def tally(self, museum: str, start: datetime, end: datetime) -> dict[str, Tally]:
+        served: Counter[tuple[str, str]] = Counter()
+        unserved: Counter[tuple[str, str]] = Counter()
+        for at, entry in self._chosen(museum, start, end, inclusive=False):
+            day = at.astimezone(UTC).date().isoformat()
+            if entry["message"] == "served":
+                served[(day, _text(entry.get("cache")))] += 1
+            else:
+                unserved[(day, _text(entry.get("reason")))] += 1
+        return tallies([{"day": day, "cache": cache, "requests": str(n)} for (day, cache), n in served.items()],
+                       [{"day": day, "reason": reason, "requests": str(n)} for (day, reason), n in unserved.items()])
+
+    def run(self, museum: str, start: datetime, end: datetime) -> dict[QueryKind, list[Row]]:
+        chosen = self._chosen(museum, start, end)
         lines = [{key: _text(entry.get(key)) for key in ("time", "message", "reason", "path", "kind", "cache",
                                                           "signed") if entry.get(key) is not None}
                  for _, entry in chosen[:MAX_LINES]]

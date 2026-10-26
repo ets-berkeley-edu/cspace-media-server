@@ -31,6 +31,11 @@
     "sort_key": "sk",
     "ttl_attribute": null
   },
+  "request-counts": {
+    "indexes": {},
+    "sort_key": "sk",
+    "ttl_attribute": null
+  },
   "servability": {
     "indexes": {
       "by_media": "media_key",
