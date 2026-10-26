@@ -1,13 +1,13 @@
 # Serena's dependencies (the app and the worker). pin-requirements.sh compiles this into requirements.txt, exact
 # versions with hashes; Dependabot does the same when it moves a version. Change a dependency here, not in
 # pyproject.toml, then run pin-requirements.sh.
-fastapi>=0.146.0
+fastapi>=0.161.1
 uvicorn[standard]>=0.30
 httpx>=0.27
-boto3>=1.43.114
+boto3>=1.43.118
 # Signs CloudFront URLs (RSA).
 cryptography>=42
-pydantic-settings>=2.16.0
+pydantic-settings>=2.16.1
 pyyaml>=6
 defusedxml>=0.7
 # Checks fetched images decode; later makes watermarked copies (libvips bundled by the wheel).
