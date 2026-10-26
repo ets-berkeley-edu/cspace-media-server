@@ -55,8 +55,8 @@ run "names_and_sizes" {
   }
 
   assert {
-    condition     = length(aws_dynamodb_table.main) == 8 && aws_dynamodb_table.main["servability"].name == "serena-dev-servability"
-    error_message = "The eight tables from tables.json, named <SERENA_TABLE_PREFIX>-<table>."
+    condition     = length(aws_dynamodb_table.main) == 9 && aws_dynamodb_table.main["servability"].name == "serena-dev-servability"
+    error_message = "The nine tables from tables.json, named <SERENA_TABLE_PREFIX>-<table>."
   }
 
   assert {

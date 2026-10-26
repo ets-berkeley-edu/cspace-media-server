@@ -176,7 +176,7 @@ flowchart LR
       gw["Gateway endpoints: S3, DynamoDB"]
     end
     subgraph data["Data: synthetic only, throwaway (PROTECT_DATA=false)"]
-      ddb[("DynamoDB: eight tables")]
+      ddb[("DynamoDB: nine tables")]
       museum[("S3: a private bucket per museum")]
       static[("S3: static bucket")]
       secrets["Secrets Manager: ETL tokens, signing keys"]
@@ -246,7 +246,7 @@ flowchart LR
       gw["Gateway endpoints: S3, DynamoDB"]
     end
     subgraph data["Data: production images and credentials, protected (PROTECT_DATA=true)"]
-      ddb[("DynamoDB: eight tables")]
+      ddb[("DynamoDB: nine tables")]
       museum[("S3: a private bucket per museum")]
       static[("S3: static bucket")]
       secrets["Secrets Manager: read-only CollectionSpace account, ETL tokens, signing keys"]
@@ -315,7 +315,7 @@ The same Terraform builds every environment; only its settings differ.
 - **ECS (D188).** The app (1 vCPU, 2 GB, 50 GB of ephemeral storage for fetches) and the worker (0.5 vCPU, 1 GB),
   on ARM, from one image. A deploy replaces the app's tasks one by one, stops the old worker before the new one
   starts, and rolls back if they don't start.
-- **Data.** The eight tables (from `deploy/terraform/app/tables.json`, which `backend/serena/tables.py` generates),
+- **Data.** The nine tables (from `deploy/terraform/app/tables.json`, which `backend/serena/tables.py` generates),
   one bucket per museum (versioned, encrypted with the KMS key, Intelligent-Tiering, no rule that deletes), one KMS
   key with yearly rotation, and the secrets: per museum, its CollectionSpace account, its ETL tokens and, with
   signed access, its portal signing key.
