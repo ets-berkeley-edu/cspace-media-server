@@ -401,8 +401,10 @@
   const name = () => MUSEUMS[S.museum];
 
   // A time as the app shows it: UTC, "2026-10-13 17:00:00 UTC", breaking only between its date and its clock time.
+  // A time as plain text, for a title or an aria-label; when() is the same time as markup, for the page.
+  const whenText = iso => new Date(iso).toISOString().replace("T", " ").slice(0, 19) + " UTC";
   function when(iso) {
-    const [d, c] = new Date(iso).toISOString().replace("T", " ").slice(0, 19).split(" ");
+    const [d, c] = whenText(iso).split(" ");
     return `<span class="nowrap">${d}</span> <span class="nowrap">${c} UTC</span>`;
   }
 
@@ -422,7 +424,7 @@
   // colour alone; a refresh still running is blue.
   const statePill = r => `<span class="pill t-${r.tone}">${r.tone === "danger" ? ICON_FAILED : ""}${esc(r.state)}</span>`;
   // An overridden refresh's marker (version 44, issue #108): the icon, its words in a tooltip and for screen readers.
-  const overrideMark = r => r.override ? `<span class="override-mark" title="${esc(`Delta threshold overridden by ${r.override.by} at ${when(r.override.at).replace(/<[^>]*>/g, "")}`)}">${ICON_OVERRIDE}<span class="sr">Delta threshold overridden</span></span>` : "";
+  const overrideMark = r => r.override ? `<span class="override-mark" title="${esc(`Delta threshold overridden by ${r.override.by} at ${whenText(r.override.at)}`)}">${ICON_OVERRIDE}<span class="sr">Delta threshold overridden</span></span>` : "";
   const REFRESH_ID = /\b([a-z]+-\d{4}-\d{2}-\d{2}-\d+)\b/g;
   const linkRefreshes = text => esc(text).replace(REFRESH_ID, (m, id) => refreshLink(id));
   // A CSID shown whole: no ⧉ (Richard, Oct 14); one click selects all of it.
