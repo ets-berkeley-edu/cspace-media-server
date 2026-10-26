@@ -94,12 +94,17 @@ describe('an overridden refresh', () => {
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: OVERRIDDEN}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     const banner = wrapper.find('#override-banner')
+    // Issue #110: it leads with the check that failed and by how much.
+    expect(wrapper.find('#override-lead').text()).toBe('A safety check failed, and an admin overrode it')
+    expect(wrapper.find('#override-overshoot').text()).toBe('The servable list changes 50% of the rows; the threshold is 5%.')
     expect(banner.text()).toContain('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC.')
     expect(wrapper.find('#override-reason').text()).toBe('Reason: PAHMA republished many images')
     expect(banner.text()).toContain('This page checks again every few seconds')
     // The reason is in the banner, not one more line under Reasons.
     expect(wrapper.find('#refresh-reasons').text()).toBe('1 problem in the servable list')
-    expect(wrapper.find('#check-overridden').text()).toBe('Overridden')
+    expect(wrapper.find('#check-heading').text()).toContain('Servable list check: failed, overridden by admin')
+    expect(wrapper.find('#check-overridden').exists()).toBe(false) // the heading says it already
+    expect(wrapper.find('#refresh-state').text()).toBe('Checking the servable list')
     const row = wrapper.find('#check-problems tbody tr')
     expect(row.classes()).toContain('overridden-problem')
     expect(row.find('s').text()).toBe(THRESHOLD)
@@ -118,9 +123,15 @@ describe('an overridden refresh', () => {
         update: {deleted: 20, written: 0, unchanged: 20}}}
       await vi.advanceTimersByTimeAsync(5000)
       await flushPromises()
-      expect(wrapper.find('#refresh-state').text()).toBe('Updated')
+      // Issue #110: once it's updated, it still reads as overridden, never as "passed" or plain "Updated".
+      expect(wrapper.find('#refresh-state').text()).toBe('Updated by override')
+      expect(wrapper.find('#refresh-state').classes()).toContain('text-warning')
+      expect(wrapper.find('#refresh-state').classes()).toContain('refresh-state-overridden')
       expect(calls.at(-1)?.headers['X-Serena-Background']).toBe('1') // not activity: an idle tab still signs out
-      expect(wrapper.find('#check-overridden').text()).toBe('Delta threshold overridden')
+      expect(wrapper.find('#check-heading').text()).toContain('Servable list check: failed, overridden by admin')
+      expect(wrapper.find('#check-heading').text()).not.toContain('passed')
+      expect(wrapper.find('#check-overridden').exists()).toBe(false)
+      expect(wrapper.find('#check-passed-without-threshold').exists()).toBe(true)
       expect(wrapper.find('#check-problems').exists()).toBe(false)
       expect(wrapper.find('#override-banner').text()).toContain('and updated from it. The team was emailed.')
       const made = calls.length
@@ -132,6 +143,16 @@ describe('an overridden refresh', () => {
     }
   })
 
+  it('keeps the chip when a re-check fails on something else, and reads that result', async () => {
+    const other = {...FAILED_CHECK, errors: [{line: 3, field: 'kind', problem: 'not a kind Serena serves'}]}
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...OVERRIDDEN, state: 'check_failed', check: other}}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#check-heading').text()).toContain('Servable list check: failed')
+    expect(wrapper.find('#check-heading').text()).not.toContain('overridden by admin')
+    expect(wrapper.find('#check-overridden').text()).toBe('Delta threshold overridden')
+    wrapper.unmount()
+  })
+
   it('says "an admin" for an override made before it recorded who', async () => {
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...OVERRIDDEN, state: 'updated', override: {at: OVERRIDE.at}}}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
@@ -140,13 +161,23 @@ describe('an overridden refresh', () => {
     wrapper.unmount()
   })
 
-  it('has a shield on Past refreshes, with its words for screen readers; a refresh without one has none', async () => {
-    const row = (n: number, override: unknown) => ({...REFRESH, refresh_id: `pahma-2026-10-1${n}-1`, refresh_date: `2026-10-1${n}`,
-      state: 'updated', updated_at: `2026-10-1${n}T11:00:00+00:00`, admin_refresh_date: null, override})
-    fakeApi({'GET /museums/pahma/refreshes': {body: {days: 30, refreshes: [row(2, OVERRIDE), row(1, null)]}}})
+  it('marks overridden refreshes on Past refreshes: "Updated by override" once updated, a shield before; a bar on the row', async () => {
+    const row = (n: number, state: string, override: unknown) => ({...REFRESH, refresh_id: `pahma-2026-10-1${n}-1`,
+      refresh_date: `2026-10-1${n}`, state, updated_at: `2026-10-1${n}T11:00:00+00:00`, admin_refresh_date: null, override})
+    fakeApi({'GET /museums/pahma/refreshes': {body: {days: 30, refreshes: [
+      row(3, 'checking', OVERRIDE), row(2, 'updated', OVERRIDE), row(1, 'updated', null)]}}})
     const {wrapper} = await at('/pahma/refreshes', Refreshes)
-    const [overridden, plain] = wrapper.findAll('#refreshes-table tbody tr')
-    expect(overridden.find('.override-mark').text()).toBe('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC')
+    const [rechecking, overridden, plain] = wrapper.findAll('#refreshes-table tbody tr')
+    // While Serena re-checks: its state, then the shield with its words for screen readers (issue #108).
+    expect(rechecking.find('.override-mark').text()).toBe('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC')
+    // Once updated (issue #110): "Updated by override" in words, so the shield alone isn't needed.
+    expect(overridden.find('.refresh-state-overridden').text()).toBe('Updated by override')
+    expect(overridden.find('.override-mark').exists()).toBe(false)
+    expect(rechecking.classes()).toContain('override-row')
+    expect(overridden.classes()).toContain('override-row')
+    expect(plain.classes()).not.toContain('override-row')
+    expect(plain.find('.refresh-state-overridden').exists()).toBe(false)
+    expect(plain.find('.refresh-state').text()).toBe('Updated')
     expect(plain.find('.override-mark').exists()).toBe(false)
     wrapper.unmount()
   })

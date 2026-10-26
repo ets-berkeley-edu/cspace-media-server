@@ -16,6 +16,7 @@
       :page="table.page"
       :items-per-page-options="PAGE_SIZES"
       :loading="!loaded && !error"
+      :row-props="rowProps"
       item-value="refresh_id"
       density="compact"
       no-data-text="No refreshes in the last 30 days."
@@ -34,7 +35,7 @@
       <template #[`item.refresh_date`]="{item}">
         {{ item.refresh_date }}<span v-if="item.admin_refresh_date"> (admin refresh, list for {{ item.admin_refresh_date }})</span>
       </template>
-      <template #[`item.state`]="{item}"><RefreshState :state="item.state" /><OverrideMark :override="item.override" /></template>
+      <template #[`item.state`]="{item}"><RefreshState :state="item.state" :override="item.override" /><OverrideMark v-if="!byOverride(item)" :override="item.override" /></template>
       <template #[`item.updated_at`]="{item}"><WhenText :at="item.updated_at" /></template>
     </v-data-table>
   </v-container>
@@ -51,17 +52,22 @@ import LoadError from '@/components/LoadError.vue'
 import OverrideMark from '@/components/OverrideMark.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import WhenText from '@/components/WhenText.vue'
-import {PAGE_SIZES, stateOf} from '@/words'
+import {PAGE_SIZES, byOverride, refreshStateOf} from '@/words'
 import {useTableState} from '@/tableState'
 
 // Every column has a meaningful order (D94); the state sorts by its label, as shown.
 const headers = [
   {title: 'Refresh', key: 'refresh_id', help: 'The refresh\'s ID: <museum>-<refresh date>-<number>. Opens its page.'},
   {title: 'Refresh date', key: 'refresh_date', help: 'The day, in Pacific time, whose servable list it brings in. An admin refresh says which day\'s list it used.'},
-  {title: 'State', key: 'state', value: (item: RefreshSummary) => stateOf(item.state), help: 'How far it got: Updated is done; a failed check or update says so, and its page says what an admin can do. A shield: an admin overrode the delta threshold.'},
+  {title: 'State', key: 'state', value: (item: RefreshSummary) => refreshStateOf(item), help: 'How far it got: Updated is done; a failed check or update says so, and its page says what an admin can do. Updated by override, or a shield: a check failed and an admin overrode the delta threshold.'},
   {title: 'Rows', key: 'rows', help: 'Rows in its servable list: one per Blob the ETL lists.'},
   {title: 'Last change', key: 'updated_at', help: 'When its state last changed (UTC).'}
 ]
+
+// An overridden refresh (issue #110): a bar in the warning colour down the row's left edge, like a waiting alert's.
+function rowProps({item}: {item: RefreshSummary}) {
+  return {class: item.override ? 'override-row' : ''}
+}
 
 const route = useRoute()
 const table = useTableState('', 'updated_at') // its place in the address (October 14, 2026)
@@ -95,3 +101,9 @@ onActivated(() => {
   shown = true
 })
 </script>
+
+<style scoped>
+#refreshes-table :deep(tr.override-row > td:first-child) {
+  box-shadow: inset 4px 0 0 rgb(var(--v-theme-warning));
+}
+</style>

@@ -262,7 +262,7 @@ go once every alert is acknowledged on the Alerts page (the bell opens it).
   a reason first." under the Reason box if you click it without one (section 21). Type one and click it. Expect:
   - the banner, with "2 alerts: An admin overrode the delta threshold" ("A servable list check failed" stays until
     acknowledged), and the bell's badge showing 2 (or one more, if the deadline alert is still waiting);
-  - after reloading the page, the same refresh `Updated`, with no red button, its reasons naming the override and
+  - after reloading the page, the same refresh `Updated by override`, with no red button, its reasons naming the override and
     its check's warnings saying the delta threshold was skipped.
 - [ ] Click "Open alerts" in the banner and acknowledge each alert. Expect the banner and the badge gone once none is
   left, and the alerts with your name and the time.
@@ -1303,19 +1303,24 @@ than the delta threshold allows, so its check fails; `--failed` doesn't call Ser
   the State cell, not the icon.
 ## 36. An overridden delta threshold, on the local stack (10 minutes; before merging the pull request that adds it)
 
-What it checks: issue #108. With `./serena up`, run `./serena etl pahma`, then `./serena etl pahma --rows 3` (its check
-fails on the delta threshold alone), and sign in to PAHMA:
+What it checks: issues #108 and #110. With `./serena up`, run `./serena etl pahma`, then `./serena etl pahma --rows 3`
+(its check fails on the delta threshold alone), and sign in to PAHMA:
 
 - [ ] **1. Override.** Open the failed refresh and click "Override the delta threshold". Give a reason and confirm.
-  Expect a banner under the state line, in orange with a shield: "Delta threshold overridden by <you> at <time> UTC.",
-  then "Reason: <your reason>", then that Serena is checking the same list again. Expect your reason not to be under
-  Reasons.
+  Expect a banner under the state line, in orange with a shield: "A safety check failed, and an admin overrode it",
+  then how far the list went past the threshold ("The servable list changes <n>% of the rows; the threshold is 5%."),
+  then "Delta threshold overridden by <you> at <time> UTC.", then "Reason: <your reason>", then that Serena is
+  checking the same list again. Expect your reason not to be under Reasons.
 - [ ] **2. While it checks.** If you catch it while the state is "Checking the servable list", expect "Servable list
-  check: failed" with an "Overridden" chip, and the threshold problem struck through with "(overridden)".
-- [ ] **3. It finishes by itself.** Without reloading, within about 10 seconds expect "Updated", "Servable list check:
-  passed" with a "Delta threshold overridden" chip, the check's warning, and the servability update. The banner ends
-  "and updated from it. The team was emailed."
-- [ ] **4. Past refreshes and Overview.** Expect a shield after the refresh's state on both. Hover over it (or tab to
-  it): "Delta threshold overridden by <you> at <time> UTC". With VoiceOver, expect the same words read out.
+  check: failed, overridden by admin" (no chip: the heading says it), and the threshold problem struck through with
+  "(overridden)".
+- [ ] **3. It finishes by itself.** Without reloading, within about 10 seconds expect an orange pill with a shield,
+  "Updated by override" (never a green "Updated"), "Servable list check: failed, overridden by admin" with no chip
+  (never "passed" on its own), a line under it saying it passed without the delta threshold, the check's warning, and
+  the servability update. The banner ends "and updated from it. The team was emailed."
+- [ ] **4. Past refreshes and Overview.** Expect the same orange "Updated by override" pill on both, and on Past
+  refreshes an orange bar down the row's left edge. While it was still checking, expect its blue state pill with a
+  shield after it instead: hover over the shield (or tab to it) for "Delta threshold overridden by <you> at <time>
+  UTC". With VoiceOver, expect the same words read out.
 - [ ] **5. Not activity.** Before step 1, open the browser's developer tools on Network. Expect each GET of the refresh
   the page makes by itself while it checks to carry `X-Serena-Background: 1`, so an open tab still signs out when idle.
