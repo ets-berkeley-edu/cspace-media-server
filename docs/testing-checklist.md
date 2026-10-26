@@ -1240,3 +1240,24 @@ fails on the delta threshold and their sample file gets the unavailable image (T
 `./serena aws etl pahma`, then override the delta threshold on that refresh on the admin app's Refreshes page
 (or override it on the tests' own failed refresh, then run the tests again). Also deploy the checked-out commit first:
 T91 checks that the running image is it.
+
+## 33. Daily request counts, personal-dev with the simulator (15 minutes, then 5 minutes the next day; before merging the pull request that adds them)
+
+What it checks: issue #96's daily counts of cache hits, misses and unserved requests, and their backfill from the
+log. From this pull request's branch on the Mac, signed in (`aws sso login --profile bmu-personal`):
+
+- [ ] **1. Deploy this branch.** `./serena aws resume`, then `./serena aws deploy`. At the plan, expect a new table
+  `serena-dev-request-counts` (or your environment's prefix), the worker's policy with `request-counts` and two
+  `RequestCount…` statements, and `SERENA_LOG_GROUP` and `SERENA_LOG_RETENTION_DAYS` in the worker's environment.
+- [ ] **2. The backfill.** Within a minute of the worker starting, expect a "requests counted" line per museum in the
+  worker's log, with `days` 28 (or fewer, if the worker has counted some days before):
+  `aws --profile bmu-personal --region us-west-2 logs filter-log-events --log-group-name /serena/dev/worker --start-time "$(( $(date +%s) - 900 ))000" --filter-pattern '"requests counted"' --query 'events[].message' --output text | tr '\t' '\n'`.
+  Expect no "requests not counted" line.
+- [ ] **3. The counts match the log.** For a day with requests (the replay's, say, or `./serena aws test`'s), compare
+  the stored item with the Past requests page's By day row for that day, with "Last 7 days":
+  `aws --profile bmu-personal --region us-west-2 dynamodb get-item --table-name serena-dev-request-counts --key '{"pk":{"S":"pahma"},"sk":{"S":"<YYYY-MM-DD>"}}' --output json | jq '.Item | {hits, misses, unserved}'`.
+  Expect hits + misses to equal the page's served count, and the unserved reasons to match.
+- [ ] **4. The next day.** An hour or more after the next UTC midnight (5 p.m. or 6 p.m. Pacific), expect one more
+  "requests counted" line per museum, with `days` 1, and an item for the day just ended.
+- [ ] **5. A restart counts nothing again.** Stop the worker's task (the service starts another). Expect no
+  "requests counted" line from the new task: every day is counted already.

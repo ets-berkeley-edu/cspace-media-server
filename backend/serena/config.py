@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # available here.
     log_group: str = ""
     log_file: str | None = None
+    # How long the log group keeps the app's log (Terraform's log_retention_days): the worker's daily request counts
+    # (issue #96) count only the days still in it.
+    log_retention_days: int = 30
 
     # Each museum's S3 bucket (design: Storage), from SERENA_BUCKETS as JSON: {"pahma": "..."}.
     buckets: dict[str, str] = {}

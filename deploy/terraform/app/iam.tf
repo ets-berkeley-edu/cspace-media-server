@@ -146,8 +146,22 @@ data "aws_iam_policy_document" "worker" {
   statement {
     sid     = "TablesReadWrite"
     actions = concat(local.table_read, local.table_write)
-    resources = flatten([for t in ["servability", "recalls", "refreshes", "alerts", "audit"] :
+    resources = flatten([for t in ["servability", "recalls", "refreshes", "alerts", "audit", "request-counts"] :
     local.table_arns[t]])
+  }
+
+  # The daily request counts (issue #96) query the app's log group, as the Past requests page does.
+  statement {
+    sid       = "RequestCountQueries"
+    actions   = ["logs:StartQuery"]
+    resources = [aws_cloudwatch_log_group.web.arn, "${aws_cloudwatch_log_group.web.arn}:*"]
+  }
+
+  # These two take no resource: a query is named by its ID.
+  statement {
+    sid       = "RequestCountResults"
+    actions   = ["logs:GetQueryResults", "logs:StopQuery"]
+    resources = ["*"]
   }
 
   statement {

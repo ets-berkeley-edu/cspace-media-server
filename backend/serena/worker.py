@@ -9,7 +9,7 @@ while the step runs; a step whose heartbeat has gone stale was interrupted and i
 loses a step (decided October 9, 2026, D33). Both steps are safe to repeat. A passed check goes straight on to the
 servability update, under the same claim (decided October 12, 2026, D80), and a successful servability update
 ends the recalls CollectionSpace has caught up with (D119). Once a day it also removes audit entries older than each
-museum's audit retention (D98)."""
+museum's audit retention (D98), and counts each museum's requests of the day before (issue #96)."""
 from __future__ import annotations
 
 import logging
@@ -34,6 +34,7 @@ from .config import Settings
 from .museum import Museum
 from .museum_settings import MuseumSettings
 from .refreshes import PACIFIC, OutOfOrder, Refresh, Refreshes, State
+from .request_counts import RequestCounts, latest_countable
 from .servable_list import read_rows
 from .store import Store
 from .watchdog import Watchdog
@@ -41,6 +42,10 @@ from .watchdog import Watchdog
 log = logging.getLogger("serena.worker")
 # Transient errors: the whole servability update is tried again (it's safe to repeat) before update_failed.
 UPDATE_ATTEMPTS = 3
+# A daily request count that failed for a museum is tried again after this long.
+COUNT_RETRY_SECONDS = 3600.0
+# Counting a month of one museum's log is two queries; they can take longer than the Past requests page waits.
+COUNT_WAIT_SECONDS = 300.0
 
 
 @dataclass
@@ -52,6 +57,7 @@ class WorkerServices:
     store: Store
     s3: Any
     watchdog: Watchdog | None = None
+    counts: RequestCounts | None = None  # None: no log to count from here
 
 
 class _Heartbeat(threading.Thread):
@@ -78,6 +84,8 @@ class Worker:
         self.monotonic = monotonic
         self.watched_at: float | None = None
         self.purged_on: str | None = None  # the Pacific date of the last removal of old audit entries
+        self.counted_through: str | None = None  # the latest UTC day every museum's requests are counted for
+        self.count_tried_at: float | None = None
         self.owner = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         self.stopping = threading.Event()
 
@@ -133,11 +141,35 @@ class Worker:
             removed += count
         return removed
 
+    def count_requests(self, now: datetime | None = None) -> int:
+        """Each museum's daily request counts (issue #96): once the day before is over and settled, counts every day
+        still in the log that isn't counted yet; a museum that fails is tried again after COUNT_RETRY_SECONDS.
+        Returns how many days were stored."""
+        if self.s.counts is None:
+            return 0
+        latest = latest_countable(now or datetime.now(UTC)).isoformat()
+        if self.counted_through == latest:
+            return 0
+        if self.count_tried_at is not None and self.monotonic() - self.count_tried_at < COUNT_RETRY_SECONDS:
+            return 0
+        self.count_tried_at = self.monotonic()
+        stored, failed = 0, False
+        for key in sorted(self.s.museums):
+            try:
+                stored += len(self.s.counts.count_missing(key))
+            except Exception:
+                log.exception("requests not counted", extra={"museum": key})
+                failed = True
+        if not failed:
+            self.counted_through = latest
+        return stored
+
     def run_forever(self) -> None:
         log.info("worker started", extra={"owner": self.owner})
         while not self.stopping.is_set():
             self.watch()
             self.purge_audit()
+            self.count_requests()
             if not self.tick():
                 self.stopping.wait(self.s.settings.worker_poll_seconds)
         log.info("worker stopped", extra={"owner": self.owner})
@@ -257,7 +289,7 @@ class Worker:
 def build_services(settings: Settings | None = None) -> WorkerServices:
     import boto3
 
-    from . import logs, museum
+    from . import logs, museum, requests_log
     from .alerts import Alerts
     from .config import get_settings
     from .store import dynamodb_client
@@ -274,7 +306,18 @@ def build_services(settings: Settings | None = None) -> WorkerServices:
         log.warning("no alert topic: alerts are recorded and logged, not emailed")
     watchdog = Watchdog(museums, museum_settings, refreshes, Alerts(store, sns, settings.alert_topic_arn),
                         store=store)
-    return WorkerServices(settings, museums, museum_settings, refreshes, store, s3, watchdog)
+    # The daily request counts read the app's log group (issue #96); locally, the web container's log file isn't
+    # the worker's, so there's nothing to count.
+    reader: requests_log.Reader | None = None
+    if settings.log_group:
+        reader = requests_log.CloudWatchReader(boto3.client("logs", region_name=settings.aws_region),
+                                               settings.log_group, wait_seconds=COUNT_WAIT_SECONDS)
+    elif settings.log_file:
+        reader = requests_log.FileReader(settings.log_file)
+    if reader is None:
+        log.warning("no request log: requests aren't counted")
+    counts = RequestCounts(store, reader, settings.log_retention_days) if reader is not None else None
+    return WorkerServices(settings, museums, museum_settings, refreshes, store, s3, watchdog, counts)
 
 
 def main() -> None:

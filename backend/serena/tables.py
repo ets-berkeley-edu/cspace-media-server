@@ -30,8 +30,10 @@ ALERTS = Table("alerts", sort_key="sk")  # pk <tenant>, sk <time>
 CACHE_INDEX = Table("cache-index")  # pk <tenant>#<blob CSID>#<derivative>
 AUDIT = Table("audit", sort_key="sk")  # pk <tenant>, sk <time>#<admin>#<random>
 ADMIN_SESSIONS = Table("admin-sessions", ttl_attribute="expires_at")  # pk SHA-256 of the session's token
+# pk <tenant>, sk <YYYY-MM-DD>, UTC: one museum's requests in one day, cache hits and misses (issue #96)
+REQUEST_COUNTS = Table("request-counts", sort_key="sk")
 
-ALL = (SERVABILITY, RECALLS, REFRESHES, SETTINGS, ALERTS, CACHE_INDEX, AUDIT, ADMIN_SESSIONS)
+ALL = (SERVABILITY, RECALLS, REFRESHES, SETTINGS, ALERTS, CACHE_INDEX, AUDIT, ADMIN_SESSIONS, REQUEST_COUNTS)
 
 
 def full_name(prefix: str, table: Table) -> str:
