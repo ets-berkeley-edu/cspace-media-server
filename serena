@@ -41,6 +41,7 @@ case "$cmd" in
     # The worker starts once the app is healthy (it creates the tables); give it a moment.
     for _ in $(seq 1 30); do [ -n "$(compose ps -q --status running worker)" ] && break; sleep 1; done
     echo "Serena (Local · simulator, $SERENA_BUILD) is up: http://localhost:$PORT/health"
+    echo "The admin app: http://localhost:${SERENA_ADMIN_PORT:-5373}/admin/   (it can take a minute more, for npm ci)"
     echo "A daily refresh: ./serena etl pahma" ;;
   down)
     compose down ;;
