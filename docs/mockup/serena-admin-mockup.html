@@ -164,6 +164,13 @@
   .totals .split { flex: 1 1 160px; max-width: 320px; }
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
   .toolbar .spacer { flex: 1; }
+  /* Past requests' Refresh (version 46, issue #100): when the numbers were read, and a spinner while Serena reads */
+  .read-at { font-size: 13px; white-space: nowrap; }
+  button.icon-text { display: inline-flex; align-items: center; gap: 5px; }
+  button.icon-text svg { width: 16px; height: 16px; flex: none; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; margin-right: 6px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
   .pager { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; justify-content: flex-end; font-size: 12px; color: var(--text-secondary); padding: 6px 10px; border-top: 1px solid var(--border); }
   .pager label { display: inline-flex; align-items: center; gap: 6px; }
   .pager select { min-height: 0; height: 26px; padding: 0 4px; font-size: 12px; border-color: var(--border); }
@@ -346,6 +353,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 46 (October 26, 2026, issue #100; for review; version 45 is issue #110's):</strong> <strong>Past requests</strong> has a <strong>Refresh</strong> button beside the range, and "Read &lt;time&gt; UTC" before it: when Serena read the log for the numbers shown, which can be up to a minute ago, since Serena keeps each museum's report, per range, for a minute (D108). Refresh reads the log again now, skipping that minute, for the cards, By day, Most requested, the table, and the From the cache or CollectionSpace card's today and totals (the stored days don't change). While it reads, "Reading the log…" with a spinner takes the time's place; the button keeps focus. <strong>The limit:</strong> once a museum's log has been read on Refresh, another Refresh within 10 seconds gets the same numbers, and the page says so under the button ("Read again less than 10 seconds ago, so Serena gave the same numbers. Try again in &lt;n&gt; seconds."), so repeated clicks can't flood Logs Insights (six queries a report, two for the counts card). <strong>Coming back</strong> to Past requests, or changing the range, reads again only once the numbers shown are more than a minute old, through the minute's cache, as now. Still the log's own delay: a request takes up to about a minute to be searchable, whatever the button does. Sample: the mockup's clock runs from 17:00:00 UTC while the page is open, and each read that reaches the log finds one more PAHMA request, up to three, as if you'd browsed some files. Try PAHMA, Last hour: Refresh, then Refresh again at once. <strong>For the app:</strong> a <code>fresh=1</code> parameter on <code>GET …/requests</code> and <code>GET …/requests/counts</code> that skips the cache and replaces the kept answer; the 10-second limit kept by Serena per museum, not by the browser, so another tab or admin can't get round it; each answer says when it was read.</li>
       <li><strong>Version 45 (October 26, 2026, issue #110; for review):</strong> An overridden refresh no longer reads like a healthy one. Choose "Overridden, updated" (or "Overridden, re-checking") under "Today's refresh" in Mockup settings. <strong>The refresh's page:</strong> the state pill reads <strong>Updated by override</strong>, in the warning colour with the shield, in place of "Updated". The banner leads with <strong>"A safety check failed, and an admin overrode it"</strong>, then how far the servable list went past the delta threshold (14.56% against 5%), then who overrode it, when and why. The check's heading reads <strong>"Servable list check: failed, overridden by admin"</strong>, never "passed" on its own, with no pill, since the heading says it (Richard, after reviewing the app); once the re-check passes, a line under it says it passed without the delta threshold. <strong>Lists:</strong> Past refreshes and Overview's Last refresh card show the same "Updated by override" pill (the shield alone stays while Serena re-checks), and in Past refreshes an overridden refresh's row has a warning-coloured bar at its left edge, like a waiting alert's red bar. The Audit log's "refresh outcome" says "State: updated by override". <strong>For the app:</strong> the pill's words and the check's heading come from the refresh's <code>override</code>, so the app needs no new state; the banner still needs the admin and the reason (see version 44).</li>
       <li><strong>Version 44 (October 26, 2026, issues #107 and #108; for review):</strong> <strong>A refresh's page</strong> is new to the mockup (the app has had one since the first release): a refresh ID opens it from Past refreshes, Overview, Alerts and the Audit log, where before the mockup only marked its row. It has the app's sections: the state line, the actions, Reasons, the servable list, its check and its servability update. <strong>The state pill (#107, in the app's pull request):</strong> a failed state also has a failure icon, so the cue isn't colour alone; a refresh still running is blue. <strong>An overridden delta threshold (#108):</strong> choose "Today's refresh" in Mockup settings. "Check failed on the delta threshold" opens a failed refresh with <strong>Override the delta threshold</strong>; give a reason and confirm. The page then shows, for as long as the refresh is shown, a <strong>banner</strong> under the state line, in the warning colour with a shield icon, saying who overrode it, when and why (the reason moves here from Reasons). While Serena re-checks, the failed check's heading has an <strong>Overridden</strong> pill and its threshold problem is struck through with "(overridden)". Once the re-check passes (4 seconds here; the page checks again by itself), it reads "Servable list check: passed" with a "Delta threshold overridden" pill and the check's warning. Past refreshes and Overview's Last refresh card show a <strong>shield</strong> after the state pill, with "Delta threshold overridden by &lt;admin&gt; at &lt;time&gt;" on hover (and read out). <strong>For the app:</strong> Serena returns only the override's time today; the banner needs the admin and the reason with it (both are already in the audit log and the alert). The state staying at "Checking the servable list" after an override is expected until the worker's next pass: the app's page doesn't load the refresh again by itself, so it kept showing the state from the moment of the override. Here it checks again every few seconds while the refresh is checking or updating.</li>
       <li><strong>Version 43 (October 26, 2026, issue #96):</strong> <strong>Past requests</strong> has a new card below By day and Most requested, <strong>From the cache or CollectionSpace</strong>: served requests answered from Serena's cached copy (hits) and fetched from CollectionSpace (misses), with the share from the cache and a bar for each row, and the unserved requests. It starts <strong>collapsed</strong>, showing the totals since counting began in one line and one bar (for PAHMA, "Since Apr 14, 2026: 6,858 served · from the cache 5,493 (80%) · from CollectionSpace 1,365 (20%) · unserved 126"); ▸ opens it (the app remembers the choice in this browser), and the totals stay above the table. It reads the daily counts the worker keeps (counted an hour after each UTC day ends, kept for good), not the range above, so it has its own <strong>Day / Week / Month / Year</strong> switch: the last 31 days, 13 weeks (ISO, Monday start), 12 months or every year, newest first. Today's row is read from the log as the page loads ("today, so far"); the first week, month or year counted says where the counts start ("from Apr 14"). The <strong>Served</strong> card at the top also splits the range's served requests: "from the cache 3 · from CollectionSpace 2". Sample data: the days the sample log covers (Oct 7 to 13) come from it and agree with By day; the days before, back to Apr 14, are invented, a few dozen a day for PAHMA and fewer for the others, the cache's share growing over the months. Try PAHMA with Week, then Month; and Cinefiles.</li>
@@ -788,6 +796,40 @@
   const RANGES = {"1h": 3600e3, "24h": DAY, "7d": 7 * DAY};
   const inRange = () => LOG.filter(l => l.museum === S.museum && ms(l.at) > ms(NOW) - RANGES[S.range] && ms(l.at) <= ms(NOW));
 
+  // ---- Reading the log again (version 46, issue #100). Serena keeps each museum's report, per range, for a minute
+  // (D108); Refresh skips that, at most once per museum every 10 seconds (inside that, Serena returns the kept answer
+  // and the page says so). Coming back to Past requests reads again once the numbers shown are over a minute old,
+  // through the minute's cache. Sample: the mockup's clock runs from NOW as the page is open, and each read that reaches
+  // the log finds one more PAHMA request (a copy of one served earlier, a few seconds before NOW), as if you'd browsed.
+  const LOADED = Date.now(), clock = () => ms(NOW) + (Date.now() - LOADED);
+  const isoOf = t => new Date(t).toISOString().slice(0, 19) + "Z";
+  const LATE = LOG.filter(l => l.museum === "pahma" && l.cache === "hit").slice(-3).map((l, k) => ({...l, at: isoOf(ms(NOW) - (40 - 15 * k) * 1000)}));
+  const READ = {}, FRESH = {}; // when Serena last read the log: per museum and range, and (for Refresh) per museum
+  const FRESH_EVERY = 10e3, KEPT_FOR = 60e3;
+  function readLog(fresh) {
+    const key = `${S.museum}:${S.range}`, now = clock();
+    if (S.reading) return;
+    if (!READ[key]) { READ[key] = now; return; } // the page's first read: shown at once in the mockup
+    if (fresh && FRESH[S.museum] && now - FRESH[S.museum] < FRESH_EVERY) {
+      const wait = Math.ceil((FRESH_EVERY - (now - FRESH[S.museum])) / 1000);
+      S.readNote = `Read again less than 10 seconds ago, so Serena gave the same numbers. Try again in ${wait} second${wait === 1 ? "" : "s"}.`;
+      render(); $("#reqRefresh")?.focus(); return;
+    }
+    if (!fresh && now - READ[key] < KEPT_FOR) return; // within the minute: Serena's kept answer, as shown
+    S.reading = true; S.readNote = ""; render(); $("#reqRefresh")?.focus();
+    setTimeout(() => {  // six Logs Insights queries for a report, two for the counts card
+      if (S.museum === "pahma" && LATE.length) { LOG.push(LATE.shift()); LOG.sort((x, y) => ms(x.at) - ms(y.at)); }
+      READ[key] = clock(); if (fresh) FRESH[S.museum] = READ[key];
+      S.reading = false; render(); $("#reqRefresh")?.focus();
+    }, 1200);
+  }
+  const REFRESH_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/></svg>`;
+  function readLine() {
+    const at = READ[`${S.museum}:${S.range}`] ||= clock(); // the page's first read, shown at once in the mockup
+    return `<span class="read-at secondary" id="reqReadAt" aria-live="polite">${S.reading ? `<span class="spin" aria-hidden="true"></span>Reading the log…` : at ? `Read ${when(isoOf(at))}` : ""}</span>
+      <button type="button" class="icon-text" id="reqRefresh" ${S.reading ? 'aria-busy="true"' : ""} title="Read the log again now, skipping Serena's one-minute cache">${REFRESH_ICON}Refresh</button>`;
+  }
+
   // ---- Daily request counts (version 43, issue #96): what the worker keeps, one item per museum per UTC day, an hour
   // after the day ends; today's row is read from the log as the page loads. Days the sample log covers come from it,
   // so they agree with By day; the days before are invented (a few dozen a day for PAHMA, the cache's share growing),
@@ -871,7 +913,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 45</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 46</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -888,7 +930,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 45</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 46</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" ${open ? 'data-show="waiting"' : ""} aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -1025,7 +1067,8 @@
       const shown = lines.filter(l => (!S.outcome || l.outcome === S.outcome) && (!S.reason || l.reason === S.reason));
       const signedCol = S.museum === "cinefiles"; // only a museum with signed access has the column (October 14, 2026)
       return `<div class="toolbar">${title(`${esc(name())} Past requests`)}<span class="spacer"></span>
-      <div role="group" aria-label="Range">${[["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"]].map(([k, v]) => `<button type="button" data-range="${k}" class="${S.range === k ? "primary" : ""}" aria-pressed="${S.range === k}">${v}</button>`).join(" ")}</div></div>
+      <div role="group" aria-label="Range">${[["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"]].map(([k, v]) => `<button type="button" data-range="${k}" class="${S.range === k ? "primary" : ""}" aria-pressed="${S.range === k}">${v}</button>`).join(" ")}</div>${readLine()}</div>
+      ${S.readNote ? `<p class="secondary" id="reqReadNote" role="status" style="margin:-4px 0 10px;text-align:right">${esc(S.readNote)}</p>` : ""}
       <p class="lead">What Serena served and couldn't serve for this museum, read from its log. Times are UTC. The counts cover every request in the range; the table below lists the newest requests. Click a column's name to sort by it; hover over it for what it holds.</p>
       <div class="cards"><div class="card"><div class="label">Served</div><div class="value num">${served}</div><div class="secondary">${bySizeHtml(lines.filter(l => l.outcome === "served"))}</div><div class="secondary"><span class="key hit"></span>from the cache ${lines.filter(l => l.cache === "hit").length} · <span class="key miss"></span>from CollectionSpace ${lines.filter(l => l.cache === "miss").length}</div></div><div class="card"><div class="label">Unserved</div><div class="value num">${lines.length - served}</div><div class="secondary">${reasons.map(([k, n]) => `${esc(k)} ${n}`).join(" · ") || "none"}</div></div></div>
       <div class="cards" style="grid-template-columns:repeat(auto-fit, minmax(440px, 1fr))">
@@ -1410,7 +1453,9 @@
         close(); render();
       };
     };
-    document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { S.range = clean(b.dataset.range); S.reason = ""; render(); });
+    document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { S.range = clean(b.dataset.range); S.reason = ""; S.readNote = ""; render(); });
+    const reread = $("#reqRefresh"); if (reread) reread.onclick = () => readLog(true);
+    if (S.page === "requests") readLog(false); // a range not read yet, or numbers over a minute old (issue #100)
     document.querySelectorAll("[data-counts-by]").forEach(b => b.onclick = () => { S.countsBy = clean(b.dataset.countsBy); render(); });
     const ct = $("#countsToggle"); if (ct) ct.onclick = () => { S.countsOpen = !S.countsOpen; render(); $("#countsToggle")?.focus(); };
     const ro = $("#reqOutcome"); if (ro) ro.onchange = () => { S.outcome = clean(ro.value); render(); };
