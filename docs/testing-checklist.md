@@ -1347,3 +1347,28 @@ Refresh finds a request at once. In AWS the log is Logs Insights, which takes up
   today row. Click Refresh four times quickly: expect the try-again message. In the CloudWatch console, Logs Insights'
   History tab for the app's log group: expect six queries per fresh read (and two for the counts), and no more than
   one fresh read per web task in any 10 seconds.
+
+## 38. Past refreshes and Overview update by themselves, on the local stack (10 minutes; before merging the pull request that adds it)
+
+What it checks: that Past refreshes and Overview load again by themselves while a refresh is checking or updating, as
+a refresh's own page does (mockup version 48). The worker usually finishes in seconds, so these steps stop it to hold a
+refresh at "Checking the servable list". With `./serena up`, run `./serena etl pahma`, then
+`./serena etl pahma --rows 3` (its check fails on the delta threshold alone), and sign in to PAHMA:
+
+- [ ] **1. Hold it.** Stop the worker: `docker compose -p serena stop worker`. Open the failed refresh and override the
+  delta threshold with a reason: its state is "Checking the servable list", and stays so.
+- [ ] **2. Past refreshes.** Open the browser's developer tools on Network, then Past refreshes: its row is the blue
+  "Checking the servable list" pill with the shield after it. Expect a `refreshes` request every 5 seconds or so, each
+  but the first with `X-Serena-Background: 1`.
+- [ ] **3. Away.** Open Recalls (any page but Past refreshes and Overview) and wait 15 seconds: no `refreshes`
+  requests. Come back to Past refreshes through the sidebar: one request without the header, then every 5 seconds
+  with it again.
+- [ ] **4. It finishes by itself.** Stay on Past refreshes and start the worker: `docker compose -p serena start
+  worker`. Without reloading, within about 10 seconds expect the orange "Updated by override" pill, and no more
+  `refreshes` requests after that.
+- [ ] **5. Overview.** With the worker running, make a new failed refresh with the full list, `./serena etl pahma`
+  (not `--rows 3` again: step 4 left that list in place, so it would pass), then repeat steps 1 and 4 with it,
+  watching Overview's "Newest refresh:" instead: `status` requests every 5 seconds while it checks, each but the first
+  with the header, then "Updated by override" without a reload, and no more requests.
+- [ ] **6. Nothing working.** With no refresh checking or updating, leave Past refreshes or Overview open for a
+  minute: no `refreshes` or `status` requests (the `alerts` banner's own checks carry on).

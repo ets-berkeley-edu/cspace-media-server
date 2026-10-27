@@ -812,7 +812,9 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   shield icon, and leaves the reason out of Reasons; while the worker checks again, the failed check's delta threshold
   problem is struck through with "(overridden)"; a re-check that fails on something else has a "Delta threshold
   overridden" chip by its heading. While a refresh is `checking` or `updating`, its page loads it again every 5
-  seconds, as background requests (they don't count as activity). Past refreshes and Overview show a shield after the
+  seconds, as background requests (they don't count as activity); so do Past refreshes, while any refresh it lists is,
+  and Overview, while its newest refresh is (decided October 27, 2026, mockup version 48), each until none is. Past
+  refreshes, kept alive, stops while another page is shown. Past refreshes and Overview show a shield after the
   state, with who and when in a tooltip and for screen readers. So that an overridden refresh never reads like a
   healthy one (issue #110, decided October 26, 2026, mockup version 45): once it's updated, its state reads "Updated
   by override", in the warning colour with the shield, on its page, Past refreshes and Overview; the banner leads with
@@ -1148,8 +1150,9 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     another museum, they sign in to it too: the app keeps a session per museum and switches between them.
   - Sessions: a random token in an HttpOnly, Secure, SameSite=Strict cookie per museum (`serena_admin_<museum>`, path
     `/admin`); the session record is keyed by the token's SHA-256. Signed out after 30 minutes without activity and
-    after 8 hours at most. The app's own background requests (the alert banner's checks, marked
-    `X-Serena-Background: 1`) don't count as activity, so a tab left open still signs out. Without a stored password
+    after 8 hours at most. The app's own background requests (the alert banner's checks, and a refresh's page, Past
+    refreshes and Overview loading again while a refresh is checking or updating, marked `X-Serena-Background: 1`)
+    don't count as activity, so a tab left open still signs out. Without a stored password
     the role is checked only at sign-in, so a role removed in CollectionSpace takes effect at the next sign-in, within
     8 hours; "sign everyone out" ends every session for a museum at once.
   - Every request that changes something carries `X-Serena-Admin: 1`, which a cross-site form can't send; without it
