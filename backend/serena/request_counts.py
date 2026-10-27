@@ -21,7 +21,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from . import tables
-from .requests_log import LogUnavailable, Reader, Tally, TooSlow
+from .requests_log import FreshReads, LogUnavailable, Reader, Tally, TooSlow
 from .store import Store
 
 log = logging.getLogger("serena.request_counts")
@@ -104,26 +104,32 @@ class Summary:
     unserved: int
     rows: list[PeriodCount]  # newest first, SHOWN[period] at most
     live_unavailable: str | None = None  # why today's (and any uncounted day's) counts couldn't be read
+    read_at: str = ""  # when today's (and any uncounted day's) counts were read from the log, ISO, UTC (issue #100)
+    try_again_in: int | None = None  # a refused fresh read (issue #100): the seconds until the next one
 
 
 class RequestCounts:
     def __init__(self, store: Store, reader: Reader | None, retention_days: int,
                  clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                 cache_seconds: float = LIVE_CACHE_SECONDS):
+                 cache_seconds: float = LIVE_CACHE_SECONDS, fresh: FreshReads | None = None):
         self.store = store
         self.reader = reader
         self.retention_days = retention_days
         self.clock = clock
         self.cache_seconds = cache_seconds
-        self._cache: dict[str, tuple[datetime, list[DayCount], str | None]] = {}
+        self.fresh = fresh or FreshReads()  # Past requests' Refresh (issue #100), as for its report
+        self._cache: dict[str, tuple[datetime, list[DayCount], str | None, datetime]] = {}
         self._lock = threading.Lock()
 
-    def summary(self, tenant: str, period: str) -> Summary:
-        """The museum's counts by period for the Past requests page, newest first, with the totals of every day."""
+    def summary(self, tenant: str, period: str, fresh: bool = False) -> Summary:
+        """The museum's counts by period for the Past requests page, newest first, with the totals of every day. A
+        fresh summary (Refresh, issue #100) reads the days not counted yet from the log again, at most once per
+        museum every FRESH_SECONDS; inside that, the kept one stands, with the seconds until the next."""
         if period not in PERIODS:
             raise ValueError(f"period must be one of {', '.join(PERIODS)}")
         now = self.clock()
-        days, unavailable = self._all_days(tenant, now)
+        wait = self.fresh.wait(tenant, now) if fresh else None
+        days, unavailable, read_at = self._all_days(tenant, now, fresh and wait is None)
         rows: dict[str, list[DayCount]] = {}
         for count in days:
             rows.setdefault(period_of(count.day, period), []).append(count)
@@ -134,13 +140,14 @@ class RequestCounts:
                              and since != period_bounds(key, period)[0])
                  for key, kept in sorted(rows.items(), reverse=True)][:SHOWN[period]]
         return Summary(period, now.astimezone(UTC).date().isoformat(), since, sum(d.hits for d in days),
-                       sum(d.misses for d in days), sum(sum(d.unserved.values()) for d in days), shown, unavailable)
+                       sum(d.misses for d in days), sum(sum(d.unserved.values()) for d in days), shown, unavailable,
+                       read_at.isoformat(), wait)
 
-    def _all_days(self, tenant: str, now: datetime) -> tuple[list[DayCount], str | None]:
+    def _all_days(self, tenant: str, now: datetime, fresh: bool = False) -> tuple[list[DayCount], str | None, datetime]:
         with self._lock:
             kept = self._cache.get(tenant)
-            if kept is not None and kept[0] > now:
-                return kept[1], kept[2]
+            if kept is not None and kept[0] > now and not fresh:
+                return kept[1], kept[2], kept[3]
         today = now.astimezone(UTC).date()
         stored = self.days(tenant, date(2000, 1, 1), today)
         # Not counted yet: today, and yesterday until the worker has counted it (an hour after it ends).
@@ -162,8 +169,8 @@ class RequestCounts:
             unavailable = str(error)
         days = stored + live
         with self._lock:
-            self._cache[tenant] = (now + timedelta(seconds=self.cache_seconds), days, unavailable)
-        return days, unavailable
+            self._cache[tenant] = (now + timedelta(seconds=self.cache_seconds), days, unavailable, now)
+        return days, unavailable, now
 
     def days(self, tenant: str, first: date, last: date) -> list[DayCount]:
         """The stored counts from first to last (inclusive), oldest first. A day with no item isn't listed."""

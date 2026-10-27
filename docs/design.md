@@ -1274,8 +1274,8 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **Keeping an admin's place** (Richard, October 14, 2026). The list pages (Past requests, Recalls, Alerts, the
     Audit log, Past refreshes) keep their filters and each table's sort, page and page size in the address, defaults
     left out, and are kept alive (one per museum), so Back, "← Back to …" or a shared address finds the same view,
-    scrolled where it was; coming back reloads Alerts, Recalls, the Audit log and Past refreshes (not Past requests,
-    whose reports are cached a minute). A page reached through a link in the app (a path, a CSID, a refresh ID, a
+    scrolled where it was; coming back reloads Alerts, Recalls, the Audit log and Past refreshes, and Past requests
+    once the numbers it shows are more than a minute old, through Serena's minute (issue #100). A page reached through a link in the app (a path, a CSID, a refresh ID, a
     target) starts with "← Back to <page>", which returns there (the browser's Back when that's the entry before);
     a page opened from the menu, the bell, the gear, the banner, a bookmark or a shared address has none. Each browser
     history entry keeps its own, so Back and Forward show the right one.
@@ -1382,6 +1382,16 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     it waits. Logs Insights can't limit a query to one museum: every query filters on the signed-in museum, which comes
     from Serena's list of museums and is checked to be lowercase letters before it goes into the query, so nothing an
     admin types reaches a query.
+  - **Refresh** (issue #100, decided October 26, 2026, mockup version 46). Beside the range, "Read <time> UTC" says
+    when Serena read the log for the numbers shown (`read_at`: up to a minute ago, as above), and Refresh reads it
+    again now for the whole page: `fresh=1` on `GET …/requests` and `GET …/requests/counts` skips the kept answer and
+    replaces it (the counts' stored days don't change). While it reads, the numbers stay and "Reading the log…" with
+    a spinner takes the time's place. To keep repeated clicks from flooding Logs Insights (six queries a report, two
+    for the counts), each web task allows one fresh read per museum every 10 seconds; inside that, it returns the
+    kept answer with `try_again_in` (whole seconds), and the page says "Read again less than 10 seconds ago, so Serena
+    gave the same numbers. Try again in <n> seconds." The limit, like the minute, is kept in each task's memory, so
+    with two web tasks a museum gets at most two fresh reads every 10 seconds. A request still needs up to about a
+    minute to be searchable in Logs Insights, whatever Refresh does. The page doesn't poll.
   - **Locally** (D109). With `SERENA_LOG_FILE` (allowed only with a local DynamoDB endpoint), the app also writes its
     log lines to that file (20 MB and one rotated copy), and the admin API runs the same six queries in Python over
     it, in place of CloudWatch. Tests use the same stand-in; a separate test checks the Logs Insights query text.

@@ -139,15 +139,20 @@ function periodName(row: PeriodCount, period: CountsPeriod): string {
   return row.period
 }
 
-watch([() => props.museum, by], async ([museum, period]) => {
+async function load(fresh = false) {
   error.value = ''
   try {
-    counts.value = await api.requestCounts(museum, period)
+    counts.value = await api.requestCounts(props.museum, by.value, fresh)
   } catch (e) {
     counts.value = null
     error.value = problem(e)
   }
-}, {immediate: true})
+}
+
+watch([() => props.museum, by], () => load(), {immediate: true})
+
+// Past requests' Refresh and its coming back after a minute (issue #100) read today's counts again with the rest.
+defineExpose({load, readAt: () => counts.value?.read_at || ''})
 </script>
 
 <style scoped>

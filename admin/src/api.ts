@@ -223,6 +223,8 @@ export interface RequestsReport {
   served_by_size: {size: string, requests: number}[] // every served request in the range, in that order
   served_by_cache: {hit: number, miss: number} // from Serena's cache, or fetched from CollectionSpace (issue #96)
   lines: RequestLine[]
+  read_at: string // when Serena read the log for it: it keeps a report a minute (D108)
+  try_again_in: number | null // a refused Refresh (issue #100): the seconds until the next; the kept report came back
 }
 
 export type CountsPeriod = 'day' | 'week' | 'month' | 'year'
@@ -246,6 +248,8 @@ export interface RequestCounts {
   totals: {hits: number, misses: number, unserved: number} // every day counted, and today so far
   rows: PeriodCount[] // newest first
   live_unavailable: string | null // why today's counts couldn't be read from the log
+  read_at: string // when today's counts were read from the log (issue #100)
+  try_again_in: number | null
 }
 
 /** A Media record a recall would recall, and how Serena found it (D116). */
@@ -370,10 +374,11 @@ export const api = {
     `${PREFIX}/museums/${museum}/blobs/${encodeURIComponent(blobCsid)}/preview?size=${encodeURIComponent(size)}`,
   lookup: (museum: string, q: string) =>
     call<Lookup>('GET', `/museums/${museum}/lookup?${new URLSearchParams({q})}`),
-  requests: (museum: string, range: RequestRange) =>
-    call<RequestsReport>('GET', `/museums/${museum}/requests?range=${range}`),
-  requestCounts: (museum: string, by: CountsPeriod) =>
-    call<RequestCounts>('GET', `/museums/${museum}/requests/counts?by=${by}`),
+  // fresh: Past requests' Refresh (issue #100), reading the log again now rather than taking the minute's kept answer
+  requests: (museum: string, range: RequestRange, fresh = false) =>
+    call<RequestsReport>('GET', `/museums/${museum}/requests?range=${range}${fresh ? '&fresh=1' : ''}`),
+  requestCounts: (museum: string, by: CountsPeriod, fresh = false) =>
+    call<RequestCounts>('GET', `/museums/${museum}/requests/counts?by=${by}${fresh ? '&fresh=1' : ''}`),
   // The lines matching the page's range and filters, as CSV: a plain link, so the browser saves the file (D113).
   requestsExportUrl: (museum: string, range: RequestRange, outcome: string, reason: string) => {
     const query = new URLSearchParams({range})

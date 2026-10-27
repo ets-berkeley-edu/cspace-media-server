@@ -288,6 +288,25 @@ def test_the_summary_is_kept_a_minute(store: Store, log_file: Path) -> None:
     assert request_counts.summary("pahma", "day").hits == 1
 
 
+def test_a_fresh_summary_reads_the_log_again_at_most_every_10_seconds(store: Store, log_file: Path) -> None:
+    """Past requests' Refresh (issue #100): today's counts from the log now, skipping the minute they're kept."""
+    now = [NOW]
+    request_counts = RequestCounts(store, FileReader(log_file), 30, clock=lambda: now[0])
+    first = request_counts.summary("pahma", "day")
+    assert (first.hits, first.read_at, first.try_again_in) == (0, NOW.isoformat(), None)
+    write(log_file, [served(NOW)])
+    now[0] = NOW + timedelta(seconds=2)
+    fresh = request_counts.summary("pahma", "day", fresh=True)
+    assert (fresh.hits, fresh.read_at, fresh.try_again_in) == (1, now[0].isoformat(), None)
+    write(log_file, [served(NOW)])  # appended: two lines now
+    now[0] = NOW + timedelta(seconds=5)
+    refused = request_counts.summary("pahma", "day", fresh=True)  # 3 seconds after the last: the kept one stands
+    assert (refused.hits, refused.read_at, refused.try_again_in) == (1, fresh.read_at, 7)
+    assert request_counts.summary("pahma", "day").try_again_in is None  # an ordinary read is never refused
+    now[0] = NOW + timedelta(seconds=12)
+    assert request_counts.summary("pahma", "day", fresh=True).hits == 2
+
+
 def test_the_api(store: Store, s3: Any, secretsmanager: Any, log_file: Path) -> None:
     app = make_app(store, s3, secretsmanager)
     app.state.admin.sessions.clock = Clock()
@@ -306,7 +325,10 @@ def test_the_api(store: Store, s3: Any, secretsmanager: Any, log_file: Path) -> 
                   "unserved": 0, "live": True, "partial": False},
                  {"period": "2026-10-25", "first_day": "2026-10-25", "last_day": "2026-10-25", "hits": 7, "misses": 1,
                   "unserved": 1, "live": False, "partial": False}],
-        "live_unavailable": None}
+        "live_unavailable": None, "read_at": NOW.isoformat(), "try_again_in": None}
+    # Refresh (issue #100): the clock doesn't move here, so the first fresh read goes ahead and the next waits.
+    assert client.get(url, params={"fresh": "1"}).json()["try_again_in"] is None
+    assert client.get(url, params={"fresh": "1"}).json()["try_again_in"] == 10
     assert client.get(url, params={"by": "month"}).json()["rows"][0]["period"] == "2026-10"
     assert client.get(url, params={"by": "decade"}).status_code == 422
     assert client.get("/admin/v1/museums/bampfa/requests/counts").status_code in (401, 403)  # signed in to PAHMA

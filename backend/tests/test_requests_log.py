@@ -127,6 +127,35 @@ def test_reports_are_kept_a_minute(tmp_path: Path) -> None:
     assert len(calls) == 3
 
 
+def test_a_fresh_read_skips_the_kept_report_at_most_every_10_seconds(tmp_path: Path) -> None:
+    """Past requests' Refresh (issue #100): the log now, once per museum every 10 seconds; inside that, the kept report
+    and the seconds to wait."""
+    clock = [NOW]
+    calls = []
+
+    class Counting(FileReader):
+        def run(self, museum: str, start: datetime, end: datetime) -> Any:
+            calls.append((museum, end))
+            return super().run(museum, start, end)
+
+    requests = Requests(Counting(tmp_path / "none"), clock=lambda: clock[0])
+    kept = requests.report("pahma", "24h")
+    clock[0] = NOW + timedelta(seconds=3)
+    fresh, wait = requests.read("pahma", "24h", fresh=True)  # within the minute, but fresh: read again, and kept
+    assert (len(calls), fresh.end, wait) == (2, clock[0], None)
+    assert requests.report("pahma", "24h") is fresh
+    clock[0] = NOW + timedelta(seconds=8)
+    again, wait = requests.read("pahma", "24h", fresh=True)  # 5 seconds later: refused
+    assert (len(calls), again, wait) == (2, fresh, 5)
+    _, wait = requests.read("bampfa", "24h", fresh=True)  # another museum has its own 10 seconds
+    assert (len(calls), wait) == (3, None)
+    _, wait = requests.read("pahma", "1h", fresh=True)  # refused, but nothing kept for the range: read it
+    assert (len(calls), wait) == (4, 5)
+    clock[0] = NOW + timedelta(seconds=13.5)
+    assert requests.read("pahma", "24h", fresh=True)[1] is None and len(calls) == 5
+    assert kept is not fresh
+
+
 def test_no_log_reader_here() -> None:
     with pytest.raises(LogUnavailable):
         Requests(None).report("pahma", "24h")
@@ -267,6 +296,10 @@ def test_the_report(client: TestClient, log_file: Path) -> None:
                                       {"size": "original", "requests": 1}]
     assert body["top_paths"][0] == {"path": "/pahma/imageserver/blobs/b1/content", "requests": 1}
     assert body["served_by_cache"] == {"hit": 3, "miss": 0}  # issue #96
+    assert (body["read_at"], body["try_again_in"]) == (now.isoformat(), None)  # issue #100
+    # Refresh (issue #100): the clock doesn't move here, so the first fresh read goes ahead and the next waits.
+    assert client.get(URL, params={"fresh": "1"}).json()["try_again_in"] is None
+    assert client.get(URL, params={"fresh": "1"}).json()["try_again_in"] == 10
     assert client.get(URL, params={"range": "7d"}).status_code == 200
     assert client.get(URL, params={"range": "30d"}).status_code == 422
     sign_in(client, "cinefiles")

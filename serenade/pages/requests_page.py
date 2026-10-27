@@ -9,6 +9,9 @@ from .page import Locator, Page, by_id
 class RequestsPage(Page):
     TITLE = by_id("page-title")
     LOADING = by_id("requests-loading")  # "Reading Serena's log…"
+    READ_AT = by_id("requests-read-at")  # issue #100: "Read <time> UTC", or "Reading the log…" while it reads again
+    REFRESH = by_id("requests-refresh")
+    REFRESH_NOTE = by_id("requests-refresh-note")  # a second Refresh inside Serena's 10 seconds
     SERVED = by_id("requests-served")
     BY_SIZE = by_id("requests-by-size")  # "by size: Small 1 · Medium 2 · …"
     UNSERVED = by_id("requests-unserved")
