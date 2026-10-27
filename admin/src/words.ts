@@ -139,6 +139,16 @@ export function stateOf(state: string): string {
   return STATES[state] || state
 }
 
+/** Whether a refresh updated only because an admin overrode its delta threshold (issue #110). */
+export function byOverride(refresh: {state: string, override?: unknown}): boolean {
+  return !!refresh.override && refresh.state === 'updated'
+}
+
+/** A refresh's state as the app shows it: one that updated after an override is "Updated by override" (issue #110). */
+export function refreshStateOf(refresh: {state: string, override?: unknown}): string {
+  return byOverride(refresh) ? 'Updated by override' : stateOf(refresh.state)
+}
+
 export function when(iso: string | null | undefined): string {
   return iso ? iso.replace('T', ' ').replace(/(\.\d+)?(Z|\+00:00)$/, '').slice(0, 19) + ' UTC' : ''
 }

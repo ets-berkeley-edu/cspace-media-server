@@ -2,7 +2,7 @@
   <v-container fluid>
     <h1 id="page-title" class="text-h5 mb-1">{{ museumName(museum) }} refresh {{ refresh?.refresh_id }}</h1>
     <p v-if="refresh" class="mb-4">
-      <RefreshState id="refresh-state" :state="refresh.state" />
+      <RefreshState id="refresh-state" :state="refresh.state" :override="refresh.override" />
       · refresh date {{ refresh.refresh_date }}<span v-if="refresh.admin_refresh_date"> · an admin refresh, with the servable list
         for {{ refresh.admin_refresh_date }}</span> · last change {{ when(refresh.updated_at) }}
       <span v-if="!refresh.newest"> · a later refresh has started</span>
@@ -17,7 +17,10 @@
       density="compact"
       class="mb-4"
     >
-      <strong>Delta threshold overridden</strong> by {{ overrideBy(refresh.override) }} at {{ when(refresh.override.at) }}.
+      <!-- It leads with the check that failed and by how much, then who, when and why (issue #110). -->
+      <strong id="override-lead" class="text-subtitle-1 font-weight-bold">A safety check failed, and an admin overrode it</strong>
+      <div v-if="overshoot" id="override-overshoot">{{ overshoot }}</div>
+      <div><strong>Delta threshold overridden</strong> by {{ overrideBy(refresh.override) }} at {{ when(refresh.override.at) }}.</div>
       <div v-if="refresh.override.reason" id="override-reason">Reason: {{ refresh.override.reason }}</div>
       <div>{{ afterOverride }}</div>
     </v-alert>
@@ -66,9 +69,11 @@
 
       <template v-if="refresh.check">
         <h2 id="check-heading" class="text-h6 mb-2">
-          Servable list check: {{ refresh.check.result }}
+          <!-- After an override it never reads "passed" alone: the check failed, and an admin overrode it (issue #110). -->
+          Servable list check: <template v-if="overriddenCheck"><span class="text-error">failed</span>, overridden by admin</template><template v-else>{{ refresh.check.result }}</template>
+          <!-- Only where the heading doesn't already say it: a re-check that failed on something else (issue #110). -->
           <v-chip
-            v-if="refresh.override"
+            v-if="refresh.override && !overriddenCheck"
             id="check-overridden"
             color="warning"
             size="small"
@@ -80,7 +85,7 @@
               size="small"
               class="mr-1"
               aria-hidden="true"
-            />{{ overriddenFailure ? 'Overridden' : 'Delta threshold overridden' }}
+            />Delta threshold overridden
           </v-chip>
         </h2>
         <p class="mb-2">
@@ -88,6 +93,9 @@
           {{ refresh.check.changed }} changed<span v-if="refresh.check.previous_rows !== null">
             ({{ refresh.check.delta_percent }}% of the {{ refresh.check.previous_rows }} rows of the last servability update; the
             threshold is {{ refresh.check.threshold_percent }}%)</span>.
+        </p>
+        <p v-if="passedByOverride" id="check-passed-without-threshold" class="mb-2 text-medium-emphasis">
+          It passed when Serena checked it again without the delta threshold; every other check still applied.
         </p>
         <p v-if="overriddenFailure" class="mb-2 text-medium-emphasis">
           The check below is the one the override answered: its delta threshold problem no longer stops the refresh. The new
@@ -210,6 +218,17 @@ const reasons = computed(() => {
 // fails on something else replaces it, and isn't marked.
 const overriddenFailure = computed(() => !!refresh.value?.override && refresh.value.state === 'checking' &&
   refresh.value.check?.result === 'failed')
+// The re-check without the delta threshold passed (issue #110).
+const passedByOverride = computed(() => !!refresh.value?.override && refresh.value.check?.result === 'passed')
+// The check an admin overrode: "failed, overridden by admin" while Serena re-checks it and once the re-check passes.
+const overriddenCheck = computed(() => overriddenFailure.value || passedByOverride.value)
+// How far the servable list went past the delta threshold, for the banner (issue #110).
+const overshoot = computed(() => {
+  const check = refresh.value?.check
+  return check && check.previous_rows !== null
+    ? `The servable list changes ${check.delta_percent}% of the rows; the threshold is ${check.threshold_percent}%.`
+    : ''
+})
 const afterOverride = computed(() => {
   const state = refresh.value?.state || ''
   if (WORKING.includes(state)) {
