@@ -1338,8 +1338,10 @@ Refresh finds a request at once. In AWS the log is Logs Insights, which takes up
 - [ ] **3. The limit.** Click Refresh again at once. Expect, under the button, "Read again less than 10 seconds ago,
   so Serena gave the same numbers. Try again in <n> seconds." and the same read time. Wait 10 seconds: Refresh reads
   again.
-- [ ] **4. Coming back.** Open Overview, come back within a minute: the same read time, no "Reading the log…". Open
-  Overview again, wait a minute and come back: "Reading the log…", then a new read time.
+- [ ] **4. Coming back.** Leave Past requests for another page (Overview, say; nothing there is part of this step),
+  and come back to it through the sidebar, not by reloading, within a minute of the read time: the same read time, no
+  "Reading the log…". Leave it again, wait until the read time is over a minute old and come back: "Reading the
+  log…" (locally it may only flash), then a new read time.
 - [ ] **5. In AWS.** On personal-dev, deployed from this branch: browse two Thumbnails, wait a minute, then click
   Refresh on Past requests with "Last hour". Expect them in the table and in "From the cache or CollectionSpace"'s
   today row. Click Refresh four times quickly: expect the try-again message. In the CloudWatch console, Logs Insights'
