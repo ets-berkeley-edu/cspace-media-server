@@ -809,11 +809,17 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   keeps the override's time, admin and reason (`override`: `at`, `by`, `reason`; an override made before October 26,
   2026 has only `at`), and the admin API returns it with every refresh, in lists too (issue #108, decided October 26,
   2026, mockup version 44). The refresh's page shows it in a banner under the state line, in the warning colour with a
-  shield icon, and leaves the reason out of Reasons; while the worker checks again, the failed check's heading has an
-  "Overridden" chip and its delta threshold problem is struck through with "(overridden)"; once the check passes, a
-  "Delta threshold overridden" chip. While a refresh is `checking` or `updating`, its page loads it again every 5
+  shield icon, and leaves the reason out of Reasons; while the worker checks again, the failed check's delta threshold
+  problem is struck through with "(overridden)"; a re-check that fails on something else has a "Delta threshold
+  overridden" chip by its heading. While a refresh is `checking` or `updating`, its page loads it again every 5
   seconds, as background requests (they don't count as activity). Past refreshes and Overview show a shield after the
-  state, with who and when in a tooltip and for screen readers.
+  state, with who and when in a tooltip and for screen readers. So that an overridden refresh never reads like a
+  healthy one (issue #110, decided October 26, 2026, mockup version 45): once it's updated, its state reads "Updated
+  by override", in the warning colour with the shield, on its page, Past refreshes and Overview; the banner leads with
+  "A safety check failed, and an admin overrode it" and how far the list went past the delta threshold; the check's
+  heading reads "failed, overridden by admin" while the worker checks again and once the check passes, never "passed"
+  on its own, with no chip, since the heading says it; and on Past refreshes an overridden refresh's row has a bar in
+  the warning colour down its left edge.
 - **Start an admin refresh** (`POST /admin/v1/museums/{tenant}/refreshes`, the app's "Start a refresh" page). When a
   servable list didn't reach Serena, or needs replacing: the admin runs the servable list script on the ETL server,
   then sends the list (plain or gzip, under the same size limit as the ETL's uploads), gives the refresh date it is
@@ -1205,6 +1211,10 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **Column help** (D164). A column's name with a dotted underline has a description, shown on hover or keyboard
     focus (a Vuetify tooltip): every column of the Past refreshes, Alerts, Past requests, Recalls and Audit log
     tables.
+  - **A refresh's state is a pill** (issue #107, as the mockup's version 43), the same on Past refreshes, the
+    refresh's page and Overview: Updated in green; a failed state (Servable list check failed, Servability update
+    failed) in red, with a failure icon so the cue isn't colour alone; a refresh still running in blue; Abandoned in
+    grey. The label is what a screen reader reads; the icon is hidden from it.
   - **Links** (D157, D158). A refresh ID opens that refresh's page wherever it appears: in an alert's text and its
     About, in the Audit log, under "kept by" on Recalls and in "Ended by refresh" there. An Audit log target that's a
     Media CSID opens Media look up; a setting, the Settings page; an acknowledged alert, the Alerts page, but only for

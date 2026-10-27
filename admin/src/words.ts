@@ -20,6 +20,20 @@ export function overrideReason(reason: string): string {
   return `delta threshold overridden by an admin: ${reason}`
 }
 
+/** The states that need an admin: shown in red, with a failure icon so the cue isn't colour alone (issue #107). */
+export const FAILED_STATES = new Set(['check_failed', 'update_failed'])
+
+/**
+ * A state's colour, as the mockup's pills (version 43): Updated green, a failed state red, Abandoned grey, and a
+ * refresh still running blue. An unknown state is grey.
+ */
+export function toneOf(state: string): string {
+  if (FAILED_STATES.has(state)) {
+    return 'error'
+  }
+  return {updated: 'success', started: 'info', received: 'info', checking: 'info', updating: 'info'}[state] || ''
+}
+
 /** How the audit retention's choices read (D97). */
 export const RETENTION_LABELS: Record<number, string> = {
   90: '90 days', 183: '6 months', 365: '12 months', 548: '18 months', 730: '24 months', 1095: '36 months'
@@ -123,6 +137,16 @@ export function reasonOf(reason: string): string {
 
 export function stateOf(state: string): string {
   return STATES[state] || state
+}
+
+/** Whether a refresh updated only because an admin overrode its delta threshold (issue #110). */
+export function byOverride(refresh: {state: string, override?: unknown}): boolean {
+  return !!refresh.override && refresh.state === 'updated'
+}
+
+/** A refresh's state as the app shows it: one that updated after an override is "Updated by override" (issue #110). */
+export function refreshStateOf(refresh: {state: string, override?: unknown}): string {
+  return byOverride(refresh) ? 'Updated by override' : stateOf(refresh.state)
 }
 
 export function when(iso: string | null | undefined): string {

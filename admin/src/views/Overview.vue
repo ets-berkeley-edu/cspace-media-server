@@ -7,7 +7,12 @@
       Newest refresh:
       <router-link :to="{name: 'refresh', params: {museum: String(route.params.museum), refreshId: status.newest.refresh_id}}">
         {{ status.newest.refresh_id }}
-      </router-link>, {{ stateOf(status.newest.state) }}<OverrideMark id="newest-override" :override="status.newest.override" />.
+      </router-link>
+      <RefreshState id="newest-refresh-state" :state="status.newest.state" :override="status.newest.override" /><OverrideMark
+        v-if="!byOverride(status.newest)"
+        id="newest-override"
+        :override="status.newest.override"
+      />
     </p>
     <p v-else-if="status" class="mb-2">No refreshes yet.</p>
     <p id="overview-pages" class="mb-6">
@@ -65,8 +70,9 @@ import type {Status} from '@/api'
 import {api, problem} from '@/api'
 import LoadError from '@/components/LoadError.vue'
 import OverrideMark from '@/components/OverrideMark.vue'
+import RefreshState from '@/components/RefreshState.vue'
 import {refresh, signedInTo} from '@/session'
-import {stateOf} from '@/words'
+import {byOverride} from '@/words'
 
 const route = useRoute()
 const router = useRouter()

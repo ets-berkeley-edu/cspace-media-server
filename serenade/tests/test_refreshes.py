@@ -81,9 +81,12 @@ def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) ->
     page.click(page.CONFIRM)
     # Issue #108: the banner says who, when and why at once, and the page checks again by itself until it's updated.
     banner = page.wait_for_text(page.OVERRIDE_BANNER, f"Reason: {OVERRIDE_REASON}").text
-    assert banner.startswith("Delta threshold overridden by "), banner
-    page.wait_for_text(page.STATE, "Updated", timeout=60)
-    assert page.text_of(page.CHECK_OVERRIDDEN) == "Delta threshold overridden"
+    # Issue #110: the banner leads with the check that failed; once updated, the state and the check still say so.
+    assert banner.startswith("A safety check failed, and an admin overrode it"), banner
+    assert "Delta threshold overridden by " in banner, banner
+    page.wait_for_text(page.STATE, "Updated by override", timeout=60)
+    assert "failed, overridden by admin" in page.text_of(page.CHECK_HEADING)
+    assert not page.driver.find_elements(*page.CHECK_OVERRIDDEN), "the heading says it: no chip"
     assert OVERRIDE_REASON not in page.text_of(page.REASONS), "the reason is in the banner, not under Reasons"
 
 
