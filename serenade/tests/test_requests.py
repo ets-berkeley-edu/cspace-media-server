@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import io
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -27,6 +28,7 @@ from serenade.pages.lookup_page import LookUpPage
 from serenade.pages.page import shortened
 from serenade.pages.requests_page import RequestsPage
 from serenade.pages.sign_in_page import SignInPage
+from serenade.stack import redirect_of
 
 pytestmark = pytest.mark.usefixtures("built_dataset")
 
@@ -186,3 +188,21 @@ def test_t64_a_file_serena_cant_show(driver: WebDriver, base_url: str) -> None:
     page.click((By.XPATH, f"{page.line_for(UNKNOWN_PATH)[1]}//button[contains(@class, 'file-link')]"))
     why = page.wait_for(page.FILE_DIALOG_NONE, timeout=20).text
     assert why == "Nothing to show: Serena has no cached copy, and CollectionSpace has no file with this CSID.", why
+
+
+def test_t106_refresh_reads_the_log_again(driver: WebDriver, base_url: str) -> None:
+    """Checklist section 37 (issue #100): Refresh shows a request made after the page was read, at once, and a second
+    Refresh inside Serena's 10 seconds says when to try again."""
+    page = requests_page(driver, base_url)
+    page.click(page.range_button("Last hour"))
+    page.wait_until_gone(page.LOADING, timeout=30)  # the last hour's own read, not the 24 hours' before it
+    first = page.wait_for_text(page.READ_AT, "Read ").text
+    path = f"/{MUSEUM}/imageserver/blobs/{uuid.uuid4()}/content"  # a Blob no refresh lists: unserved, not listed
+    redirect_of(path)
+    assert not page.driver.find_elements(*page.line_for(path)), "on the page before Refresh"
+    page.click(page.REFRESH)
+    page.wait_for(page.line_for(path), timeout=30)
+    assert page.text_of(page.READ_AT) != first, "the read time didn't move"
+    page.click(page.REFRESH)
+    note = page.wait_for_text(page.REFRESH_NOTE, "Try again in").text
+    assert note.startswith("Read again less than 10 seconds ago, so Serena gave the same numbers."), note

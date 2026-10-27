@@ -1324,3 +1324,24 @@ What it checks: issues #108 and #110. With `./serena up`, run `./serena etl pahm
   UTC". With VoiceOver, expect the same words read out.
 - [ ] **5. Not activity.** Before step 1, open the browser's developer tools on Network. Expect each GET of the refresh
   the page makes by itself while it checks to carry `X-Serena-Background: 1`, so an open tab still signs out when idle.
+
+## 37. Refresh on Past requests (15 minutes: 5 on the local stack, 10 in AWS; before merging the pull request that adds it)
+
+What it checks: issue #100. Serenade's T106 checks steps 1 to 3 on the local stack, where the log is a file and
+Refresh finds a request at once. In AWS the log is Logs Insights, which takes up to about a minute to find a request.
+
+- [ ] **1. Read when.** With `./serena up` and `./serena etl pahma`, sign in to PAHMA and open Past requests. Beside
+  the range, expect "Read <date> <time> UTC" and a Refresh button.
+- [ ] **2. Refresh.** In another tab, open a PAHMA file once
+  (`http://localhost:8300/pahma/imageserver/blobs/<any CSID>/content`). Click Refresh: expect "Reading the log…"
+  with a spinner where the time was, the numbers staying, then a later "Read …" time and that request in the table.
+- [ ] **3. The limit.** Click Refresh again at once. Expect, under the button, "Read again less than 10 seconds ago,
+  so Serena gave the same numbers. Try again in <n> seconds." and the same read time. Wait 10 seconds: Refresh reads
+  again.
+- [ ] **4. Coming back.** Open Overview, come back within a minute: the same read time, no "Reading the log…". Open
+  Overview again, wait a minute and come back: "Reading the log…", then a new read time.
+- [ ] **5. In AWS.** On personal-dev, deployed from this branch: browse two Thumbnails, wait a minute, then click
+  Refresh on Past requests with "Last hour". Expect them in the table and in "From the cache or CollectionSpace"'s
+  today row. Click Refresh four times quickly: expect the try-again message. In the CloudWatch console, Logs Insights'
+  History tab for the app's log group: expect six queries per fresh read (and two for the counts), and no more than
+  one fresh read per web task in any 10 seconds.

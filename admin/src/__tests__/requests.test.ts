@@ -1,5 +1,6 @@
 import {flushPromises, mount} from '@vue/test-utils'
-import {describe, expect, it} from 'vitest'
+import {describe, expect, it, vi} from 'vitest'
+import {KeepAlive, defineComponent, h, ref} from 'vue'
 import {createMemoryHistory, createRouter} from 'vue-router'
 import {fakeApi} from './fake'
 import {routes} from '@/router'
@@ -24,7 +25,8 @@ const REPORT = {
     line('2026-10-12T17:01:00.000+00:00', 'unserved', 'not_listed', 2),
     line('2026-10-12T17:02:00.000+00:00', 'served'),
     line('2026-10-12T17:03:00.000+00:00', 'unserved', 'too_large', 3)
-  ]
+  ],
+  read_at: '2026-10-12T18:00:00+00:00', try_again_in: null
 }
 
 async function open() {
@@ -135,5 +137,98 @@ describe('the Past requests page', () => {
     ;(document.querySelector('#file-dialog-dismiss') as HTMLElement).click()
     await flushPromises()
     wrapper.unmount()
+  })
+})
+
+// Issue #100: Refresh reads the log again now; Serena allows it once per museum every 10 seconds.
+const COUNTS = {by: 'day', today: '2026-10-12', since: null, totals: {hits: 0, misses: 0, unserved: 0}, rows: [],
+  live_unavailable: null, read_at: '2026-10-12T18:00:00+00:00', try_again_in: null}
+
+describe('reading the log again', () => {
+  it('says when the numbers were read, and Refresh reads the report and today\'s counts again, fresh', async () => {
+    const answers: Record<string, {body: unknown}> = {
+      'GET /museums/pahma/requests?range=24h': {body: REPORT},
+      'GET /museums/pahma/requests/counts?by=day': {body: COUNTS}
+    }
+    const calls = fakeApi(answers)
+    const wrapper = await open()
+    await flushPromises()
+    expect(wrapper.find('#requests-read-at').text()).toBe('Read 2026-10-12 18:00:00 UTC')
+    let answer: (value: Response) => void = () => {}
+    const reading = new Promise<Response>(resolve => { answer = resolve })
+    const fetch = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) =>
+      url.includes('requests?range=24h&fresh=1') ? reading : fetch(url, init)))
+    await wrapper.find('#requests-refresh').trigger('click')
+    await flushPromises()
+    // While it reads: the numbers stay, and the time's place says so.
+    expect(wrapper.find('#requests-read-at').text()).toBe('Reading the log…')
+    expect(wrapper.find('#requests-by-day').exists()).toBe(true)
+    expect(wrapper.find('#requests-refresh').attributes('aria-busy')).toBe('true')
+    answer(new Response(JSON.stringify({...REPORT, read_at: '2026-10-12T18:00:30+00:00',
+      days: [{...REPORT.days[0], served: 3}]}), {status: 200}))
+    await flushPromises()
+    expect(wrapper.find('#requests-read-at').text()).toBe('Read 2026-10-12 18:00:30 UTC')
+    expect(wrapper.find('#requests-served').text()).toContain('3')
+    expect(wrapper.find('#requests-refresh-note').exists()).toBe(false)
+    expect(calls.map(c => c.path)).toContain('/museums/pahma/requests/counts?by=day&fresh=1')
+    wrapper.unmount()
+  })
+
+  it('says when to try again, when Serena gives the same numbers inside its 10 seconds', async () => {
+    fakeApi({
+      'GET /museums/pahma/requests?range=24h': {body: REPORT},
+      'GET /museums/pahma/requests?range=24h&fresh=1': {body: {...REPORT, try_again_in: 7}},
+      'GET /museums/pahma/requests?range=1h': {body: {...REPORT, range: '1h'}},
+      'GET /museums/pahma/requests/counts?by=day': {body: COUNTS},
+      'GET /museums/pahma/requests/counts?by=day&fresh=1': {body: {...COUNTS, try_again_in: 7}}
+    })
+    const wrapper = await open()
+    await flushPromises()
+    await wrapper.find('#requests-refresh').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('#requests-refresh-note').text()).toBe(
+      'Read again less than 10 seconds ago, so Serena gave the same numbers. Try again in 7 seconds.')
+    expect(wrapper.find('#requests-refresh-note').attributes('role')).toBe('status')
+    const lastHour = wrapper.findAll('#request-range button').find(b => b.text() === 'Last hour')
+    await lastHour?.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('#requests-refresh-note').exists()).toBe(false) // a new range: a new read
+    wrapper.unmount()
+  })
+
+  it('reads again on coming back once the numbers are over a minute old, not before', async () => {
+    const calls = fakeApi({
+      'GET /museums/pahma/requests?range=24h': {body: REPORT},
+      'GET /museums/pahma/requests/counts?by=day': {body: COUNTS}
+    })
+    const router = createRouter({history: createMemoryHistory('/admin/'), routes})
+    await router.push('/pahma/requests')
+    const here = ref(true)
+    const Elsewhere = defineComponent({render: () => h('p', 'elsewhere')})
+    const Host = defineComponent({setup: () => () => h(KeepAlive, null, [here.value ? h(Requests) : h(Elsewhere)])})
+    const wrapper = mount(Host, {global: {plugins: [router]}, attachTo: document.body})
+    await flushPromises()
+    const reads = () => calls.filter(c => c.path.startsWith('/museums/pahma/requests?')).length
+    expect(reads()).toBe(1)
+    const now = vi.spyOn(Date, 'now')
+    try {
+      now.mockReturnValue(Date.parse(REPORT.read_at) + 30_000) // back after 30 seconds: as it was
+      here.value = false
+      await flushPromises()
+      here.value = true
+      await flushPromises()
+      expect(reads()).toBe(1)
+      now.mockReturnValue(Date.parse(REPORT.read_at) + 61_000) // after more than a minute: read again (not fresh)
+      here.value = false
+      await flushPromises()
+      here.value = true
+      await flushPromises()
+      expect(reads()).toBe(2)
+      expect(calls.filter(c => c.path.includes('fresh=1'))).toHaveLength(0)
+    } finally {
+      now.mockRestore()
+      wrapper.unmount()
+    }
   })
 })

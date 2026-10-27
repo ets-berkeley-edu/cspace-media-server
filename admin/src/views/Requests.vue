@@ -13,7 +13,39 @@
       >
         <v-btn v-for="r in REQUEST_RANGES" :key="r.value" :value="r.value">{{ r.title }}</v-btn>
       </v-btn-toggle>
+      <!-- When Serena read the log for the numbers shown, and Refresh to read it again now (issue #100). -->
+      <span id="requests-read-at" class="text-medium-emphasis text-no-wrap" aria-live="polite">
+        <template v-if="refreshing">
+          <v-progress-circular
+            indeterminate
+            size="14"
+            width="2"
+            class="mr-1"
+            aria-hidden="true"
+          />Reading the log…
+        </template>
+        <template v-else-if="report">Read {{ when(report.read_at) }}</template>
+      </span>
+      <v-btn
+        id="requests-refresh"
+        variant="outlined"
+        :prepend-icon="mdiRefresh"
+        :aria-busy="refreshing"
+        title="Read the log again now, skipping Serena's one-minute cache"
+        @click="refreshNow"
+      >
+        Refresh
+      </v-btn>
     </div>
+    <p
+      v-if="tryAgainIn"
+      id="requests-refresh-note"
+      role="status"
+      class="mb-2 text-medium-emphasis"
+    >
+      Read again less than 10 seconds ago, so Serena gave the same numbers. Try again in {{ tryAgainIn }}
+      second{{ tryAgainIn === 1 ? '' : 's' }}.
+    </p>
     <p class="mb-4">
       What Serena served and couldn't serve for this museum, read from its log. Times are UTC. The counts cover every
       request in the range; the table below lists the newest requests. Click a column's name to sort by it; hover over it
@@ -88,7 +120,7 @@
       </div>
     </template>
     <!-- Kept mounted across ranges: it reads the daily counts, not the range (issue #96). -->
-    <CacheCounts v-show="report && !loading" :museum="museum" />
+    <CacheCounts v-show="report && !loading" ref="cacheCounts" :museum="museum" />
     <template v-if="report && !loading">
       <v-alert
         v-if="report.truncated"
@@ -161,8 +193,9 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref, watch} from 'vue'
+import {computed, onActivated, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
+import {mdiRefresh} from '@mdi/js'
 import {museumName} from '@/session'
 import type {RequestLine, RequestRange, RequestsReport} from '@/api'
 import {api, problem} from '@/api'
@@ -271,9 +304,16 @@ watch(outcome, value => {
   }
 })
 
+// Reading the log again (issue #100): see readAgain().
+const KEPT_MS = 60_000
+const refreshing = ref(false)
+const tryAgainIn = ref<number | null>(null)
+const cacheCounts = ref<InstanceType<typeof CacheCounts> | null>(null)
+
 watch([museum, range], async ([m, r], before) => {
   loading.value = true
   error.value = ''
+  tryAgainIn.value = null
   if (before?.[1] !== undefined) {
     reason.value = '' // a new range has its own reasons; the address's, on first load, stays
   }
@@ -286,6 +326,40 @@ watch([museum, range], async ([m, r], before) => {
     loading.value = false
   }
 }, {immediate: true})
+
+// Reading the log again (issue #100): the numbers shown stay while Serena reads, and the counts card reads today's
+// counts with them. Refresh is fresh: it skips Serena's minute (D108), and Serena allows one every 10 seconds per
+// museum; inside that it gives the same numbers and says when to try again.
+async function readAgain(fresh: boolean) {
+  if (refreshing.value || loading.value) {
+    return
+  }
+  refreshing.value = true
+  error.value = ''
+  try {
+    const [again] = await Promise.all([api.requests(museum.value, range.value, fresh), cacheCounts.value?.load(fresh)])
+    report.value = again
+    tryAgainIn.value = fresh ? again.try_again_in : null
+  } catch (e) {
+    error.value = problem(e)
+  } finally {
+    refreshing.value = false
+  }
+}
+
+function refreshNow() {
+  void readAgain(true)
+}
+
+// Kept alive (App.vue): coming back reads again once the numbers shown are over a minute old, through Serena's
+// minute, so a quick look elsewhere starts no queries (issue #100).
+let seen = false
+onActivated(() => {
+  if (seen && report.value && Date.now() - Date.parse(report.value.read_at) > KEPT_MS) {
+    void readAgain(false)
+  }
+  seen = true
+})
 </script>
 
 <style scoped>

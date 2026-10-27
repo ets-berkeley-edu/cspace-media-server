@@ -22,12 +22,15 @@ Range = Annotated[Literal["1h", "24h", "7d"], Query(alias="range")]
 Outcome = Annotated[Literal["served", "unserved"] | None, Query()]
 ReasonFilter = Annotated[str | None, Query(pattern=r"^[a-z_]+$", max_length=64)]
 Period = Annotated[Literal["day", "week", "month", "year"], Query(alias="by")]
+# Refresh (issue #100): read the log again now, skipping the minute a report is kept (D108), at most once per museum
+# every 10 seconds; inside that, the kept answer comes back with try_again_in.
+Fresh = Annotated[bool, Query()]
 
 
-def _report(request: Request, tenant: str, range_: str) -> Report:
+def _report(request: Request, tenant: str, range_: str, fresh: bool = False) -> tuple[Report, int | None]:
     requests: Requests = request.app.state.requests_log
     try:
-        return requests.report(tenant, range_)
+        return requests.read(tenant, range_, fresh)
     except TooSlow as slow:
         raise HTTPException(504, str(slow)) from slow
     except LogUnavailable as unavailable:
@@ -38,11 +41,12 @@ def create_router() -> APIRouter:
     router = APIRouter(prefix="/admin/v1/museums/{tenant}")
 
     @router.get("/requests")
-    def requests_report(request: Request, session: SignedIn, range_: Range = "24h") -> dict[str, Any]:
+    def requests_report(request: Request, session: SignedIn, range_: Range = "24h",
+                        fresh: Fresh = False) -> dict[str, Any]:
         """Counts by day (served; unserved by reason), served counts by size and the most-requested paths cover every
         request in the range; the lines are the newest MAX_LINES, newest first (D105 to D107). The app sorts, filters
         and pages them."""
-        report = _report(request, session.tenant, range_)
+        report, wait = _report(request, session.tenant, range_, fresh)
         # The museum's sizes, smallest to largest: its derivatives in their configured order, then the original file
         # (Richard, October 14, 2026). The page sorts its Size columns by them; any other name is "(invalid)".
         sizes = [*request.app.state.museums[session.tenant].derivatives, "original"]
@@ -52,6 +56,10 @@ def create_router() -> APIRouter:
             "range": report.range,
             "start": report.start.isoformat(),
             "end": report.end.isoformat(),
+            # When Serena read the log for this report (it's kept a minute, D108), and a refused Refresh's wait
+            # (issue #100).
+            "read_at": report.end.isoformat(),
+            "try_again_in": wait,
             "max_lines": MAX_LINES,
             "truncated": report.truncated,
             # Only a museum with signed access (Cinefiles) can have a signed-link request: the page shows that column
@@ -71,13 +79,14 @@ def create_router() -> APIRouter:
         }
 
     @router.get("/requests/counts")
-    def request_counts(request: Request, session: SignedIn, period: Period = "day") -> dict[str, Any]:
+    def request_counts(request: Request, session: SignedIn, period: Period = "day",
+                       fresh: Fresh = False) -> dict[str, Any]:
         """From the cache or CollectionSpace (issue #96): served requests that were cache hits and misses, and
         unserved requests, by day, ISO week, month or year (UTC), newest first, from the worker's daily counts, with
         today's (and yesterday's, until counted) read from the log. Not the page's range: the counts go back to the
         first day counted. When the log can't be read, the stored counts come back with `live_unavailable`."""
         counts: RequestCounts = request.app.state.request_counts
-        summary = counts.summary(session.tenant, period)
+        summary = counts.summary(session.tenant, period, fresh)
         return {
             "by": summary.period,
             "today": summary.today,
@@ -87,6 +96,8 @@ def create_router() -> APIRouter:
                       "misses": row.misses, "unserved": row.unserved, "live": row.live, "partial": row.partial}
                      for row in summary.rows],
             "live_unavailable": summary.live_unavailable,
+            "read_at": summary.read_at,  # when the days not counted yet were read from the log (issue #100)
+            "try_again_in": summary.try_again_in,
         }
 
     @router.get("/requests/export.csv")
@@ -94,7 +105,7 @@ def create_router() -> APIRouter:
                         outcome: Outcome = None, reason: ReasonFilter = None) -> Response:
         """The lines matching the page's range and filters, newest first, as CSV (D112, D113): formula-safe, like
         the audit log's export."""
-        report = _report(request, session.tenant, range_)
+        report, _ = _report(request, session.tenant, range_)
         out = io.StringIO()
         writer = csv.writer(out, lineterminator="\r\n")
         writer.writerow(["time (UTC)", "outcome", "reason", "path", "kind", "cache", "signed link"])

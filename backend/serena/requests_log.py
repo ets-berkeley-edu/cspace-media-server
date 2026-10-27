@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import threading
 import time
@@ -36,6 +37,7 @@ DEFAULT_RANGE = "24h"
 MAX_LINES = 10_000  # the most a Logs Insights query returns (D107)
 TOP_PATHS = 10  # Most requested (issue #95)
 CACHE_SECONDS = 60.0  # D108: reloads within a minute don't start new queries
+FRESH_SECONDS = 10.0  # issue #100: Refresh reads the log again at most once per museum in this time
 WAIT_SECONDS = 30.0  # D108: past this, the queries are stopped and the admin is asked for a shorter range
 LOGGERS = {"served": "serena.imageserver", "unserved": "serena.unserved"}
 _MUSEUM = re.compile(r"^[a-z]+$")
@@ -362,31 +364,60 @@ def build(museum: str, range_: str, start: datetime, end: datetime, rows: dict[Q
                   for row in rows.get(QueryKind.SERVED_BY_CACHE, [])})
 
 
+class FreshReads:
+    """Past requests' Refresh (issue #100): it reads the log again now, skipping the minute a report is kept, at most
+    once per museum every FRESH_SECONDS in this web task, so repeated clicks can't flood Logs Insights. Inside that
+    time the kept answer stands, and the page says when to try again."""
+
+    def __init__(self, seconds: float = FRESH_SECONDS):
+        self.seconds = seconds
+        self._last: dict[str, datetime] = {}
+        self._lock = threading.Lock()
+
+    def wait(self, museum: str, now: datetime) -> int | None:
+        """None: read the log again now (the time is noted); otherwise the whole seconds until the next fresh read."""
+        with self._lock:
+            last = self._last.get(museum)
+            if last is not None and (left := self.seconds - (now - last).total_seconds()) > 0:
+                return max(1, math.ceil(left))
+            self._last[museum] = now
+            return None
+
+
 @dataclass
 class Requests:
-    """Reports by museum and range, each kept CACHE_SECONDS so reloads don't start new queries (D108)."""
+    """Reports by museum and range, each kept CACHE_SECONDS so reloads don't start new queries (D108). A report is as
+    of its `end`, when Serena read the log."""
 
     reader: Reader | None
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     cache_seconds: float = CACHE_SECONDS
+    fresh: FreshReads = field(default_factory=FreshReads)
     _cache: dict[tuple[str, str], tuple[datetime, Report]] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def report(self, museum: str, range_: str) -> Report:
+        return self.read(museum, range_)[0]
+
+    def read(self, museum: str, range_: str, fresh: bool = False) -> tuple[Report, int | None]:
+        """The museum's report for the range, and, for a fresh read refused by the limit, the seconds until the next
+        one (issue #100). A fresh read skips the kept report and replaces it."""
         if self.reader is None:
             raise LogUnavailable("The request log isn't available in this environment.")
         if range_ not in RANGES:
             raise ValueError(f"range must be one of {', '.join(RANGES)}")
         now = self.clock()
-        with self._lock:
-            kept = self._cache.get((museum, range_))
-            if kept is not None and kept[0] > now:
-                return kept[1]
+        wait = self.fresh.wait(museum, now) if fresh else None
+        if not fresh or wait is not None:
+            with self._lock:
+                kept = self._cache.get((museum, range_))
+                if kept is not None and kept[0] > now:
+                    return kept[1], wait
         start = now - RANGES[range_]
         report = build(museum, range_, start, now, self.reader.run(museum, start, now))
         with self._lock:
             self._cache[(museum, range_)] = (now + timedelta(seconds=self.cache_seconds), report)
-        return report
+        return report, wait
 
 
 def lines_matching(report: Report, outcome: str | None, reason: str | None) -> Iterable[Line]:
