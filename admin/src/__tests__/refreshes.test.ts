@@ -1,13 +1,15 @@
 import {flushPromises, mount} from '@vue/test-utils'
 import {describe, expect, it, vi} from 'vitest'
+import {KeepAlive, defineComponent, h, ref} from 'vue'
 import {createMemoryHistory, createRouter} from 'vue-router'
 import {fakeApi} from './fake'
 import {routes} from '@/router'
 import AlertBanner from '@/components/AlertBanner.vue'
+import Overview from '@/views/Overview.vue'
 import RefreshDetail from '@/views/RefreshDetail.vue'
 import Refreshes from '@/views/Refreshes.vue'
 import StartRefresh from '@/views/StartRefresh.vue'
-import {waiting} from '@/session'
+import {session, waiting} from '@/session'
 import {pacificDate} from '@/words'
 
 const REFRESH = {
@@ -285,5 +287,96 @@ describe('a refresh\'s state', () => {
     expect(wrapper.find('#refresh-state').classes()).toContain('text-error')
     expect(wrapper.find('#refresh-state .refresh-state-icon').exists()).toBe(true)
     wrapper.unmount()
+  })
+})
+
+describe('Past refreshes and Overview, while a refresh is working', () => {
+  const row = (state: string) => ({...REFRESH, state, actions: [], admin_refresh_date: null})
+  const list = (state: string) => ({body: {days: 30, refreshes: [row(state)]}})
+
+  it('Past refreshes loads again by itself, in the background, until none is checking or updating', async () => {
+    vi.useFakeTimers()
+    try {
+      const answers = {'GET /museums/pahma/refreshes': list('checking')}
+      const calls = fakeApi(answers)
+      const {wrapper} = await at('/pahma/refreshes', Refreshes)
+      expect(wrapper.find('#refreshes-table tbody .refresh-state').text()).toBe('Checking the servable list')
+      expect(calls[0].headers['X-Serena-Background']).toBeUndefined() // opening the page is activity
+      answers['GET /museums/pahma/refreshes'] = list('updated')
+      await vi.advanceTimersByTimeAsync(5000)
+      await flushPromises()
+      expect(calls).toHaveLength(2)
+      expect(calls[1].headers['X-Serena-Background']).toBe('1') // not activity: an idle tab still signs out
+      expect(wrapper.find('#refreshes-table tbody .refresh-state').text()).toBe('Updated')
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(calls).toHaveLength(2) // done: no more loads
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('Past refreshes doesn\'t load again when nothing is working', async () => {
+    vi.useFakeTimers()
+    try {
+      const calls = fakeApi({'GET /museums/pahma/refreshes': list('check_failed')})
+      const {wrapper} = await at('/pahma/refreshes', Refreshes)
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(calls).toHaveLength(1)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('Past refreshes stops while another page is shown, and starts again on coming back', async () => {
+    vi.useFakeTimers()
+    try {
+      const calls = fakeApi({'GET /museums/pahma/refreshes': list('updating')})
+      const router = createRouter({history: createMemoryHistory('/admin/'), routes})
+      await router.push('/pahma/refreshes')
+      const shown = ref(true)
+      // As App.vue does: the page is kept alive while another is shown.
+      const Host = defineComponent({setup: () => () => h(KeepAlive, null, {default: () => shown.value ? h(Refreshes) : h('div')})})
+      const wrapper = mount(Host, {global: {plugins: [router]}, attachTo: document.body})
+      await flushPromises()
+      expect(calls).toHaveLength(1)
+      shown.value = false
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(calls).toHaveLength(1) // away: no loads
+      shown.value = true
+      await flushPromises()
+      expect(calls).toHaveLength(2) // coming back loads again, as it always has
+      expect(calls[1].headers['X-Serena-Background']).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(calls).toHaveLength(3) // and, still working, checks again in the background
+      expect(calls[2].headers['X-Serena-Background']).toBe('1')
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('Overview loads again by itself while its newest refresh is working', async () => {
+    vi.useFakeTimers()
+    try {
+      session.signedIn = [{museum: 'pahma', name: 'PAHMA', user: 'admin'}]
+      const answers = {'GET /museums/pahma/status': {body: {newest: row('checking') as unknown, unacknowledged: 0}}}
+      const calls = fakeApi(answers)
+      const {wrapper} = await at('/pahma', Overview)
+      expect(wrapper.find('#newest-refresh-state').text()).toBe('Checking the servable list')
+      answers['GET /museums/pahma/status'] = {body: {newest: row('updated'), unacknowledged: 0}}
+      await vi.advanceTimersByTimeAsync(5000)
+      await flushPromises()
+      expect(calls).toHaveLength(2)
+      expect(calls[1].headers['X-Serena-Background']).toBe('1')
+      expect(wrapper.find('#newest-refresh-state').text()).toBe('Updated')
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(calls).toHaveLength(2)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

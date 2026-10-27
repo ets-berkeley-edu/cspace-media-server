@@ -68,6 +68,7 @@ import {computed, ref, watch} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import type {Status} from '@/api'
 import {api, problem} from '@/api'
+import {useCheckAgain, working} from '@/checkAgain'
 import LoadError from '@/components/LoadError.vue'
 import OverrideMark from '@/components/OverrideMark.vue'
 import RefreshState from '@/components/RefreshState.vue'
@@ -83,16 +84,28 @@ const error = ref('')
 const signOutError = ref('')
 const signingOut = ref(false)
 
-async function load() {
-  error.value = ''
-  try {
-    status.value = await api.status(String(route.params.museum))
-  } catch (e) {
-    error.value = problem(e)
+// While the newest refresh is checking or updating, the page loads again by itself (checkAgain.ts); one that fails
+// leaves what it shows and tries again.
+const after = useCheckAgain(() => load(true))
+
+async function load(background = false) {
+  if (!background) {
+    error.value = ''
   }
+  try {
+    status.value = await api.status(String(route.params.museum), background)
+    error.value = ''
+  } catch (e) {
+    if (!background) {
+      error.value = problem(e)
+      after(false)
+      return
+    }
+  }
+  after(working([status.value?.newest]))
 }
 
-watch(() => route.params.museum, load, {immediate: true})
+watch(() => route.params.museum, () => load(), {immediate: true})
 
 // It says why when it fails, instead of doing nothing; the dialog stays open to try again.
 async function signOutAll() {

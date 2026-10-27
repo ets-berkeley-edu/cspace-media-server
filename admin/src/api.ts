@@ -396,9 +396,12 @@ export const api = {
   resetSetting: (museum: string, name: string, reason: string) =>
     call<SettingsResponse>('POST', `/museums/${museum}/settings/${encodeURIComponent(name)}/reset`, {reason}),
   etlApiUrl: (museum: string) => `${PREFIX}/museums/${museum}/etl-api.json`,
-  status: (museum: string) => call<Status>('GET', `/museums/${museum}/status`),
-  refreshes: (museum: string) => call<{refreshes: RefreshSummary[]}>('GET', `/museums/${museum}/refreshes`),
-  // background: the refresh's page checking again while Serena works (issue #108), which doesn't count as activity
+  // background: Overview, Past refreshes and a refresh's page checking again while Serena works (checkAgain.ts),
+  // which doesn't count as activity
+  status: (museum: string, background = false) => call<Status>('GET', `/museums/${museum}/status`, undefined,
+    background ? {headers: {'X-Serena-Background': '1'}} : undefined),
+  refreshes: (museum: string, background = false) => call<{refreshes: RefreshSummary[]}>('GET',
+    `/museums/${museum}/refreshes`, undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),
   refresh: (museum: string, refreshId: string, background = false) => call<Refresh>('GET',
     `/museums/${museum}/refreshes/${refreshId}`, undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),
   retryUpdate: (museum: string, refreshId: string, reason: string) =>

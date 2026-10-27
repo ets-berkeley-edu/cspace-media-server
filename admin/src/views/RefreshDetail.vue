@@ -170,11 +170,12 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onBeforeUnmount, ref, watch} from 'vue'
+import {computed, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
 import {mdiShieldAlert} from '@mdi/js'
 import type {Refresh, RefreshAction} from '@/api'
 import {ApiError, api, problem as failure} from '@/api'
+import {WORKING, useCheckAgain, working} from '@/checkAgain'
 import ReasonField from '@/components/ReasonField.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import {alertsChanged, museumName} from '@/session'
@@ -205,9 +206,7 @@ const reasonField = ref<InstanceType<typeof ReasonField> | null>(null)
 
 // While the worker checks or updates, the page checks again by itself (issue #108), so an override's re-check and
 // update show without a reload. These checks don't count as activity: an open tab still signs out when idle.
-const WORKING = ['checking', 'updating']
-const AGAIN_MS = 5000
-let again: ReturnType<typeof setTimeout> | undefined
+const after = useCheckAgain(() => load(true))
 
 // The override's reason is in the banner, so Reasons leaves out the line Serena adds for it.
 const reasons = computed(() => {
@@ -244,10 +243,7 @@ function isThreshold(problem: string): boolean {
 }
 
 function checkAgain() {
-  clearTimeout(again)
-  if (refresh.value && WORKING.includes(refresh.value.state)) {
-    again = setTimeout(() => load(true), AGAIN_MS)
-  }
+  after(working([refresh.value]))
 }
 
 async function load(background = false) {
@@ -258,8 +254,6 @@ async function load(background = false) {
   }
   checkAgain()
 }
-
-onBeforeUnmount(() => clearTimeout(again))
 
 function open(which: RefreshAction) {
   action.value = which

@@ -47,6 +47,7 @@ import {useRoute} from 'vue-router'
 import {museumName} from '@/session'
 import type {RefreshSummary} from '@/api'
 import {api, problem} from '@/api'
+import {useCheckAgain, working} from '@/checkAgain'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import LoadError from '@/components/LoadError.vue'
 import OverrideMark from '@/components/OverrideMark.vue'
@@ -78,19 +79,31 @@ const refreshes = ref<RefreshSummary[]>([])
 const loaded = ref(false)
 const error = ref('')
 
-async function load() {
+// While a refresh is checking or updating, the page loads the list again by itself (checkAgain.ts), keeping what it
+// shows meanwhile; one that fails leaves the list as it was and tries again.
+const after = useCheckAgain(() => load(true))
+
+async function load(background = false) {
   const m = museum.value
-  loaded.value = false
-  error.value = ''
-  try {
-    refreshes.value = (await api.refreshes(m)).refreshes
-    loaded.value = true
-  } catch (e) {
-    error.value = problem(e)
+  if (!background) {
+    loaded.value = false
+    error.value = ''
   }
+  try {
+    refreshes.value = (await api.refreshes(m, background)).refreshes
+    loaded.value = true
+    error.value = ''
+  } catch (e) {
+    if (!background) {
+      error.value = problem(e)
+      after(false)
+      return
+    }
+  }
+  after(working(refreshes.value))
 }
 
-watch(museum, load, {immediate: true})
+watch(museum, () => load(), {immediate: true})
 
 // Kept alive (App.vue): coming back shows it as it was, with anything new since.
 let shown = false
