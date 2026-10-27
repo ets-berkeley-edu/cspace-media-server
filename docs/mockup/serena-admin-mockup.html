@@ -144,6 +144,13 @@
   /* Version 45 (issue #110): the banner says first that a check failed; an overridden refresh's row has a bar at its left edge */
   .override-banner .lead-in { font-size: 15px; }
   tr.override-row td:first-child { box-shadow: inset 4px 0 0 var(--text-warning); }
+  /* Version 47 (issue #117): how far past the delta threshold, and the override's kind of reason. */
+  .delta-over { color: var(--text-danger); font-weight: 600; }
+  .delta-far { display: flex; gap: 8px; align-items: flex-start; background: var(--bg-danger); color: var(--text-danger); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; max-width: 90ch; }
+  .delta-far svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+  fieldset.kinds { border: 0; padding: 0; margin: 0 0 10px; }
+  fieldset.kinds legend { padding: 0; margin-bottom: 4px; font-size: 13px; }
+  fieldset.kinds label { display: flex; gap: 8px; align-items: baseline; margin: 2px 0; font-size: 14px; }
   .state-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 16px; }
   tr.overridden td { color: var(--text-muted); }
   tr.overridden td.struck { text-decoration: line-through; }
@@ -338,6 +345,7 @@
       <label>Today's refresh <select id="mockRefresh" autocomplete="off">
         <option value="sample" selected>Sample: none yet</option>
         <option value="failed">Check failed on the delta threshold</option>
+        <option value="far">Check failed far past the delta threshold</option>
         <option value="rechecking">Overridden, re-checking</option>
         <option value="updated">Overridden, updated</option>
       </select></label>
@@ -353,6 +361,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 47 (October 27, 2026, issue #117; for review):</strong> Four ideas from #110, each of which can be taken or left on its own. <strong>1. How far past the delta threshold.</strong> Choose "Check failed far past the delta threshold" under "Today's refresh" in Mockup settings: like #110's first load, 28,756.76% against 5%. Wherever a refresh's delta is past the threshold (the check, the banner, the override dialog), the percent is in red and says how many times the threshold it is ("2.9 times the 5% threshold"; the October 10 failure is 3.8 times). From 10 times the threshold, a red note under the check and in the dialog says it's <strong>far past</strong> it, with the row counts before and after, and that a change this large is usually a first load or the wrong file. 10 times is a fixed rule here, not a setting: is it the right point? <strong>2. Reasons in two lists.</strong> A refresh's page has <strong>What went wrong</strong> (a problem in the servable list, a failed update, a refresh that was abandoned when the next one started) and <strong>What admins did</strong> (an override, with its time, the reason staying in the banner; a retried update; an admin refresh, and the refresh it closed: see pahma-2026-10-08-1 and -2). Each says "None." when empty. <strong>3. An Overridden filter.</strong> Past refreshes has <strong>All</strong> and <strong>Overridden (n)</strong>, like Alerts' All and Waiting; October 3 is a sample overridden refresh. <strong>4. A more useful override reason.</strong> The override dialog asks <strong>Why is the change expected?</strong>: First load, Known bulk change in CollectionSpace, Testing, or Something else, then the reason in the admin's own words, at least 20 characters ("Say a little more: at least 20 characters (7 so far)."). Like every reason, the button stays enabled and says what's missing. The banner, the alert and the audit log show both: "Known bulk change in CollectionSpace: PAHMA took …". The other dialogs' reasons are unchanged. <strong>For the app:</strong> (1) needs nothing new from Serena; (2) needs Serena to record which list each reason belongs in (today reasons are plain strings), rather than the app guessing from their words; (3) is the app's alone, the choice kept in the address as on Alerts; (4) needs the override's kind beside its reason in the API, the refresh and the audit log, and Serena to check the length too. <strong>Fixed in passing:</strong> an abandoned refresh's page (pahma-2026-10-08-1) didn't open in version 46.</li>
       <li><strong>Version 46 (October 26, 2026, issue #100; for review; version 45 is issue #110's):</strong> <strong>Past requests</strong> has a <strong>Refresh</strong> button beside the range, and "Read &lt;time&gt; UTC" before it: when Serena read the log for the numbers shown, which can be up to a minute ago, since Serena keeps each museum's report, per range, for a minute (D108). Refresh reads the log again now, skipping that minute, for the cards, By day, Most requested, the table, and the From the cache or CollectionSpace card's today and totals (the stored days don't change). While it reads, "Reading the log…" with a spinner takes the time's place; the button keeps focus. <strong>The limit:</strong> once a museum's log has been read on Refresh, another Refresh within 10 seconds gets the same numbers, and the page says so under the button ("Read again less than 10 seconds ago, so Serena gave the same numbers. Try again in &lt;n&gt; seconds."), so repeated clicks can't flood Logs Insights (six queries a report, two for the counts card). <strong>Coming back</strong> to Past requests, or changing the range, reads again only once the numbers shown are more than a minute old, through the minute's cache, as now. Still the log's own delay: a request takes up to about a minute to be searchable, whatever the button does. Sample: the mockup's clock runs from 17:00:00 UTC while the page is open, and each read that reaches the log finds one more PAHMA request, up to three, as if you'd browsed some files. Try PAHMA, Last hour: Refresh, then Refresh again at once. <strong>For the app:</strong> a <code>fresh=1</code> parameter on <code>GET …/requests</code> and <code>GET …/requests/counts</code> that skips the cache and replaces the kept answer; the 10-second limit kept by Serena per museum, not by the browser, so another tab or admin can't get round it; each answer says when it was read.</li>
       <li><strong>Version 45 (October 26, 2026, issue #110; for review):</strong> An overridden refresh no longer reads like a healthy one. Choose "Overridden, updated" (or "Overridden, re-checking") under "Today's refresh" in Mockup settings. <strong>The refresh's page:</strong> the state pill reads <strong>Updated by override</strong>, in the warning colour with the shield, in place of "Updated". The banner leads with <strong>"A safety check failed, and an admin overrode it"</strong>, then how far the servable list went past the delta threshold (14.56% against 5%), then who overrode it, when and why. The check's heading reads <strong>"Servable list check: failed, overridden by admin"</strong>, never "passed" on its own, with no pill, since the heading says it (Richard, after reviewing the app); once the re-check passes, a line under it says it passed without the delta threshold. <strong>Lists:</strong> Past refreshes and Overview's Last refresh card show the same "Updated by override" pill (the shield alone stays while Serena re-checks), and in Past refreshes an overridden refresh's row has a warning-coloured bar at its left edge, like a waiting alert's red bar. The Audit log's "refresh outcome" says "State: updated by override". <strong>For the app:</strong> the pill's words and the check's heading come from the refresh's <code>override</code>, so the app needs no new state; the banner still needs the admin and the reason (see version 44).</li>
       <li><strong>Version 44 (October 26, 2026, issues #107 and #108; for review):</strong> <strong>A refresh's page</strong> is new to the mockup (the app has had one since the first release): a refresh ID opens it from Past refreshes, Overview, Alerts and the Audit log, where before the mockup only marked its row. It has the app's sections: the state line, the actions, Reasons, the servable list, its check and its servability update. <strong>The state pill (#107, in the app's pull request):</strong> a failed state also has a failure icon, so the cue isn't colour alone; a refresh still running is blue. <strong>An overridden delta threshold (#108):</strong> choose "Today's refresh" in Mockup settings. "Check failed on the delta threshold" opens a failed refresh with <strong>Override the delta threshold</strong>; give a reason and confirm. The page then shows, for as long as the refresh is shown, a <strong>banner</strong> under the state line, in the warning colour with a shield icon, saying who overrode it, when and why (the reason moves here from Reasons). While Serena re-checks, the failed check's heading has an <strong>Overridden</strong> pill and its threshold problem is struck through with "(overridden)". Once the re-check passes (4 seconds here; the page checks again by itself), it reads "Servable list check: passed" with a "Delta threshold overridden" pill and the check's warning. Past refreshes and Overview's Last refresh card show a <strong>shield</strong> after the state pill, with "Delta threshold overridden by &lt;admin&gt; at &lt;time&gt;" on hover (and read out). <strong>For the app:</strong> Serena returns only the override's time today; the banner needs the admin and the reason with it (both are already in the audit log and the alert). The state staying at "Checking the servable list" after an override is expected until the worker's next pass: the app's page doesn't load the refresh again by itself, so it kept showing the state from the moment of the override. Here it checks again every few seconds while the refresh is checking or updating.</li>
@@ -403,7 +412,7 @@
 <script>
 (() => {
   const MUSEUMS = {pahma: "PAHMA", bampfa: "BAMPFA", botgarden: "Botanical Garden", cinefiles: "Cinefiles", ucjeps: "UCJEPS"};
-  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: "", countsBy: "day", countsOpen: false};
+  const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", refreshesShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: "", countsBy: "day", countsOpen: false};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
@@ -727,11 +736,22 @@
   const OCT10_CHECK = {result: "failed", rows: 152003, added: 0, removed: 35387, changed: 0, previous: 187377, delta: 18.89, threshold: 5, warnings: [],
     errors: [{line: "", field: "file", problem: "18.89% of the rows would change; the threshold is 5%"}]};
   REFRESHES[2].reasons = ["1 problem in the servable list"]; REFRESHES[2].check = OCT10_CHECK;
-  REFRESHES[5].reasons = ["closed by the admin refresh pahma-2026-10-08-2"];
+  REFRESHES[4].reasons = [{admin: true, text: "started by admin as an admin refresh: the Oct 8 servable list didn't reach Serena"}];
+  REFRESHES[5].reasons = [{admin: true, text: "closed by the admin refresh pahma-2026-10-08-2"}];
+  // Version 47 (issue #117): an older overridden refresh, so that Past refreshes' "Overridden" filter has one to show.
+  Object.assign(REFRESHES[REFRESHES.length - 1], {reasons: ["1 problem in the servable list", {admin: true, override: true, text: "delta threshold overridden by pahma-admin"}],
+    override: {by: "pahma-admin", at: "2026-10-03T15:12:40Z", kind: "bulk", reason: "PAHMA published the 1930s survey photographs, about 27,000 Media records"},
+    check: {result: "passed", rows: 187341, added: 27341, removed: 0, changed: 0, previous: 160000, delta: 17.09, threshold: 5, errors: [],
+      warnings: ["the delta threshold was overridden by an admin for this refresh (17.09% of the rows change; the threshold is 5%)"]},
+    update: {deleted: 0, written: 27341, unchanged: 160000}});
+  // A refresh's reasons, in two lists (version 47, issue #117): what went wrong, and what admins did. Serena records
+  // which each is; here a reason an admin caused is {admin: true, text}.
+  const reasonText = x => typeof x === "string" ? x : x.text;
+  const isAdminReason = x => typeof x !== "string" && !!x.admin;
   function detailOf(r, i) {
     if (r.check || r.tone !== "success") return r;
     const previous = REFRESHES[i + 1] && REFRESHES[i + 1].rows;
-    return {...r, reasons: [], check: {result: "passed", rows: r.rows, added: Math.max(0, r.rows - (previous || r.rows)), removed: 0, changed: 0, previous, delta: previous ? +(100 * Math.abs(r.rows - previous) / previous).toFixed(2) : null, threshold: 5, warnings: [], errors: []},
+    return {...r, reasons: r.reasons || [], check: {result: "passed", rows: r.rows, added: Math.max(0, r.rows - (previous || r.rows)), removed: 0, changed: 0, previous, delta: previous ? +(100 * Math.abs(r.rows - previous) / previous).toFixed(2) : null, threshold: 5, warnings: [], errors: []},
       update: {deleted: 0, written: Math.max(0, r.rows - (previous || 0)), unchanged: Math.min(r.rows, previous || r.rows)}};
   }
 
@@ -740,16 +760,38 @@
   // reads the admin and the reason from the refresh itself (today only `at` is returned: see the notes).
   const TODAY_CHECK = {result: "failed", rows: 160118, added: 0, removed: 27284, changed: 0, previous: 187402, delta: 14.56, threshold: 5, warnings: [],
     errors: [{line: "", field: "file", problem: "14.56% of the rows would change; the threshold is 5%"}]};
-  const OVERRIDE = {by: "admin", at: "2026-10-13T16:02:11Z", reason: "PAHMA took the 1930s survey photographs off the public portal on purpose"};
+  // Version 47 (issue #117): far past the threshold, like #110's initial load (28,757% against 5%).
+  const FAR_CHECK = {result: "failed", rows: 160155, added: 159600, removed: 0, changed: 0, previous: 555, delta: 28756.76, threshold: 5, warnings: [],
+    errors: [{line: "", field: "file", problem: "28756.76% of the rows would change; the threshold is 5%"}]};
+  const OVERRIDE = {by: "admin", at: "2026-10-13T16:02:11Z", kind: "bulk", reason: "PAHMA took the 1930s survey photographs off the public portal on purpose"};
+  let todayCheck = TODAY_CHECK;  // the failed check today's refresh started from: Mockup settings choose it
   function todayRefresh(stage) {
-    const base = {id: "2026-10-13-1", date: "2026-10-13", rows: 160118, reasons: ["1 problem in the servable list"], scenario: true};
-    if (stage === "failed") return {...base, state: "Servable list check failed", tone: "danger", at: "2026-10-13T10:36:40Z", check: TODAY_CHECK, actions: ["override"]};
-    const override = {...OVERRIDE};
-    if (stage === "rechecking") return {...base, state: "Checking the servable list", tone: "info", at: override.at, check: TODAY_CHECK, override};
+    const c = todayCheck;
+    const base = {id: "2026-10-13-1", date: "2026-10-13", rows: c.rows, reasons: ["1 problem in the servable list"], scenario: true};
+    if (stage === "failed") return {...base, state: "Servable list check failed", tone: "danger", at: "2026-10-13T10:36:40Z", check: c, actions: ["override"]};
+    const override = {...OVERRIDE}, by = {admin: true, override: true, text: `delta threshold overridden by ${override.by}`};
+    base.reasons = [...base.reasons, by];
+    if (stage === "rechecking") return {...base, state: "Checking the servable list", tone: "info", at: override.at, check: c, override};
     return {...base, state: "Updated", tone: "success", at: "2026-10-13T16:04:52Z", override,
-      check: {...TODAY_CHECK, result: "passed", errors: [], warnings: ["the delta threshold was overridden by an admin for this refresh (14.56% of the rows change; the threshold is 5%)"]},
-      update: {deleted: 27284, written: 0, unchanged: 160118}};
+      check: {...c, result: "passed", errors: [], warnings: [`the delta threshold was overridden by an admin for this refresh (${deltaPct(c.delta)}% of the rows change; the threshold is ${c.threshold}%)`]},
+      update: {deleted: c.removed, written: c.added, unchanged: c.previous - c.removed}};
   }
+  // How far past the delta threshold a check went (version 47, issue #117): "far" from 10 times the threshold.
+  const FAR_TIMES = 10;
+  const deltaPct = n => n.toLocaleString("en-US", {maximumFractionDigits: 2});
+  const overBy = c => c && c.previous && c.delta > c.threshold ? c.delta / c.threshold : 0;
+  const timesText = c => { const t = overBy(c); return t >= 100 ? Math.round(t).toLocaleString("en-US") : t.toFixed(1); };
+  const deltaHtml = c => overBy(c) ? `<span class="delta-over">${deltaPct(c.delta)}%</span> of the rows, ${timesText(c)} times the ${c.threshold}% threshold${overBy(c) >= FAR_TIMES ? ": far past it" : ""}` : `${deltaPct(c.delta)}% of the rows`;
+  // The override's kind of reason (version 47, issue #117): one of these, then the admin's own words.
+  const KINDS = {first: "First load", bulk: "Known bulk change in CollectionSpace", testing: "Testing", other: "Something else"};
+  const REASON_MIN = 20;
+  // Reasons in two lists (version 47, issue #117): what went wrong, and what admins did.
+  const reasonsHtml = r => {
+    const all = r.reasons || [], list = (id, xs) => xs.length ? `<ul id="${id}">${xs.map(x => `<li>${esc(reasonText(x))}${x.override && r.override ? ` at ${when(r.override.at)}; its reason is in the banner above` : ""}</li>`).join("")}</ul>` : "<p>None.</p>";
+    return `<h3>What went wrong</h3>${list("refresh-problems", all.filter(x => !isAdminReason(x)))}
+      <h3>What admins did</h3>${list("refresh-admin-actions", all.filter(isAdminReason))}`;
+  };
+  const farNote = (c, before) => overBy(c) >= FAR_TIMES ? `<div class="delta-far" role="note">${ICON_FAILED}<div><strong>Far past the delta threshold.</strong> ${deltaPct(c.delta)}% is ${timesText(c)} times the threshold: the last servability update had ${c.previous.toLocaleString("en-US")} rows, this list has ${c.rows.toLocaleString("en-US")}. A change this large is usually a first load or the wrong file.${before ? " Check that the file is the right one before you override." : ""}</div></div>` : "";
   const stillPublic = (at, date, refresh, media, blob, ack) => ({at, date, title: "Recalled in Serena, but still public in CollectionSpace", about: media,
     msg: `Refresh ${refresh} still lists Media record ${media} of PAHMA as public (Blob ${blob}), so its recall in Serena stays. Change the record in CollectionSpace, or, if the recall was a mistake, release it in the admin app.`, ack});
   // A recall of one record names it, and is about its Media CSID; several: "<n> Media records" (Richard, Oct 14).
@@ -913,7 +955,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 46</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 47</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -930,7 +972,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 46</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 47</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" ${open ? 'data-show="waiting"' : ""} aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -999,13 +1041,16 @@
       <p class="secondary">What Serena served and couldn't serve is on the <button class="link" data-go="requests">Past requests</button> page; "<button class="link" data-go="lookup">Media look up</button>" says why for any one file.</p>`;
     },
 
+    // Version 47 (issue #117): All or Overridden, like Alerts' All or Waiting.
     refreshes: () => `${title(`${esc(name())} Past refreshes`)}<p class="lead">This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it; click again to reverse.</p>
+      <div class="toolbar"><div role="group" aria-label="Show">${[["all", "All"], ["overridden", `Overridden (${REFRESHES.filter(r => r.override).length})`]].map(([k, v]) => `<button type="button" data-show-refreshes="${k}" class="${S.refreshesShow === k ? "primary" : ""}" aria-pressed="${S.refreshesShow === k}">${v}</button>`).join(" ")}</div></div>
       ${table("refreshes", [
         {key: "id", title: "Refresh", help: "The refresh's ID: <museum>-<refresh date>-<number>. Opens its page.", html: r => refreshLink(`${S.museum}-${r.id}`)},
         {key: "date", title: "Refresh date", help: "The day, in Pacific time, whose servable list it brings in. An admin refresh says which day's list it used.", html: r => `${r.date}${r.admin ? ' <span class="pill t-info">admin refresh</span>' : ""}`},
         {key: "state", title: "State", help: "How far it got: Updated is done; a failed check or update says so, and its page says what an admin can do. Updated by override, with the shield: a check failed and an admin overrode the delta threshold.", html: r => `${statePill(r)}${overrideMark(r)}`},
         {key: "rows", title: "Rows", num: true, help: "Rows in its servable list: one per Blob the ETL lists.", html: r => r.rows ? r.rows.toLocaleString("en-US") : "—"},
-        {key: "at", title: "Last change", help: "When its state last changed (UTC).", html: r => when(r.at)}], REFRESHES, {key: "at", dir: "desc"}, {rowClass: r => r.override ? "override-row" : ""})}`,
+        {key: "at", title: "Last change", help: "When its state last changed (UTC).", html: r => when(r.at)}], S.refreshesShow === "overridden" ? REFRESHES.filter(r => r.override) : REFRESHES, {key: "at", dir: "desc"},
+        {rowClass: r => r.override ? "override-row" : "", none: S.refreshesShow === "overridden" ? "No overridden refreshes in the last 30 days." : "None."})}`,
 
     // A refresh's page (version 44): in the app since the first release; new to the mockup, for issue #108's override.
     refresh: () => {
@@ -1014,15 +1059,16 @@
       // Who overrode it, when and why, for as long as the refresh is shown: the reason moves here from Reasons.
       // Version 45 (issue #110): it leads with the failed check and by how much, then who, when and why.
       const banner = o ? `<div class="override-banner" id="override-banner" role="note">${ICON_OVERRIDE}<div><strong class="lead-in">A safety check failed, and an admin overrode it</strong>
-        <p>${c ? `The servable list changes ${c.delta}% of the rows; the threshold is ${c.threshold}%. ` : ""}<strong>Delta threshold overridden</strong> by ${esc(o.by)} at ${when(o.at)}.</p>
-        <p>Reason: ${esc(o.reason)}</p>
+        <p>${c ? `The servable list changes ${deltaHtml(c)}. ` : ""}<strong>Delta threshold overridden</strong> by ${esc(o.by)} at ${when(o.at)}.</p>
+        <p>Reason: ${o.kind ? `<strong>${esc(KINDS[o.kind])}</strong>: ` : ""}${esc(o.reason)}</p>
         <p>${running ? "Serena is checking the same servable list again without the delta threshold (every other check still applies) and, if it passes, updates. This page checks again every few seconds until it's done."
           : `Serena checked the same servable list again without the delta threshold (every other check still applied)${r.tone === "success" ? " and updated from it" : ""}. The team was emailed.`}</p></div></div>` : "";
       // Version 45 (issue #110): after an override the heading says the check failed, not "passed", and needs no pill.
-      const checkHeading = !o ? esc(c.result) : `<span style="color:var(--text-danger)">failed</span>, overridden by admin`;
+      const checkHeading = !c ? "" : !o ? esc(c.result) : `<span style="color:var(--text-danger)">failed</span>, overridden by admin`;
       const checkHtml = !c ? "" : `<h3>Servable list check: ${checkHeading}</h3>
         ${o && c.result === "passed" ? `<p class="secondary">It passed when Serena checked it again without the delta threshold; every other check still applied.</p>` : ""}
-        <p>${c.rows.toLocaleString("en-US")} rows; ${c.added.toLocaleString("en-US")} added, ${c.removed.toLocaleString("en-US")} removed, ${c.changed.toLocaleString("en-US")} changed${c.previous ? ` (${c.delta}% of the ${c.previous.toLocaleString("en-US")} rows of the last servability update; the threshold is ${c.threshold}%)` : ""}.</p>
+        <p>${c.rows.toLocaleString("en-US")} rows; ${c.added.toLocaleString("en-US")} added, ${c.removed.toLocaleString("en-US")} removed, ${c.changed.toLocaleString("en-US")} changed${c.previous ? ` (${overBy(c) ? `<span class="delta-over">${deltaPct(c.delta)}%</span>` : `${deltaPct(c.delta)}%`} of the ${c.previous.toLocaleString("en-US")} rows of the last servability update; ${overBy(c) ? `${timesText(c)} times the ${c.threshold}% threshold` : `the threshold is ${c.threshold}%`})` : ""}.</p>
+        ${o ? "" : farNote(c, r.actions && r.actions.includes("override"))}
         ${o && c.result === "failed" ? `<p class="secondary">The check below is the one the override answered: its delta threshold problem no longer stops the refresh. The new check's result replaces it when Serena is done.</p>` : ""}
         ${c.warnings.length ? `<ul>${c.warnings.map(w => `<li>Warning: ${esc(w)}</li>`).join("")}</ul>` : ""}
         ${c.errors.length ? `<div class="tw"><table id="check-problems"><thead><tr><th>Line</th><th>Field</th><th>Problem</th></tr></thead><tbody>${c.errors.map(p => {
@@ -1033,7 +1079,7 @@
         <p class="state-line" id="refresh-state-line">${statePill(r)}<span>· refresh date ${esc(r.date)}${r.admin ? " · an admin refresh" : ""} · last change ${when(r.at)}${i > 0 ? " · a later refresh has started" : ""}</span></p>
         ${banner}
         ${r.actions && r.actions.includes("override") && i === 0 ? `<p><button type="button" class="danger" id="ovOpen">Override the delta threshold</button></p>` : ""}
-        <h3>Reasons</h3>${r.reasons && r.reasons.length ? `<ul id="refresh-reasons">${r.reasons.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : "<p>None recorded.</p>"}
+        ${reasonsHtml(r)}
         <h3>The servable list</h3><p>${r.rows ? `servable-list.${S.museum}.${esc(r.date)}.tsv: ${r.rows.toLocaleString("en-US")} rows, received ${when(r.admin ? r.at : `${r.date}T10:02:04Z`)}.` : "Not received."}</p>
         ${checkHtml}
         ${r.update ? `<h3>The servability update</h3><p>${r.update.deleted.toLocaleString("en-US")} deleted, ${r.update.written.toLocaleString("en-US")} written, ${r.update.unchanged.toLocaleString("en-US")} unchanged.</p>` : ""}`;
@@ -1393,18 +1439,33 @@
   // ---- events
   function bind() {
     // The bell and the banner open Alerts showing the waiting ones (D213); every other way in shows All.
-    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); if (S.page === "alerts") { S.jumpAlert = null; S.alertsShow = b.dataset.show === "waiting" ? "waiting" : "all"; S.pages.alerts && (S.pages.alerts.page = 1); } S.menu = false; S.focus = null; S.from = null; render(); });
+    document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { S.page = clean(b.dataset.go); if (S.page === "alerts") { S.jumpAlert = null; S.alertsShow = b.dataset.show === "waiting" ? "waiting" : "all"; S.pages.alerts && (S.pages.alerts.page = 1); } if (S.page === "refreshes") S.refreshesShow = "all"; S.menu = false; S.focus = null; S.from = null; render(); });
     // All or Waiting (D212); in the app the choice is kept in the address, like sorting and paging.
     document.querySelectorAll("[data-show-alerts]").forEach(b => b.onclick = () => { S.jumpAlert = null; S.alertsShow = clean(b.dataset.showAlerts); if (S.pages.alerts) S.pages.alerts.page = 1; render(); const again = document.querySelector(`[data-show-alerts="${S.alertsShow}"]`); if (again) again.focus(); });
+    document.querySelectorAll("[data-show-refreshes]").forEach(b => b.onclick = () => { S.refreshesShow = clean(b.dataset.showRefreshes); if (S.pages.refreshes) S.pages.refreshes.page = 1; render(); const again = document.querySelector(`[data-show-refreshes="${S.refreshesShow}"]`); if (again) again.focus(); });
     document.querySelectorAll("[data-back]").forEach(b => b.onclick = () => { S.page = S.from; S.from = null; S.focus = null; render(); window.scrollTo(0, S.scroll || 0); });
     document.querySelectorAll("[data-expand]").forEach(b => b.onclick = () => { const k = clean(b.dataset.expand); S.expanded[k] = !S.expanded[k]; render(); const again = document.querySelector(`[data-expand="${CSS.escape(k)}"]`); if (again) again.focus(); });
     // A refresh ID opens the refresh's page (version 44; before, the mockup marked its row on Past refreshes).
     document.querySelectorAll("[data-refresh]").forEach(b => b.onclick = () => { leaving(); S.page = "refresh"; S.refresh = clean(b.dataset.refresh); S.focus = null; render(); window.scrollTo(0, 0); });
     const ov = $("#ovOpen");
     if (ov) ov.onclick = () => {
-      dialog("Override the delta threshold", `<p style="margin-top:0">The servable list check failed only because more rows change than the delta threshold allows. Do this once you know the change is expected. Serena checks the same servable list again without the delta threshold (every other check still applies) and, if it passes, updates Serena from it. The team is emailed.</p>${reasonField("relReason", "the refresh, " + TO_TEAM)}`,
+      // Version 47 (issue #117): the dialog says how far past the threshold the list is, and the reason has a kind
+      // (required) and at least REASON_MIN characters of the admin's own words, so the audit log says why.
+      const c = todayCheck;
+      dialog("Override the delta threshold", `<p style="margin-top:0">The servable list check failed only because more rows change than the delta threshold allows: this list changes ${deltaHtml(c)}. Do this once you know the change is expected. Serena checks the same servable list again without the delta threshold (every other check still applies) and, if it passes, updates Serena from it. The team is emailed.</p>
+        ${farNote(c, true)}
+        <fieldset class="kinds" aria-describedby="ovKindMsg"><legend>Why is the change expected? (required)</legend>${Object.entries(KINDS).map(([k, v]) => `<label><input type="radio" name="ovKind" value="${k}"> ${esc(v)}</label>`).join("")}</fieldset><div class="err-text" id="ovKindMsg" role="alert"></div>
+        <label class="field">Reason (required) <textarea id="relReason" rows="2" aria-describedby="relReasonHint relReasonMsg"></textarea></label><div class="muted" id="relReasonHint" style="margin:-6px 0 4px;font-size:12px">Required, at least ${REASON_MIN} characters: what changed, and how you know it's expected. Recorded in the refresh, ${esc(TO_TEAM)}. No personal data, please.</div><div class="err-text" id="relReasonMsg" role="alert"></div>`,
         `<button type="button" data-close>Cancel</button><button type="button" class="danger" id="relConfirm">Override the delta threshold</button>`);
-      bindDialog(() => { OVERRIDE.by = S.user; OVERRIDE.at = NOW; OVERRIDE.reason = typed($("#relReason")).trim(); refreshScenario("rechecking", true); });
+      bindDialog();
+      $("#relConfirm").onclick = () => {
+        const kind = document.querySelector('input[name="ovKind"]:checked'), box = $("#relReason"), words = typed(box).trim();
+        $("#ovKindMsg").textContent = kind ? "" : "Choose why the change is expected.";
+        $("#relReasonMsg").textContent = !words ? "Give a reason first." : words.length < REASON_MIN ? `Say a little more: at least ${REASON_MIN} characters (${words.length} so far).` : "";
+        if (!kind) { document.querySelector('input[name="ovKind"]').focus(); return; }
+        if (words.length < REASON_MIN) { box.focus(); return; }
+        Object.assign(OVERRIDE, {by: S.user, at: NOW, kind: clean(kind.value), reason: words}); close(); refreshScenario("rechecking", true);
+      };
     };
     document.querySelectorAll("[data-lookup]").forEach(b => b.onclick = () => { leaving(); S.focus = null; openLookup(clean(b.dataset.lookup)); });
     const lf = $("#loginForm");
@@ -1712,17 +1773,20 @@
     clearTimeout(rechecked);
     const drop = list => list.splice(0, list.length, ...list.filter(x => !x.scenario));
     drop(REFRESHES); drop(ALERTS); drop(AUDIT);
-    $("#mockRefresh").value = stage;
+    // "far" (version 47) is a failed check like "failed", far past the threshold; overriding it keeps that check.
+    if (!fromPage) todayCheck = stage === "far" ? FAR_CHECK : TODAY_CHECK;
+    if (stage === "far") stage = "failed";
+    $("#mockRefresh").value = stage === "failed" && todayCheck === FAR_CHECK ? "far" : stage;
     if (stage !== "sample") {
-      if (!fromPage) Object.assign(OVERRIDE, {by: "admin", at: "2026-10-13T16:02:11Z", reason: "PAHMA took the 1930s survey photographs off the public portal on purpose"});
+      if (!fromPage) Object.assign(OVERRIDE, {by: "admin", at: "2026-10-13T16:02:11Z", kind: "bulk", reason: "PAHMA took the 1930s survey photographs off the public portal on purpose"});
       const r = todayRefresh(stage), id = `${S.museum}-${r.id}`;
       REFRESHES.unshift(r);
-      const failedAlert = {at: "2026-10-13T10:36:43Z", date: "2026-10-13", title: "A servable list check failed", about: id, msg: `Refresh ${id} failed its servable list check: 27,284 rows removed (14.56%), more than the 5% delta threshold. Its page says more.`, ack: null, scenario: true};
+      const failedAlert = {at: "2026-10-13T10:36:43Z", date: "2026-10-13", title: "A servable list check failed", about: id, msg: `Refresh ${id} failed its servable list check: ${(r.check.added + r.check.removed).toLocaleString("en-US")} rows ${r.check.added ? "added" : "removed"} (${deltaPct(r.check.delta)}%), more than the ${r.check.threshold}% delta threshold. Its page says more.`, ack: null, scenario: true};
       ALERTS.unshift(failedAlert);
       if (stage !== "failed") {
         failedAlert.ack = {by: OVERRIDE.by, at: OVERRIDE.at};
-        ALERTS.unshift({at: OVERRIDE.at, date: "2026-10-13", title: "An admin overrode the delta threshold", about: id, msg: `An admin overrode the delta threshold for ${name()}'s refresh ${id} (14.56% of the rows change). Serena checks the same servable list again without it and, on a pass, updates. Reason: ${OVERRIDE.reason}`, ack: null, scenario: true});
-        AUDIT.unshift({at: OVERRIDE.at, admin: OVERRIDE.by, action: "threshold override", target: id, details: `Reason: ${OVERRIDE.reason} · Delta percent: 14.56`, scenario: true});
+        ALERTS.unshift({at: OVERRIDE.at, date: "2026-10-13", title: "An admin overrode the delta threshold", about: id, msg: `An admin overrode the delta threshold for ${name()}'s refresh ${id} (${deltaPct(r.check.delta)}% of the rows change). Serena checks the same servable list again without it and, on a pass, updates. Reason: ${KINDS[OVERRIDE.kind]}: ${OVERRIDE.reason}`, ack: null, scenario: true});
+        AUDIT.unshift({at: OVERRIDE.at, admin: OVERRIDE.by, action: "threshold override", target: id, details: `Reason: ${KINDS[OVERRIDE.kind]}: ${OVERRIDE.reason} · Delta percent: ${r.check.delta}`, scenario: true});
       }
       if (stage === "updated") AUDIT.unshift({at: r.at, admin: "Serena", action: "refresh outcome", target: id, details: "State: updated by override", scenario: true});
       // When the re-check ends while the admin is on another page, they stay there.
