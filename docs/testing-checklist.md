@@ -1366,8 +1366,9 @@ refresh at "Checking the servable list". With `./serena up`, run `./serena etl p
 - [ ] **4. It finishes by itself.** Stay on Past refreshes and start the worker: `docker compose -p serena start
   worker`. Without reloading, within about 10 seconds expect the orange "Updated by override" pill, and no more
   `refreshes` requests after that.
-- [ ] **5. Overview.** Repeat steps 1 and 4 with a new failed refresh (`./serena etl pahma --rows 3` again), watching
-  Overview's "Newest refresh:" instead: `status` requests every 5 seconds with the header while it checks, then
-  "Updated by override" without a reload, and no more requests.
+- [ ] **5. Overview.** With the worker running, make a new failed refresh with the full list, `./serena etl pahma`
+  (not `--rows 3` again: step 4 left that list in place, so it would pass), then repeat steps 1 and 4 with it,
+  watching Overview's "Newest refresh:" instead: `status` requests every 5 seconds while it checks, each but the first
+  with the header, then "Updated by override" without a reload, and no more requests.
 - [ ] **6. Nothing working.** With no refresh checking or updating, leave Past refreshes or Overview open for a
   minute: no `refreshes` or `status` requests (the `alerts` banner's own checks carry on).
