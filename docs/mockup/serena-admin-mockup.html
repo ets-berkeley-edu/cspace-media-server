@@ -382,7 +382,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
-      <li><strong>Version 55 (October 28, 2026; for review; Richard, after trying version 54):</strong> <strong>Manual refresh's action is all in the card at the top.</strong> The card starts with the museum's <strong>current refresh</strong>, for context: the open one if there is one, else the newest, with its state, refresh date, rows and last change (hidden while it's your own check, which "Your check" shows). Then which ETL list it will check ("The ETL list: the one for 2026-10-12 (the newest), …", or "none yet"), the older-list and open-refresh warnings, and <strong>Check the ETL list</strong>. <strong>Checking needs no reason:</strong> it changes nothing. The reason is asked for when you <strong>run the servability update</strong>, which applies the ETL list: its Reason field is beside that button, and the button, never disabled, says "Give a reason first." and moves focus there. Once a check starts, its result, the override and "Run the servability update" appear at the top of the card, and the rest reads "Check another ETL list". While the check's own next step waits for you ("Run the servability update", or "Override the delta threshold"), "Check the ETL list" for another one is <strong>outlined</strong>, not a second filled button; it's blue again once that's done. <strong>The picker</strong> stays below, under <strong>Choose the ETL list</strong> ("A recent ETL list" or "Upload an ETL list file"), which folds away: it starts open, folds by itself once a check starts, and opens again, with focus on it, when the check is pressed without an ETL list or a file. <strong>"ETL list"</strong> replaces "list" and "servable list" in the page's own words; Serena's state names ("Checking the servable list", "Servable list check failed") and the override dialog, which a refresh's page shares, are unchanged. <strong>Mockup only:</strong> <strong>Reset</strong>, in the page's dashed bar, goes back to Serena with no pending refreshes: the refreshes this page and "Today's refresh" in Mockup settings made go, with their alerts and audit entries, and the page is as it first opens (the sample's own refreshes stay, the October 3 override among them). <strong>For the app:</strong> starting a manual refresh takes no reason (today Serena requires one: the design's Manual refresh, "The list"), and "Run the servability update" takes one (today it has none), recorded in the refresh's reasons and the audit log; closing an open refresh still asks to confirm. A refresh's page asks for the same reason before its own "Run the servability update".</li>
+      <li><strong>Version 55 (October 28, 2026; for review; Richard, after trying version 54):</strong> <strong>Manual refresh's action is all in the card at the top.</strong> The card starts with the museum's <strong>current refresh</strong>, for context: the open one if there is one, else the newest, with its state, refresh date, rows and last change (hidden while it's your own check, which "Your check" shows). Then <strong>Replace with:</strong> and two choices, <strong>Choose from previous</strong> and <strong>Upload one</strong>; once one is chosen, which ETL list it will check ("The ETL list: the one for 2026-10-12 (the newest), …", or "none yet"); the older-list and open-refresh warnings; and <strong>Check the ETL list</strong>, which, pressed before either choice, says "Choose from previous or upload one first." <strong>Checking needs no reason:</strong> it changes nothing. The reason is asked for when you <strong>run the servability update</strong>, which applies the ETL list: its Reason field is beside that button, and the button, never disabled, says "Give a reason first." and moves focus there. Once a check starts, its result, the override and "Run the servability update" appear at the top of the card, with "Replace with:" below them for another ETL list. While the check's own next step waits for you ("Run the servability update", or "Override the delta threshold"), "Check the ETL list" for another one is <strong>outlined</strong>, not a second filled button; it's blue again once that's done. <strong>The bottom card</strong> appears only once a choice is made: <strong>Previous ETL lists</strong> (the table of the last 10) for "Choose from previous", or <strong>Upload an ETL list file</strong> (the file, its refresh date and the live public core checkbox) for "Upload one". Before either choice, and again once a check starts, there is none. It folds away, and opens again, with focus on it, when the check is pressed without an ETL list or a file. <strong>"ETL list"</strong> replaces "list" and "servable list" in the page's own words; Serena's state names ("Checking the servable list", "Servable list check failed") and the override dialog, which a refresh's page shares, are unchanged. <strong>Mockup only:</strong> <strong>Reset</strong>, in the page's dashed bar, goes back to Serena with no pending refreshes: the refreshes this page and "Today's refresh" in Mockup settings made go, with their alerts and audit entries, and the page is as it first opens (the sample's own refreshes stay, the October 3 override among them). <strong>For the app:</strong> starting a manual refresh takes no reason (today Serena requires one: the design's Manual refresh, "The list"), and "Run the servability update" takes one (today it has none), recorded in the refresh's reasons and the audit log; closing an open refresh still asks to confirm. A refresh's page asks for the same reason before its own "Run the servability update".</li>
       <li><strong>Version 54 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's second idea, <strong>Reasons in two lists</strong>, is in the app as shown here: a refresh's page has What went wrong and What admins did, each "None." when empty. Serena records which list each reason goes in; a reason recorded before has none and goes under What went wrong. In the app, an abandoned refresh closed by a manual refresh lists "closed by the manual refresh …" under What admins did, and one closed by the ETL's next refresh lists it under What went wrong. With this, all four of version 47's ideas are in the app.</li>
       <li><strong>Version 53 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's fourth idea, <strong>a more useful override reason</strong>, is in the app as shown here: the override dialog, on a refresh's page and on Manual refresh, asks <strong>Why is the change expected?</strong> first, then the reason, at least 20 characters. Serena checks both, stores the kind beside the reason (an override made before has none, and shows its reason alone), and the banner, the alert email and the audit log give the kind's words first. In the app, the Audit log shows the kind in its Reason line rather than as a field of its own. Nothing else changes; idea 2, Reasons in two lists, is still to come.</li>
       <li><strong>Version 52 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's third idea, <strong>the Overridden filter</strong> on Past refreshes, is in the app as shown here: All and Overridden (n) above the table, like Alerts' All and Waiting. In the app, the choice is kept in the address (<code>show=overridden</code>), so Back and a shared link keep it, and the menu opens the page on All. Nothing else changes.</li>
@@ -444,7 +444,7 @@
   const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", refreshesShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: "", countsBy: "day", countsOpen: false};
   // The Manual refresh page (version 49, issue #118): where the list comes from, the list picked, what's typed, and the
   // refresh it started. Mockup only: what the check finds, and whether the museum has an open refresh.
-  S.mr = {source: "recent", pick: null, runReason: "", run: null, outcome: "passes", open: "none", pickerOpen: true};
+  S.mr = {source: null, pick: null, runReason: "", run: null, outcome: "passes", open: "none", pickerOpen: true};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
@@ -1245,7 +1245,7 @@
     REFRESHES.unshift(r);
     AUDIT.unshift({at: NOW, admin: S.user, action: "refresh start", target: full, scenario: true,
       details: `Manual refresh · ${etl ? `ETL list for ${r.listDate}, from ${S.museum}-${r.fromId}` : `Uploaded list for ${r.listDate}`} · SHA-256: ${fakeSha(etl ? from.id : full)}${open ? ` · Closed ${S.museum}-${open.id}` : ""}`});
-    S.mr.run = id; S.mr.runReason = ""; S.mr.pick = null; S.mr.fileName = ""; S.mr.pickerOpen = false; // version 55
+    S.mr.run = id; S.mr.runReason = ""; S.mr.pick = null; S.mr.fileName = ""; S.mr.source = null; // version 55: no bottom card until the next choice
     mrStage(r, "checking");
     mrTimer = setTimeout(() => {
       const c = mrCheck(r.rows, outcome);
@@ -1350,17 +1350,19 @@
     const card =`<section class="mr-card" id="mr-card" aria-labelledby="mr-card-head">
       ${currentHtml}
       ${run ? `${mrResult(run)}<hr>` : ""}
-      <h3 id="mr-card-head">${run ? "Check another ETL list" : "Check an ETL list"}</h3>
-      <p class="mr-chosen" id="mr-chosen">${chosenHtml(pick, newest)}</p>
+      <h3 id="mr-card-head">Replace with:</h3>
+      <fieldset class="source" aria-labelledby="mr-card-head" aria-describedby="mrSourceMsg">${[["recent", "Choose from previous"], ["upload", "Upload one"]].map(([k, v]) => `<label><input type="radio" name="mrSource" value="${k}" ${S.mr.source === k ? "checked" : ""}> ${v}</label>`).join("")}</fieldset>
+      <div class="err-text" id="mrSourceMsg" role="alert"></div>
+      ${S.mr.source ? `<p class="mr-chosen" id="mr-chosen">${chosenHtml(pick, newest)}</p>` : ""}
       <div class="err-text" id="mrPickMsg" role="alert"></div>
       ${olderWarn}
       ${openWarn}
       <p class="secondary" style="margin:0 0 10px">Checking changes nothing, so it needs no reason. You give one when you run the servability update.</p>
       <button class="${waitsOnYou ? "" : "primary"}" type="submit">Check the ETL list</button><div class="err-text" id="mrCheckMsg" role="alert" style="margin-top:6px"></div></section>`;
-    const picker = `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>Choose the ETL list <span class="secondary">(${S.mr.source === "recent" ? "a recent ETL list" : "upload an ETL list file"})</span></summary>
-      <fieldset class="source"><legend>Where the ETL list comes from</legend>${[["recent", "A recent ETL list"], ["upload", "Upload an ETL list file"]].map(([k, v]) => `<label><input type="radio" name="mrSource" value="${k}" ${S.mr.source === k ? "checked" : ""}> ${v}</label>`).join("")}</fieldset>
+    // The bottom card: the previous ETL lists or the upload fields, once one is chosen above; none before.
+    const picker = !S.mr.source ? "" : `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>${S.mr.source === "recent" ? "Previous ETL lists" : "Upload an ETL list file"}</summary>
       ${S.mr.source === "recent" ? recent : `<div style="max-width:640px">${upload}</div>`}</details>`;
-    return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Bring an ETL list into Serena now, when a refresh failed or its ETL list didn't reach Serena. Pick one of the recent ETL lists or upload an ETL list file: Serena checks it without changing anything. If the check passes, you give a reason and run the servability update; if it fails only on the delta threshold, you can override it first.</p>
+    return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Bring an ETL list into Serena now, when a refresh failed or its ETL list didn't reach Serena. Choose one of the previous ETL lists or upload one: Serena checks it without changing anything. If the check passes, you give a reason and run the servability update; if it fails only on the delta threshold, you can override it first.</p>
       ${mock}
       <form id="mrForm" novalidate>${card}${picker}</form>`;
   }
@@ -1368,7 +1370,7 @@
   function chosenHtml(pick, newest) {
     if (S.mr.source === "recent") {
       return pick ? `<strong>The ETL list:</strong> the one for ${esc(pick.date)}${pick === newest ? " (the newest)" : ""}, ${pick.rows.toLocaleString("en-US")} rows, from ${refreshLink(`${S.museum}-${pick.id}`)}.`
-        : `<strong>The ETL list:</strong> <span class="muted">none yet. Choose one of the recent ETL lists below.</span>`;
+        : `<strong>The ETL list:</strong> <span class="muted">none yet. Choose one of the previous ETL lists below.</span>`;
     }
     return S.mr.fileName ? `<strong>The ETL list:</strong> an uploaded file, <span class="mono">${esc(S.mr.fileName)}</span>.`
       : `<strong>The ETL list:</strong> <span class="muted">none yet. Choose the ETL list file below.</span>`;
@@ -1761,7 +1763,7 @@
       clearTimeout(mrTimer); clearTimeout(rechecked);
       const drop = list => list.splice(0, list.length, ...list.filter(x => !x.scenario));
       drop(REFRESHES); drop(ALERTS); drop(AUDIT);
-      Object.assign(S.mr, {source: "recent", pick: null, runReason: "", run: null, outcome: "passes", open: "none", pickerOpen: true, fileName: "", uploadDate: ""});
+      Object.assign(S.mr, {source: null, pick: null, runReason: "", run: null, outcome: "passes", open: "none", pickerOpen: true, fileName: "", uploadDate: ""});
       todayCheck = TODAY_CHECK; $("#mockRefresh").value = "sample";
       render(); $("#mrReset")?.focus();
     };
@@ -1770,7 +1772,7 @@
       if (k === "open") mrOpenEtl(v);
       render(); const again = document.querySelector(`[data-mr-mock="${k}:${v}"]`); if (again) again.focus();
     });
-    document.querySelectorAll('input[name="mrSource"]').forEach(b => b.onchange = () => { S.mr.source = clean(b.value); render(); const again = document.querySelector(`input[name="mrSource"][value="${S.mr.source}"]`); if (again) again.focus(); });
+    document.querySelectorAll('input[name="mrSource"]').forEach(b => b.onchange = () => { S.mr.source = clean(b.value); S.mr.pickerOpen = true; render(); const again = document.querySelector(`input[name="mrSource"][value="${S.mr.source}"]`); if (again) again.focus(); });
     const mp = $("#mrPicker"); if (mp) mp.ontoggle = () => { S.mr.pickerOpen = mp.open; };
     // The file chosen shows in the top card at once; no redraw, so the file input keeps it.
     const mfile = $("#mrFile"); if (mfile) mfile.onchange = () => {
@@ -1790,6 +1792,8 @@
     if (mf) mf.onsubmit = e => {
       e.preventDefault();
       const missing = [], say = (id, ok, text) => { const m = $("#" + id + "Msg"); if (m) m.textContent = ok ? "" : text; if (!ok) missing.push(id); };
+      say("mrSource", !!S.mr.source, "Choose from previous or upload one first.");
+      if (!S.mr.source) { document.querySelector('input[name="mrSource"]').focus(); return; }
       if (S.mr.source === "recent") say("mrPick", !!S.mr.pick, "Choose an ETL list first.");
       else {
         say("mrFile", $("#mrFile").files.length > 0, "Choose the ETL list file first.");
