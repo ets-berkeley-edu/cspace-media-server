@@ -858,6 +858,15 @@ The actions:
 
 - **Retry the ETL list update.** On an `update_failed` refresh: it goes back to `updating` and the worker does the
   ETL list update again, at once (the worker also retries by itself, see An update that failed partway).
+  **Whoever comes second** (decided October 28, 2026, mockup version 56, Richard): a retry, an admin's or the
+  worker's, moves the refresh to `updating` with a conditional write, only while it is still `update_failed` and the
+  museum's newest refresh, so two retries never run at once and one never acts on a refresh another admin has
+  replaced. An admin who comes second (another admin retried first, or applied an ETL list in Manual refresh, which
+  replaced the failed refresh) gets `409` saying who or what got there first; nothing changes and their reason isn't
+  recorded. The page says so in red above the steps ("Not retried: <admin> retried it first, and Serena is applying
+  the ETL list now.") and reloads the refresh, so it shows its real state and no Retry button. A worker retry that
+  comes second skips the refresh. Not yet built: today the `409` gives only the refresh's state, the app keeps the
+  old refresh on screen after it, and the worker doesn't retry by itself.
 - **Override the delta threshold.** On a `check_failed` refresh whose only problem is the delta threshold: it goes
   back to `checking`, and the worker checks the same ETL list again, skipping only the delta threshold (every
   other check still applies); on a pass it does the ETL list update. The refresh's reasons and its check's warnings
