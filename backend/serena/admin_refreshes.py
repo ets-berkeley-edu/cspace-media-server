@@ -121,7 +121,9 @@ def detail(refresh: Refresh, newest: bool) -> dict[str, Any]:
     return {**summary(refresh), "newest": newest, "file_name": refresh.file_name,
             "upload": {"rows": refresh.upload.rows, "bytes": refresh.upload.bytes, "sha256": refresh.upload.sha256,
                        "uploaded_at": refresh.upload.uploaded_at} if refresh.upload else None,
-            "check": refresh.check, "update": refresh.update, "actions": actions(refresh, newest)}
+            "check": refresh.check, "update": refresh.update, "actions": actions(refresh, newest),
+            # A failed update: until when the worker tries it again by itself (decided October 28, 2026).
+            "retry_until": refresh.retry_until if refresh.state == State.UPDATE_FAILED else None}
 
 
 def threshold_only(refresh: Refresh) -> bool:
@@ -153,6 +155,11 @@ def deadline_at(refresh: Refresh, deadline: str) -> str | None:
     hours, minutes = (int(part) for part in deadline.split(":"))
     at = datetime.combine(date.fromisoformat(refresh.refresh_date), time(hours, minutes), tzinfo=PACIFIC)
     return at.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+# An admin's retry, in the refresh's reasons, with who retried it (decided October 28, 2026): the 409 of an admin who
+# comes second names them.
+RETRIED = "ETL list update retried by "
 
 
 def _clean(reason: str) -> str:
@@ -194,9 +201,25 @@ def create_router() -> APIRouter:
     def acting_on(r: RefreshServices, tenant: str, refresh_id: str, action: str) -> Refresh:
         refresh, newest = newest_or_404(r, tenant, refresh_id)
         if action not in actions(refresh, newest):
+            if action == "retry_update":
+                raise HTTPException(409, not_retried(r, refresh))
             raise HTTPException(409, f"Refresh {refresh.refresh_id} is {refresh.state.value}"
                                      f"{'' if newest else ', and a later refresh has started'}: it can't be done now.")
         return refresh
+
+    def not_retried(r: RefreshServices, refresh: Refresh) -> str:
+        """Why a retry came second (decided October 28, 2026, mockup version 56): who or what got there first. The
+        page shows it and loads the refresh again."""
+        newest = r.refreshes.newest(refresh.tenant)
+        if newest is not None and newest.refresh_id != refresh.refresh_id:
+            which = "manual refresh" if newest.admin_refresh is not None else "refresh"
+            return f"Not retried: the {which} {newest.refresh_id} replaced it. This page shows the refresh as it is."
+        if refresh.state in (State.UPDATING, State.UPDATED):
+            retried = next((x for x in reversed(refresh.reasons) if x.startswith(RETRIED)), None)
+            who = retried[len(RETRIED):].split(":", 1)[0] if retried else "Serena"
+            now = "Serena is applying the ETL list now" if refresh.state == State.UPDATING else "it is updated now"
+            return f"Not retried: {who} retried it first, and {now}. This page shows the refresh as it is."
+        return f"Not retried: refresh {refresh.refresh_id} is {refresh.state.value}. This page shows it as it is."
 
     def watchdog_deadline(request: Request, tenant: str) -> str:
         museum = services(request).museums[tenant]
@@ -237,10 +260,12 @@ def create_router() -> APIRouter:
         reason = _clean(body.reason)
         try:
             refresh = r.refreshes.transition(refresh, State.UPDATING,
-                                             reason=f"ETL list update retried by an admin: {reason}",
+                                             reason=f"{RETRIED}{session.user}: {reason}",
                                              reason_kind=ReasonKind.ADMIN)
-        except OutOfOrder as error:
-            raise HTTPException(409, error.detail) from None
+        except OutOfOrder:
+            # Another admin's retry, or the worker's, came first (a conditional write): say who.
+            current = r.refreshes.get(session.tenant, refresh_id)
+            raise HTTPException(409, not_retried(r, current or refresh)) from None
         services(request).audit.record(session.tenant, session.user, Action.UPDATE_RETRY, refresh.refresh_id,
                                        {"reason": reason})
         return detail(refresh, True)

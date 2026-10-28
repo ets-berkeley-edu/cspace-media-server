@@ -137,6 +137,24 @@ def test_failed_refreshes(watchdog: Watchdog, clock: Clock, store: Store, state:
     assert "_" not in alert.message.replace(refresh.refresh_id, "")  # no state name such as check_failed
 
 
+def test_a_failed_update_while_serena_retries_it_and_after(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    """Decided October 28, 2026: the alert says Serena retries the update, and until when; once the retries have run
+    out, a second alert says an admin is needed."""
+    refreshes = Refreshes(store, clock)
+    at(clock, 3, 1)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.UPDATE_FAILED, reason="the reason",
+                         results={"retry_until": "2026-10-10T16:01:00+00:00"})
+    at(clock, 3, 10)
+    (alert,) = watchdog.check()
+    assert alert.message == (f"Refresh {refresh.refresh_id} failed its ETL list update: the reason. Serena tries the "
+                             "update again every 10 minutes, until 16:01 UTC. Its page says more.")
+    at(clock, 9, 1)  # 16:01 UTC
+    stopped = [a for a in watchdog.check() if a.instance == "stopped"]
+    assert len(stopped) == 1 and "Serena has stopped retrying it: an admin is needed" in stopped[0].message
+    assert len([a for a in alerts_of(store) if a["kind"]["S"] == "update_failed"]) == 2
+
+
 def test_not_updated_in_24_hours(watchdog: Watchdog, clock: Clock, store: Store) -> None:
     refreshes = Refreshes(store, clock)
     at(clock, 3, 30)

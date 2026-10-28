@@ -152,7 +152,7 @@ def test_retry_a_failed_update(admin: TestClient, etl: TestClient, worker: Worke
     assert worker.tick() == 1
     after = refresh_of(admin, refresh["refresh_id"])
     assert after["state"] == "updated"
-    assert "ETL list update retried by an admin: DynamoDB is back" in after["reasons"]
+    assert "ETL list update retried by admin: DynamoDB is back" in after["reasons"]
     entry = audit(admin)[0]
     assert entry["action"] == "update_retry" and entry["target"] == refresh["refresh_id"]
     assert entry["details"] == {"reason": "DynamoDB is back"}
@@ -167,6 +167,85 @@ def test_no_retry_once_a_later_day_started(admin: TestClient, etl: TestClient, w
     response = admin.post(f"/admin/v1/museums/pahma/refreshes/{refresh['refresh_id']}/retry-update", headers=CHANGES,
                           json={"reason": "too late"})
     assert response.status_code == 409
+    assert response.json()["detail"].startswith("Not retried: the refresh pahma-2026-10-11-1 replaced it.")
+
+
+# --- a failed update: the worker retries it by itself, and a retry that comes second (decided October 28, 2026)
+
+def test_the_worker_retries_a_failed_update_every_10_minutes_for_6_hours(
+        admin: TestClient, etl: TestClient, worker: Worker, clock: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    refresh = failed_update(etl, worker, monkeypatch)
+    one = refresh_of(admin, refresh["refresh_id"])
+    assert one["retry_until"] == "2026-10-10T16:30:00+00:00"  # 6 hours after it failed
+    assert worker.tick() == 0  # not 10 minutes yet
+
+    def down(*args: Any, **kwargs: Any) -> None:
+        raise ClientError({"Error": {"Code": "InternalServerError", "Message": "synthetic"}}, "BatchWriteItem")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(updating, "update", down)
+        clock.now += timedelta(minutes=10)
+        assert worker.tick() == 1
+    again = refresh_of(admin, refresh["refresh_id"])
+    # It failed the same way: the same time to stop, and no second copy of the reason.
+    assert again["state"] == "update_failed" and again["retry_until"] == one["retry_until"]
+    assert again["reasons"] == one["reasons"]
+    clock.now += timedelta(minutes=10)
+    assert worker.tick() == 1  # DynamoDB answers again
+    assert refresh_of(admin, refresh["refresh_id"])["state"] == "updated"
+
+
+def test_the_worker_stops_retrying_after_6_hours(admin: TestClient, etl: TestClient, worker: Worker, clock: Any,
+                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    refresh = failed_update(etl, worker, monkeypatch)
+    clock.now += timedelta(hours=6)
+    assert worker.tick() == 0
+    one = refresh_of(admin, refresh["refresh_id"])
+    assert one["state"] == "update_failed" and one["actions"] == ["retry_update"]
+
+
+def test_a_retry_that_comes_second(admin: TestClient, etl: TestClient, worker: Worker,
+                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    """Another admin's retry came first: Serena changes nothing, and says who (mockup version 56)."""
+    refresh = failed_update(etl, worker, monkeypatch)
+    url = f"/admin/v1/museums/pahma/refreshes/{refresh['refresh_id']}/retry-update"
+    assert admin.post(url, headers=CHANGES, json={"reason": "DynamoDB is back"}).status_code == 200
+    response = admin.post(url, headers=CHANGES, json={"reason": "trying too"})
+    assert response.status_code == 409
+    assert response.json()["detail"] == ("Not retried: admin retried it first, and Serena is applying the ETL list "
+                                          "now. This page shows the refresh as it is.")
+    one = refresh_of(admin, refresh["refresh_id"])
+    assert not any("trying too" in reason for reason in one["reasons"])
+    assert [e["details"]["reason"] for e in audit(admin) if e["action"] == "update_retry"] == ["DynamoDB is back"]
+
+
+def test_the_worker_skips_a_retry_an_admin_made_first(admin: TestClient, etl: TestClient, worker: Worker, clock: Any,
+                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    refresh = failed_update(etl, worker, monkeypatch)
+    url = f"/admin/v1/museums/pahma/refreshes/{refresh['refresh_id']}/retry-update"
+    stale = worker.s.refreshes.get("pahma", refresh["refresh_id"])
+    assert stale is not None
+    assert admin.post(url, headers=CHANGES, json={"reason": "DynamoDB is back"}).status_code == 200
+    clock.now += timedelta(minutes=10)
+    assert worker._retry(stale) is None  # read before the admin's retry: its conditional write fails
+    assert worker.tick() == 1 and refresh_of(admin, refresh["refresh_id"])["state"] == "updated"
+
+
+def test_the_local_stacks_failed_update(admin: TestClient, etl: TestClient, worker: Worker, store: Store,
+                                        clock: Any) -> None:
+    """devtools.failed_update, for testing checklist section 45: a failed update of the last updated ETL list, which
+    the worker retries."""
+    from devtools.failed_update import record
+
+    refreshes = Refreshes(store, clock)
+    assert record(refreshes, "pahma") is None  # nothing updated yet
+    done = updated_refresh(etl, worker, BLOBS)
+    failed = record(refreshes, "pahma")
+    assert failed is not None and failed.state == State.UPDATE_FAILED and failed.retry_until
+    assert refresh_of(admin, failed.refresh_id)["actions"] == ["retry_update"]
+    assert refresh_of(admin, failed.refresh_id)["upload"]["sha256"] == done["upload"]["sha256"]
+    clock.now += timedelta(minutes=10)
+    assert worker.tick() == 1 and refresh_of(admin, failed.refresh_id)["state"] == "updated"
 
 
 # --- overriding the delta threshold, for the failed refresh's own servable list (D62, D74, D83)

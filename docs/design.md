@@ -797,9 +797,9 @@ table, so a restart never loses a step.
   decided October 27, 2026, mockup version 47). The 10 times is fixed, not a setting: the note changes neither what
   Serena serves nor whether an override is allowed.
 - **The ETL list update** reads the museum's rows from the servability table itself, through its `by_tenant` index,
-  so it is right even after an ETL list update that stopped partway (decided October 9, 2026). It first deletes the rows for Blobs no longer
-  listed, then writes the new and changed rows, each with the time it was written (`listed_at`); unchanged rows aren't touched. Deleting before adding means an ETL list update
-  that stops halfway never serves a Blob that the new ETL list dropped. Writes are batched (25 at a time), and what
+  so it is right even after an ETL list update that stopped partway (decided October 9, 2026). It writes the rows that
+  tighten first, then those that publish (see Tighten first, publish last below), each new or changed row with the
+  time it was written (`listed_at`); unchanged rows aren't touched. Writes are batched (25 at a time), and what
   DynamoDB leaves unprocessed is retried with backoff; a whole ETL list update that still fails is tried twice more
   before the refresh ends `update_failed` with the reason. The refresh shows the counts: deleted, written, unchanged.
   **An update that failed partway** (decided October 28, 2026): the batches are not one all-or-nothing change, so
@@ -808,17 +808,19 @@ table, so a restart never loses a step.
   some of each ETL list, never a Blob the new one dropped. Retrying is always safe: each try reads the table again and
   does only what's left, and "Retry the update" or the next refresh finishes the job. A worker that dies mid-update
   doesn't cause this: its heartbeat goes stale and another pass finishes the step. Two rules keep the partial state
-  harmless and short (Richard, October 28, 2026; not yet built):
+  harmless and short (Richard, October 28, 2026):
   - **Tighten first, publish last.** The order is by effect, not by kind of write: first the deletes of Blobs the new
     ETL list drops and every change that makes a file less available (public to restricted, a changed Media CSID or
     kind); then the new rows and every change that makes one more available. An update that stops partway then never
-    serves a file it shouldn't: the worst is some newly listed files not served yet, which fails closed. (Today's
-    order, deletes then all writes, can leave a file the new list restricts still served as public.)
+    serves a file it shouldn't: the worst is some newly listed files not served yet, which fails closed.
   - **Retry by itself.** The worker tries an `update_failed` refresh's update again every 10 minutes for up to 6 hours
     (starting values), so the partial state lasts minutes once its cause clears, not until an admin notices. While it
     retries, the alert, the refresh's page and the pending card say so ("Serena tries the update again every 10
     minutes, until <time>"); "Retry the update" still tries at once, and applying another ETL list still replaces
-    it. After the last try, the alert says Serena has stopped retrying and an admin is needed. A failed update usually
+    it. The refresh keeps `retry_until`, set when its update fails straight after its check (6 hours on) and kept
+    by every retry; a corrected ETL list from the ETL clears it. A retry that fails the same way adds nothing to the
+    refresh's reasons. After the last try, a second alert says Serena has stopped retrying and an admin is needed.
+    A failed update usually
     means DynamoDB is failing, and while it is Serena can't look a file up, so it serves the unavailable image
     anyway: the partial state shows only once DynamoDB answers again.
 
@@ -865,8 +867,9 @@ The actions:
   replaced the failed refresh) gets `409` saying who or what got there first; nothing changes and their reason isn't
   recorded. The page says so in red above the steps ("Not retried: <admin> retried it first, and Serena is applying
   the ETL list now.") and reloads the refresh, so it shows its real state and no Retry button. A worker retry that
-  comes second skips the refresh. Not yet built: today the `409` gives only the refresh's state, the app keeps the
-  old refresh on screen after it, and the worker doesn't retry by itself.
+  comes second skips the refresh. An admin's retry is recorded in the refresh's reasons with who made it ("ETL list
+  update retried by <admin>: <reason>"), which is how the `409` names them; the worker's adds none, and the `409`
+  then says Serena retried it.
 - **Override the delta threshold.** On a `check_failed` refresh whose only problem is the delta threshold: it goes
   back to `checking`, and the worker checks the same ETL list again, skipping only the delta threshold (every
   other check still applies); on a pass it does the ETL list update. The refresh's reasons and its check's warnings

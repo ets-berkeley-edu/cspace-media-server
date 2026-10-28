@@ -47,8 +47,24 @@ class Watchdog:
             return None
         reasons = "; ".join(refresh.reasons)
         what = f"Refresh {refresh.refresh_id} {FAILED_WORDS[refresh.state]}"
+        retrying = ""
+        if refresh.state == State.UPDATE_FAILED and refresh.retry_until:
+            until = datetime.fromisoformat(refresh.retry_until)
+            if self.clock() < until:
+                retrying = f" Serena tries the update again every 10 minutes, until {until.strftime('%H:%M')} UTC."
         return Alert(refresh.tenant, refresh.refresh_date, FAILED[refresh.state], refresh.refresh_id,
-                     f"{what}: {reasons}. Its page says more." if reasons else f"{what}. Its page says more.")
+                     f"{what}: {reasons}.{retrying} Its page says more." if reasons
+                     else f"{what}.{retrying} Its page says more.")
+
+    def stopped_retrying(self, refresh: Refresh) -> Alert | None:
+        """A failed update whose retries have run out (decided October 28, 2026): an admin is needed now."""
+        if refresh.state != State.UPDATE_FAILED or not refresh.retry_until or \
+                self.clock() < datetime.fromisoformat(refresh.retry_until):
+            return None
+        return Alert(refresh.tenant, refresh.refresh_date, Kind.UPDATE_FAILED, refresh.refresh_id,
+                     f"Refresh {refresh.refresh_id}'s ETL list update still fails, and Serena has stopped retrying "
+                     "it: an admin is needed. Retry the update on its page once the cause is fixed, or apply another "
+                     "ETL list.", instance="stopped")
 
     def raise_failure(self, refresh: Refresh) -> None:
         """Raised by the worker as soon as a step fails, so the team hears at once (design: The daily sequence). The
@@ -74,6 +90,9 @@ class Watchdog:
         failure = self.failure(newest) if newest is not None else None
         if failure is not None:
             found.append(failure)
+        stopped = self.stopped_retrying(newest) if newest is not None else None
+        if stopped is not None:
+            found.append(stopped)
 
         deadline_text = self.museum_settings.get(self.museums[tenant]).watchdog_deadline
         hours, minutes = (int(part) for part in deadline_text.split(":"))

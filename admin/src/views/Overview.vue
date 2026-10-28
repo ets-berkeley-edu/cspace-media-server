@@ -14,11 +14,30 @@
                 v-if="!byOverride(status.current)"
                 id="current-override"
                 :override="status.current.override"
-              />
+              /><v-chip
+                v-if="partly"
+                id="partly-replaced"
+                class="ml-1 font-weight-bold"
+                color="warning"
+                size="small"
+                variant="tonal"
+              >
+                <v-icon
+                  class="mr-1"
+                  :icon="mdiAlertCircle"
+                  size="small"
+                  aria-hidden="true"
+                />partly replaced
+              </v-chip>
             </div>
             <div>
               <RefreshLink :id="status.current.refresh_id" /> · {{ status.current.rows?.toLocaleString('en-US') ?? '—' }} rows ·
               {{ when(status.current.updated_at) }}
+            </div>
+            <!-- A failed update stopped partway (decided October 28, 2026): Serena serves some of each ETL list. -->
+            <div v-if="partly && pending" id="partly-replaced-detail" class="mt-1">
+              <RefreshLink :id="pending.refresh_id" />'s update stopped partway, so Serena serves some of each ETL list,
+              never a file either one restricts or drops.{{ retryText(pending) ? ` ${retryText(pending)}` : '' }}
             </div>
           </template>
           <div v-else id="current-none" class="my-1">None yet: Serena hasn't had an ETL list update.</div>
@@ -104,6 +123,7 @@
 
 <script setup lang="ts">
 import {computed, ref, watch} from 'vue'
+import {mdiAlertCircle} from '@mdi/js'
 import {useRoute, useRouter} from 'vue-router'
 import type {Status} from '@/api'
 import {api, problem} from '@/api'
@@ -114,7 +134,7 @@ import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import StateSince from '@/components/StateSince.vue'
 import {refresh, signedInTo} from '@/session'
-import {FAILED_STATES, byOverride, fixText, when} from '@/words'
+import {FAILED_STATES, byOverride, fixText, retryText, when} from '@/words'
 
 const route = useRoute()
 const router = useRouter()
@@ -124,6 +144,7 @@ const status = ref<Status | null>(null)
 const error = ref('')
 const signOutError = ref('')
 const pending = computed(() => status.value?.pending ?? null)
+const partly = computed(() => pending.value?.state === 'update_failed')
 const signingOut = ref(false)
 
 // While the newest refresh is checking or updating, the page loads again by itself (checkAgain.ts); one that fails

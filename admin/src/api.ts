@@ -106,6 +106,8 @@ export interface Refresh extends RefreshSummary {
   actions: RefreshAction[]
   // When the watchdog's deadline for an ETL refresh's day passes, in UTC (mockup version 55); none for a manual one
   deadline_at?: string | null
+  // A failed update: until when Serena tries it again by itself (decided October 28, 2026); none for an older one
+  retry_until?: string | null
 }
 
 export interface Status {
