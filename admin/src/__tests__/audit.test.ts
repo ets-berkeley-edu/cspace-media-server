@@ -13,6 +13,11 @@ describe('the audit log, readable', () => {
       {label: 'SHA-256', value: '88f538917c20…', full: sha}
     ])
     expect(detailLines({})).toEqual([])
+    // An override's kind goes before its reason (issue #120); one made before has none.
+    expect(detailLines({kind: 'first_load', reason: 'UCJEPS\'s first load', delta_percent: 99})).toEqual([
+      {label: 'Reason', value: 'First load: UCJEPS\'s first load'}, {label: 'Delta percent', value: '99'}])
+    expect(detailLines({reason: 'PAHMA republished many images'})).toEqual([
+      {label: 'Reason', value: 'PAHMA republished many images'}])
   })
 
   it('shows an acknowledged alert by its kind, refresh date and subject', () => {

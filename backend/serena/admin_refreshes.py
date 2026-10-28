@@ -56,6 +56,23 @@ class Reason(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
+# Why an admin expects the change an override lets through (issue #120, mockup version 47): one of these, then the
+# reason in the admin's own words, at least OVERRIDE_REASON_MIN characters. An override made before has no kind.
+OVERRIDE_KINDS = {"first_load": "First load", "bulk_change": "Known bulk change in CollectionSpace",
+                  "testing": "Testing", "other": "Something else"}
+OVERRIDE_REASON_MIN = 20
+
+
+class Override(BaseModel):
+    kind: str = Field(default="", max_length=20)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+def override_reason(kind: str | None, reason: str) -> str:
+    """The override's reason as the alert and the refresh's reasons give it: its kind's words first, when it has one."""
+    return f"{OVERRIDE_KINDS[kind]}: {reason}" if kind in OVERRIDE_KINDS else reason
+
+
 class FromList(BaseModel):
     """A manual refresh with one of the ETL's servable lists (issue #118), named by the refresh it came with."""
     refresh_id: str = Field(min_length=1, max_length=100)
@@ -203,18 +220,24 @@ def create_router() -> APIRouter:
         return detail(refresh, True)
 
     @router.post("/refreshes/{refresh_id}/override-threshold", dependencies=[Depends(changes)])
-    def override_threshold(refresh_id: str, body: Reason, session: SignedIn, r: Refreshes_,
+    def override_threshold(refresh_id: str, body: Override, session: SignedIn, r: Refreshes_,
                            request: Request) -> dict[str, Any]:
         """D74, D83: a refresh whose servable list check failed on the delta threshold alone goes back to the worker,
         which checks the same servable list again without the delta threshold and, on a pass, does the servability
-        update. Nothing is left armed. Emailed to the team (D62)."""
+        update. Nothing is left armed. Emailed to the team (D62). The admin says why the change is expected: a kind,
+        and the reason in their own words (issue #120)."""
         refresh = acting_on(r, session.tenant, refresh_id, "override_threshold")
+        if body.kind not in OVERRIDE_KINDS:
+            raise HTTPException(422, "Choose why the change is expected.")
         reason = _clean(body.reason)
+        if len(reason) < OVERRIDE_REASON_MIN:
+            raise HTTPException(422, f"Say a little more: at least {OVERRIDE_REASON_MIN} characters.")
+        given = override_reason(body.kind, reason)
         at = r.refreshes.now()
         try:
-            override = {"at": at, "by": session.user, "reason": reason}
+            override = {"at": at, "by": session.user, "kind": body.kind, "reason": reason}
             refresh = r.refreshes.transition(refresh, State.CHECKING, results={"override": override},
-                                             reason=f"delta threshold overridden by an admin: {reason}")
+                                             reason=f"delta threshold overridden by an admin: {given}")
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
         delta = (refresh.check or {}).get("delta_percent")
@@ -224,10 +247,10 @@ def create_router() -> APIRouter:
         r.alerts.raise_(Alert(session.tenant, r.refreshes.today(), Kind.THRESHOLD_OVERRIDDEN, refresh.refresh_id,
                               f"An admin overrode the delta threshold for {museum.name}'s refresh "
                               f"{refresh.refresh_id} ({delta}% of the rows change). Serena checks the same servable "
-                              f"list again without it and, {then}. Reason: {reason}",
+                              f"list again without it and, {then}. Reason: {given}",
                               instance=at))  # each override is emailed (D62)
         services(request).audit.record(session.tenant, session.user, Action.THRESHOLD_OVERRIDE, refresh.refresh_id,
-                                       {"reason": reason, "delta_percent": delta})
+                                       {"kind": body.kind, "reason": reason, "delta_percent": delta})
         return detail(refresh, True)
 
     @router.post("/refreshes/{refresh_id}/run-update", dependencies=[Depends(changes)])

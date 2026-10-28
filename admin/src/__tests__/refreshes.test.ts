@@ -70,13 +70,31 @@ describe('overriding the delta threshold', () => {
     expect(wrapper.find('#override-threshold').classes()).toContain('bg-error') // red: it changes what the public sees (D156)
     await wrapper.find('#override-threshold').trigger('click')
     await flushPromises()
+    // Issue #120: why the change is expected, then at least 20 characters; the button stays enabled and says what's
+    // missing, with focus on the first thing missing.
+    const confirm = () => (document.querySelector('#confirm-action') as HTMLButtonElement).click()
+    const dialogText = () => document.querySelector('.v-dialog')?.textContent || ''
+    expect(dialogText()).toContain('Why is the change expected? (required)')
+    expect(dialogText()).toContain('Required, at least 20 characters: what changed, and how you know it\'s expected.')
     const reason = document.querySelector('#reason') as HTMLTextAreaElement
+    reason.value = 'many   images'
+    reason.dispatchEvent(new Event('input'))
+    await flushPromises()
+    confirm()
+    await flushPromises()
+    expect(dialogText()).toContain('Choose why the change is expected.')
+    expect(dialogText()).toContain('Say a little more: at least 20 characters (11 so far).')
+    expect(document.activeElement?.id).toBe('override-kind-first_load')
+    expect(calls.filter(c => c.method === 'POST')).toHaveLength(0)
+    ;(document.querySelector('#override-kind-bulk_change') as HTMLInputElement).click()
     reason.value = 'PAHMA republished many images'
     reason.dispatchEvent(new Event('input'))
     await flushPromises()
-    ;(document.querySelector('#confirm-action') as HTMLButtonElement).click()
+    expect(dialogText()).not.toContain('Choose why the change is expected.')
+    expect(dialogText()).not.toContain('Say a little more')
+    confirm()
     await vi.waitFor(() => expect(wrapper.find('#refresh-state').text()).toBe('Checking the servable list'))
-    expect(calls.find(c => c.method === 'POST')?.body).toEqual({reason: 'PAHMA republished many images'})
+    expect(calls.find(c => c.method === 'POST')?.body).toEqual({kind: 'bulk_change', reason: 'PAHMA republished many images'})
     expect(wrapper.find('#override-threshold').exists()).toBe(false)
     wrapper.unmount()
   })
@@ -87,9 +105,10 @@ describe('overriding the delta threshold', () => {
 const THRESHOLD = '50% of the rows would change; the threshold is 5.0%'
 const FAILED_CHECK = {result: 'failed', rows: 40, added: 0, removed: 20, changed: 0, previous_rows: 40, threshold_percent: 5,
   delta_percent: 50, error_count: 1, errors: [{line: 0, field: 'file', problem: THRESHOLD}], warnings: []}
-const OVERRIDE = {at: '2026-10-10T16:00:00+00:00', by: 'pahma-admin', reason: 'PAHMA republished many images'}
+const OVERRIDE = {at: '2026-10-10T16:00:00+00:00', by: 'pahma-admin', kind: 'bulk_change', reason: 'PAHMA republished many images'}
 const OVERRIDDEN = {...REFRESH, state: 'checking', actions: [], check: FAILED_CHECK, override: OVERRIDE,
-  reasons: ['1 problem in the servable list', 'delta threshold overridden by an admin: PAHMA republished many images']}
+  reasons: ['1 problem in the servable list',
+    'delta threshold overridden by an admin: Known bulk change in CollectionSpace: PAHMA republished many images']}
 
 // Issue #120: past the delta threshold, the percent is in red and says how many times the threshold it is; from 10 times,
 // a note says it's far past it.
@@ -166,7 +185,7 @@ describe('an overridden refresh', () => {
     expect(wrapper.find('#override-overshoot .delta-over').text()).toBe('50%')
     expect(wrapper.find('#check-far-past').exists()).toBe(false) // the banner says it
     expect(banner.text()).toContain('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC.')
-    expect(wrapper.find('#override-reason').text()).toBe('Reason: PAHMA republished many images')
+    expect(wrapper.find('#override-reason').text()).toBe('Reason: Known bulk change in CollectionSpace: PAHMA republished many images')
     expect(banner.text()).toContain('This page checks again every few seconds')
     // The reason is in the banner, not one more line under Reasons.
     expect(wrapper.find('#refresh-reasons').text()).toBe('1 problem in the servable list')
@@ -226,6 +245,16 @@ describe('an overridden refresh', () => {
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     expect(wrapper.find('#override-banner').text()).toContain('overridden by an admin at')
     expect(wrapper.find('#override-reason').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('gives the reason alone for an override made before it had a kind (issue #120)', async () => {
+    const before = {...OVERRIDE, kind: undefined}
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...OVERRIDDEN, state: 'updated', override: before,
+      reasons: ['delta threshold overridden by an admin: PAHMA republished many images']}}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#override-reason').text()).toBe('Reason: PAHMA republished many images')
+    expect(wrapper.find('#refresh-reasons').exists()).toBe(false) // its line is the banner's
     wrapper.unmount()
   })
 
@@ -433,7 +462,7 @@ describe('Manual refresh (issue #118)', () => {
     const failed = {...RUN, state: 'check_failed', actions: ['override_threshold'], check: {...FAILED_CHECK}}
     const calls = fakeApi({...choices(null), 'POST /museums/pahma/refreshes/from-list': {status: 201, body: failed},
       'POST /museums/pahma/refreshes/pahma-2026-10-12-1/override-threshold': {body: {...failed, state: 'checking', actions: [],
-        override: {at: '2026-10-12T17:00:00+00:00', by: 'admin', reason: 'a known bulk change'}}}})
+        override: {at: '2026-10-12T17:00:00+00:00', by: 'admin', kind: 'testing', reason: 'a test of the override, by hand'}}}})
     const {wrapper} = await at('/pahma/manual-refresh', ManualRefresh)
     await wrapper.find('#pick-pahma-2026-10-11-1').setValue(true)
     setup(wrapper).reason = 'now'
@@ -449,13 +478,20 @@ describe('Manual refresh (issue #118)', () => {
     expect(document.querySelector('.v-dialog')?.textContent).toContain('this list changes 50% of the rows, 10.0 times the 5% threshold: far past it.')
     expect(document.querySelector('#override-far-past')?.textContent).toContain('Far past the delta threshold.')
     const reason = document.querySelector('#override-reason') as HTMLTextAreaElement
-    reason.value = 'a known bulk change'
+    reason.value = 'a test of the override, by hand'
     reason.dispatchEvent(new Event('input'))
     await flushPromises()
     ;(document.querySelector('#confirm-override') as HTMLButtonElement).click()
     await flushPromises()
-    expect(calls.at(-1)?.body).toEqual({reason: 'a known bulk change'})
+    expect(document.querySelector('.v-dialog')?.textContent).toContain('Choose why the change is expected.') // issue #120
+    expect(calls.filter(c => c.method === 'POST')).toHaveLength(1) // only the check
+    ;(document.querySelector('#override-kind-testing') as HTMLInputElement).click()
+    await flushPromises()
+    ;(document.querySelector('#confirm-override') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(calls.at(-1)?.body).toEqual({kind: 'testing', reason: 'a test of the override, by hand'})
     expect(wrapper.find('#manual-override-note').text()).toContain('Delta threshold overridden by admin')
+    expect(wrapper.find('#manual-override-note').text()).toContain('Reason: Testing: a test of the override, by hand')
     wrapper.unmount()
 
     const other = {...RUN, state: 'check_failed', actions: [], check: {...FAILED_CHECK, error_count: 3, errors: [

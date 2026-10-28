@@ -23,6 +23,7 @@ pytestmark = pytest.mark.usefixtures("built_dataset")
 
 ADMIN = ("admin", "admin")  # the simulator's synthetic account: its password is its username
 GIVE_A_REASON = "Give a reason first."
+CHOOSE_A_KIND = "Choose why the change is expected."
 OVERRIDE_REASON = "serenade T18: a test override"
 REPAIR_REASON = "serenade T19: a test manual refresh"
 
@@ -79,11 +80,16 @@ def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) ->
     page.click(page.OVERRIDE)
     page.click(page.CONFIRM)
     page.wait_for_text(page.REASON_MESSAGES, GIVE_A_REASON)
+    page.wait_for_text(page.KIND_MESSAGES, CHOOSE_A_KIND)  # issue #120
     assert page.refresh(UCJEPS, failed)["state"] == "check_failed", "overridden without a reason"
     page.type(page.REASON, OVERRIDE_REASON)
     page.click(page.CONFIRM)
+    assert page.refresh(UCJEPS, failed)["state"] == "check_failed", "overridden without saying why it's expected"
+    page.click(page.KIND_TESTING)
+    page.click(page.CONFIRM)
     # Issue #108: the banner says who, when and why at once, and the page checks again by itself until it's updated.
-    banner = page.wait_for_text(page.OVERRIDE_BANNER, f"Reason: {OVERRIDE_REASON}").text
+    # Issue #120: the reason with its kind first.
+    banner = page.wait_for_text(page.OVERRIDE_BANNER, f"Reason: Testing: {OVERRIDE_REASON}").text
     # Issue #110: the banner leads with the check that failed; once updated, the state and the check still say so.
     assert banner.startswith("A safety check failed, and an admin overrode it"), banner
     assert "Delta threshold overridden by " in banner, banner

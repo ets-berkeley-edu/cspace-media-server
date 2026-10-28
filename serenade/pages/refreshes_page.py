@@ -30,6 +30,10 @@ class RefreshesPage(Page):
     CONFIRM = by_id("confirm-action")
     REASON = by_id("reason")  # the action's reason (ReasonField's own id)
     REASON_MESSAGES = messages_of("reason")
+    # Issue #120: an override says why the change is expected (a kind) before its reason.
+    KIND_TESTING = (By.XPATH, "//input[@id='override-kind-testing']"
+                              "/ancestor::div[contains(@class, 'v-selection-control')][1]")
+    KIND_MESSAGES = messages_of("override-kind-first_load")
     CANCEL = dialog_button("Cancel")
     # Manual refresh (issue #118): the list's source, the ETL's lists or an upload, and the check's result on the page.
     SOURCE_UPLOAD = (By.XPATH, "//input[@id='source-upload']/ancestor::div[contains(@class, 'v-selection-control')][1]")

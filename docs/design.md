@@ -818,9 +818,16 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   other check still applies); on a pass it does the servability update. The refresh's reasons and its check's warnings
   say so. Nothing is left armed, so there is nothing to expire or cancel, and an override only ever applies to a
   servable list an admin has looked at. Each override raises an alert, so the team is emailed every time. The refresh
-  keeps the override's time, admin and reason (`override`: `at`, `by`, `reason`; an override made before October 26,
-  2026 has only `at`), and the admin API returns it with every refresh, in lists too (issue #108, decided October 26,
-  2026, mockup version 44). The refresh's page shows it in a banner under the state line, in the warning colour with a
+  keeps the override's time, admin, kind and reason (`override`: `at`, `by`, `kind`, `reason`; an override made before
+  October 26, 2026 has only `at`, and one made before issue #120 no `kind`), and the admin API returns it with every
+  refresh, in lists too (issue #108, decided October 26, 2026, mockup version 44). **Why the change is expected**
+  (issue #120, decided October 27, 2026, mockup version 47): the override dialog asks first for its kind (`kind`:
+  `first_load` "First load", `bulk_change` "Known bulk change in CollectionSpace", `testing` "Testing" or `other`
+  "Something else"; required), then the reason in the admin's own words, at least 20 characters (spaces run together
+  count once; "Say a little more: at least 20 characters (7 so far)."), so the audit log says why. Serena checks both
+  (422 otherwise) and stores the kind beside the reason; the banner, the refresh's reasons, the alert email and the
+  audit log give both, the kind's words first ("Known bulk change in CollectionSpace: …"). The other dialogs'
+  reasons don't change. The refresh's page shows it in a banner under the state line, in the warning colour with a
   shield icon, and leaves the reason out of Reasons; while the worker checks again, the failed check's delta threshold
   problem is struck through with "(overridden)"; a re-check that fails on something else has a "Delta threshold
   overridden" chip by its heading. While a refresh is `checking` or `updating`, its page loads it again every 5
@@ -1246,7 +1253,8 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     a reason (Recall, Release, Cancel recall, a Settings change, Retry the servability update, Override the delta
     threshold, Manual refresh), the action's button stays enabled. Pressed without a reason, it sends nothing, says
     "Give a reason first." under the Reason field and moves focus there; a hint under the field says it's required
-    and where it's recorded. Manual refresh does the same for its list or its file, its refresh date and its
+    and where it's recorded. An override also says "Choose why the change is expected." under its kinds, with focus
+    on the first, and a reason under 20 characters says how many it has (issue #120). Manual refresh does the same for its list or its file, its refresh date and its
     confirmation, and a
     Settings change for its value.
   - **Column help** (D164). A column's name with a dotted underline has a description, shown on hover or keyboard
