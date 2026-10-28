@@ -18,7 +18,7 @@ from serena.alerts import Alert, Alerts, Kind
 from serena.app import create_app
 from serena.config import Settings
 from serena.museum_settings import MuseumSettings
-from serena.refreshes import Refreshes, State, Upload
+from serena.refreshes import Refresh, Refreshes, State, Upload, reason_kinds
 from serena.store import Store
 from serena.worker import Worker, WorkerServices
 
@@ -204,6 +204,8 @@ def test_override_the_delta_threshold(admin: TestClient, etl: TestClient, worker
     assert any("overridden by an admin" in w for w in after["check"]["warnings"])
     assert ("delta threshold overridden by an admin: Known bulk change in CollectionSpace: PAHMA republished half its "
             "images") in after["reasons"]
+    # Issue #120: which list each reason goes in, recorded by Serena: the check's problem, then the override.
+    assert after["reason_kinds"] == ["problem", "override"] and len(after["reasons"]) == 2
     assert after["override"] == override  # kept once the refresh is updated
     done = [r for r in caplog.records if r.getMessage() == "servable list check done"]
     assert done[-1].threshold_overridden is True  # type: ignore[attr-defined]
@@ -327,6 +329,8 @@ def test_a_manual_refresh_closes_only_the_open_refresh_it_was_shown(admin: TestC
     assert new["refresh_id"] == stuck["refresh_id"][:-1] + "2"  # the same refresh date, the second refresh
     old = refresh_of(admin, stuck["refresh_id"])
     assert old["state"] == "abandoned" and f"closed by the manual refresh {new['refresh_id']}" in old["reasons"]
+    assert old["reason_kinds"][-1] == "admin"  # issue #120: what admins did, on the refresh it closed
+    assert refresh_of(admin, new["refresh_id"])["reason_kinds"] == ["admin"]  # the manual refresh itself
     assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "waiting"
     assert run_update(admin, new["refresh_id"]).status_code == 200
     assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "updated"
@@ -397,6 +401,7 @@ def test_a_waiting_refresh_is_closed_by_the_next_refresh(admin: TestClient, etl:
     closed = refresh_of(admin, waiting["refresh_id"])
     assert closed["state"] == "abandoned" and closed["actions"] == []
     assert "a later refresh started before the servability update ran" in closed["reasons"]
+    assert closed["reason_kinds"] == ["admin", "problem"]  # issue #120: the ETL's refresh closed it, not an admin
     outcome = audit(admin, "refresh")[0]
     assert (outcome["target"], outcome["details"]["reasons"]) == (
         waiting["refresh_id"], ["a later refresh started before the servability update ran"])
@@ -471,3 +476,16 @@ def test_acknowledging_all(app: Any, admin: TestClient, store: Store) -> None:
     assert admin.post(url, headers=CHANGES, json={"keys": []}).status_code == 422
     assert admin.post(url, headers=CHANGES, json={"keys": [f"k{i}" for i in range(501)]}).status_code == 422
     assert admin.post(url, headers=CHANGES, json={"keys": ["x" * 201]}).status_code == 422
+
+
+def test_reasons_from_before_their_kinds_are_what_went_wrong(store: Store, clock: Any) -> None:
+    """Issue #120: a reason recorded before Serena recorded kinds has none and counts as what went wrong; the kinds
+    recorded since belong to the newest reasons."""
+    refreshes = Refreshes(store)
+    refresh, _ = refreshes.start("pahma")
+    refresh = refreshes.transition(refresh, State.CHECK_FAILED, reason="no servable list uploaded")
+    refresh.reasons.insert(0, "an older reason")  # as if recorded before
+    assert reason_kinds(refresh) == ["problem", "problem"]
+    refresh.reason_kinds = ["admin"]
+    assert reason_kinds(refresh) == ["problem", "admin"]
+    assert reason_kinds(Refresh("pahma", "2026-10-10", 1, State.STARTED, "x", "x")) == []

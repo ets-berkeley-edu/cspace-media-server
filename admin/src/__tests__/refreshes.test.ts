@@ -57,6 +57,35 @@ describe('a refresh', () => {
   })
 })
 
+describe('a refresh\'s reasons (issue #120)', () => {
+  it('puts each reason in the list Serena says, and says "None." for an empty one', async () => {
+    const closed = {...REFRESH, state: 'abandoned', actions: [], reasons: [
+      'manual refresh with the servable list servable-list.tsv: the ETL\'s list didn\'t arrive',
+      'a later refresh started before the servability update ran'], reason_kinds: ['admin', 'problem']}
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: closed}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.text()).not.toContain('Reasons')
+    expect(wrapper.find('#refresh-problems').text()).toBe('a later refresh started before the servability update ran')
+    expect(wrapper.find('#refresh-admin-actions').text()).toContain('the ETL\'s list didn\'t arrive')
+    wrapper.unmount()
+
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...REFRESH, reasons: [], reason_kinds: []}}})
+    const empty = (await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)).wrapper
+    expect(empty.find('#refresh-problems-none').text()).toBe('None.')
+    expect(empty.find('#refresh-admin-actions-none').text()).toBe('None.')
+    empty.unmount()
+  })
+
+  it('counts a reason without a kind as what went wrong, never guessing from its words', async () => {
+    const before = {...REFRESH, reasons: ['servability update retried by an admin: fixed', 'servability update failed']}
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: before}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.findAll('#refresh-problems li')).toHaveLength(2)
+    expect(wrapper.find('#refresh-admin-actions-none').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})
+
 describe('overriding the delta threshold', () => {
   it('sends the reason and shows the refresh being checked again', async () => {
     const failed = {...REFRESH, state: 'check_failed', actions: ['override_threshold']}
@@ -108,7 +137,8 @@ const FAILED_CHECK = {result: 'failed', rows: 40, added: 0, removed: 20, changed
 const OVERRIDE = {at: '2026-10-10T16:00:00+00:00', by: 'pahma-admin', kind: 'bulk_change', reason: 'PAHMA republished many images'}
 const OVERRIDDEN = {...REFRESH, state: 'checking', actions: [], check: FAILED_CHECK, override: OVERRIDE,
   reasons: ['1 problem in the servable list',
-    'delta threshold overridden by an admin: Known bulk change in CollectionSpace: PAHMA republished many images']}
+    'delta threshold overridden by an admin: Known bulk change in CollectionSpace: PAHMA republished many images'],
+  reason_kinds: ['problem', 'override']}
 
 // Issue #120: past the delta threshold, the percent is in red and says how many times the threshold it is; from 10 times,
 // a note says it's far past it.
@@ -187,8 +217,11 @@ describe('an overridden refresh', () => {
     expect(banner.text()).toContain('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC.')
     expect(wrapper.find('#override-reason').text()).toBe('Reason: Known bulk change in CollectionSpace: PAHMA republished many images')
     expect(banner.text()).toContain('This page checks again every few seconds')
-    // The reason is in the banner, not one more line under Reasons.
-    expect(wrapper.find('#refresh-reasons').text()).toBe('1 problem in the servable list')
+    // Issue #120: the reasons in two lists, as Serena records them; the override's reason is in the banner, and its
+    // line under What admins did says who and when.
+    expect(wrapper.find('#refresh-problems').text()).toBe('1 problem in the servable list')
+    expect(wrapper.find('#refresh-admin-actions').text()).toBe('Delta threshold overridden by pahma-admin at ' +
+      '2026-10-10 16:00:00 UTC; its reason is in the banner above.')
     expect(wrapper.find('#check-heading').text()).toContain('Servable list check: failed, overridden by admin')
     expect(wrapper.find('#check-overridden').exists()).toBe(false) // the heading says it already
     expect(wrapper.find('#refresh-state').text()).toBe('Checking the servable list')
@@ -254,7 +287,9 @@ describe('an overridden refresh', () => {
       reasons: ['delta threshold overridden by an admin: PAHMA republished many images']}}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     expect(wrapper.find('#override-reason').text()).toBe('Reason: PAHMA republished many images')
-    expect(wrapper.find('#refresh-reasons').exists()).toBe(false) // its line is the banner's
+    // No kinds from before issue #120: its override's own line is still the override's, under What admins did.
+    expect(wrapper.find('#refresh-problems-none').text()).toBe('None.')
+    expect(wrapper.find('#refresh-admin-actions').text()).toContain('its reason is in the banner above.')
     wrapper.unmount()
   })
 

@@ -809,7 +809,19 @@ table, so a restart never loses a step.
 Decided October 11, 2026 (settling F5), and revised October 12, 2026 (D73 to D75, D82, D83). Any admin of the museum
 may take these actions; each needs a typed reason (up to 500 characters, no personal data), is recorded in the
 refresh's reasons and the audit log, and is offered only on the museum's newest refresh, in the state it applies to
-(a manual refresh starts a refresh of its own):
+(a manual refresh starts a refresh of its own).
+
+**A refresh's reasons in two lists** (issue #120, decided October 27, 2026, mockup version 47). Serena records each
+reason with its kind (`reason_kinds`, one per reason, beside `reasons`, which stay plain strings for the ETL API, the
+watchdog and the audit log): `problem` (a problem in the servable list, a failed update, a refresh abandoned when a
+later refresh started), `admin` (a retried update, a manual refresh, the servability update run on one, and the
+refresh a manual refresh closed) or `override`. The admin API returns `reason_kinds` with every refresh. A reason
+recorded before has no kind and counts as `problem`; since every later reason has one, the kinds stored belong to the
+newest reasons. A refresh's page shows **What went wrong** (`problem`) and **What admins did** (`admin` and
+`override`), each "None." when empty, in place of Reasons. The override's line there says who and when ("Delta
+threshold overridden by <admin> at <time>; its reason is in the banner above."); for a refresh from before, the line
+Serena wrote for its override still counts as the override's. The app never guesses a list from a reason's words.
+The actions:
 
 - **Retry the servability update.** On an `update_failed` refresh: it goes back to `updating` and the worker does the
   servability update again.
@@ -828,7 +840,7 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   (422 otherwise) and stores the kind beside the reason; the banner, the refresh's reasons, the alert email and the
   audit log give both, the kind's words first ("Known bulk change in CollectionSpace: …"). The other dialogs'
   reasons don't change. The refresh's page shows it in a banner under the state line, in the warning colour with a
-  shield icon, and leaves the reason out of Reasons; while the worker checks again, the failed check's delta threshold
+  shield icon, and leaves the reason out of What admins did; while the worker checks again, the failed check's delta threshold
   problem is struck through with "(overridden)"; a re-check that fails on something else has a "Delta threshold
   overridden" chip by its heading. While a refresh is `checking` or `updating`, its page loads it again every 5
   seconds, as background requests (they don't count as activity); so do Past refreshes, while any refresh it lists is,

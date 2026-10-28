@@ -29,7 +29,7 @@ from . import uploads
 from .admin_api import SignedIn, changes, services
 from .alerts import Alert, Alerts, Kind
 from .audit import Action
-from .refreshes import BUSY, Busy, OutOfOrder, Refresh, Refreshes, State, Upload
+from .refreshes import BUSY, Busy, OutOfOrder, ReasonKind, Refresh, Refreshes, State, Upload, reason_kinds
 
 log = logging.getLogger("serena.admin")
 
@@ -105,6 +105,8 @@ def summary(refresh: Refresh) -> dict[str, Any]:
     return {"refresh_id": refresh.refresh_id, "refresh_date": refresh.refresh_date, "state": refresh.state.value,
             "created_at": refresh.created_at, "updated_at": refresh.updated_at,
             "rows": refresh.upload.rows if refresh.upload else None, "reasons": refresh.reasons,
+            # Which list each reason goes in, one per reason (issue #120): problem, admin or override.
+            "reason_kinds": reason_kinds(refresh),
             # A manual refresh: the refresh date its servable list is for, which may be earlier than the refresh's
             # own (D66, D75), and, for one of the ETL's lists, the refresh it came with (issue #118).
             "manual": refresh.admin_refresh is not None,
@@ -212,7 +214,8 @@ def create_router() -> APIRouter:
         reason = _clean(body.reason)
         try:
             refresh = r.refreshes.transition(refresh, State.UPDATING,
-                                             reason=f"servability update retried by an admin: {reason}")
+                                             reason=f"servability update retried by an admin: {reason}",
+                                             reason_kind=ReasonKind.ADMIN)
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
         services(request).audit.record(session.tenant, session.user, Action.UPDATE_RETRY, refresh.refresh_id,
@@ -237,7 +240,8 @@ def create_router() -> APIRouter:
         try:
             override = {"at": at, "by": session.user, "kind": body.kind, "reason": reason}
             refresh = r.refreshes.transition(refresh, State.CHECKING, results={"override": override},
-                                             reason=f"delta threshold overridden by an admin: {given}")
+                                             reason=f"delta threshold overridden by an admin: {given}",
+                                             reason_kind=ReasonKind.OVERRIDE)
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
         delta = (refresh.check or {}).get("delta_percent")
@@ -259,7 +263,8 @@ def create_router() -> APIRouter:
         reason: the admin gave one when starting the refresh."""
         refresh = acting_on(r, session.tenant, refresh_id, "run_update")
         try:
-            refresh = r.refreshes.transition(refresh, State.UPDATING, reason="servability update run by an admin")
+            refresh = r.refreshes.transition(refresh, State.UPDATING, reason="servability update run by an admin",
+                                             reason_kind=ReasonKind.ADMIN)
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
         services(request).audit.record(session.tenant, session.user, Action.UPDATE_RUN, refresh.refresh_id)
@@ -295,7 +300,8 @@ def create_router() -> APIRouter:
         upload = Upload(source.upload.sha256, source.upload.rows, source.upload.bytes, source.upload.key,
                         r.refreshes.now())
         try:
-            refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note, upload=upload, results={
+            refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note, reason_kind=ReasonKind.ADMIN,
+                                             upload=upload, results={
                 "admin_refresh": {"refresh_date": source.refresh_date, "from": source.refresh_id}})
             refresh = r.refreshes.transition(refresh, State.CHECKING)
         except OutOfOrder as error:
@@ -360,7 +366,7 @@ def create_router() -> APIRouter:
             note = (f"manual refresh with the servable list {name}"
                     + (f", for the refresh date {refresh_date}" if refresh_date else "") + f": {reason}")
             try:
-                refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note,
+                refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note, reason_kind=ReasonKind.ADMIN,
                                                  results={"admin_refresh": {"refresh_date": refresh_date or None}},
                                                  upload=Upload(received.sha256, received.rows, received.size, key,
                                                                r.refreshes.now()))

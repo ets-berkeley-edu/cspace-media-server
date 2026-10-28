@@ -21,7 +21,9 @@ class RefreshesPage(Page):
                           "//div[contains(concat(' ', normalize-space(@class), ' '), ' v-field ')]")
     # A refresh's page.
     STATE = by_id("refresh-state")
-    REASONS = by_id("refresh-reasons")
+    # Issue #120: a refresh's reasons in two lists.
+    WENT_WRONG = by_id("refresh-problems")
+    ADMINS_DID = by_id("refresh-admin-actions")
     CHECK_PROBLEMS = by_id("check-problems")
     OVERRIDE_BANNER = by_id("override-banner")  # issue #108: who overrode the delta threshold, when and why
     CHECK_OVERRIDDEN = by_id("check-overridden")  # only when a re-check fails on something else (issue #110)

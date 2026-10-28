@@ -96,7 +96,10 @@ def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) ->
     page.wait_for_text(page.STATE, "Updated by override", timeout=60)
     assert "failed, overridden by admin" in page.text_of(page.CHECK_HEADING)
     assert not page.driver.find_elements(*page.CHECK_OVERRIDDEN), "the heading says it: no chip"
-    assert OVERRIDE_REASON not in page.text_of(page.REASONS), "the reason is in the banner, not under Reasons"
+    # Issue #120: the override under What admins did, with who and when; its reason only in the banner.
+    admins_did = page.text_of(page.ADMINS_DID)
+    assert "its reason is in the banner above" in admins_did and OVERRIDE_REASON not in admins_did, admins_did
+    assert OVERRIDE_REASON not in page.text_of(page.WENT_WRONG), "the reason is in the banner"
 
 
 @pytest.mark.after("test_t18_overriding_the_delta_threshold")
@@ -121,10 +124,10 @@ def test_t19_a_manual_refresh_repairs_an_open_failed_refresh(driver: WebDriver, 
     page.click(page.RUN_UPDATE)
     page.wait_for_text(page.RESULT_STATE, "Updated", timeout=60)
     page.open_refresh(UCJEPS, repaired)
-    assert REPAIR_REASON in page.text_of(page.REASONS)
+    assert REPAIR_REASON in page.text_of(page.ADMINS_DID)  # issue #120
     page.open_refresh(UCJEPS, failed["refresh_id"])
     assert page.text_of(page.STATE) == "Abandoned"
-    assert f"closed by the manual refresh {repaired}" in page.text_of(page.REASONS)
+    assert f"closed by the manual refresh {repaired}" in page.text_of(page.ADMINS_DID)
 
 
 @pytest.mark.after("test_t19_a_manual_refresh_repairs_an_open_failed_refresh")

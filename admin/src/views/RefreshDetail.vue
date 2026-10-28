@@ -77,11 +77,17 @@
     </div>
 
     <template v-if="refresh">
-      <h2 class="text-h6 mb-2">Reasons</h2>
-      <ul v-if="reasons.length" id="refresh-reasons" class="mb-4 ml-6">
-        <li v-for="(line, i) in reasons" :key="i">{{ line }}</li>
+      <!-- A refresh's reasons in two lists, as Serena records them (issue #120). -->
+      <h2 class="text-h6 mb-2">What went wrong</h2>
+      <ul v-if="wentWrong.length" id="refresh-problems" class="mb-4 ml-6">
+        <li v-for="(line, i) in wentWrong" :key="i">{{ line }}</li>
       </ul>
-      <p v-else class="mb-4">None recorded.</p>
+      <p v-else id="refresh-problems-none" class="mb-4">None.</p>
+      <h2 class="text-h6 mb-2">What admins did</h2>
+      <ul v-if="adminsDid.length" id="refresh-admin-actions" class="mb-4 ml-6">
+        <li v-for="(line, i) in adminsDid" :key="i">{{ line }}</li>
+      </ul>
+      <p v-else id="refresh-admin-actions-none" class="mb-4">None.</p>
 
       <h2 class="text-h6 mb-2">The servable list</h2>
       <p v-if="refresh.upload" class="mb-4">
@@ -263,10 +269,23 @@ const kind = ref('') // why the change is expected, for an override (issue #120)
 // update show without a reload. These checks don't count as activity: an open tab still signs out when idle.
 const after = useCheckAgain(() => load(true))
 
-// The override's reason is in the banner, so Reasons leaves out the line Serena adds for it.
-const reasons = computed(() => {
-  const given = refresh.value?.override?.reason
-  return (refresh.value?.reasons || []).filter(line => !given || line !== overrideReason(refresh.value?.override || {}))
+// A refresh's reasons, in the list Serena says each goes in (issue #120): what went wrong, or what admins did. A
+// reason recorded before has the kind "problem"; for those, the line Serena wrote for the override is still the
+// override's. An override's line gives who and when: its reason is in the banner.
+const kinds = computed(() => {
+  const r = refresh.value
+  const own = r?.override?.reason ? overrideReason(r.override) : null
+  return (r?.reasons || []).map((line, i) => r?.reason_kinds?.[i] === 'override' || line === own ? 'override'
+    : r?.reason_kinds?.[i] || 'problem')
+})
+const wentWrong = computed(() => (refresh.value?.reasons || []).filter((_, i) => kinds.value[i] === 'problem'))
+const adminsDid = computed(() => {
+  const r = refresh.value
+  const last = kinds.value.lastIndexOf('override')
+  return (r?.reasons || []).flatMap((line, i) => kinds.value[i] === 'problem' ? []
+    : i === last && r?.override
+      ? [`Delta threshold overridden by ${overrideBy(r.override)} at ${when(r.override.at)}; its reason is in the banner above.`]
+      : [line])
 })
 // The failed check an override answered, still shown while Serena checks the servable list again. A re-check that
 // fails on something else replaces it, and isn't marked.
