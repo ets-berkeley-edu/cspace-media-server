@@ -7,12 +7,11 @@ raises OutOfOrder (409).
 
     started -> received -> checking -> check_failed
                                      -> updating -> updated | update_failed
-                                     -> waiting -> updating (a manual refresh)
 
-A passed servable list check goes straight on to the servability update (decided October 12, 2026, D80), except a
-manual refresh's: it waits until an admin runs the servability update (issue #118, decided October 27, 2026). An open
-refresh is closed as abandoned when a later refresh date's refresh starts, or when an admin starts a manual refresh
-(D82); a manual refresh waiting for its servability update is closed by any refresh that starts. A museum has at most
+A passed servable list check goes straight on to the servability update (decided October 12, 2026, D80), a manual
+refresh's too (decided October 28, 2026, mockup version 55; from October 27 it waited in `waiting` for an admin, and a
+refresh left there is closed by any refresh that starts). An open refresh is closed as abandoned when a later refresh
+date's refresh starts, or when an admin applies an ETL list in Manual refresh (D82). A museum has at most
 one open refresh (any state but updated or abandoned), and it is always its newest."""
 from __future__ import annotations
 
@@ -40,7 +39,9 @@ class State(StrEnum):
     UPDATING = "updating"
     UPDATED = "updated"
     UPDATE_FAILED = "update_failed"
-    WAITING = "waiting"  # a manual refresh's check passed: it waits for an admin to run the servability update
+    # A manual refresh's passed check waited for an admin from October 27 to 28, 2026; no refresh is put in it now,
+    # but one left there is still read, and closed by the next refresh.
+    WAITING = "waiting"
     ABANDONED = "abandoned"
 
 

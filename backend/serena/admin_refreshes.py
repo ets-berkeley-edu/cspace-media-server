@@ -6,16 +6,19 @@ and goes in the audit log. Actions that change a refresh need a reason, which is
 the audit log. An override of the delta threshold is also emailed to the team: the app records an alert, and the
 worker sends it (D62), so the app needs no permission to publish.
 
-A manual refresh (the admin app's Manual refresh page, issue #118, decided October 27, 2026; "admin refresh" in the
-earlier decisions) brings in one of the ETL's recent servable lists or an uploaded one. Its check passed, it waits
-for an admin to run the servability update. Starting one closes the museum's open refresh only if it is the one the
-admin was shown, and never one the worker is checking or updating."""
+A manual refresh (the admin app's Manual refresh page, issue #118; reworked October 28, 2026, mockup version 55;
+"admin refresh" in the earlier decisions) replaces the current ETL list with one of the ETL's recent ones or an
+uploaded one. A dry run checks it first, changing nothing and making no refresh; Apply then starts an ordinary manual
+refresh, which checks the list again and, on a pass, updates by itself. A pending refresh in the way (rule D): one
+waiting for the ETL job is stopped only if it is the one the admin was shown and confirmed stopping; one the worker is
+checking or updating means waiting; a failed one is replaced without asking."""
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
 import re
+import tempfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -25,11 +28,13 @@ from urllib.parse import unquote
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
+from . import servable_list_check as checking
 from . import uploads
 from .admin_api import SignedIn, changes, services
 from .alerts import Alert, Alerts, Kind
 from .audit import Action
 from .refreshes import BUSY, PACIFIC, Busy, OutOfOrder, ReasonKind, Refresh, Refreshes, State, Upload, reason_kinds
+from .servable_list import read_rows
 
 log = logging.getLogger("serena.admin")
 
@@ -77,7 +82,10 @@ class FromList(BaseModel):
     """A manual refresh with one of the ETL's servable lists (issue #118), named by the refresh it came with."""
     refresh_id: str = Field(min_length=1, max_length=100)
     reason: str = Field(min_length=1, max_length=500)
-    open_refresh: str = Field(default="", max_length=100)  # the open refresh the admin was shown, which this closes
+    # The pending refresh the admin was shown and confirmed stopping, when it waits for the ETL job (rule D).
+    open_refresh: str = Field(default="", max_length=100)
+    # Apply with override (mockup version 55): why the change is expected; the reason is then the override's.
+    kind: str = Field(default="", max_length=20)
 
 
 class Acknowledge(BaseModel):
@@ -140,8 +148,6 @@ def actions(refresh: Refresh, newest: bool) -> list[str]:
         return []
     if refresh.state == State.UPDATE_FAILED:
         return ["retry_update"]
-    if refresh.state == State.WAITING:
-        return ["run_update"]
     if threshold_only(refresh):
         return ["override_threshold"]
     return []
@@ -177,17 +183,75 @@ def create_router() -> APIRouter:
         return refresh, newest is not None and newest.refresh_id == refresh.refresh_id
 
     def closing(r: RefreshServices, tenant: str, shown: str) -> Refresh | None:
-        """The museum's open refresh, which a manual refresh will close: refused while the worker is on it, and
-        unless it's the one the admin was shown and confirmed closing (issue #118, MR13)."""
+        """The museum's pending refresh, which a manual refresh replaces (rule D, decided October 28, 2026): refused
+        while the worker is checking or applying its ETL list; one waiting for the ETL job only if it's the one the
+        admin was shown and confirmed stopping; a failed one without asking, since applying another ETL list is one of
+        its fixes."""
         newest = r.refreshes.newest(tenant)
         if newest is None or not newest.open:
             return None
         if newest.state in BUSY:
-            raise HTTPException(409, f"Refresh {newest.refresh_id} is {newest.state.value}: wait for it to finish.")
-        if newest.refresh_id != shown:
-            raise HTTPException(409, f"Refresh {newest.refresh_id} is open ({newest.state.value}): confirm that it "
-                                     "may be closed, then try again.")
+            step = "checking" if newest.state == State.CHECKING else "applying"
+            raise HTTPException(409, f"Refresh {newest.refresh_id} is {step} its ETL list: wait a few minutes, then "
+                                     "apply again.")
+        if newest.state not in (State.CHECK_FAILED, State.UPDATE_FAILED) and newest.refresh_id != shown:
+            raise HTTPException(409, f"Refresh {newest.refresh_id} is still under way: confirm that applying your ETL "
+                                     "list stops it, then apply again.")
         return newest
+
+    def previous_rows(request: Request, r: RefreshServices, tenant: str) -> tuple[Refresh | None, Any]:
+        """The last updated refresh and its ETL list's rows, which a check compares with (None: the first)."""
+        last = r.refreshes.latest_updated(tenant)
+        if last is None or last.upload is None:
+            return last, None
+        with stored(request, tenant, last.upload.key) as handle:
+            return last, read_rows(handle)
+
+    def stored(request: Request, tenant: str, key: str) -> Any:
+        """A stored (gzip) ETL list, downloaded to a temporary file on the task's disk, as the worker does."""
+        admin = services(request)
+        handle = tempfile.TemporaryFile(dir=admin.settings.upload_dir)
+        r = refresh_services(request)
+        r.s3.download_fileobj(admin.settings.buckets[tenant], key, handle)
+        handle.seek(0)
+        return handle
+
+    def dry_run(request: Request, r: RefreshServices, tenant: str, handle: Any) -> dict[str, Any]:
+        """Manual refresh's check (mockup version 55): what applying the ETL list would change, against the last ETL
+        list update, as the worker checks it; nothing is stored, and no refresh is made. A check of some 187,000 rows
+        takes about a second, so it answers within the request (measured October 28, 2026)."""
+        museum = services(request).museums[tenant]
+        last, previous = previous_rows(request, r, tenant)
+        threshold = request.app.state.museum_settings.get(museum).delta_threshold_percent
+        result = checking.check(museum, handle, previous, threshold)
+        return {"check": result.summary(), "checked_at": r.refreshes.now(),
+                "against": {"refresh_id": last.refresh_id, "updated_at": last.updated_at}
+                if last is not None and previous is not None else None}
+
+    def overriding(r: RefreshServices, session: Any, kind: str, reason: str) -> dict[str, Any] | None:
+        """Apply with override: the kind and a reason long enough, as for an override on a refresh's page."""
+        if not kind:
+            return None
+        if kind not in OVERRIDE_KINDS:
+            raise HTTPException(422, "Choose why the change is expected.")
+        if len(reason) < OVERRIDE_REASON_MIN:
+            raise HTTPException(422, f"Say a little more: at least {OVERRIDE_REASON_MIN} characters.")
+        return {"at": r.refreshes.now(), "by": session.user, "kind": kind, "reason": reason}
+
+    def applied(request: Request, r: RefreshServices, session: Any, refresh: Refresh,
+                override: dict[str, Any] | None) -> None:
+        """An override applied with the ETL list is emailed then, and audited, as every override is (D62)."""
+        if override is None:
+            return
+        museum = services(request).museums[session.tenant]
+        given = override_reason(override["kind"], override["reason"])
+        r.alerts.raise_(Alert(session.tenant, r.refreshes.today(), Kind.THRESHOLD_OVERRIDDEN, refresh.refresh_id,
+                              f"An admin overrode the delta threshold for {museum.name}'s manual refresh "
+                              f"{refresh.refresh_id}. Serena checks the ETL list without it and, on a pass, "
+                              f"updates. Reason: {given}", instance=override["at"]))
+        services(request).audit.record(session.tenant, session.user, Action.THRESHOLD_OVERRIDE, refresh.refresh_id,
+                                       {"kind": override["kind"], "reason": override["reason"],
+                                        "delta_percent": None})
 
     def audit_closed(request: Request, tenant: str, r: RefreshServices, before: Refresh | None) -> None:
         """The open refresh a manual refresh closed, by that refresh (D150), with the reason it was given."""
@@ -294,8 +358,7 @@ def create_router() -> APIRouter:
             raise HTTPException(409, error.detail) from None
         delta = (refresh.check or {}).get("delta_percent")
         museum = services(request).museums[session.tenant]
-        then = ("on a pass, waits for an admin to run the ETL list update" if refresh.admin_refresh is not None
-                else "on a pass, updates")
+        then = "on a pass, updates"
         r.alerts.raise_(Alert(session.tenant, r.refreshes.today(), Kind.THRESHOLD_OVERRIDDEN, refresh.refresh_id,
                               f"An admin overrode the delta threshold for {museum.name}'s refresh "
                               f"{refresh.refresh_id} ({delta}% of the rows change). Serena checks the same servable "
@@ -303,19 +366,6 @@ def create_router() -> APIRouter:
                               instance=at))  # each override is emailed (D62)
         services(request).audit.record(session.tenant, session.user, Action.THRESHOLD_OVERRIDE, refresh.refresh_id,
                                        {"kind": body.kind, "reason": reason, "delta_percent": delta})
-        return detail(refresh, True)
-
-    @router.post("/refreshes/{refresh_id}/run-update", dependencies=[Depends(changes)])
-    def run_update(refresh_id: str, session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
-        """Issue #118 (MR9): a manual refresh whose check passed waits; an admin runs its servability update. No
-        reason: the admin gave one when starting the refresh."""
-        refresh = acting_on(r, session.tenant, refresh_id, "run_update")
-        try:
-            refresh = r.refreshes.transition(refresh, State.UPDATING, reason="ETL list update run by an admin",
-                                             reason_kind=ReasonKind.ADMIN)
-        except OutOfOrder as error:
-            raise HTTPException(409, error.detail) from None
-        services(request).audit.record(session.tenant, session.user, Action.UPDATE_RUN, refresh.refresh_id)
         return detail(refresh, True)
 
     @router.get("/servable-lists")
@@ -328,18 +378,51 @@ def create_router() -> APIRouter:
                            "uploaded_at": refresh.upload.uploaded_at}
                           for refresh in r.refreshes.etl_lists(session.tenant) if refresh.upload is not None]}
 
+    @router.post("/servable-lists/{refresh_id}/dry-run", dependencies=[Depends(changes)])
+    def dry_run_of_list(refresh_id: str, session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
+        """Manual refresh's dry run of one of the ETL's recent lists (mockup version 55): nothing is stored, nothing
+        audited."""
+        source = r.refreshes.get(session.tenant, refresh_id)
+        if source is None or source.upload is None or source.admin_refresh is not None:
+            raise HTTPException(404, "No such ETL list.")
+        with stored(request, session.tenant, source.upload.key) as handle:
+            return dry_run(request, r, session.tenant, handle)
+
+    @router.post("/servable-lists/dry-run", dependencies=[Depends(changes)])
+    async def dry_run_of_upload(request: Request, session: SignedIn, r: Refreshes_) -> dict[str, Any]:
+        """Manual refresh's dry run of an uploaded list (plain or gzip): it's read to the task's disk, checked and
+        removed; it's sent again with Apply."""
+        received = await receive(request)
+        try:
+            with open(received.path, "rb") as handle:
+                return await asyncio.to_thread(dry_run, request, r, session.tenant, handle)
+        finally:
+            os.unlink(received.path)
+
+    async def receive(request: Request) -> Any:
+        admin = services(request)
+        stream, gzipped = await _sniff(request.stream())
+        try:
+            return await uploads.receive(stream, gzipped=gzipped, max_bytes=admin.settings.upload_max_mb * 1024 * 1024,
+                                         directory=admin.settings.upload_dir)
+        except uploads.TooLarge:
+            raise HTTPException(413, f"At most {admin.settings.upload_max_mb} MB uncompressed.") from None
+        except uploads.BadGzip:
+            raise HTTPException(400, "The file looks like gzip but isn't valid gzip.") from None
+
     @router.post("/refreshes/from-list", status_code=201, dependencies=[Depends(changes)])
     def start_from_list(body: FromList, session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
-        """A manual refresh with one of the ETL's servable lists (issue #118, MR3 to MR7), named by the refresh it
-        came with: its stored list is checked again, as every servable list is, and the refresh is for the list's own
-        refresh date. On a pass it waits for an admin to run the servability update."""
+        """Apply refresh with one of the ETL's lists (issue #118, MR3 to MR7; mockup version 55), named by the
+        refresh it came with: an ordinary manual refresh, whose stored list is checked again and, on a pass, applied
+        by the worker. With `kind`, the delta threshold is overridden for it (Apply with override)."""
         reason = _clean(body.reason)
         source = r.refreshes.get(session.tenant, body.refresh_id)
         if source is None or source.upload is None or source.admin_refresh is not None:
             raise HTTPException(404, "No such ETL list.")
+        override = overriding(r, session, body.kind, reason)
         before = closing(r, session.tenant, body.open_refresh)
         try:
-            refresh, _ = r.refreshes.start(session.tenant, "closed by the manual refresh {refresh_id}")
+            refresh, _ = r.refreshes.start(session.tenant, "replaced by the manual refresh {refresh_id}")
         except OutOfOrder as error:  # Busy included
             raise HTTPException(409, error.detail) from None
         note = (f"manual refresh with the ETL list for {source.refresh_date}, from {source.refresh_id}: "
@@ -350,11 +433,13 @@ def create_router() -> APIRouter:
         try:
             refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note, reason_kind=ReasonKind.ADMIN,
                                              upload=upload, results={
-                "admin_refresh": {"refresh_date": source.refresh_date, "from": source.refresh_id}})
+                "admin_refresh": {"refresh_date": source.refresh_date, "from": source.refresh_id},
+                **({"override": override} if override else {})})
             refresh = r.refreshes.transition(refresh, State.CHECKING)
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
         audit_closed(request, session.tenant, r, before)
+        applied(request, r, session, refresh, override)
         services(request).audit.record(session.tenant, session.user, Action.ADMIN_REFRESH, refresh.refresh_id,
                                        {"from": source.refresh_id, "refresh_date": source.refresh_date,
                                         "rows": upload.rows, "sha256": upload.sha256, "reason": reason})
@@ -368,12 +453,13 @@ def create_router() -> APIRouter:
                      x_file_name: Annotated[str, Header(max_length=600)] = "",
                      x_refresh_date: Annotated[str, Header(max_length=10)] = "",
                      x_reason: Annotated[str, Header(max_length=1600)] = "",
-                     x_open_refresh: Annotated[str, Header(max_length=100)] = "") -> dict[str, Any]:
-        """A manual refresh with an uploaded list (D66, D75, D82; issue #118): the body is a servable list made with
-        the servable list script (plain or gzip), and the admin confirms it was made from the live public core.
-        Serena closes the museum's open refresh, if there is one and it's the one the admin was shown
-        (X-Open-Refresh), as abandoned, starts a refresh with the list and checks it; on a pass it waits for an admin
-        to run the servability update. Refused while the worker is checking or updating a refresh."""
+                     x_open_refresh: Annotated[str, Header(max_length=100)] = "",
+                     x_override_kind: Annotated[str, Header(max_length=20)] = "") -> dict[str, Any]:
+        """Apply refresh with an uploaded list (D66, D75, D82; issue #118; mockup version 55): the body is an ETL list
+        made with the ETL list script (plain or gzip), sent again after its dry run, and the admin confirms it
+        was made from the live public core. Serena replaces the pending refresh as rule D allows (X-Open-Refresh: the
+        one the admin was shown), starts a manual refresh with the list, and the worker checks and, on a pass,
+        applies it. With X-Override-Kind, the delta threshold is overridden for it."""
         admin = services(request)
         if x_live_core_confirmed != "yes":
             raise HTTPException(422, "Confirm that the ETL list was made from the live public core.")
@@ -389,21 +475,14 @@ def create_router() -> APIRouter:
         bucket = admin.settings.buckets.get(session.tenant)
         if bucket is None:
             raise HTTPException(503, "Serena has no bucket for this museum.")
+        override = overriding(r, session, x_override_kind.strip(), reason)
         await asyncio.to_thread(closing, r, session.tenant, x_open_refresh.strip())
-        stream, gzipped = await _sniff(request.stream())
-        try:
-            received = await uploads.receive(stream, gzipped=gzipped,
-                                             max_bytes=admin.settings.upload_max_mb * 1024 * 1024,
-                                             directory=admin.settings.upload_dir)
-        except uploads.TooLarge:
-            raise HTTPException(413, f"At most {admin.settings.upload_max_mb} MB uncompressed.") from None
-        except uploads.BadGzip:
-            raise HTTPException(400, "The file looks like gzip but isn't valid gzip.") from None
+        received = await receive(request)
         before = await asyncio.to_thread(closing, r, session.tenant, x_open_refresh.strip())
         try:
             try:
                 refresh, _ = await asyncio.to_thread(r.refreshes.start, session.tenant,
-                                                     "closed by the manual refresh {refresh_id}")
+                                                     "replaced by the manual refresh {refresh_id}")
             except Busy as busy:
                 raise HTTPException(409, busy.detail) from None
             except OutOfOrder as error:
@@ -415,7 +494,8 @@ def create_router() -> APIRouter:
                     + (f", for the refresh date {refresh_date}" if refresh_date else "") + f": {reason}")
             try:
                 refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note, reason_kind=ReasonKind.ADMIN,
-                                                 results={"admin_refresh": {"refresh_date": refresh_date or None}},
+                                                 results={"admin_refresh": {"refresh_date": refresh_date or None},
+                                                          **({"override": override} if override else {})},
                                                  upload=Upload(received.sha256, received.rows, received.size, key,
                                                                r.refreshes.now()))
                 refresh = r.refreshes.transition(refresh, State.CHECKING)
@@ -424,6 +504,7 @@ def create_router() -> APIRouter:
         finally:
             os.unlink(received.path)
         await asyncio.to_thread(audit_closed, request, session.tenant, r, before)
+        await asyncio.to_thread(applied, request, r, session, refresh, override)
         admin.audit.record(session.tenant, session.user, Action.ADMIN_REFRESH, refresh.refresh_id,
                            {"file_name": name, "refresh_date": refresh_date, "rows": received.rows,
                             "sha256": received.sha256, "reason": reason})

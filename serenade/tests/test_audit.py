@@ -38,14 +38,13 @@ def test_t37_refresh_actions_and_the_etls_calls(driver: WebDriver, base_url: str
     """Checklist section 14, step 7; section 20. After UCJEPS's alerts and refresh tests."""
     page = audit_log(driver, base_url, UCJEPS)
     failed = refresh_id(UCJEPS_FAILED)
-    # The admin's actions: the override, the acknowledgements, the manual refreshes and the update run on one.
+    # The admin's actions: the override, the acknowledgements and the manual refreshes.
     override = page.cells(page.entry("threshold override", "serenade T18"))
     assert (override["By"], override["Target"]) == (ADMIN[0], failed), override
     acknowledged = page.cells(page.entry("alert acknowledge", failed))
     assert acknowledged["By"] == ADMIN[0] and acknowledged["Target"].startswith("Check failed"), acknowledged
     repair = page.cells(page.entry("manual refresh", "serenade T19: a test manual refresh"))
     assert repair["By"] == ADMIN[0] and "SHA-256: " in repair["Details"], repair
-    assert page.driver.find_elements(*page.entries_by(ADMIN[0], "update run")), "running the update isn't audited"
     # The ETL's calls, with the key it used: read through the API, since T21's manual refreshes (three entries each)
     # push UCJEPS's oldest entries past the page's 100 rows.
     every = page.entries(UCJEPS)

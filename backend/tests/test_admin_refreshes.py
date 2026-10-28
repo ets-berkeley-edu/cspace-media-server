@@ -346,18 +346,64 @@ def test_a_new_list_drops_an_override(store: Store, clock: Any) -> None:
 # admin to run the servability update
 
 def admin_refresh(admin: TestClient, body: bytes, confirmed: bool = True,
-                 reason: str = "ETL%20log%20checked%3A%20caf%C3%A9", open_refresh: str = "") -> Any:
+                 reason: str = "ETL%20log%20checked%3A%20caf%C3%A9", open_refresh: str = "", kind: str = "") -> Any:
     return admin.post("/admin/v1/museums/pahma/refreshes", content=body, headers={
         **CHANGES, "X-Live-Core-Confirmed": "yes" if confirmed else "", "X-Open-Refresh": open_refresh,
-        "X-File-Name": "servable-list.pahma.2026-10-09.tsv", "X-Refresh-Date": "2026-10-09", "X-Reason": reason})
+        "X-File-Name": "servable-list.pahma.2026-10-09.tsv", "X-Refresh-Date": "2026-10-09", "X-Reason": reason,
+        "X-Override-Kind": kind})
 
 
-def run_update(admin: TestClient, refresh_id: str, headers: dict[str, str] = CHANGES) -> Any:
-    return admin.post(f"/admin/v1/museums/pahma/refreshes/{refresh_id}/run-update", headers=headers)
+def dry_run(admin: TestClient, body: bytes | None = None, refresh_id: str = "",
+            headers: dict[str, str] = CHANGES) -> Any:
+    """Manual refresh's dry run: of an uploaded list, or of the ETL's list from `refresh_id`."""
+    if refresh_id:
+        return admin.post(f"/admin/v1/museums/pahma/servable-lists/{refresh_id}/dry-run", headers=headers)
+    return admin.post("/admin/v1/museums/pahma/servable-lists/dry-run", content=body, headers=headers)
+
+
+def items(store: Store, name: tables.Table) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = store.client.scan(TableName=store.table(name))["Items"]
+    return found
+
+
+# --- Manual refresh: a dry run, then Apply (mockup version 55, decided October 28, 2026)
+
+@pytest.mark.parametrize("compress", [False, True])
+def test_a_dry_run_changes_nothing(admin: TestClient, etl: TestClient, worker: Worker, store: Store,
+                                   compress: bool) -> None:
+    """It checks the list against the last ETL list update, and keeps nothing: no refresh, no file, no audit entry."""
+    body = file_of(BLOBS)
+    first = dry_run(admin, gzip.compress(body) if compress else body)
+    assert first.status_code == 200, first.text
+    assert first.json()["check"]["result"] == "passed" and first.json()["against"] is None  # the first update
+    assert "first ETL list update: the delta threshold doesn't apply" in first.json()["check"]["warnings"]
+    done = updated_refresh(etl, worker, BLOBS)
+    before = (items(store, tables.REFRESHES), admin.get("/admin/v1/museums/pahma/audit").json()["entries"])
+    result = dry_run(admin, file_of(changed(BLOBS, 0.5))).json()
+    assert result["against"]["refresh_id"] == done["refresh_id"] and result["checked_at"]
+    check = result["check"]
+    assert check["result"] == "failed" and check["changed"] == 20 and check["delta_percent"] == 50.0
+    assert [p["field"] for p in check["errors"]] == ["file"]  # only the delta threshold
+    assert (items(store, tables.REFRESHES), admin.get("/admin/v1/museums/pahma/audit").json()["entries"]) == before
+    assert dry_run(admin, body, headers={}).status_code == 403  # without the app's header
+
+
+def test_a_dry_run_of_one_of_the_etls_lists(admin: TestClient, etl: TestClient, worker: Worker, clock: Any) -> None:
+    good = updated_refresh(etl, worker, BLOBS)
+    clock.now += timedelta(days=1)
+    failed = checked(etl, worker, changed(BLOBS, 0.5))
+    result = dry_run(admin, refresh_id=good["refresh_id"])
+    assert result.status_code == 200, result.text
+    assert result.json()["check"]["result"] == "passed" and result.json()["check"]["changed"] == 0
+    assert dry_run(admin, refresh_id=failed["refresh_id"]).json()["check"]["result"] == "failed"
+    assert dry_run(admin, refresh_id="pahma-2026-10-01-1").status_code == 404
+    assert refresh_of(admin, failed["refresh_id"])["state"] == "check_failed"  # untouched
 
 
 @pytest.mark.parametrize("compress", [False, True])
-def test_a_manual_refresh(admin: TestClient, etl: TestClient, worker: Worker, store: Store, compress: bool) -> None:
+def test_apply_an_uploaded_list(admin: TestClient, etl: TestClient, worker: Worker, store: Store,
+                                compress: bool) -> None:
+    """Apply starts an ordinary manual refresh: it checks the list again and, on a pass, updates by itself."""
     body = file_of(BLOBS)
     response = admin_refresh(admin, gzip.compress(body) if compress else body)
     assert response.status_code == 201, response.text
@@ -367,95 +413,107 @@ def test_a_manual_refresh(admin: TestClient, etl: TestClient, worker: Worker, st
     assert refresh["manual"] and refresh["admin_refresh_from"] is None  # uploaded, not one of the ETL's lists
     assert any("manual refresh with the ETL list servable-list.pahma.2026-10-09.tsv, for the refresh date "
                "2026-10-09: ETL log checked: café" in r for r in refresh["reasons"])
-    # The check passes; the refresh waits for an admin (MR9), and nothing changes until then.
-    assert worker.tick() == 1
-    waiting = refresh_of(admin, refresh["refresh_id"])
-    assert waiting["state"] == "waiting" and waiting["actions"] == ["run_update"]
-    assert waiting["check"]["result"] == "passed" and waiting["update"] is None
-    assert store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"] == []
-    assert worker.tick() == 0  # the worker leaves it alone
-    assert run_update(admin, refresh["refresh_id"], headers={}).status_code == 403  # without the app's header
-    response = run_update(admin, refresh["refresh_id"])
-    assert response.status_code == 200 and response.json()["state"] == "updating"
-    assert run_update(admin, refresh["refresh_id"]).status_code == 409  # once
     assert worker.tick() == 1
     assert refresh_of(admin, refresh["refresh_id"])["state"] == "updated"
-    rows = store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"]
-    assert len(rows) == len(BLOBS)
-    ran, started = audit(admin)[:2]
-    assert (ran["action"], ran["target"], ran["details"]) == ("update_run", refresh["refresh_id"], {})
+    assert len(items(store, tables.SERVABILITY)) == len(BLOBS)
+    started = audit(admin)[0]
     assert started["action"] == "admin_refresh" and started["details"]["rows"] == len(BLOBS)
     outcome = audit(admin, "refresh")[0]  # the refresh's outcome, by the refresh (D150)
     assert (outcome["action"], outcome["target"], outcome["details"]["state"]) == (
         "refresh_outcome", refresh["refresh_id"], "updated")
+    assert admin.post(f"/admin/v1/museums/pahma/refreshes/{refresh['refresh_id']}/run-update",
+                      headers=CHANGES).status_code == 404  # gone with the October 27 flow
 
 
-def test_a_manual_refresh_whose_check_fails_changes_nothing(admin: TestClient, worker: Worker,
-                                                               store: Store) -> None:
+def test_an_applied_list_whose_check_fails_changes_nothing(admin: TestClient, worker: Worker, store: Store) -> None:
     refresh = admin_refresh(admin, b"not\ta\tservable\tlist\n").json()
     worker.tick()
     assert refresh_of(admin, refresh["refresh_id"])["state"] == "check_failed"
-    assert store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"] == []
-    assert run_update(admin, refresh["refresh_id"]).status_code == 409
+    assert items(store, tables.SERVABILITY) == []
     outcome = audit(admin, "refresh")[0]  # by the refresh, next to the ETL's calls (D150)
     assert (outcome["target"], outcome["details"]["state"]) == (refresh["refresh_id"], "check_failed")
 
 
-def test_a_manual_refresh_refused(admin: TestClient, etl: TestClient) -> None:
+def test_apply_with_override(admin: TestClient, etl: TestClient, worker: Worker, clock: Any) -> None:
+    """A dry run that failed only on the delta threshold: Apply with override starts the refresh with the threshold
+    overridden, which is emailed and audited then."""
+    updated_refresh(etl, worker, BLOBS)
+    clock.now += timedelta(days=1)
+    body = file_of(changed(BLOBS, 0.5))
+    assert admin_refresh(admin, body, kind="bulk_change", reason="too%20short").status_code == 422
+    assert admin_refresh(admin, body, kind="nonsense", reason="PAHMA%20republished%20half").status_code == 422
+    response = admin_refresh(admin, body, kind="bulk_change", reason="PAHMA%20republished%20half%20its%20images")
+    assert response.status_code == 201, response.text
+    refresh = response.json()
+    override = refresh["override"]
+    assert (override["by"], override["kind"], override["reason"]) == ("admin", "bulk_change",
+                                                                     "PAHMA republished half its images")
+    alert = admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"][0]
+    assert alert["kind"] == "threshold_overridden" and refresh["refresh_id"] in alert["message"]
+    assert alert["message"].endswith("Reason: Known bulk change in CollectionSpace: PAHMA republished half its images")
+    assert {e["action"] for e in audit(admin)[:2]} == {"threshold_override", "admin_refresh"}
+    assert worker.tick() == 1
+    after = refresh_of(admin, refresh["refresh_id"])
+    assert after["state"] == "updated" and after["check"]["changed"] == 20
+
+
+def test_apply_while_a_refresh_is_busy(admin: TestClient, etl: TestClient) -> None:
+    """Rule D: one being checked or applied means waiting."""
     assert admin_refresh(admin, file_of(BLOBS), confirmed=False).status_code == 422
     assert admin_refresh(admin, file_of(BLOBS), reason="").status_code == 422
     refresh = start(etl)
     upload(etl, refresh, file_of(BLOBS))
     etl.post(refresh["links"]["check"], headers=auth())  # the worker is on it now
     response = admin_refresh(admin, file_of(BLOBS), open_refresh=refresh["refresh_id"])
-    assert response.status_code == 409 and "wait for it to finish" in response.json()["detail"]
+    assert response.status_code == 409
+    assert response.json()["detail"] == (f"Refresh {refresh['refresh_id']} is checking its ETL list: wait a few "
+                                         "minutes, then apply again.")
 
 
-def test_a_manual_refresh_closes_only_the_open_refresh_it_was_shown(admin: TestClient, etl: TestClient,
-                                                                    worker: Worker) -> None:
-    """D82, MR13: the ETL job reached Serena, then failed; a manual refresh repairs it, once the admin confirms
-    closing the open refresh the page named."""
+def test_apply_stops_a_waiting_refresh_only_once_confirmed(admin: TestClient, etl: TestClient,
+                                                           worker: Worker) -> None:
+    """Rule D (D82): the ETL job reached Serena, then stopped; applying an ETL list stops its refresh, once the admin
+    confirms stopping the one the page named."""
     stuck = start(etl)
     upload(etl, stuck, file_of(BLOBS))  # received, never checked
     unnamed = admin_refresh(admin, file_of(BLOBS))
-    assert unnamed.status_code == 409 and stuck["refresh_id"] in unnamed.json()["detail"]
+    assert unnamed.status_code == 409 and unnamed.json()["detail"] == (
+        f"Refresh {stuck['refresh_id']} is still under way: confirm that applying your ETL list stops it, then apply "
+        "again.")
     assert admin_refresh(admin, file_of(BLOBS), open_refresh="pahma-2026-10-10-9").status_code == 409
-    assert refresh_of(admin, stuck["refresh_id"])["state"] == "received"  # still open: nothing was closed
+    assert refresh_of(admin, stuck["refresh_id"])["state"] == "received"  # nothing was stopped
     response = admin_refresh(admin, file_of(BLOBS), open_refresh=stuck["refresh_id"])
     assert response.status_code == 201, response.text
     new = response.json()
     assert new["refresh_id"] == stuck["refresh_id"][:-1] + "2"  # the same refresh date, the second refresh
     old = refresh_of(admin, stuck["refresh_id"])
-    assert old["state"] == "abandoned" and f"closed by the manual refresh {new['refresh_id']}" in old["reasons"]
-    assert old["reason_kinds"][-1] == "admin"  # issue #120: what admins did, on the refresh it closed
+    assert old["state"] == "abandoned" and f"replaced by the manual refresh {new['refresh_id']}" in old["reasons"]
+    assert old["reason_kinds"][-1] == "admin"  # issue #120: what admins did, on the refresh it replaced
     assert refresh_of(admin, new["refresh_id"])["reason_kinds"] == ["admin"]  # the manual refresh itself
-    assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "waiting"
-    assert run_update(admin, new["refresh_id"]).status_code == 200
     assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "updated"
     outcomes = [(e["target"], e["details"]) for e in audit(admin, "refresh")]
-    closing = {"state": "abandoned", "reasons": [f"closed by the manual refresh {new['refresh_id']}"]}
-    assert (stuck["refresh_id"], closing) in outcomes  # D150
-    assert (new["refresh_id"], "updated") in [(t, d["state"]) for t, d in outcomes]
+    replaced = {"state": "abandoned", "reasons": [f"replaced by the manual refresh {new['refresh_id']}"]}
+    assert (stuck["refresh_id"], replaced) in outcomes  # D150
 
 
-def test_a_manual_refresh_after_an_earlier_day_was_left_open(admin: TestClient, etl: TestClient, worker: Worker,
-                                                     clock: Any) -> None:
-    """Yesterday's servable list check failed (not on the threshold) and today no refresh started: a manual refresh
-    still works."""
+def test_apply_replaces_a_failed_refresh_without_asking(admin: TestClient, etl: TestClient, worker: Worker,
+                                                        clock: Any) -> None:
+    """Rule D: applying another ETL list is one of a failed refresh's fixes, so it needs no confirmation; today's
+    or an earlier day's."""
     updated_refresh(etl, worker, BLOBS)
     clock.now += timedelta(days=1)
     failed = checked(etl, worker, {**BLOBS, "not a CSID!": "1a2b3c4d-0000-4000-8000-000000000001"})
-    assert failed["state"] == "check_failed" and refresh_of(admin, failed["refresh_id"])["actions"] == []
+    assert failed["state"] == "check_failed"
     clock.now += timedelta(days=1)
-    response = admin_refresh(admin, file_of(BLOBS), open_refresh=failed["refresh_id"])
+    response = admin_refresh(admin, file_of(BLOBS))
     assert response.status_code == 201, response.text
     assert refresh_of(admin, failed["refresh_id"])["state"] == "abandoned"
 
 
-def test_the_etls_recent_lists_and_a_manual_refresh_with_one(admin: TestClient, etl: TestClient, worker: Worker,
-                                                            clock: Any) -> None:
-    """MR3 to MR7: the ETL's lists, whatever their refresh's outcome, never an admin's upload; a manual refresh with
-    one checks it again and is for that list's refresh date."""
+def test_the_etls_recent_lists_and_apply_one(admin: TestClient, etl: TestClient, worker: Worker,
+                                            clock: Any) -> None:
+    """MR3 to MR7: the ETL's lists, whatever their refresh's outcome, never an admin's upload; applying one checks it
+    again, updates by itself, and is for that list's refresh date."""
     good = updated_refresh(etl, worker, BLOBS)
     clock.now += timedelta(days=1)
     failed = checked(etl, worker, changed(BLOBS, 0.5))  # fails on the delta threshold, and stays open
@@ -465,12 +523,11 @@ def test_the_etls_recent_lists_and_a_manual_refresh_with_one(admin: TestClient, 
     assert lists[1]["rows"] == len(BLOBS) and len(lists[1]["sha256"]) == 64 and lists[1]["uploaded_at"]
 
     url = "/admin/v1/museums/pahma/refreshes/from-list"
-    ask = {"refresh_id": good["refresh_id"], "reason": "yesterday's list", "open_refresh": failed["refresh_id"]}
+    ask = {"refresh_id": good["refresh_id"], "reason": "yesterday's list"}
     assert admin.post(url, json=ask).status_code == 403  # without the app's header
     assert admin.post(url, headers=CHANGES, json={**ask, "reason": ""}).status_code == 422
-    assert admin.post(url, headers=CHANGES, json={**ask, "open_refresh": ""}).status_code == 409  # not confirmed
     assert admin.post(url, headers=CHANGES, json={**ask, "refresh_id": "pahma-2026-10-01-1"}).status_code == 404
-    response = admin.post(url, headers=CHANGES, json=ask)
+    response = admin.post(url, headers=CHANGES, json=ask)  # the failed one is replaced without asking
     assert response.status_code == 201, response.text
     new = response.json()
     assert new["state"] == "checking" and new["refresh_date"] == failed["refresh_date"]  # today's
@@ -484,31 +541,26 @@ def test_the_etls_recent_lists_and_a_manual_refresh_with_one(admin: TestClient, 
     # A manual refresh's list isn't one of the ETL's, and the ETL's list can't be picked by a manual refresh's ID.
     assert [x["refresh_id"] for x in admin.get("/admin/v1/museums/pahma/servable-lists").json()["lists"]] == [
         failed["refresh_id"], good["refresh_id"]]
-    again = {"refresh_id": new["refresh_id"], "reason": "no", "open_refresh": new["refresh_id"]}
-    assert admin.post(url, headers=CHANGES, json=again).status_code == 404
-    assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "waiting"  # no change: it passes
+    assert admin.post(url, headers=CHANGES, json={**ask, "refresh_id": new["refresh_id"]}).status_code == 404
+    assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "updated"
 
 
-def test_a_waiting_refresh_is_closed_by_the_next_refresh(admin: TestClient, etl: TestClient, worker: Worker) -> None:
-    """MR9: a passed manual refresh nobody updated is closed as abandoned when the ETL starts a refresh, even the same
-    day; it never times out."""
-    waiting = admin_refresh(admin, file_of(BLOBS)).json()
-    assert worker.tick() == 1 and refresh_of(admin, waiting["refresh_id"])["state"] == "waiting"
+def test_a_refresh_left_waiting_is_closed_by_the_next_refresh(admin: TestClient, etl: TestClient, worker: Worker,
+                                                              store: Store, clock: Any) -> None:
+    """A manual refresh left `waiting` by the October 27 flow is still closed by the next refresh that starts."""
+    refreshes = Refreshes(store, clock)
+    left, _ = refreshes.start("pahma")
+    refreshes.transition(left, State.WAITING)
     nightly = start(etl)
-    assert nightly["refresh_id"] != waiting["refresh_id"]  # a new refresh, not the waiting one
-    closed = refresh_of(admin, waiting["refresh_id"])
-    assert closed["state"] == "abandoned" and closed["actions"] == []
-    assert "a later refresh started before the ETL list update ran" in closed["reasons"]
-    assert closed["reason_kinds"] == ["admin", "problem"]  # issue #120: the ETL's refresh closed it, not an admin
-    outcome = audit(admin, "refresh")[0]
-    assert (outcome["target"], outcome["details"]["reasons"]) == (
-        waiting["refresh_id"], ["a later refresh started before the ETL list update ran"])
+    assert nightly["refresh_id"] != left.refresh_id
+    closed = refresh_of(admin, left.refresh_id)
+    assert closed["state"] == "abandoned" and "a later refresh started before the ETL list update ran" in closed[
+        "reasons"]
 
 
-def test_an_override_on_a_manual_refresh_waits_too(admin: TestClient, etl: TestClient, worker: Worker,
-                                                   clock: Any) -> None:
-    """MR11: overriding a manual refresh's delta threshold checks its list again; on a pass it waits for the same
-    button as a passed check."""
+def test_an_override_on_a_manual_refresh_updates(admin: TestClient, etl: TestClient, worker: Worker,
+                                                 clock: Any) -> None:
+    """An override on a manual refresh's page checks its list again and, on a pass, updates, as for an ETL refresh."""
     updated_refresh(etl, worker, BLOBS)
     clock.now += timedelta(days=1)
     failed = admin_refresh(admin, file_of(changed(BLOBS, 0.5))).json()
@@ -517,11 +569,7 @@ def test_an_override_on_a_manual_refresh_waits_too(admin: TestClient, etl: TestC
                           headers=CHANGES, json={"kind": "bulk_change", "reason": "PAHMA republished half its images"})
     assert response.status_code == 200, response.text
     alert = admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"][0]
-    assert "on a pass, waits for an admin to run the ETL list update" in alert["message"]
-    assert worker.tick() == 1
-    after = refresh_of(admin, failed["refresh_id"])
-    assert after["state"] == "waiting" and after["actions"] == ["run_update"] and after["override"]
-    assert run_update(admin, failed["refresh_id"]).status_code == 200
+    assert "on a pass, updates" in alert["message"]
     assert worker.tick() == 1 and refresh_of(admin, failed["refresh_id"])["state"] == "updated"
 
 

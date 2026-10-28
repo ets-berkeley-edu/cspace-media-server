@@ -43,18 +43,20 @@ def test_t16_past_refreshes_lists_the_datasets_refresh(driver: WebDriver, base_u
     assert (cells["State"], cells["Rows"]) == ("Updated", "21"), cells  # 20 rows and the placeholder image
 
 
-def test_t20_manual_refresh_says_whats_missing(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 21; issue #118. Nothing is started, from the ETL's lists or an upload."""
+def test_t20_manual_refresh_dry_run_and_whats_missing(driver: WebDriver, base_url: str) -> None:
+    """Checklist section 46; mockup version 55. The check shows once an ETL list is chosen; the dry run starts no
+    refresh; Apply without a reason says so and starts nothing."""
     page = signed_in(driver, base_url, MUSEUM)
     before = len(page.refreshes(MUSEUM))
     page.open(f"{MUSEUM}/manual-refresh")
-    page.click(page.START)
-    assert page.wait_for_text(page.PICK_ERROR, "Choose a list first.")
+    page.click(page.SOURCE_ETL)
+    assert not page.driver.find_elements(*page.CHECK), "the check shows before an ETL list is chosen"
+    page.click((By.CSS_SELECTOR, "input[name='manual-pick']"))
+    page.click(page.CHECK)
+    assert page.wait_for_text(page.DRY_HEAD, "The dry run passed", timeout=30)
+    assert len(page.refreshes(MUSEUM)) == before, "the dry run made a refresh"
+    page.click(page.APPLY)
     assert page.wait_for_text(page.REASON_MESSAGES, GIVE_A_REASON)  # the message fades in
-    page.click(page.SOURCE_UPLOAD)
-    page.click(page.START)
-    assert page.wait_for_text(page.FILE_MESSAGES, "Choose the ETL list first.")
-    assert "Confirm the list was made from the live public core." in page.text_of(page.CONFIRM_MESSAGES)
     assert driver.current_url.endswith(f"/{MUSEUM}/manual-refresh")
     assert len(page.refreshes(MUSEUM)) == before
 
@@ -104,30 +106,32 @@ def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) ->
 
 @pytest.mark.after("test_t18_overriding_the_delta_threshold")
 def test_t19_a_manual_refresh_repairs_an_open_failed_refresh(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 14, steps 5 and 6; issue #118. First a failed refresh to repair: a manual refresh with the
-    20-row list, which fails against the 3 rows UCJEPS publishes. Then Manual refresh, with the 3-row list uploaded,
-    closes it once confirmed, checks, waits, and updates when asked."""
+    """Checklist section 14, steps 5 and 6; section 46. First a failed refresh to repair: a manual refresh with the
+    20-row list, which fails against the 3 rows UCJEPS publishes. Then Manual refresh, with the 3-row list uploaded:
+    a dry run, then Apply, which replaces the failed refresh without asking (rule D) and updates by itself."""
     page = signed_in(driver, base_url, UCJEPS)
     failed = page.admin_refresh(UCJEPS, servable_list("ucjeps-20").read_text(), "serenade T19: a refresh to repair")
     assert failed["state"] == "check_failed", failed["state"]
     page.open(f"{UCJEPS}/manual-refresh")
     page.click(page.SOURCE_UPLOAD)
     page.choose_file(page.FILE, str(Path(servable_list("ucjeps-3")).resolve()))
+    page.click(page.CHECK)
+    page.wait_for_text(page.DRY_HEAD, "The dry run passed", timeout=30)
+    page.click(page.APPLY)
+    assert page.wait_for_text(page.CONFIRM_MESSAGES, "Confirm the ETL list was made from the live public core.")
     page.type(page.REASON, REPAIR_REASON)
     page.click(page.CONFIRM_LIVE_CORE)
-    page.click(page.START)
-    page.click(page.MANUAL_CONFIRM)  # it closes the failed refresh (MR13)
-    page.wait_for_text(page.RESULT_STATE, "Waiting for the ETL list update", timeout=60)
-    assert driver.current_url.endswith(f"/{UCJEPS}/manual-refresh"), "the result is on the page (layout A)"
-    repaired = page.wait_for((By.XPATH, "//*[@id='manual-result-heading']//a")).text
+    page.click(page.APPLY)
+    applied = page.wait_for_text(page.APPLIED, "started", timeout=60).text
+    assert f"It replaced the pending refresh {failed['refresh_id']}" in applied, applied
+    repaired = page.wait_for((By.XPATH, "//*[@id='manual-applied-head']//a")).text
     assert repaired != failed["refresh_id"]
-    page.click(page.RUN_UPDATE)
-    page.wait_for_text(page.RESULT_STATE, "Updated", timeout=60)
-    page.open_refresh(UCJEPS, repaired)
+    assert driver.current_url.endswith(f"/{UCJEPS}/manual-refresh"), "the summary is on the page"
+    page.wait_for_state(UCJEPS, repaired, "Updated")
     assert REPAIR_REASON in page.text_of(page.ADMINS_DID)  # issue #120
     page.open_refresh(UCJEPS, failed["refresh_id"])
     assert page.text_of(page.STATE) == "Abandoned"
-    assert f"closed by the manual refresh {repaired}" in page.text_of(page.ADMINS_DID)
+    assert f"replaced by the manual refresh {repaired}" in page.text_of(page.ADMINS_DID)
 
 
 @pytest.mark.after("test_t19_a_manual_refresh_repairs_an_open_failed_refresh")
