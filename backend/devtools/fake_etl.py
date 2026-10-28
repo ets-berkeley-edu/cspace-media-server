@@ -11,7 +11,7 @@ CollectionSpace (deploy/README.md: ./serena aws etl <museum>), where every museu
                                                          # that order, for ./serena aws replay (D283), which prints it
 
 It adds synthetic Media records to the CollectionSpace simulator first (the stand-in for the Solr refresh), and lists
-them in the servable list (the stand-in for the servable list script), so each listed file can then be fetched on a
+them in the servable list (the stand-in for the ETL list script), so each listed file can then be fetched on a
 miss. The CSIDs are made from the museum and a number, so the same --rows
 gives the same servable list every day (the delta threshold passes). The museum's ETL token is read from the
 local Secrets Manager stand-in, as the real ETL reads its own from its secret store; it's never printed."""
@@ -123,7 +123,7 @@ def daily_refresh(serena: httpx.Client, cspace: httpx.Client, tenant: str, token
     """Runs the ETL job in the order of the daily sequence (design: The daily sequence; D70, D81) and returns a
     summary: the refresh's final state (None when Serena wasn't called), its counts, and sample paths to request."""
     listed = rows(tenant, count, first)
-    add_to_simulator(cspace, listed, bands)  # the Solr refresh's stand-in; `listed` is the servable list script's
+    add_to_simulator(cspace, listed, bands)  # the Solr refresh's stand-in; `listed` is the ETL list script's
     refresh: dict[str, Any] = {"refresh_id": None, "state": None}
     if not failed:
         headers = {"Authorization": f"Bearer {token}"}

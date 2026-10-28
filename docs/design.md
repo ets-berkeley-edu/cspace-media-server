@@ -97,7 +97,7 @@ What Serena improves:
 | Publication (`approvedforweb` / `postToPublic`), sensitivity (for PAHMA, the related Object's status) and access (for Cinefiles, the document's access code and record status) live on the Media, Object and Organization records, not on the Blob. | Serena doesn't evaluate them. The ETL does, per museum, in `cspace-solr-ucb`, and tells Serena the result (see Restricted files). |
 | The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its placeholder image; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The ETL list mirrors these fields, with a kind and an access value per Blob. |
 | Cinefiles staff set a document's access in CollectionSpace: "Access code override" on the document (Object) record, otherwise "Publication access code" on the Organization record named in its Source field. The values are PFA Staff Only, In House Only, Campus (UCB), Education (\*.edu) and World. A document's Record status must be approved for it to be in the public core. Cinefiles' ETL has no Media-level publish flag: every Media record of an included document is in the public core. | For Cinefiles, the access code restricts a PDF and the record status removes a whole document; unpublishing a Media record changes nothing. |
-| Cinefiles' access code is computed into a table (`cinefiles_denorm.doclist_view`, column `code`) by a daily "denorm" job that Lyrasis runs, not RTL; the ETL reads that table. | Restriction for Cinefiles depends on that job having run. The servable list script takes a PDF's access from `code_s` in the public core, so Glimmer and Serena agree. |
+| Cinefiles' access code is computed into a table (`cinefiles_denorm.doclist_view`, column `code`) by a daily "denorm" job that Lyrasis runs, not RTL; the ETL reads that table. | Restriction for Cinefiles depends on that job having run. The ETL list script takes a PDF's access from `code_s` in the public core, so Glimmer and Serena agree. |
 | The ETL runs daily: cron starts `one_job.sh` at 21:01 server time (`crontab.app_cspace.PROD`, Jira CSW-1029), and it runs the museums one after another (since CSW-865). It empties each core and reloads it in place (delete, commit, then the day's CSV posted to Solr 8 on the ETL server); if a load fails it posts the previous day's CSV again. There is no staging core. Its output is immutable. | New files appear, and CollectionSpace-driven recalls take effect, within about 24 hours. |
 | CollectionSpace is hosted at Lyrasis. Designs assume only HTTP Basic authentication (newer CollectionSpace versions also have OAuth2, not checked for the hosted version). | Serena uses one read-only service account per museum, password in Secrets Manager. |
 | CollectionSpace generates the image derivatives (Thumbnail, Small, Medium, FullHD, OriginalJpeg) itself. | Serena never resizes. It makes only watermarked copies. |
@@ -561,7 +561,7 @@ The words this document, the code, the ETL API and the admin app use for the dai
 | ETL job | The ETL's daily work for one museum (`cspace-solr-ucb`), from extracting the data to Serena's part |
 | Solr refresh | The ETL job's step that replaces the public core's documents with the day's |
 | ETL list | The list of the Blobs Serena may serve, made from the live public core (see The ETL list). Called the servable list until October 28, 2026 (Richard): the code, the ETL API, the tables, the S3 keys and the file's name keep "servable list" names until a later change |
-| Servable list script | The ETL's script, on the ETL server, that makes a museum's ETL list from its live public core |
+| ETL list script | The ETL's script, on the ETL server, that makes a museum's ETL list from its live public core. Called the servable list script until October 28, 2026 (Richard); the ETL's own name for it changes on the ETL team's timeline |
 | `blobmedia_ss` | The public core's field that pairs each Blob with its Media record: `<blob CSID>:<media CSID>` |
 | Refresh | Serena's record of one museum's day: it takes an ETL list through the ETL list check and the ETL list update |
 | Refresh date | The Pacific date a refresh started on; a refresh's ID is `<tenant>-<refresh date>-<n>` |
@@ -576,7 +576,7 @@ The words this document, the code, the ETL API and the admin app use for the dai
 | Failed refresh | A day when the public core was refreshed but Serena wasn't updated: its ETL list didn't arrive, failed the check, or its ETL list update failed. An admin repairs it |
 | Retry the ETL list update | An admin action on a refresh whose ETL list update failed |
 | Override the delta threshold | An admin action on a refresh that failed only on the delta threshold: its ETL list is checked again without it |
-| Admin refresh | A refresh an admin starts in the admin app with an ETL list made by the servable list script, to repair a failed refresh (`POST /admin/v1/museums/{tenant}/refreshes`) |
+| Admin refresh | A refresh an admin starts in the admin app with an ETL list made by the ETL list script, to repair a failed refresh (`POST /admin/v1/museums/{tenant}/refreshes`) |
 | Rerun the ETL job | The ETL team runs a museum's ETL job again, the same day |
 | Recall | An admin's stop on serving a Media record's files, in Serena, until a refresh on a later day no longer lists them as public (see Recalls) |
 | Recall ended | A refresh ended a recall: its ETL list no longer has the recalled Blob as public |
@@ -621,7 +621,7 @@ The list of the files Serena may serve: every Blob the public core links to, wit
 through, its kind and who may see it. Serena checks it (the ETL list check) and updates its servability table
 from it (the ETL list update). It was called the Blob-to-Media file until October 11, 2026.
 
-Made each day per museum by the servable list script, on the ETL server, from the museum's live public core, after the
+Made each day per museum by the ETL list script, on the ETL server, from the museum's live public core, after the
 Solr refresh (Jira CSW-1027; decided October 11 and 12, 2026, D68 and D84). The script is the ETL team's, in
 `cspace-solr-ucb`: Serena never reads Solr. Made from the live core, the list matches what the public core's clients
 see, even when the Solr refresh fell back to the previous day's data, and it can be made again at any time.
@@ -656,7 +656,7 @@ Per museum (decided October 11 and 12, 2026, D70, D71, D80 and D81):
 
 1. Extract and merge, as today, writing `blobmedia_ss` too.
 2. The Solr refresh, as today, with its fallback to the previous day's data if the load fails.
-3. Run the servable list script: it makes the ETL list from the live public core.
+3. Run the ETL list script: it makes the ETL list from the live public core.
 4. Start a refresh with Serena; it returns the ETL list's file name.
 5. Upload the ETL list.
 6. Ask Serena to check it. If the check passes, Serena does the ETL list update at once.
@@ -671,9 +671,9 @@ isn't `updated` in time (see Watchdog and alerts). An admin brings Serena up to 
 - The check failed only on the delta threshold: override the delta threshold, after making sure the change is
   expected (for example a museum republished many images).
 - The check failed otherwise (a malformed list): once the cause is fixed, the ETL team reruns the ETL job, or an admin
-  runs the servable list script again and starts a manual refresh.
+  runs the ETL list script again and starts a manual refresh.
 - The ETL list update failed: retry the ETL list update once whatever stopped it is fixed.
-- The ETL list never reached Serena: run the servable list script on the ETL server, then start a manual refresh
+- The ETL list never reached Serena: run the ETL list script on the ETL server, then start a manual refresh
   (or start one with one of the ETL's recent lists).
 - Or wait: the next day's refresh catches up.
 
@@ -914,7 +914,7 @@ The actions:
   - **The choice.** "Replace with:" **Choose from previous** (one of the museum's 10 most recent ETL lists from the
     ETL, `GET …/servable-lists`: one per refresh, that refresh's last, whatever its outcome, never a manual refresh's;
     each with its refresh, refresh date, upload time, rows, SHA-256 and the refresh's state) or **Upload one** (an
-    ETL list made with the servable list script on the ETL server, plain or gzip, under the same size limit as the
+    ETL list made with the ETL list script on the ETL server, plain or gzip, under the same size limit as the
     ETL's uploads, with the refresh date it is for, today to start). The table or the upload's fields appear only once
     one is chosen.
   - **Check the ETL list: a dry run.** It shows what applying it would change and changes nothing: Serena checks it
@@ -927,7 +927,7 @@ The actions:
     request. An upload is sent with the dry run and again with Apply: nothing is stored in between.
   - **Apply refresh** is the last step, under a result that can be applied. It needs a reason (why now), for an
     upload the checkbox that the list was made from the live public core (D75), and, for an ETL list older than the
-    newest, a confirmation (what it does to what Serena serves, and that a new list from the servable list script is
+    newest, a confirmation (what it does to what Serena serves, and that a new list from the ETL list script is
     better, MR6). It starts an ordinary manual refresh (`201`) that checks the ETL list again, since the last update
     may have moved since the dry run, and, on a pass, updates by itself, as an ETL refresh does. A dry run that failed
     only on the delta threshold offers **Apply with override** instead: "Why is the change expected?" and a reason of
@@ -1850,8 +1850,9 @@ The F numbers follow the team's list of follow-ups.
   the job's own log and email for everything, with Serena's notification list copied (it works when Serena is
   down), and an ETL API call that raises an alert in Serena for what only the ETL can see (a mismatch above). To
   agree with the ETL team; it depends on the notifications list (October 28, 2026).
-- **ETL-side names.** With "ETL list" in the admin app and this document, proposed for the ETL team, on their
-  timeline: the servable list script as the ETL list script, and the file as `etl-list.<tenant>.<YYYY-MM-DD>.tsv`.
+- **ETL-side names.** With "ETL list" and "ETL list script" in the admin app and this document (the script's name
+  decided October 28, 2026, Richard), proposed for the ETL team, on their timeline: the same name for the script in
+  the ETL's own repository, and the file as `etl-list.<tenant>.<YYYY-MM-DD>.tsv`.
   The file's name is part of the ETL API (Serena returns it when a refresh starts), so Serena would accept both for a
   while; the stored audit action `etl_servable_list_upload` would be read under both names, old entries keeping theirs
   (October 28, 2026).

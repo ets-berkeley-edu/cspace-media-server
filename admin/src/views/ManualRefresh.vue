@@ -159,7 +159,7 @@
               </v-table>
               <p class="mb-2 text-medium-emphasis">The first {{ dry.check.errors.length }} of {{ dry.check.error_count }}, by line.</p>
               <p class="mb-2">
-                These problems can't be overridden. Fix the ETL list, or make a new one with the servable list script on
+                These problems can't be overridden. Fix the ETL list, or make a new one with the ETL list script on
                 the ETL server, and check it again.
               </p>
               <v-btn id="manual-cancel" variant="outlined" @click="startOver">Cancel</v-btn>
@@ -190,7 +190,7 @@
                   may link to images Serena then refuses, and Serena may serve images that have since stopped being public.
                 </p>
                 <p class="mt-1">
-                  <strong>Better:</strong> run the servable list script on the ETL server (or ask whoever runs it) to make an
+                  <strong>Better:</strong> run the ETL list script on the ETL server (or ask whoever runs it) to make an
                   ETL list from today's public core, then pick it here or upload it. Serena can't start the ETL itself.
                   You'll be asked to confirm.
                 </p>
@@ -220,7 +220,7 @@
                 v-if="source === 'upload'"
                 id="confirm-live-core"
                 v-model="confirmed"
-                label="This ETL list was made from the live public core: I ran the servable list script on the ETL server."
+                label="This ETL list was made from the live public core: I ran the ETL list script on the ETL server."
                 :error-messages="problems.confirmed ? [problems.confirmed] : []"
               />
               <div style="max-width: 640px">
@@ -363,7 +363,7 @@
             <strong>The ETL list for {{ pickedList.refresh_date }} isn't the newest</strong> ({{ lists[0].refresh_date }}).
             If its check passes, what Serena serves goes back to that day's public core while Solr keeps today's: the
             portals may link to images Serena refuses, and Serena may serve images that are no longer public. An ETL list
-            made today with the servable list script on the ETL server is better.
+            made today with the ETL list script on the ETL server is better.
           </p>
           <p v-if="stopping && pending">
             <strong>{{ pending.refresh_id }} is still under way</strong> ({{ STATES[pending.state] || pending.state }}).

@@ -456,7 +456,7 @@ def create_router() -> APIRouter:
                      x_open_refresh: Annotated[str, Header(max_length=100)] = "",
                      x_override_kind: Annotated[str, Header(max_length=20)] = "") -> dict[str, Any]:
         """Apply refresh with an uploaded list (D66, D75, D82; issue #118; mockup version 55): the body is an ETL list
-        made with the servable list script (plain or gzip), sent again after its dry run, and the admin confirms it
+        made with the ETL list script (plain or gzip), sent again after its dry run, and the admin confirms it
         was made from the live public core. Serena replaces the pending refresh as rule D allows (X-Open-Refresh: the
         one the admin was shown), starts a manual refresh with the list, and the worker checks and, on a pass,
         applies it. With X-Override-Kind, the delta threshold is overridden for it."""

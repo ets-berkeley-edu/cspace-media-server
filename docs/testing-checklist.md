@@ -271,7 +271,7 @@ go once every alert is acknowledged on the Alerts page (the bell opens it).
   3-row list (4 rows with the placeholder image), so the default 20 rows are far over the delta threshold. This is
   on purpose: leave the refresh `check_failed` (open), and the manual refresh below repairs it.
 - [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv` (the stand-in for running
-  the servable list script on the ETL server). In the app, open "Manual refresh" (in the Admin group) and choose
+  the ETL list script on the ETL server). In the app, open "Manual refresh" (in the Admin group) and choose
   "Upload a file". Choose the file (in the Mac file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and
   press Return). The refresh date starts as today, with a calendar picker; leave it. Type a reason, tick "This
   servable list was made from the live public core" and click "Check the servable list" (clicked too soon, it says
@@ -1391,7 +1391,7 @@ What it checks: issue #118 (decisions MR1 to MR15; mockup versions 49 and 50). W
 - [ ] **3. Too soon.** Click "Check the servable list": expect "Choose a list first." and "Give a reason first.", and
   focus on the first list. Nothing starts.
 - [ ] **4. An older list.** Pick the second list: expect at once a warning that it isn't the newest, what that does,
-  and that a new list from the servable list script is better. Type a reason and click "Check the servable list":
+  and that a new list from the ETL list script is better. Type a reason and click "Check the servable list":
   expect a dialog, "Check an older list?". Cancel.
 - [ ] **5. The newest list, checked here.** Pick the newest list, give a reason and check it (no dialog: no open
   refresh, the newest list). Expect, at the top of the page, "Your check: pahma-<today>-3" with a blue pill, "With the
@@ -1524,7 +1524,7 @@ pending refresh's four steps (decided October 28, 2026). With `./serena up`, sig
   steps.
 - [ ] **6. The words.** On Past refreshes, a refresh's page, Settings ("ETL list check"), Media look up ("last ETL list
   update") and Alerts (a new "An ETL list check failed" alert from 4), no page says "servable list" or "servability
-  update", except "the servable list script" on Manual refresh, which is the ETL's own name for it.
+  update"; Manual refresh says "the ETL list script".
 - [ ] **7. Past the deadline.** In Settings, set the watchdog deadline to a time already past today, then run
   `./serena etl pahma` and open the refresh while it's checking: the "since" line ends, in the warning colour, "Past
   the HH:MM Pacific deadline: the watchdog has alerted." Set the deadline back to 08:00.
