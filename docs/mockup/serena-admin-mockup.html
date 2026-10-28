@@ -160,6 +160,16 @@
   fieldset.source label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
   .mr-result { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin: 18px 0 0; max-width: 90ch; }
   .mr-result h3 { margin-top: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  /* Version 55: the top card holds the action (the list chosen, the warnings, the reason, the check and its result);
+     the list picker below it folds away. */
+  .mr-card { border: 1px solid var(--border-strong); border-radius: 12px; padding: 14px 18px; margin: 0 0 18px; max-width: 90ch; background: var(--surface-1); }
+  .mr-card > h3 { margin-top: 0; }
+  .mr-card .mr-result { border: 0; padding: 0; margin: 0 0 14px; max-width: none; }
+  .mr-card hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+  .mr-chosen { margin: 0 0 10px; }
+  details.mr-picker { max-width: 960px; }
+  details.mr-picker > summary { cursor: pointer; font-weight: 600; font-size: 15px; margin: 0 0 10px; }
+  details.mr-picker > summary .secondary { font-weight: 400; font-size: 13px; }
   tr.picked td { background: var(--bg-accent); }
   .state-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 16px; }
   tr.overridden td { color: var(--text-muted); }
@@ -371,6 +381,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 55 (October 28, 2026; for review):</strong> <strong>Manual refresh's action is all in the card at the top</strong> (Richard, after trying version 54). The card says which list it will check ("The list: the ETL's list for 2026-10-12 (the newest), …", or "none yet"), with the older-list and open-refresh warnings, the <strong>Reason</strong> field and <strong>Check the servable list</strong>. Once a check starts, its result, the override and "Run the servability update" appear at the top of the same card, and the fields below them read "Check another list". <strong>The list picker</strong> (where the list comes from, the ETL's lists or the upload fields) stays below, under <strong>Choose the list</strong>, which folds away: it starts open, folds by itself once a check starts, and opens again, with focus on it, when "Check the servable list" is pressed without a list or a file. <strong>To decide:</strong> while a check waits for "Run the servability update", the card has two blue buttons, that and "Check the servable list" (for another list): should the second be outlined, or the fields for another list stay hidden until asked for? <strong>For the app:</strong> nothing new from Serena.</li>
       <li><strong>Version 54 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's second idea, <strong>Reasons in two lists</strong>, is in the app as shown here: a refresh's page has What went wrong and What admins did, each "None." when empty. Serena records which list each reason goes in; a reason recorded before has none and goes under What went wrong. In the app, an abandoned refresh closed by a manual refresh lists "closed by the manual refresh …" under What admins did, and one closed by the ETL's next refresh lists it under What went wrong. With this, all four of version 47's ideas are in the app.</li>
       <li><strong>Version 53 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's fourth idea, <strong>a more useful override reason</strong>, is in the app as shown here: the override dialog, on a refresh's page and on Manual refresh, asks <strong>Why is the change expected?</strong> first, then the reason, at least 20 characters. Serena checks both, stores the kind beside the reason (an override made before has none, and shows its reason alone), and the banner, the alert email and the audit log give the kind's words first. In the app, the Audit log shows the kind in its Reason line rather than as a field of its own. Nothing else changes; idea 2, Reasons in two lists, is still to come.</li>
       <li><strong>Version 52 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's third idea, <strong>the Overridden filter</strong> on Past refreshes, is in the app as shown here: All and Overridden (n) above the table, like Alerts' All and Waiting. In the app, the choice is kept in the address (<code>show=overridden</code>), so Back and a shared link keep it, and the menu opens the page on All. Nothing else changes.</li>
@@ -432,7 +443,7 @@
   const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", refreshesShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: "", countsBy: "day", countsOpen: false};
   // The Manual refresh page (version 49, issue #118): where the list comes from, the list picked, what's typed, and the
   // refresh it started. Mockup only: what the check finds, and whether the museum has an open refresh.
-  S.mr = {source: "recent", pick: null, reason: "", run: null, outcome: "passes", open: "none"};
+  S.mr = {source: "recent", pick: null, reason: "", run: null, outcome: "passes", open: "none", pickerOpen: true};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
@@ -975,7 +986,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 54</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 55</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -993,7 +1004,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 54</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 55</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" ${open ? 'data-show="waiting"' : ""} aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>
@@ -1233,7 +1244,7 @@
     REFRESHES.unshift(r);
     AUDIT.unshift({at: NOW, admin: S.user, action: "refresh start", target: full, scenario: true,
       details: `Manual refresh · ${etl ? `ETL list for ${r.listDate}, from ${S.museum}-${r.fromId}` : `Uploaded list for ${r.listDate}`} · SHA-256: ${fakeSha(etl ? from.id : full)}${open ? ` · Closed ${S.museum}-${open.id}` : ""} · Reason: ${S.mr.reason}`});
-    S.mr.run = id; S.mr.reason = ""; S.mr.pick = null;
+    S.mr.run = id; S.mr.reason = ""; S.mr.pick = null; S.mr.fileName = ""; S.mr.pickerOpen = false; // version 55
     mrStage(r, "checking");
     mrTimer = setTimeout(() => {
       const c = mrCheck(r.rows, outcome);
@@ -1307,26 +1318,43 @@
         <td><input type="radio" name="mrPick" value="${esc(r.id)}" ${pick === r ? "checked" : ""} aria-label="Use the list for ${esc(r.date)}${k === 0 ? ", the newest" : ""}"></td>
         <td class="nowrap">${esc(r.date)}${k === 0 ? ' <span class="pill t-neutral">newest</span>' : ""}</td><td>${when(listUploaded(r))}</td><td class="num">${r.rows.toLocaleString("en-US")}</td>
         <td>${statePill(r)}${overrideMark(r)}</td><td>${shortCopy(fakeSha(r.id))}</td><td>${refreshLink(`${S.museum}-${r.id}`)}</td></tr>`).join("")}</tbody></table></div>
-      <div class="err-text" id="mrPickMsg" role="alert"></div>
-      ${older ? `<div class="warn-note" id="mr-older" role="note">${ICON_FAILED}<div><strong>This isn't the newest list.</strong> It's the ETL's list for ${esc(pick.date)}, ${days} day${days === 1 ? "" : "s"} older than the newest (${esc(newest.date)}).
+      `;
+    const olderWarn = !older ? "" : `<div class="warn-note" id="mr-older" role="note">${ICON_FAILED}<div><strong>This isn't the newest list.</strong> It's the ETL's list for ${esc(pick.date)}, ${days} day${days === 1 ? "" : "s"} older than the newest (${esc(newest.date)}).
         <p>Using it sets servability back to that day's public core while Solr keeps today's: the portals may link to images Serena then refuses, and Serena may serve images that have since stopped being public.</p>
-        <p><strong>Better:</strong> run the servable list script on the ETL server (or ask whoever runs it) to make a list from today's public core, then pick it here or upload it. Serena can't start the ETL itself.</p></div></div>` : ""}`;
+        <p><strong>Better:</strong> run the servable list script on the ETL server (or ask whoever runs it) to make a list from today's public core, then pick it here or upload it. Serena can't start the ETL itself.</p></div></div>`;
     const upload = `<label class="field">The servable list (.tsv or .tsv.gz) <input type="file" id="mrFile" accept=".tsv,.gz,.txt"></label><div class="err-text" id="mrFileMsg" role="alert"></div>
       <label class="field" style="max-width:260px">The refresh date the servable list is for <input type="date" id="mrDate" value="2026-10-13" max="2026-10-13"></label><div class="err-text" id="mrDateMsg" role="alert"></div>
       <label style="display:flex;gap:8px;margin-bottom:4px"><input type="checkbox" id="mrConfirm"> This servable list was made from the live public core: I ran the servable list script on the ETL server.</label><div class="err-text" id="mrConfirmMsg" role="alert"></div>`;
     const openWarn = !open ? "" : BUSY_STATES.includes(open.state)
       ? `<div class="warn-note" id="mr-open" role="note">${ICON_FAILED}<div><strong>${esc(`${S.museum}-${open.id}`)} is being ${open.state.startsWith("Checking") ? "checked" : "updated"}.</strong> Serena doesn't close a refresh while it's checking or updating: wait for it to finish, then check a list.</div></div>`
       : `<div class="warn-note" id="mr-open" role="note">${ICON_FAILED}<div><strong>${esc(`${S.museum}-${open.id}`)} is still open</strong> (${esc(open.state)}). Checking a list closes it as abandoned: it stops where it is and won't update. You'll be asked to confirm.</div></div>`;
-    const result = run ? mrResult(run) : "";
+    // Version 55: everything happens in the card at the top: the list chosen (from the picker below), the warnings,
+    // the reason, "Check the servable list", and then the check's result, override and update. The picker below folds
+    // away, and folds by itself once a check starts.
+    const card = `<section class="mr-card" id="mr-card" aria-labelledby="mr-card-head">
+      ${run ? `${mrResult(run)}<hr>` : ""}
+      <h3 id="mr-card-head">${run ? "Check another list" : "Check a servable list"}</h3>
+      <p class="mr-chosen" id="mr-chosen">${chosenHtml(pick, newest)}</p>
+      <div class="err-text" id="mrPickMsg" role="alert"></div>
+      ${olderWarn}
+      ${openWarn}
+      <div style="max-width:640px">${reasonField("mrReason", "the refresh and the audit log")}</div>
+      <button class="primary" type="submit">Check the servable list</button></section>`;
+    const picker = `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>Choose the list <span class="secondary">(${S.mr.source === "recent" ? "a recent list from the ETL" : "upload a file"})</span></summary>
+      <fieldset class="source"><legend>Where the servable list comes from</legend>${[["recent", "A recent list from the ETL"], ["upload", "Upload a file"]].map(([k, v]) => `<label><input type="radio" name="mrSource" value="${k}" ${S.mr.source === k ? "checked" : ""}> ${v}</label>`).join("")}</fieldset>
+      ${S.mr.source === "recent" ? recent : `<div style="max-width:640px">${upload}</div>`}</details>`;
     return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Bring a servable list into Serena now, when a refresh failed or its servable list didn't reach Serena. Pick one of the ETL's recent lists or upload one: Serena checks it without changing anything. If the check passes, you run the servability update; if it fails only on the delta threshold, you can override it first.</p>
       ${mock}
-      ${result}
-      <form id="mrForm" novalidate style="margin-top:18px">
-      <fieldset class="source"><legend>Where the servable list comes from</legend>${[["recent", "A recent list from the ETL"], ["upload", "Upload a file"]].map(([k, v]) => `<label><input type="radio" name="mrSource" value="${k}" ${S.mr.source === k ? "checked" : ""}> ${v}</label>`).join("")}</fieldset>
-      ${S.mr.source === "recent" ? recent : `<div style="max-width:640px">${upload}</div>`}
-      <div style="max-width:640px">${reasonField("mrReason", "the refresh and the audit log")}</div>
-      ${openWarn}
-      <button class="primary" type="submit">Check the servable list</button></form>`;
+      <form id="mrForm" novalidate>${card}${picker}</form>`;
+  }
+  // The list the top card will check (version 55): the one picked below, or the file chosen there.
+  function chosenHtml(pick, newest) {
+    if (S.mr.source === "recent") {
+      return pick ? `<strong>The list:</strong> the ETL's list for ${esc(pick.date)}${pick === newest ? " (the newest)" : ""}, ${pick.rows.toLocaleString("en-US")} rows, from ${refreshLink(`${S.museum}-${pick.id}`)}.`
+        : `<strong>The list:</strong> <span class="muted">none yet. Choose one of the ETL's lists below.</span>`;
+    }
+    return S.mr.fileName ? `<strong>The list:</strong> an uploaded file, <span class="mono">${esc(S.mr.fileName)}</span>.`
+      : `<strong>The list:</strong> <span class="muted">none yet. Choose the file below.</span>`;
   }
 
   // An audit entry's target as a link where it names something the app can open (Richard, Oct 13).
@@ -1716,6 +1744,13 @@
       render(); const again = document.querySelector(`[data-mr-mock="${k}:${v}"]`); if (again) again.focus();
     });
     document.querySelectorAll('input[name="mrSource"]').forEach(b => b.onchange = () => { S.mr.source = clean(b.value); render(); const again = document.querySelector(`input[name="mrSource"][value="${S.mr.source}"]`); if (again) again.focus(); });
+    const mp = $("#mrPicker"); if (mp) mp.ontoggle = () => { S.mr.pickerOpen = mp.open; };
+    // The file chosen shows in the top card at once; no redraw, so the file input keeps it.
+    const mfile = $("#mrFile"); if (mfile) mfile.onchange = () => {
+      S.mr.fileName = clean((mfile.files[0] || {}).name || "");
+      $("#mr-chosen").innerHTML = chosenHtml(null, null);
+      if (S.mr.fileName) $("#mrFileMsg").textContent = "";
+    };
     document.querySelectorAll('input[name="mrPick"]').forEach(b => b.onchange = () => { S.mr.pick = clean(b.value); render(); const again = document.querySelector(`input[name="mrPick"][value="${S.mr.pick}"]`); if (again) again.focus(); });
     const mrr = $("#mrReason");
     if (mrr) { mrr.value = S.mr.reason; mrr.oninput = () => { S.mr.reason = typed(mrr); if (mrr.value.trim()) $("#mrReasonMsg").textContent = ""; }; }
@@ -1731,6 +1766,8 @@
         say("mrConfirm", $("#mrConfirm").checked, "Confirm the list was made from the live public core.");
       }
       const reasonOk = reasonGiven("mrReason");
+      // A list or file still to choose is in the picker below (version 55): open it, keeping what's typed, and go there.
+      if (missing.length && !$("#mrPicker").open) { $("#mrPicker").open = true; S.mr.pickerOpen = true; }
       if (missing.length) { (missing[0] === "mrPick" ? document.querySelector('input[name="mrPick"]') : $("#" + missing[0])).focus(); return; }
       if (!reasonOk) return;
       if (S.mr.source === "upload") S.mr.uploadDate = clean($("#mrDate").value);
