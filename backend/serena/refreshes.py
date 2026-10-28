@@ -7,10 +7,13 @@ raises OutOfOrder (409).
 
     started -> received -> checking -> check_failed
                                      -> updating -> updated | update_failed
+                                     -> waiting -> updating (a manual refresh)
 
-A passed servable list check goes straight on to the servability update (decided October 12, 2026, D80). An open
-refresh is closed as abandoned when a later refresh date's refresh starts, or when an admin starts an admin refresh
-(D82). A museum has at most one open refresh (any state but updated or abandoned), and it is always its newest."""
+A passed servable list check goes straight on to the servability update (decided October 12, 2026, D80), except a
+manual refresh's: it waits until an admin runs the servability update (issue #118, decided October 27, 2026). An open
+refresh is closed as abandoned when a later refresh date's refresh starts, or when an admin starts a manual refresh
+(D82); a manual refresh waiting for its servability update is closed by any refresh that starts. A museum has at most
+one open refresh (any state but updated or abandoned), and it is always its newest."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -37,6 +40,7 @@ class State(StrEnum):
     UPDATING = "updating"
     UPDATED = "updated"
     UPDATE_FAILED = "update_failed"
+    WAITING = "waiting"  # a manual refresh's check passed: it waits for an admin to run the servability update
     ABANDONED = "abandoned"
 
 
@@ -82,7 +86,9 @@ class Refresh:
     check: dict[str, Any] | None = None  # the servable list check's result
     update: dict[str, Any] | None = None  # the servability update's counts
     override: dict[str, Any] | None = None  # an admin's override of the delta threshold for this list (D83)
-    admin_refresh: dict[str, Any] | None = None  # an admin refresh: the refresh date its list is for (D75)
+    # A manual refresh: the refresh date its list is for (D75) and, for one of the ETL's lists, the refresh it came
+    # with ("from", issue #118).
+    admin_refresh: dict[str, Any] | None = None
     owner: str | None = None  # the worker doing this refresh's step
     heartbeat_at: int | None = None  # when that worker last said it was still on it (Unix seconds)
 
@@ -225,24 +231,29 @@ class Refreshes:
 
     def start(self, tenant: str, closing_reason: str | None = None) -> tuple[Refresh, bool]:
         """The museum's open refresh for today's refresh date, or a new one. Returns (refresh, created). Closes an
-        earlier refresh date's open refresh as abandoned, unless the worker is on it (Busy). With `closing_reason` (an
-        admin refresh, D82), any open refresh is closed that way, today's included, and a new one always starts."""
+        earlier refresh date's open refresh as abandoned, unless the worker is on it (Busy), and a manual refresh
+        waiting for its servability update whatever its date (issue #118). With `closing_reason` (a manual refresh,
+        D82), any open refresh is closed that way, today's included, and a new one always starts; "{refresh_id}" in
+        it is the new refresh's ID."""
         for _ in range(3):  # another call may start a refresh at the same moment: re-read and try again
             refresh_date = self.today()
             newest = self.newest(tenant)
+            n = newest.n + 1 if newest is not None and newest.refresh_date == refresh_date else 1
             if newest is not None and newest.open:
-                if newest.refresh_date == refresh_date and closing_reason is None:
+                waiting = newest.state == State.WAITING
+                if newest.refresh_date == refresh_date and closing_reason is None and not waiting:
                     return newest, False
                 if newest.state in BUSY:
                     step = "checked" if newest.state == State.CHECKING else "updated"
                     raise Busy(newest.refresh_id, newest.state,
                                f"refresh {newest.refresh_id} is still being {step}; try again")
+                reason = (closing_reason.format(refresh_id=f"{tenant}-{refresh_date}-{n}") if closing_reason
+                          else "a later refresh started before the servability update ran" if waiting
+                          else "a later refresh date's refresh started")
                 try:
-                    self.transition(newest, State.ABANDONED,
-                                    reason=closing_reason or "a later refresh date's refresh started")
+                    self.transition(newest, State.ABANDONED, reason=reason)
                 except OutOfOrder:
                     continue
-            n = newest.n + 1 if newest is not None and newest.refresh_date == refresh_date else 1
             now = self.now()
             refresh = Refresh(tenant, refresh_date, n, State.STARTED, now, now)
             try:
@@ -335,6 +346,21 @@ class Refreshes:
         except self.client.exceptions.ConditionalCheckFailedException:
             return False
         return True
+
+    def etl_lists(self, tenant: str, limit: int = 10) -> list[Refresh]:
+        """The refreshes with the museum's most recent servable lists from the ETL, newest first: one list per refresh
+        (its last), whatever the refresh's outcome. A manual refresh's list isn't one (issue #118, MR3, MR4)."""
+        found: list[Refresh] = []
+        start: dict[str, Any] | None = None
+        while len(found) < limit:
+            options: dict[str, Any] = {"ExclusiveStartKey": start} if start else {}
+            page = self.client.query(TableName=self.table, KeyConditionExpression="pk = :pk", ScanIndexForward=False,
+                                     ConsistentRead=True, ExpressionAttributeValues={":pk": {"S": tenant}}, **options)
+            found += [r for r in map(_from_item, page["Items"]) if r.upload is not None and r.admin_refresh is None]
+            start = page.get("LastEvaluatedKey")
+            if not start:
+                break
+        return found[:limit]
 
     def latest_updated(self, tenant: str) -> Refresh | None:
         """The museum's most recent updated refresh."""

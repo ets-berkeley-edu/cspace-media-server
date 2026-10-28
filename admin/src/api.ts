@@ -58,7 +58,7 @@ export interface Check {
   warnings: string[]
 }
 
-export type RefreshAction = 'retry_update' | 'override_threshold'
+export type RefreshAction = 'retry_update' | 'override_threshold' | 'run_update'
 
 /** An admin's override of the delta threshold for a refresh's servable list (D83): one made before issue #108 has only `at`. */
 export interface Override {
@@ -75,8 +75,21 @@ export interface RefreshSummary {
   updated_at: string
   rows: number | null
   reasons: string[]
-  admin_refresh_date: string | null // an admin refresh: the refresh date its servable list is for
+  manual: boolean // a manual refresh (issue #118; "admin refresh" in the earlier decisions)
+  admin_refresh_date: string | null // a manual refresh: the refresh date its servable list is for
+  admin_refresh_from: string | null // a manual refresh with one of the ETL's lists: the refresh it came with (issue #118)
   override: Override | null
+}
+
+/** One of the ETL's recent servable lists, by the refresh it came with, and that refresh's outcome (issue #118). */
+export interface ServableList {
+  refresh_id: string
+  refresh_date: string
+  state: string
+  override: Override | null
+  rows: number
+  sha256: string
+  uploaded_at: string
 }
 
 export interface Refresh extends RefreshSummary {
@@ -410,16 +423,24 @@ export const api = {
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {reason}),
   // An admin refresh, with the servable list as the body. The file name and reason are URL-encoded: a header carries
   // only ASCII.
-  startRefresh: (museum: string, file: File, refreshDate: string, reason: string) =>
+  // A manual refresh (issue #118), with an uploaded list or one of the ETL's. openRefresh: the open refresh the admin
+  // was shown and agreed to close; Serena closes no other.
+  startRefresh: (museum: string, file: File, refreshDate: string, reason: string, openRefresh = '') =>
     call<Refresh>('POST', `/museums/${museum}/refreshes`, undefined, {
       file,
       headers: {
         'X-Live-Core-Confirmed': 'yes',
         'X-File-Name': encodeURIComponent(file.name),
         'X-Refresh-Date': refreshDate,
-        'X-Reason': encodeURIComponent(reason)
+        'X-Reason': encodeURIComponent(reason),
+        'X-Open-Refresh': openRefresh
       }
     }),
+  startFromList: (museum: string, refreshId: string, reason: string, openRefresh = '') =>
+    call<Refresh>('POST', `/museums/${museum}/refreshes/from-list`, {refresh_id: refreshId, reason, open_refresh: openRefresh}),
+  servableLists: (museum: string) => call<{lists: ServableList[]}>('GET', `/museums/${museum}/servable-lists`),
+  runUpdate: (museum: string, refreshId: string) =>
+    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/run-update`),
   // background: the banner's own checks, which don't count as activity (the session still signs out when idle)
   alerts: (museum: string, background = false) => call<{alerts: AlertItem[]}>('GET', `/museums/${museum}/alerts`,
     undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),

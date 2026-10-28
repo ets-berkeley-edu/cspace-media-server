@@ -3,8 +3,10 @@
     <h1 id="page-title" class="text-h5 mb-1">{{ museumName(museum) }} refresh {{ refresh?.refresh_id }}</h1>
     <p v-if="refresh" class="mb-4">
       <RefreshState id="refresh-state" :state="refresh.state" :override="refresh.override" />
-      · refresh date {{ refresh.refresh_date }}<span v-if="refresh.admin_refresh_date"> · an admin refresh, with the servable list
-        for {{ refresh.admin_refresh_date }}</span> · last change {{ when(refresh.updated_at) }}
+      · refresh date {{ refresh.refresh_date }}<span v-if="refresh.manual" id="refresh-manual"> · a manual refresh, with
+        <template v-if="refresh.admin_refresh_from">the ETL's list for {{ refresh.admin_refresh_date }} (from
+          <RefreshLink :id="refresh.admin_refresh_from" />)</template><template v-else>an uploaded list for
+          {{ refresh.admin_refresh_date || refresh.refresh_date }}</template></span> · last change {{ when(refresh.updated_at) }}
       <span v-if="!refresh.newest"> · a later refresh has started</span>
     </p>
     <!-- Who overrode the delta threshold, when and why, for as long as the refresh is shown (issue #108). -->
@@ -33,7 +35,23 @@
       {{ error }}
     </v-alert>
 
+    <!-- A manual refresh whose check passed waits for an admin (issue #118, MR9). -->
+    <p v-if="refresh?.state === 'waiting'" id="refresh-waiting" class="mb-2">
+      <strong>The check passed{{ refresh.override ? ' without the delta threshold' : '' }}.</strong> Nothing has changed
+      yet: the refresh waits for an admin to run the servability update. Running it is in the audit log. If tonight's ETL
+      refresh or another manual refresh starts first, Serena closes this one as abandoned.
+    </p>
     <div v-if="refresh?.actions.length" class="mb-6">
+      <v-btn
+        v-if="refresh.actions.includes('run_update')"
+        id="run-update"
+        color="primary"
+        variant="flat"
+        :loading="busy"
+        @click="runUpdate"
+      >
+        Run the servability update
+      </v-btn>
       <v-btn
         v-if="refresh.actions.includes('retry_update')"
         id="retry-update"
@@ -175,28 +193,32 @@ import {useRoute} from 'vue-router'
 import {mdiShieldAlert} from '@mdi/js'
 import type {Refresh, RefreshAction} from '@/api'
 import {ApiError, api, problem as failure} from '@/api'
-import {WORKING, useCheckAgain, working} from '@/checkAgain'
+import {useCheckAgain, working} from '@/checkAgain'
 import ReasonField from '@/components/ReasonField.vue'
+import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import {alertsChanged, museumName} from '@/session'
 import {overrideBy, overrideReason, when} from '@/words'
 
-const titles: Record<RefreshAction, string> = {
+// The actions with a dialog and a reason; "Run the servability update" has neither (the reason was given at the start).
+type Dialogued = Exclude<RefreshAction, 'run_update'>
+const titles: Record<Dialogued, string> = {
   retry_update: 'Retry the servability update',
   override_threshold: 'Override the delta threshold'
 }
-const explanations: Record<RefreshAction, string> = {
+const explanations = computed<Record<Dialogued, string>>(() => ({
   retry_update: 'The worker runs the servability update again. Do this once whatever stopped it is fixed.',
   override_threshold: 'The servable list check failed only because more rows change than the delta threshold allows. ' +
     'Do this once you know the change is expected. Serena checks the same servable list again without the delta ' +
-    'threshold (every other check still applies) and, if it passes, updates Serena from it. The team is emailed.'
-}
+    'threshold (every other check still applies) and, if it passes, ' +
+    `${refresh.value?.manual ? 'waits for an admin to run the servability update' : 'updates Serena from it'}. The team is emailed.`
+}))
 
 const route = useRoute()
 const refresh = ref<Refresh | null>(null)
 const error = ref('')
 const dialog = ref(false)
-const action = ref<RefreshAction>('retry_update')
+const action = ref<Dialogued>('retry_update')
 const reason = ref('')
 const busy = ref(false)
 
@@ -230,12 +252,17 @@ const overshoot = computed(() => {
 })
 const afterOverride = computed(() => {
   const state = refresh.value?.state || ''
-  if (WORKING.includes(state)) {
+  const manual = !!refresh.value?.manual // a manual refresh waits for an admin after its check (issue #118)
+  if (state === 'checking' || (state === 'updating' && !manual)) {
     return 'Serena is checking the same servable list again without the delta threshold (every other check still ' +
-      'applies) and, if it passes, updates. This page checks again every few seconds until it\'s done.'
+      `applies) and, if it passes, ${manual ? 'waits for an admin to run the servability update' : 'updates'}. ` +
+      'This page checks again every few seconds until it\'s done.'
   }
-  return 'Serena checked the same servable list again without the delta threshold (every other check still applied)' +
-    `${state === 'updated' ? ' and updated from it' : ''}. The team was emailed.`
+  const then = state === 'updated' ? ' and updated from it' : state === 'waiting'
+    ? ': it passed, and waits for an admin to run the servability update'
+    : state === 'updating' ? ': it passed, and Serena is running the servability update' : ''
+  return `Serena checked the same servable list again without the delta threshold (every other check still applied)${then}. ` +
+    'The team was emailed.'
 })
 
 function isThreshold(problem: string): boolean {
@@ -255,7 +282,23 @@ async function load(background = false) {
   checkAgain()
 }
 
-function open(which: RefreshAction) {
+async function runUpdate() {
+  if (!refresh.value) {
+    return
+  }
+  busy.value = true
+  error.value = ''
+  try {
+    refresh.value = await api.runUpdate(museum.value, refresh.value.refresh_id)
+    checkAgain()
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'That didn\'t work.'
+  } finally {
+    busy.value = false
+  }
+}
+
+function open(which: Dialogued) {
   action.value = which
   reason.value = ''
   reasonField.value?.reset()

@@ -191,6 +191,7 @@
           "updating",
           "updated",
           "update_failed",
+          "waiting",
           "abandoned"
         ],
         "title": "State",
@@ -315,7 +316,7 @@
     },
     "/museums/{tenant}/refreshes": {
       "post": {
-        "description": "Serena assigns the refresh ID and the refresh date (the Pacific date now). If the museum's refresh for today\nis still open, returns it (200). An earlier refresh date's open refresh is closed as abandoned, unless Serena is\nchecking or updating it: then 409, and the ETL job tries again (decided October 9, 2026, D30). Once today's\nrefresh is closed (updated or abandoned), calling this again starts the day's next one (pahma-2026-10-13-2,\nsay): that is how the ETL brings Serena up to date again the same day (D149). The delta threshold's override\nstays an admin action in the admin app.",
+        "description": "Serena assigns the refresh ID and the refresh date (the Pacific date now). If the museum's refresh for today\nis still open, returns it (200). An earlier refresh date's open refresh is closed as abandoned, unless Serena is\nchecking or updating it: then 409, and the ETL job tries again (decided October 9, 2026, D30). Once today's\nrefresh is closed (updated or abandoned), calling this again starts the day's next one (pahma-2026-10-13-2,\nsay): that is how the ETL brings Serena up to date again the same day (D149). A manual refresh waiting for an\nadmin to run its servability update is closed as abandoned, whatever its date. The delta threshold's override\nstays an admin action in the admin app.",
         "operationId": "start_refresh_museums__tenant__refreshes_post",
         "parameters": [
           {

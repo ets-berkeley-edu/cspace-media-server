@@ -7,7 +7,13 @@ export const STATES: Record<string, string> = {
   updating: 'Updating servability',
   updated: 'Updated',
   update_failed: 'Servability update failed',
+  waiting: 'Waiting for the servability update', // a manual refresh's passed check (issue #118)
   abandoned: 'Abandoned'
+}
+
+/** An audit action's words: the stored name, except "admin_refresh", which the app calls a manual refresh (issue #118). */
+export function actionWords(action: string): string {
+  return action === 'admin_refresh' ? 'manual refresh' : action.replace(/_/g, ' ')
 }
 
 /** Who overrode a refresh's delta threshold: an override made before issue #108 doesn't say. */
@@ -31,7 +37,7 @@ export function toneOf(state: string): string {
   if (FAILED_STATES.has(state)) {
     return 'error'
   }
-  return {updated: 'success', started: 'info', received: 'info', checking: 'info', updating: 'info'}[state] || ''
+  return {updated: 'success', started: 'info', received: 'info', checking: 'info', updating: 'info', waiting: 'info'}[state] || ''
 }
 
 /** How the audit retention's choices read (D97). */

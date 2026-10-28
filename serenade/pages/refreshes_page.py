@@ -1,4 +1,4 @@
-"""Past refreshes, a refresh's page and Start a refresh (design: Admin web app; Refreshes)."""
+"""Past refreshes, a refresh's page and Manual refresh (design: Admin web app; Refreshes)."""
 from __future__ import annotations
 
 import json
@@ -31,13 +31,19 @@ class RefreshesPage(Page):
     REASON = by_id("reason")  # the action's reason (ReasonField's own id)
     REASON_MESSAGES = messages_of("reason")
     CANCEL = dialog_button("Cancel")
-    # Start a refresh.
+    # Manual refresh (issue #118): the list's source, the ETL's lists or an upload, and the check's result on the page.
+    SOURCE_UPLOAD = (By.XPATH, "//input[@id='source-upload']/ancestor::div[contains(@class, 'v-selection-control')][1]")
+    PICK_ERROR = by_id("pick-error")
+    MANUAL_CONFIRM = by_id("manual-confirm")  # closing the open refresh, or using an older list
+    RESULT = by_id("manual-result")
+    RESULT_STATE = by_id("manual-result-state")
+    RUN_UPDATE = by_id("run-update")
     FILE = by_id("file")
     FILE_MESSAGES = messages_of("file")
     CONFIRM_LIVE_CORE = (By.XPATH, "//input[@id='confirm-live-core']/ancestor::div[contains(@class, "
                                    "'v-selection-control')][1]")
     CONFIRM_MESSAGES = messages_of("confirm-live-core")
-    START = by_id("start-refresh-button")
+    START = by_id("manual-check")
 
     COLUMNS = ("Refresh", "Refresh date", "State", "Rows", "Last change")
 
@@ -92,12 +98,26 @@ class RefreshesPage(Page):
         return found
 
     def admin_refresh(self, museum: str, servable_list: str, reason: str, seconds: float = 60) -> dict[str, Any]:
-        """Starts an admin refresh with the servable list, as Start a refresh does, and waits until the worker has
-        checked it (and updated, on a pass); returns the refresh."""
+        """Starts a manual refresh with an uploaded servable list, as Manual refresh does, closing the museum's open
+        refresh if there is one, and waits until the worker has checked it; on a pass it runs the servability update
+        and waits for that too. Returns the refresh."""
+        status, text = self.call_api("GET", f"{API}/{museum}/status")
+        _expect(status, 200, text)
+        newest = json.loads(text)["newest"]
+        open_refresh = newest["refresh_id"] if newest and newest["state"] not in ("updated", "abandoned") else ""
         status, text = self.call_api("POST", f"{API}/{museum}/refreshes", servable_list, {
-            "X-Live-Core-Confirmed": "yes", "X-File-Name": "serenade.tsv", "X-Reason": reason})
+            "X-Live-Core-Confirmed": "yes", "X-File-Name": "serenade.tsv", "X-Reason": reason,
+            "X-Open-Refresh": open_refresh})
         _expect(status, 201, text)
         refresh_id = json.loads(text)["refresh_id"]
+        found = self._settled(museum, refresh_id, seconds)
+        if found["state"] == "waiting":
+            status, text = self.call_api("POST", f"{API}/{museum}/refreshes/{refresh_id}/run-update")
+            _expect(status, 200, text)
+            found = self._settled(museum, refresh_id, seconds)
+        return found
+
+    def _settled(self, museum: str, refresh_id: str, seconds: float) -> dict[str, Any]:
         deadline = time.monotonic() + seconds
         while (found := self.refresh(museum, refresh_id))["state"] in ("started", "received", "checking", "updating"):
             if time.monotonic() > deadline:

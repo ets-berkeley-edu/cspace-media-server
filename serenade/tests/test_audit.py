@@ -38,18 +38,22 @@ def test_t37_refresh_actions_and_the_etls_calls(driver: WebDriver, base_url: str
     """Checklist section 14, step 7; section 20. After UCJEPS's alerts and refresh tests."""
     page = audit_log(driver, base_url, UCJEPS)
     failed = refresh_id(UCJEPS_FAILED)
-    # The admin's actions: the override, the acknowledgements, the admin refreshes.
+    # The admin's actions: the override, the acknowledgements, the manual refreshes and the update run on one.
     override = page.cells(page.entry("threshold override", "serenade T18"))
     assert (override["By"], override["Target"]) == (ADMIN[0], failed), override
     acknowledged = page.cells(page.entry("alert acknowledge", failed))
     assert acknowledged["By"] == ADMIN[0] and acknowledged["Target"].startswith("Check failed"), acknowledged
-    repair = page.cells(page.entry("admin refresh", "serenade T19: a test admin refresh"))
+    repair = page.cells(page.entry("manual refresh", "serenade T19: a test manual refresh"))
     assert repair["By"] == ADMIN[0] and "SHA-256: " in repair["Details"], repair
-    # The ETL's calls, with the key it used.
-    for action in ("etl refresh start", "etl servable list upload", "etl check request"):
-        calls = page.driver.find_elements(*page.entries_by(f"ETL ({UCJEPS})", action))
+    assert page.driver.find_elements(*page.entries_by(ADMIN[0], "update run")), "running the update isn't audited"
+    # The ETL's calls, with the key it used: read through the API, since T21's manual refreshes (three entries each)
+    # push UCJEPS's oldest entries past the page's 100 rows.
+    every = page.entries(UCJEPS)
+    for action in ("etl_refresh_start", "etl_servable_list_upload", "etl_check_request"):
+        calls = [e for e in every if e["admin"] == f"ETL ({UCJEPS})" and e["action"] == action]
         assert len(calls) == 2, f"{action}: {len(calls)} entries, not one per ETL refresh"
-        assert all("Which key: current" in call.text for call in calls), action
+        assert all(call["details"].get("which_key") == "current" for call in calls), action
+    assert page.driver.find_elements(*page.entries_by(f"ETL ({UCJEPS})", "etl check request")), "not on the page"
     # Each refresh's outcome, by Serena, its target the refresh (a link to it).
     outcome = page.cells(page.entry("refresh outcome", failed))
     assert outcome["By"] == "Serena" and "State: updated" in outcome["Details"], outcome

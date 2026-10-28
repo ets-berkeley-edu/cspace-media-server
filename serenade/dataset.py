@@ -99,13 +99,13 @@ CINEFILES = "cinefiles"
 # UCJEPS, a reserved museum (the inventory's Data roles): a normal refresh, then one of 3 rows that fails its servable
 # list check (the delta over the threshold), which raises an alert. T23 to T25 look at its alerts and acknowledge them;
 # then the refresh tests act on it: T17 looks, T18 overrides the threshold (so UCJEPS publishes 3 rows), T19 repairs a
-# failed admin refresh, T21 adds admin refreshes up to 30. No PAHMA test uses UCJEPS.
+# failed manual refresh, T21 adds manual refreshes up to 30. No PAHMA test uses UCJEPS.
 UCJEPS = "ucjeps"
 UCJEPS_FAILED = "ucjeps-failed"
 
 
 def servable_list(name: str) -> Path:
-    """A servable list ./serena test wrote beside the dataset (ucjeps-20, ucjeps-3), for an admin refresh."""
+    """A servable list ./serena test wrote beside the dataset (ucjeps-20, ucjeps-3), for a manual refresh."""
     return Path(os.environ["SERENADE_DATASET"]).with_name(f"{name}.tsv")
 
 

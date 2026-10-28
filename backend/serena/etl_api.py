@@ -216,7 +216,8 @@ def create_etl_app(services: Services) -> FastAPI:
         is still open, returns it (200). An earlier refresh date's open refresh is closed as abandoned, unless Serena is
         checking or updating it: then 409, and the ETL job tries again (decided October 9, 2026, D30). Once today's
         refresh is closed (updated or abandoned), calling this again starts the day's next one (pahma-2026-10-13-2,
-        say): that is how the ETL brings Serena up to date again the same day (D149). The delta threshold's override
+        say): that is how the ETL brings Serena up to date again the same day (D149). A manual refresh waiting for an
+        admin to run its servability update is closed as abandoned, whatever its date. The delta threshold's override
         stays an admin action in the admin app."""
         before = services.refreshes.newest(tenant)
         try:
@@ -225,7 +226,9 @@ def create_etl_app(services: Services) -> FastAPI:
             raise out_of_order(error) from None
         if created:
             if before is not None and before.open and before.refresh_id != refresh.refresh_id:
-                abandoned(tenant, before, "a later refresh date's refresh started")
+                closed = services.refreshes.get(tenant, before.refresh_id)
+                abandoned(tenant, before, closed.reasons[-1] if closed and closed.reasons
+                          else "a later refresh date's refresh started")
             audited(request, tenant, Action.ETL_REFRESH_START, refresh.refresh_id,
                     {"refresh_date": refresh.refresh_date})
         log.info("refresh started" if created else "open refresh returned",

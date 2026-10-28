@@ -600,7 +600,7 @@ where the table is read as a list, a sort key:
 | --- | --- | --- | --- |
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access, and when the row was last written new or changed (`listed_at`, so a Media URL can pick the Blob listed most recently, D175); indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
 | Recalls | `<tenant>#<media CSID>` | | indexed by museum (`by_tenant`, for the Recalls page and the servability update); the Blob CSID the Media record had when it was recalled; who, when, why; and, once a servability update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A recall that ends is deleted; its history is in the audit log (see How a recall ends) |
-| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, an admin refresh's refresh date, the worker's claim (owner, heartbeat), timestamps, reasons |
+| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, a manual refresh's list (its refresh date, and the refresh an ETL list came with), the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits, audit retention and the placeholder image's Media record (D169), over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its bell, banner and Alerts page |
 | Cache index | see Storage | | |
@@ -669,9 +669,10 @@ isn't `updated` in time (see Watchdog and alerts). An admin brings Serena up to 
 - The check failed only on the delta threshold: override the delta threshold, after making sure the change is
   expected (for example a museum republished many images).
 - The check failed otherwise (a malformed list): once the cause is fixed, the ETL team reruns the ETL job, or an admin
-  runs the servable list script again and starts an admin refresh.
+  runs the servable list script again and starts a manual refresh.
 - The servability update failed: retry the servability update once whatever stopped it is fixed.
-- The servable list never reached Serena: run the servable list script on the ETL server, then start an admin refresh.
+- The servable list never reached Serena: run the servable list script on the ETL server, then start a manual refresh
+  (or start one with one of the ETL's recent lists).
 - Or wait: the next day's refresh catches up.
 
 So on a failed refresh the public core and Serena can differ for up to a day. Version 1 accepts that; changing both or
@@ -703,7 +704,9 @@ the AWS libraries' own logging stays at warnings, since at debug it would log a 
 | `GET` | `/etl/v1/museums/{tenant}` | The latest updated refresh (`404` if there is none yet) |
 
 Refresh states: `started` → `received` → `checking` → `check_failed`, or `updating` → `updated` or `update_failed`.
-An open refresh becomes `abandoned` when a later refresh date's refresh or an admin refresh closes it. Rules:
+A manual refresh's passed check goes to `waiting` instead, until an admin runs the servability update (`updating`; see
+Admin actions on refreshes). An open refresh becomes `abandoned` when a later refresh date's refresh or a manual
+refresh closes it. Rules:
 
 - A call out of order gets `409`. Repeating a call is safe: starting a refresh returns the open refresh; asking for a servable list check
   that is queued, running or done returns the refresh as it is (`202` while queued or running, `200` once done);
@@ -714,8 +717,10 @@ An open refresh becomes `abandoned` when a later refresh date's refresh or an ad
 - A refresh's refresh date is the Pacific date when it starts. A new refresh for the same refresh date is allowed once the
   previous one is closed (`updated` or `abandoned`): that is how the ETL brings Serena up to date again the same day,
   and the API has no "force" option (Richard, October 13, 2026, D149): the delta threshold guards against a broken ETL
-  run, so only an admin overrides it, in the admin app. Starting a later refresh date's refresh, or an admin refresh,
+  run, so only an admin overrides it, in the admin app. Starting a later refresh date's refresh, or a manual refresh,
   closes an earlier open refresh as `abandoned`, except one the worker is checking or updating, which is never abandoned.
+  A manual refresh `waiting` for its servability update is closed by any refresh that starts, the same day's
+  included: the ETL's start then begins a new refresh rather than returning it (issue #118, MR9).
 - If the open refresh is one the worker is checking or updating, a later refresh date's refresh isn't started: `409`, and the
   ETL tries again until its step timeout, then carries on without Serena (decided October 9, 2026). So a museum has
   at most one open refresh, always its newest.
@@ -797,7 +802,7 @@ table, so a restart never loses a step.
 Decided October 11, 2026 (settling F5), and revised October 12, 2026 (D73 to D75, D82, D83). Any admin of the museum
 may take these actions; each needs a typed reason (up to 500 characters, no personal data), is recorded in the
 refresh's reasons and the audit log, and is offered only on the museum's newest refresh, in the state it applies to
-(an admin refresh starts a refresh of its own):
+(a manual refresh starts a refresh of its own):
 
 - **Retry the servability update.** On an `update_failed` refresh: it goes back to `updating` and the worker does the
   servability update again.
@@ -822,14 +827,34 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   heading reads "failed, overridden by admin" while the worker checks again and once the check passes, never "passed"
   on its own, with no chip, since the heading says it; and on Past refreshes an overridden refresh's row has a bar in
   the warning colour down its left edge.
-- **Start an admin refresh** (`POST /admin/v1/museums/{tenant}/refreshes`, the app's "Start a refresh" page). When a
-  servable list didn't reach Serena, or needs replacing: the admin runs the servable list script on the ETL server,
-  then sends the list (plain or gzip, under the same size limit as the ETL's uploads), gives the refresh date it is
-  for (today, to start), and confirms with a checkbox that the list was made from the live public core (D75). Serena
-  closes the museum's open refresh, if there is one, as `abandoned`, its reasons naming the admin refresh (D82);
-  starts a new refresh with the list (`201`); checks it and, if it passes, does the servability update; if it fails,
-  nothing changes and the refresh shows why. Audited as `admin_refresh`. The refresh's refresh date is today, as for every refresh; the date
-  the admin gives is recorded with it and shown beside it. Refused while the worker is checking or updating a refresh.
+- **Manual refresh** (the admin app's Manual refresh page, issue #118, decided October 27, 2026 from MR1 to MR15
+  and mockup versions 49 and 50; called an admin refresh in D66, D75 and D82, and Start a refresh before). When a
+  servable list didn't reach Serena, needs replacing, or a refresh failed:
+  - **The list.** One of the museum's 10 most recent servable lists from the ETL (`GET …/servable-lists`): one per
+    refresh, that refresh's last, whatever its outcome, never a manual refresh's; each with its refresh, refresh date,
+    upload time, rows, SHA-256 and the refresh's state. The page warns when the list picked isn't the newest (what it
+    does to servability, and that running the servable list script on the ETL server for a new list is better) and
+    asks to confirm (MR6). Serena checks it again as stored (`POST …/refreshes/from-list` with the refresh's ID; the
+    new refresh points to the same S3 object, which is never deleted), and the refresh is for that list's own refresh
+    date (`admin_refresh_date`, with `admin_refresh_from` naming the refresh). **Or an upload** (`POST
+    …/refreshes`): the admin runs the servable list script on the ETL server, sends the list (plain or gzip, under
+    the same size limit as the ETL's uploads), gives the refresh date it is for (today, to start), and confirms with a
+    checkbox that the list was made from the live public core (D75). Either way a reason is required.
+  - **The open refresh** (MR13). Serena closes the museum's open refresh as `abandoned` ("closed by the manual
+    refresh <refresh ID>", D82) only if it is the one the admin was shown and confirmed closing (`open_refresh`, or
+    the `X-Open-Refresh` header for an upload): otherwise `409`. Refused while the worker is checking or updating a
+    refresh.
+  - **Check, then update** (MR9, MR10). Serena starts a new refresh (`201`) and checks the list. If the check
+    passes, the refresh is `waiting`: nothing changes until an admin presses **Run the servability update** (`POST
+    …/refreshes/{refresh_id}/run-update`, no reason, audited as `update_run`). A waiting refresh nobody updates is
+    closed as `abandoned` when the ETL or another manual refresh starts a refresh; it has no timeout. If the check
+    fails only on the delta threshold, the admin can override it on the page, as on the refresh's page (MR11): the
+    re-check that passes leaves it `waiting` too, and the alert says so. Any other failure shows the first 20
+    problems and their total, with no override (MR12). The progress and the result are on the Manual refresh page
+    (layout A), which checks again every 5 seconds while the refresh is checking or updating, with a link to the
+    refresh; its page has the Run button too. Audited as `admin_refresh` (shown as "manual refresh"). The refresh's
+    refresh date is today, as for every refresh; the list's date is recorded with it and shown beside it. ETL
+    refreshes still update as soon as their check passes.
 
 ### Watchdog and alerts
 
@@ -838,7 +863,7 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 - a museum's refresh for today hasn't reached `updated` or `abandoned` by the museum's deadline (08:00 to start; admins
   set it in the admin app), including when no refresh started at all. This is how Serena notices a failed refresh;
 - a museum's newest refresh is `check_failed`, `update_failed` or `abandoned` (an abandoned refresh's reasons say whether
-  a later refresh date's refresh or an admin refresh closed it). The worker raises the first two at once, when the
+  a later refresh date's refresh or a manual refresh closed it). The worker raises the first two at once, when the
   step fails; the watchdog's later passes raise them again, which records and emails nothing more;
 - Serena hasn't had a servability update for a museum in 24 hours. Only a museum that has had one can be late: before
   its first servability update there's nothing to compare with.
@@ -1161,9 +1186,10 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
 - **Pages.** Served by the app with a Content-Security-Policy that allows scripts only from Serena (no CDN). Every page's
   title but the Overview's starts with the museum's name, for example "PAHMA Settings".
 - **Layout** (the UI review, October 13, 2026, D136 to D138). The app bar has the environment and build, the alert
-  bell, the Settings gear and the museum menu. The left-hand menu has three groups: Daily refresh (Overview, Start a
-  refresh, Past refreshes), Media records (Past requests, Media look up, Recalls) and Admin (Audit log, API
-  documentation). The bell opens the Alerts page; while alerts wait to be acknowledged it carries a red badge with
+  bell, the Settings gear and the museum menu. The left-hand menu has three groups: Daily refresh (Overview, Past
+  refreshes), Media records (Past requests, Media look up, Recalls) and Admin (Manual refresh, Audit log, API
+  documentation; Manual refresh replaced Start a refresh in the Daily refresh group, issue #118). Overview links to
+  Manual refresh. The bell opens the Alerts page; while alerts wait to be acknowledged it carries a red badge with
   their number (99+ above 99), and a one-line banner under the app bar names the newest one, with "Open alerts". While
   alerts wait, the bell and "Open alerts" open the page showing only those (D213; see Watchdog and alerts). The
   bell and the banner share one request, made on every page change and every minute while the tab is visible. The
@@ -1207,17 +1233,21 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     form, whose "Recall <n> Media records" is the filled red one (Richard, October 14, 2026).
   - **A reason is never a disabled button** (Richard, October 14, 2026, for accessibility). In every dialog that needs
     a reason (Recall, Release, Cancel recall, a Settings change, Retry the servability update, Override the delta
-    threshold, Start a refresh), the action's button stays enabled. Pressed without a reason, it sends nothing, says
+    threshold, Manual refresh), the action's button stays enabled. Pressed without a reason, it sends nothing, says
     "Give a reason first." under the Reason field and moves focus there; a hint under the field says it's required
-    and where it's recorded. Start a refresh does the same for its file, its refresh date and its confirmation, and a
+    and where it's recorded. Manual refresh does the same for its list or its file, its refresh date and its
+    confirmation, and a
     Settings change for its value.
   - **Column help** (D164). A column's name with a dotted underline has a description, shown on hover or keyboard
     focus (a Vuetify tooltip): every column of the Past refreshes, Alerts, Past requests, Recalls and Audit log
     tables.
   - **A refresh's state is a pill** (issue #107, as the mockup's version 43), the same on Past refreshes, the
     refresh's page and Overview: Updated in green; a failed state (Servable list check failed, Servability update
-    failed) in red, with a failure icon so the cue isn't colour alone; a refresh still running in blue; Abandoned in
-    grey. The label is what a screen reader reads; the icon is hidden from it.
+    failed) in red, with a failure icon so the cue isn't colour alone; a refresh still running, or a manual refresh
+    Waiting for the servability update, in blue; Abandoned in grey. The label is what a screen reader reads; the icon
+    is hidden from it. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
+    list came from and, when it isn't the refresh's own day, the list's date: "manual refresh · ETL list for
+    2026-10-09" or "manual refresh · uploaded list" (issue #116, folded into #118).
   - **Links** (D157, D158). A refresh ID opens that refresh's page wherever it appears: in an alert's text and its
     About, in the Audit log, under "kept by" on Recalls and in "Ended by refresh" there. An Audit log target that's a
     Media CSID opens Media look up; a setting, the Settings page; an acknowledged alert, the Alerts page, but only for
@@ -1274,8 +1304,9 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     explanation of its own (a proxy's error page, say), the app says what it means and keeps the code: 502, 503 or
     504, "Serena can't be reached right now. Try again in a minute. (502)"; any other code, "Serena gave an unexpected
     answer. (<code>)".
-  - **Keeping an admin's place** (Richard, October 14, 2026). The list pages (Past requests, Recalls, Alerts, the
-    Audit log, Past refreshes) keep their filters and each table's sort, page and page size in the address, defaults
+  - **Keeping an admin's place** (Richard, October 14, 2026). Manual refresh is kept alive too (issue #118), so coming
+    back from a refresh's page finds the list picked, what was typed and the check's result. The list pages (Past
+    requests, Recalls, Alerts, the Audit log, Past refreshes) keep their filters and each table's sort, page and page size in the address, defaults
     left out, and are kept alive (one per museum), so Back, "← Back to …" or a shared address finds the same view,
     scrolled where it was; coming back reloads Alerts, Recalls, the Audit log and Past refreshes, and Past requests
     once the numbers it shows are more than a minute old, through Serena's minute (issue #100). A page reached through a link in the app (a path, a CSID, a refresh ID, a
@@ -1316,8 +1347,9 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - an "API documentation" button: Swagger UI, bundled with the app (no CDN), read-only, showing the ETL API's
     description generated from the code (decided October 10, 2026);
   - an audit log of every admin action: sign-in, sign-out, signing everyone out, recall, release, cancel, a settings change
-    (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, an
-    admin refresh and an audit export (the placeholder image's Media record is a settings change), each
+    (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, a
+    manual refresh (stored as `admin_refresh`, shown as "manual refresh"), a manual refresh's servability update run
+    and an audit export (the placeholder image's Media record is a settings change), each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
     The ETL's calls that change something are there too (Richard, October 13, 2026, D150): starting a refresh,
     uploading a servable list and asking for the check, by "ETL (<museum>)", with which of the museum's two tokens it

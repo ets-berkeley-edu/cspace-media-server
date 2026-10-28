@@ -14,7 +14,7 @@ export interface BackTo {
 
 /** What the link says, by the page it goes back to. */
 const TITLES: Record<string, string> = {
-  overview: 'Overview', refreshes: 'Past refreshes', 'start-refresh': 'Start a refresh', alerts: 'Alerts',
+  overview: 'Overview', refreshes: 'Past refreshes', 'manual-refresh': 'Manual refresh', alerts: 'Alerts',
   requests: 'Past requests', recalls: 'Recalls', lookup: 'Media look up', settings: 'Settings', audit: 'Audit log',
   api: 'API documentation'
 }

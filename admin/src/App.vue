@@ -103,16 +103,17 @@ import {refresh, session, signedInTo, waiting} from '@/session'
 // The left-hand menu's groups (the UI review, October 13, 2026). Alerts and Settings are in the app bar: the bell and
 // the gear (D137, D138).
 const NAV = [
-  {title: 'Daily refresh', items: [
-    {name: 'overview', title: 'Overview'}, {name: 'start-refresh', title: 'Start a refresh'},
-    {name: 'refreshes', title: 'Past refreshes'}]},
+  {title: 'Daily refresh', items: [{name: 'overview', title: 'Overview'}, {name: 'refreshes', title: 'Past refreshes'}]},
   {title: 'Media records', items: [
     {name: 'requests', title: 'Past requests'}, {name: 'lookup', title: 'Media look up'}, {name: 'recalls', title: 'Recalls'}]},
-  {title: 'Admin', items: [{name: 'audit', title: 'Audit log'}, {name: 'api', title: 'API documentation'}]}
+  // Manual refresh replaced Start a refresh, in the Admin group (issue #118, MR1, MR2).
+  {title: 'Admin', items: [
+    {name: 'manual-refresh', title: 'Manual refresh'}, {name: 'audit', title: 'Audit log'},
+    {name: 'api', title: 'API documentation'}]}
 ]
 
 // The pages kept alive (by their components' names): the lists an admin works through and leaves by a link.
-const KEPT_ALIVE = ['Requests', 'Recalls', 'Alerts', 'AuditLog', 'Refreshes']
+const KEPT_ALIVE = ['Requests', 'Recalls', 'Alerts', 'AuditLog', 'Refreshes', 'ManualRefresh']
 
 const route = useRoute()
 const router = useRouter()

@@ -7,7 +7,7 @@ import {api, unexplained} from '@/api'
 import {routes} from '@/router'
 import {session} from '@/session'
 import Alerts from '@/views/Alerts.vue'
-import StartRefresh from '@/views/StartRefresh.vue'
+import ManualRefresh from '@/views/ManualRefresh.vue'
 
 const MEDIA = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c50'
 
@@ -46,19 +46,27 @@ describe('a recall\'s alert', () => {
   })
 })
 
-describe('starting a refresh', () => {
+describe('starting a manual refresh', () => {
   it('never disables its button: pressed too soon, it says what\'s missing under each field', async () => {
-    const calls = fakeApi({})
-    const wrapper = await at('/pahma/start-refresh', StartRefresh)
-    const button = wrapper.find('#start-refresh-button')
+    const calls = fakeApi({
+      'GET /museums/pahma/servable-lists': {body: {lists: []}},
+      'GET /museums/pahma/status': {body: {newest: null, unacknowledged: 0}}
+    })
+    const wrapper = await at('/pahma/manual-refresh', ManualRefresh)
+    const button = wrapper.find('#manual-check')
     expect(button.attributes('disabled')).toBeUndefined()
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Choose a list first.')
+    expect(document.body.textContent).toContain('Give a reason first.')
+    await wrapper.find('input#source-upload').setValue(true) // a registered Vuetify radio, not an unknown element
+    await flushPromises()
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     const text = document.body.textContent || ''
     expect(text).toContain('Choose the servable list first.')
-    expect(text).toContain('Give a reason first.')
     expect(text).toContain('Confirm the list was made from the live public core.')
-    expect(calls).toHaveLength(0)
+    expect(calls.filter(c => c.method === 'POST')).toHaveLength(0)
     wrapper.unmount()
   })
 })

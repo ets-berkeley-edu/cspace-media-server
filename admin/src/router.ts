@@ -9,10 +9,10 @@ import Overview from '@/views/Overview.vue'
 import RefreshDetail from '@/views/RefreshDetail.vue'
 import Refreshes from '@/views/Refreshes.vue'
 import LookUp from '@/views/LookUp.vue'
+import ManualRefresh from '@/views/ManualRefresh.vue'
 import Requests from '@/views/Requests.vue'
 import Settings from '@/views/Settings.vue'
 import SignIn from '@/views/SignIn.vue'
-import StartRefresh from '@/views/StartRefresh.vue'
 import Recalls from '@/views/Recalls.vue'
 
 export const routes = [
@@ -21,7 +21,10 @@ export const routes = [
   {path: '/:museum', name: 'overview', component: Overview},
   {path: '/:museum/refreshes', name: 'refreshes', component: Refreshes},
   {path: '/:museum/refreshes/:refreshId', name: 'refresh', component: RefreshDetail},
-  {path: '/:museum/start-refresh', name: 'start-refresh', component: StartRefresh},
+  {path: '/:museum/manual-refresh', name: 'manual-refresh', component: ManualRefresh},
+  // Manual refresh replaced Start a refresh (issue #118): an old bookmark still finds it.
+  {path: '/:museum/start-refresh', redirect: (to: {params: {museum?: string | string[]}}) => ({
+    name: 'manual-refresh', params: {museum: String(to.params.museum)}})},
   {path: '/:museum/alerts', name: 'alerts', component: Alerts},
   {path: '/:museum/requests', name: 'requests', component: Requests},
   {path: '/:museum/recalls', name: 'recalls', component: Recalls},

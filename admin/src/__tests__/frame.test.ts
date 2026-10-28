@@ -28,7 +28,7 @@ describe('the frame', () => {
     const wrapper = await app([])
     expect(wrapper.findAll('.nav-group').map(g => g.text())).toEqual(['Daily refresh', 'Media records', 'Admin'])
     expect(wrapper.findAll('[id^="nav-"]').map(i => i.text())).toEqual([
-      'Overview', 'Start a refresh', 'Past refreshes', 'Past requests', 'Media look up', 'Recalls', 'Audit log',
+      'Overview', 'Past refreshes', 'Past requests', 'Media look up', 'Recalls', 'Manual refresh', 'Audit log',
       'API documentation'])
     expect(wrapper.find('#settings-gear').attributes('href')).toContain('/pahma/settings')
     expect(wrapper.find('#settings-gear').attributes('aria-label')).toBe('PAHMA settings')
