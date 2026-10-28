@@ -58,6 +58,8 @@ export interface Check {
   warnings: string[]
 }
 
+export type ReasonKind = 'problem' | 'admin' | 'override'
+
 export type RefreshAction = 'retry_update' | 'override_threshold' | 'run_update'
 
 /** An admin's override of the delta threshold for a refresh's servable list (D83): one made before issue #108 has only `at`. */
@@ -76,6 +78,8 @@ export interface RefreshSummary {
   updated_at: string
   rows: number | null
   reasons: string[]
+  // Which list each reason goes in, one per reason (issue #120): what went wrong, or what admins did
+  reason_kinds?: ReasonKind[]
   manual: boolean // a manual refresh (issue #118; "admin refresh" in the earlier decisions)
   admin_refresh_date: string | null // a manual refresh: the refresh date its servable list is for
   admin_refresh_from: string | null // a manual refresh with one of the ETL's lists: the refresh it came with (issue #118)

@@ -1481,3 +1481,22 @@ What it checks: issue #120's fourth idea (mockup version 47). With `./serena up`
   "Testing", give a reason of 20 characters or more, and confirm: expect "Reason: Testing: …" under the result.
 - [ ] **6. Other reasons.** Open a Recall, Retry the servability update or a Settings change: expect a plain reason,
   with no kinds and no 20-character minimum.
+
+## 43. A refresh's reasons in two lists, on the local stack (10 minutes; before merging the pull request that adds it)
+
+What it checks: issue #120's second idea (mockup version 47). With `./serena up`, run `./serena etl pahma`, and sign in
+to PAHMA:
+
+- [ ] **1. None.** Open the updated refresh: expect "What went wrong" and "What admins did", each "None.", and no
+  "Reasons" heading.
+- [ ] **2. What went wrong.** Run `./serena etl pahma --rows 3` and open its refresh: under What went wrong, "1 problem
+  in the servable list"; What admins did, "None.".
+- [ ] **3. An override.** Override it with a kind and a reason. Expect under What admins did "Delta threshold
+  overridden by admin at <time> UTC; its reason is in the banner above.", the reason only in the banner, and "1
+  problem in the servable list" still under What went wrong.
+- [ ] **4. A manual refresh, and the refresh it closed.** Run `./serena etl pahma --rows 3` again (it fails and stays
+  open). On Manual refresh, pick a list, give a reason and confirm closing the open refresh. Open the closed refresh:
+  "closed by the manual refresh <id>" under What admins did, its "1 problem…" under What went wrong. Open the new one:
+  "manual refresh with the ETL's servable list for …: <your reason>" under What admins did.
+- [ ] **5. Abandoned by the ETL.** Leave the new one waiting, and run `./serena etl pahma`. Open it again: "a later
+  refresh started before the servability update ran" under What went wrong.

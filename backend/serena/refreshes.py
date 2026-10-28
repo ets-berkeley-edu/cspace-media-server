@@ -44,6 +44,22 @@ class State(StrEnum):
     ABANDONED = "abandoned"
 
 
+class ReasonKind(StrEnum):
+    """Which of a refresh's two lists a reason goes in (issue #120, mockup version 47): what went wrong, or what admins
+    did, an override among them (its page gives the override's reason in its banner). Serena records it with each
+    reason, so the admin app never guesses from the words."""
+    PROBLEM = "problem"
+    ADMIN = "admin"
+    OVERRIDE = "override"
+
+
+def reason_kinds(refresh: Refresh) -> list[str]:
+    """One kind per reason, in order. A reason recorded before issue #120 has none and counts as what went wrong; since
+    every later reason has one, the kinds recorded belong to the newest reasons."""
+    known = refresh.reason_kinds[-len(refresh.reasons):] if refresh.reasons else []
+    return [ReasonKind.PROBLEM.value] * (len(refresh.reasons) - len(known)) + known
+
+
 CLOSED = frozenset({State.UPDATED, State.ABANDONED})
 BUSY = frozenset({State.CHECKING, State.UPDATING})  # the worker is on it: never abandoned
 # A servable list may be uploaded, or replaced by a corrected one, except while the worker is on the refresh or once
@@ -83,6 +99,7 @@ class Refresh:
     updated_at: str
     upload: Upload | None = None
     reasons: list[str] = field(default_factory=list)
+    reason_kinds: list[str] = field(default_factory=list)  # ReasonKind values for the newest reasons (issue #120)
     check: dict[str, Any] | None = None  # the servable list check's result
     update: dict[str, Any] | None = None  # the servability update's counts
     override: dict[str, Any] | None = None  # an admin's override of the delta threshold for this list (D83)
@@ -140,6 +157,7 @@ def _to_item(refresh: Refresh) -> dict[str, Any]:
         "pk": refresh.tenant, "sk": refresh.sort_key, "refresh_id": refresh.refresh_id,
         "refresh_date": refresh.refresh_date, "n": refresh.n, "state": refresh.state.value,
         "created_at": refresh.created_at, "updated_at": refresh.updated_at, "reasons": refresh.reasons,
+        "reason_kinds": refresh.reason_kinds,
     }
     if refresh.upload:
         plain["upload"] = vars(refresh.upload)
@@ -182,7 +200,7 @@ def _from_item(item: dict[str, Any]) -> Refresh:
                    state=State(plain["state"]), created_at=plain["created_at"], updated_at=plain["updated_at"],
                    upload=Upload(upload["sha256"], int(upload["rows"]), int(upload["bytes"]), upload["key"],
                                  upload["uploaded_at"]) if upload else None,
-                   reasons=list(plain.get("reasons", [])),
+                   reasons=list(plain.get("reasons", [])), reason_kinds=list(plain.get("reason_kinds", [])),
                    check=_plain(plain.get("check")), update=_plain(plain.get("update")),
                    override=_plain(plain.get("override")), admin_refresh=_plain(plain.get("admin_refresh")),
                    owner=plain.get("owner"),
@@ -234,7 +252,7 @@ class Refreshes:
         earlier refresh date's open refresh as abandoned, unless the worker is on it (Busy), and a manual refresh
         waiting for its servability update whatever its date (issue #118). With `closing_reason` (a manual refresh,
         D82), any open refresh is closed that way, today's included, and a new one always starts; "{refresh_id}" in
-        it is the new refresh's ID."""
+        it is the new refresh's ID, and the closed refresh lists it under what admins did (issue #120)."""
         for _ in range(3):  # another call may start a refresh at the same moment: re-read and try again
             refresh_date = self.today()
             newest = self.newest(tenant)
@@ -251,7 +269,8 @@ class Refreshes:
                           else "a later refresh started before the servability update ran" if waiting
                           else "a later refresh date's refresh started")
                 try:
-                    self.transition(newest, State.ABANDONED, reason=reason)
+                    self.transition(newest, State.ABANDONED, reason=reason,
+                                    reason_kind=ReasonKind.ADMIN if closing_reason else ReasonKind.PROBLEM)
                 except OutOfOrder:
                     continue
             now = self.now()
@@ -266,10 +285,11 @@ class Refreshes:
                          "another refresh was starting at the same time; try again")
 
     def transition(self, refresh: Refresh, to: State, *, upload: Upload | None = None, reason: str | None = None,
-                   results: dict[str, dict[str, Any]] | None = None, release: bool = False) -> Refresh:
-        """Move the refresh to `to`, only if it is still in the state it was read in. `results` sets check, update,
-        override or admin_refresh; a new upload removes an earlier override, which was for the earlier list.
-        `release` ends the worker's claim."""
+                   reason_kind: ReasonKind = ReasonKind.PROBLEM, results: dict[str, dict[str, Any]] | None = None,
+                   release: bool = False) -> Refresh:
+        """Move the refresh to `to`, only if it is still in the state it was read in. `reason` is recorded with its
+        kind: what went wrong unless an admin did it. `results` sets check, update, override or admin_refresh; a new
+        upload removes an earlier override, which was for the earlier list. `release` ends the worker's claim."""
         now = self.now()
         names = {"#state": "state"}
         values: dict[str, Any] = {":to": {"S": to.value}, ":from": {"S": refresh.state.value}, ":now": {"S": now}}
@@ -282,8 +302,10 @@ class Refreshes:
             update += f", #{name} = :{name}"
             values[f":{name}"] = _serializer.serialize(_decimals(result))
         if reason is not None:
-            update += ", reasons = list_append(if_not_exists(reasons, :empty), :reason)"
+            update += (", reasons = list_append(if_not_exists(reasons, :empty), :reason), "
+                       "reason_kinds = list_append(if_not_exists(reason_kinds, :empty), :kind)")
             values[":reason"] = {"L": [{"S": reason}]}
+            values[":kind"] = {"L": [{"S": reason_kind.value}]}
             values[":empty"] = {"L": []}
         removing = []
         if upload is not None and "override" not in (results or {}):
@@ -310,6 +332,7 @@ class Refreshes:
                 refresh.override = None
         if reason is not None:
             refresh.reasons.append(reason)
+            refresh.reason_kinds.append(reason_kind.value)
         for name, result in (results or {}).items():
             setattr(refresh, name, result)
         if release:
