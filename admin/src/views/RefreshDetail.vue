@@ -21,7 +21,11 @@
     >
       <!-- It leads with the check that failed and by how much, then who, when and why (issue #110). -->
       <strong id="override-lead" class="text-subtitle-1 font-weight-bold">A safety check failed, and an admin overrode it</strong>
-      <div v-if="overshoot" id="override-overshoot">{{ overshoot }}</div>
+      <!-- How far past, in red, with how many times the threshold it is (issue #120). -->
+      <div v-if="refresh.check && timesOver(refresh.check)" id="override-overshoot">
+        The servable list changes <DeltaPast :check="refresh.check" />.
+      </div>
+      <div v-else-if="overshoot" id="override-overshoot">{{ overshoot }}</div>
       <div><strong>Delta threshold overridden</strong> by {{ overrideBy(refresh.override) }} at {{ when(refresh.override.at) }}.</div>
       <div v-if="refresh.override.reason" id="override-reason">Reason: {{ refresh.override.reason }}</div>
       <div>{{ afterOverride }}</div>
@@ -106,12 +110,14 @@
             />Delta threshold overridden
           </v-chip>
         </h2>
-        <p class="mb-2">
-          {{ refresh.check.rows }} rows; {{ refresh.check.added }} added, {{ refresh.check.removed }} removed,
-          {{ refresh.check.changed }} changed<span v-if="refresh.check.previous_rows !== null">
-            ({{ refresh.check.delta_percent }}% of the {{ refresh.check.previous_rows }} rows of the last servability update; the
-            threshold is {{ refresh.check.threshold_percent }}%)</span>.
-        </p>
+        <p id="check-counts" class="mb-2"><CheckCounts :check="refresh.check" /></p>
+        <!-- From 10 times the threshold (issue #120); the banner says it once the threshold is overridden. -->
+        <FarPastNote
+          v-if="!refresh.override"
+          id="check-far-past"
+          :check="refresh.check"
+          :before-override="refresh.actions.includes('override_threshold')"
+        />
         <p v-if="passedByOverride" id="check-passed-without-threshold" class="mb-2 text-medium-emphasis">
           It passed when Serena checked it again without the delta threshold; every other check still applied.
         </p>
@@ -162,7 +168,17 @@
       <v-card>
         <v-card-title>{{ titles[action] }}</v-card-title>
         <v-card-text>
-          <p class="mb-4">{{ explanations[action] }}</p>
+          <p v-if="action === 'override_threshold' && refresh?.check && timesOver(refresh.check)" id="override-explanation" class="mb-4">
+            The servable list check failed only because more rows change than the delta threshold allows: this list
+            changes <DeltaPast :check="refresh.check" />. {{ explanations[action] }}
+          </p>
+          <p v-else class="mb-4">{{ explanations[action] }}</p>
+          <FarPastNote
+            v-if="action === 'override_threshold' && refresh?.check"
+            id="override-far-past"
+            :check="refresh.check"
+            before-override
+          />
           <ReasonField
             ref="reasonField"
             v-model="reason"
@@ -194,11 +210,14 @@ import {mdiShieldAlert} from '@mdi/js'
 import type {Refresh, RefreshAction} from '@/api'
 import {ApiError, api, problem as failure} from '@/api'
 import {useCheckAgain, working} from '@/checkAgain'
+import CheckCounts from '@/components/CheckCounts.vue'
+import DeltaPast from '@/components/DeltaPast.vue'
+import FarPastNote from '@/components/FarPastNote.vue'
 import ReasonField from '@/components/ReasonField.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import {alertsChanged, museumName} from '@/session'
-import {overrideBy, overrideReason, when} from '@/words'
+import {overrideBy, overrideReason, timesOver, when} from '@/words'
 
 // The actions with a dialog and a reason; "Run the servability update" has neither (the reason was given at the start).
 type Dialogued = Exclude<RefreshAction, 'run_update'>
@@ -208,7 +227,8 @@ const titles: Record<Dialogued, string> = {
 }
 const explanations = computed<Record<Dialogued, string>>(() => ({
   retry_update: 'The worker runs the servability update again. Do this once whatever stopped it is fixed.',
-  override_threshold: 'The servable list check failed only because more rows change than the delta threshold allows. ' +
+  override_threshold: (refresh.value?.check && timesOver(refresh.value.check) ? ''
+    : 'The servable list check failed only because more rows change than the delta threshold allows. ') +
     'Do this once you know the change is expected. Serena checks the same servable list again without the delta ' +
     'threshold (every other check still applies) and, if it passes, ' +
     `${refresh.value?.manual ? 'waits for an admin to run the servability update' : 'updates Serena from it'}. The team is emailed.`

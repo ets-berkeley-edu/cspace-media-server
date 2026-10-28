@@ -39,9 +39,15 @@
         Delta threshold overridden by {{ overrideBy(run.override) }} at {{ when(run.override.at) }}.
         <template v-if="run.override.reason">Reason: {{ run.override.reason }}</template>
       </p>
-      <p v-if="run.check && !working([run])" id="manual-counts" class="mb-2">{{ counts(run.check) }}</p>
+      <p v-if="run.check && !working([run])" id="manual-counts" class="mb-2"><CheckCounts :check="run.check" /></p>
 
       <template v-if="run.actions.includes('override_threshold')">
+        <FarPastNote
+          v-if="run.check"
+          id="manual-far-past"
+          :check="run.check"
+          before-override
+        />
         <p class="mb-2">
           The check failed only on the delta threshold. Override it only if you know the change is expected: Serena then
           checks the same list again without it, and you run the servability update as for a passed check. The team is
@@ -304,10 +310,17 @@
         <v-card-title>Override the delta threshold</v-card-title>
         <v-card-text>
           <p class="mb-4">
-            The servable list check failed only because more rows change than the delta threshold allows. Do this once
+            The servable list check failed only because more rows change than the delta threshold allows<span v-if="run?.check && timesOver(run.check)">: this list changes <DeltaPast :check="run.check" /></span>.
+            Do this once
             you know the change is expected. Serena checks the same servable list again without the delta threshold (every
             other check still applies) and, if it passes, waits for you to run the servability update. The team is emailed.
           </p>
+          <FarPastNote
+            v-if="run?.check"
+            id="override-far-past"
+            :check="run.check"
+            before-override
+          />
           <ReasonField
             id="override-reason"
             ref="overrideField"
@@ -336,17 +349,20 @@
 <script setup lang="ts">
 import {computed, onActivated, reactive, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
-import type {Check, Refresh, ServableList} from '@/api'
+import type {Refresh, ServableList} from '@/api'
 import {ApiError, api, problem} from '@/api'
 import {useCheckAgain, working} from '@/checkAgain'
+import CheckCounts from '@/components/CheckCounts.vue'
 import CopyButton from '@/components/CopyButton.vue'
+import DeltaPast from '@/components/DeltaPast.vue'
+import FarPastNote from '@/components/FarPastNote.vue'
 import OverrideMark from '@/components/OverrideMark.vue'
 import ReasonField from '@/components/ReasonField.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import WhenText from '@/components/WhenText.vue'
 import {alertsChanged, museumName} from '@/session'
-import {STATES, byOverride, overrideBy, pacificDate, when} from '@/words'
+import {STATES, byOverride, overrideBy, pacificDate, timesOver, when} from '@/words'
 
 // Manual refresh (issue #118, decisions MR1 to MR15, reviewed October 27, 2026): one of the ETL's recent servable lists
 // or an uploaded one, checked without updating; a passed check waits for "Run the servability update", and a failure
@@ -401,13 +417,6 @@ watch(picked, () => { problems.pick = '' })
 watch(chosen, () => { problems.file = '' })
 watch(refreshDate, () => { problems.date = '' })
 watch(confirmed, () => { problems.confirmed = '' })
-
-function counts(check: Check): string {
-  const delta = check.previous_rows !== null
-    ? ` (${check.delta_percent}% of the ${check.previous_rows} rows of the last servability update; the threshold is ` +
-      `${check.threshold_percent}%)` : ''
-  return `${check.rows} rows; ${check.added} added, ${check.removed} removed, ${check.changed} changed${delta}.`
-}
 
 /** The ETL's lists and the museum's open refresh, read again whenever the page is shown or a check ends. */
 async function loadChoices() {

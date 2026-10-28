@@ -27,3 +27,9 @@
 .key.miss {
   background: rgb(var(--v-theme-warning));
 }
+
+// A check's delta past the delta threshold, in red (issue #120): CheckCounts and DeltaPast.
+.delta-over {
+  color: rgb(var(--v-theme-error));
+  font-weight: 600;
+}

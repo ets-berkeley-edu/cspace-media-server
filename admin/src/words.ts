@@ -145,6 +145,23 @@ export function stateOf(state: string): string {
   return STATES[state] || state
 }
 
+/**
+ * From this many times the museum's delta threshold, a check is far past it (issue #120, decided October 27, 2026):
+ * fixed, not a setting, since it only adds a note.
+ */
+export const FAR_PAST_TIMES = 10
+
+/** How many times its delta threshold a check's delta is, or 0 when it isn't past it or had nothing to compare with. */
+export function timesOver(check: {previous_rows: number | null, delta_percent: number | null, threshold_percent: number}): number {
+  return check.previous_rows && check.delta_percent !== null && check.delta_percent > check.threshold_percent
+    ? check.delta_percent / check.threshold_percent : 0
+}
+
+/** "3.8" times; from 100 times, a whole number ("5,751"). */
+export function timesText(times: number): string {
+  return times >= 100 ? Math.round(times).toLocaleString('en-US') : times.toFixed(1)
+}
+
 /** Whether a refresh updated only because an admin overrode its delta threshold (issue #110). */
 export function byOverride(refresh: {state: string, override?: unknown}): boolean {
   return !!refresh.override && refresh.state === 'updated'

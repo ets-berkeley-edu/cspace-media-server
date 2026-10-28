@@ -1311,7 +1311,8 @@ What it checks: issues #108 and #110. With `./serena up`, run `./serena etl pahm
 
 - [ ] **1. Override.** Open the failed refresh and click "Override the delta threshold". Give a reason and confirm.
   Expect a banner under the state line, in orange with a shield: "A safety check failed, and an admin overrode it",
-  then how far the list went past the threshold ("The servable list changes <n>% of the rows; the threshold is 5%."),
+  then how far the list went past the threshold ("The servable list changes <n>% of the rows, <m> times the 5%
+  threshold: far past it.", since issue #120),
   then "Delta threshold overridden by <you> at <time> UTC.", then "Reason: <your reason>", then that Serena is
   checking the same list again. Expect your reason not to be under Reasons.
 - [ ] **2. While it checks.** If you catch it while the state is "Checking the servable list", expect "Servable list
@@ -1420,3 +1421,25 @@ What it checks: issue #118 (decisions MR1 to MR15; mockup versions 49 and 50). W
   public core checkbox). Upload `./serena etl pahma --file-only > /tmp/pahma.tsv`'s file with a reason: the result
   says "With an uploaded list for <today>", and Past refreshes' tag "manual refresh · uploaded list".
 
+## 40. How far past the delta threshold, on the local stack (10 minutes; before merging the pull request that adds it)
+
+What it checks: issue #120's first idea (mockup version 47; "far past" from 10 times the threshold, decided October
+27, 2026). With `./serena up`, run `./serena etl pahma` (21 rows), then `./serena etl pahma --rows 18` (it fails on the
+delta threshold alone, about 2 times past it), and sign in to PAHMA:
+
+- [ ] **1. Past it.** Open the failed refresh. Expect the check's line to end "(<n>% of the 21 rows of the last
+  servability update; <m> times the 5% threshold)", with the percent in red, and no red note under it.
+- [ ] **2. The dialog.** Click "Override the delta threshold": expect "this list changes <n>% of the rows, <m> times
+  the 5% threshold" in its first paragraph, the percent in red, and no "Far past" note. Cancel.
+- [ ] **3. Far past it.** Run `./serena etl pahma --rows 3` and open its refresh (the earlier one is Abandoned).
+  Expect, under the check's line, a red note: "Far past the delta threshold. <n>% is <m> times the threshold: the last
+  servability update had 21 rows, this list has 4. A change this large is usually a first load or the wrong file.
+  Check that the file is the right one before you override." Open the dialog: the same note, and its first paragraph
+  ends "threshold: far past it." Cancel.
+- [ ] **4. Overridden.** Override it with a reason. Expect the banner's line "The servable list changes <n>% of the
+  rows, <m> times the 5% threshold: far past it.", and the red note under the check gone (the banner says it).
+- [ ] **5. Manual refresh.** On Manual refresh, pick the `--rows 3` list (confirm closing any open refresh) and check
+  it. Expect the same counts line, the red note above "Override the delta threshold", and the note again in its
+  dialog. Cancel.
+- [ ] **6. Within it.** Open the refresh from step 1's first `./serena etl pahma` (Updated): expect "the threshold is
+  5%", not in red, and no note.
