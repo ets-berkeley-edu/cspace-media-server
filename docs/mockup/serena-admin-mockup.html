@@ -382,7 +382,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
-      <li><strong>Version 55 (October 28, 2026; for review; Richard, after trying version 54):</strong> <strong>Manual refresh's action is all in the card at the top.</strong> The card starts with the museum's <strong>current refresh</strong>, for context: the open one if there is one, else the newest, with its state, refresh date, rows and last change (hidden while it's your own check, which "Your check" shows). Then <strong>Replace with:</strong> and two choices, <strong>Choose from previous</strong> and <strong>Upload one</strong>; once one is chosen, which ETL list it will check ("The ETL list: the one for 2026-10-12 (the newest), …", or "none yet"); and, only once an ETL list is chosen (a row picked, or a file), the older-list and open-refresh warnings and <strong>Check the ETL list</strong>: hidden until then, not disabled, since no button is ever disabled (Richard, October 28, 2026). When the open refresh is your own waiting check, its warning says so: "This replaces your check above. Serena runs one refresh at a time, so checking this ETL list closes … as abandoned: its servability update won't run." <strong>Checking needs no reason:</strong> it changes nothing. The reason is asked for when you <strong>apply the refresh</strong>, which runs the servability update with the ETL list: its Reason field is above <strong>Apply refresh</strong> (called "Run the servability update" before), with an outlined <strong>Cancel</strong> to its right: a way to back out of the ETL list you chose, a mini reset of Manual refresh, which starts over with nothing chosen and no result, the current refresh as before the check; no reason or confirmation, since nothing changes (Richard, October 28, 2026). Serena can't unmake the check it made, so Cancel closes it as abandoned behind the scenes (else it would stay open, and the next check would replace it): Past refreshes and the Audit log show it; Apply refresh, and the button, never disabled, says "Give a reason first." and moves focus there. Once a check starts, its result, the override and Apply refresh appear at the top of the card, with "Replace with:" below them for another ETL list. While the check's own next step waits for you (Apply refresh, or "Override the delta threshold"), "Check the ETL list" for another one is <strong>outlined</strong>, not a second filled button; it's blue again once that's done. <strong>The bottom card</strong> appears only once a choice is made: <strong>Previous ETL lists</strong> (the table of the last 10) for "Choose from previous", or <strong>Upload an ETL list file</strong> (the file, its refresh date and the live public core checkbox) for "Upload one". Before either choice, and again once a check starts, there is none. It folds away, and opens again, with focus on it, when the check is pressed without an ETL list or a file. <strong>"ETL list"</strong> replaces "list" and "servable list" in the page's own words; Serena's state names ("Checking the servable list", "Servable list check failed") and the override dialog, which a refresh's page shares, are unchanged. <strong>Mockup only:</strong> <strong>Reset</strong>, in the page's dashed bar, goes back to Serena with no pending refreshes: the refreshes this page and "Today's refresh" in Mockup settings made go, with their alerts and audit entries, and the page is as it first opens (the sample's own refreshes stay, the October 3 override among them). <strong>For the app:</strong> starting a manual refresh takes no reason (today Serena requires one: the design's Manual refresh, "The list"), and applying the refresh ("Run the servability update" today) takes one (today it has none), recorded in the refresh's reasons and the audit log; closing an open refresh still asks to confirm. A refresh's page has the same reason, Apply refresh and Cancel. Cancel is new: an audited "refresh cancel" that closes a waiting manual refresh as abandoned, after which the page starts over, and Serena's words for the step become "apply the refresh".</li>
+      <li><strong>Version 55 (October 28, 2026; for review; Richard, after trying version 54):</strong> <strong>Manual refresh, simplified.</strong> An admin replaces the current ETL list with one from a previous refresh or one they upload, checks it with a dry run, and applies it; Serena does the rest as an ordinary refresh. <strong>The card at the top</strong> starts with the museum's <strong>current refresh</strong>, for context, then <strong>Replace with:</strong> and two choices, <strong>Choose from previous</strong> and <strong>Upload one</strong>. The <strong>bottom card</strong> appears once one is chosen: <strong>Previous ETL lists</strong> (the last 10) or <strong>Upload an ETL list file</strong> (the file and its refresh date); it folds away. <strong>Check the ETL list</strong> shows once an ETL list is chosen (hidden until then, not disabled, as no button is). <strong>The check is a dry run:</strong> Serena answers within the request, against the last servability update, and keeps nothing: no refresh is made, so it can't conflict with one. Its result says when it was checked and against which update, then the counts and the delta; a far-past note; or the first 20 problems, which can't be overridden. Choosing another ETL list drops the result. <strong>Apply it</strong>, under a result that can be applied: the <strong>reason</strong> (why now), the older-list warning, the upload's live public core checkbox, and <strong>Apply refresh</strong> with an outlined <strong>Cancel</strong>, which backs out to "Replace with:" with nothing chosen (nothing was made, so there's nothing to close). A dry run that failed only on the delta threshold offers <strong>Apply with override</strong> instead: "Why is the change expected?" and a reason of at least 20 characters, and the team is emailed when it's applied. <strong>A refresh in the way</strong> (decided October 28, 2026): an open one (started, received, or failed) is named, and Apply asks to confirm closing it as abandoned; one being checked or updated means waiting a few minutes, and Apply says so. An older ETL list is confirmed too. <strong>After Apply</strong>, the card shows a summary: the refresh it started, with which ETL list, the reason (and override), any refresh it closed, and that Serena checks the ETL list again and updates by itself; it points to <strong>Past refreshes</strong> and <strong>Overview</strong> to follow it, and <strong>Replace with another ETL list</strong> starts over. The page doesn't follow the refresh (in the mockup, which redraws everything, the current refresh line does). The page's own words say "ETL list"; Serena's state names don't change. <strong>Mockup only:</strong> the dashed bar chooses what the dry run finds and an open refresh, and <strong>Reset</strong> goes back to Serena with no pending refreshes. <strong>For the app</strong> (reverses parts of MR9 to MR13): a dry-run endpoint that checks a previous ETL list or an uploaded file and returns the result without storing anything (within the request if it's fast enough for some 187,000 rows; to measure first); starting a manual refresh takes the reason (and, for an override, its kind) and checks and updates by itself, as an ETL refresh does; no "Waiting for the servability update" state, no "Run the servability update", no Cancel in Serena; an upload is sent again on Apply.</li>
       <li><strong>Version 54 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's second idea, <strong>Reasons in two lists</strong>, is in the app as shown here: a refresh's page has What went wrong and What admins did, each "None." when empty. Serena records which list each reason goes in; a reason recorded before has none and goes under What went wrong. In the app, an abandoned refresh closed by a manual refresh lists "closed by the manual refresh …" under What admins did, and one closed by the ETL's next refresh lists it under What went wrong. With this, all four of version 47's ideas are in the app.</li>
       <li><strong>Version 53 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's fourth idea, <strong>a more useful override reason</strong>, is in the app as shown here: the override dialog, on a refresh's page and on Manual refresh, asks <strong>Why is the change expected?</strong> first, then the reason, at least 20 characters. Serena checks both, stores the kind beside the reason (an override made before has none, and shows its reason alone), and the banner, the alert email and the audit log give the kind's words first. In the app, the Audit log shows the kind in its Reason line rather than as a field of its own. Nothing else changes; idea 2, Reasons in two lists, is still to come.</li>
       <li><strong>Version 52 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's third idea, <strong>the Overridden filter</strong> on Past refreshes, is in the app as shown here: All and Overridden (n) above the table, like Alerts' All and Waiting. In the app, the choice is kept in the address (<code>show=overridden</code>), so Back and a shared link keep it, and the menu opens the page on All. Nothing else changes.</li>
@@ -444,7 +444,7 @@
   const S = {open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", refreshesShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: "", countsBy: "day", countsOpen: false};
   // The Manual refresh page (version 49, issue #118): where the list comes from, the list picked, what's typed, and the
   // refresh it started. Mockup only: what the check finds, and whether the museum has an open refresh.
-  S.mr = {source: null, pick: null, runReason: "", run: null, outcome: "passes", open: "none", pickerOpen: true};
+  S.mr = {source: null, pick: null, fileName: "", uploadDate: "", dry: null, applyReason: "", kind: "", live: false, applied: null, outcome: "passes", open: "none", pickerOpen: true};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
@@ -1112,7 +1112,6 @@
       return `${title(`${esc(name())} refresh ${esc(id)}`)}
         <p class="state-line" id="refresh-state-line">${statePill(r)}<span>· refresh date ${esc(r.date)}${r.admin ? ` · ${r.mr ? `a manual refresh, with ${esc(sourceText(r))}` : "an admin refresh"}` : ""} · last change ${when(r.at)}${i > 0 ? " · a later refresh has started" : ""}</span></p>
         ${banner}
-        ${r.mr ? mrNext(r, "refresh") : ""}
         ${r.actions && r.actions.includes("override") && i === 0 ? `<p><button type="button" class="danger" id="ovOpen">Override the delta threshold</button></p>` : ""}
         ${reasonsHtml(r)}
         <h3>The servable list</h3><p>${r.rows ? `servable-list.${S.museum}.${esc(r.listDate || r.date)}.tsv: ${r.rows.toLocaleString("en-US")} rows, received ${when(r.admin ? r.at : `${r.date}T10:02:04Z`)}.` : "Not received."}</p>
@@ -1181,21 +1180,18 @@
     api: () => `${title(`${esc(name())} ETL API documentation`)}<p class="lead">The ETL API's description, generated from the code, read-only (Swagger UI in the app; not shown in the mockup).</p>`,
   };
 
-  // ---- Manual refresh (version 49, issue #118; decisions MR1 to MR15). It replaces Start a refresh: an admin picks one
-  // of the ETL's recent servable lists or uploads one, Serena checks it without updating, and the admin then runs the
-  // servability update, or overrides a failed delta threshold first, all on this page (layout A, chosen October 27,
-  // 2026; version 50 removed layout B, the result on the refresh's page).
+  // ---- Manual refresh (issue #118; reworked in version 55, Richard, October 28, 2026). An admin replaces the current
+  // ETL list with one from a previous refresh or one they upload. "Check the ETL list" is a dry run: it shows what
+  // would change and changes nothing, so it never touches a refresh. "Apply refresh" is the last step: it starts an
+  // ordinary manual refresh, which Serena checks again and applies by itself, and the page shows a summary and points
+  // to Past refreshes and Overview. A refresh in the way: Apply confirms closing an open one, or, while one is being
+  // checked or updated, says to wait.
   // A made-up SHA-256 for a sample list, the same every time.
   const fakeSha = id => { let h = 7, out = ""; for (let k = 0; out.length < 64; k++) { h = (h * 31 + id.charCodeAt(k % id.length) + k) >>> 0; out += (h >>> 3 & 15).toString(16); } return out; };
   // The ETL's last 10 lists, one per refresh (its final list), whatever the refresh's outcome; an admin's uploads aren't
   // here, and a refresh whose list never arrived has none (MR3, MR4).
   const etlLists = () => REFRESHES.filter(r => r.rows && !r.admin).slice(0, 10);
   const listUploaded = r => r.uploaded || `${r.date}T10:02:04Z`;
-  // A manual refresh's states. "Waiting for the servability update" is new: a check that passed, waiting for an admin
-  // (MR9); its name is to be decided.
-  const MR_STATES = {checking: ["Checking the servable list", "info"], checked: ["Waiting for the servability update", "info"],
-    failed: ["Servable list check failed", "danger"], rechecking: ["Checking the servable list", "info"],
-    updating: ["Updating servability", "info"], updated: ["Updated", "success"], abandoned: ["Abandoned", "neutral"]};
   const MR_PROBLEMS = [{line: "1042", field: "blob_csid", problem: "not a CSID: 9f9f-0000"},
     {line: "20581", field: "kind", problem: "\"thumbnail\" isn't a kind Serena serves"},
     {line: "88310", field: "blob_csid", problem: "the same Blob CSID as line 88309"}];
@@ -1203,15 +1199,12 @@
   // Past refreshes' Refresh date: a manual refresh's tag says so, where its list came from and, when it isn't the
   // refresh's own day, the list's date, in words, not colour alone (issue #116, folded into #118).
   const manualTag = r => `<span class="pill t-info">manual refresh · ${r.source === "etl" ? "ETL list" : "uploaded list"}${r.listDate && r.listDate !== r.date ? ` for ${esc(r.listDate)}` : ""}</span>`;
-  const openRefresh = () => REFRESHES.find(r => r.tone === "info");
+  // The museum's open refresh: its newest, unless that's updated or abandoned. One being checked or updated is busy.
+  const openRefresh = () => { const r = REFRESHES[0]; return r && ["info", "danger"].includes(r.tone) ? r : null; };
+  const BUSY_STATES = ["Checking the servable list", "Updating servability"];
   const nextId = () => `2026-10-13-${REFRESHES.filter(r => r.date === "2026-10-13").length + 1}`;
-  let mrTimer = null;
-  function mrStage(r, stage, extra) {
-    const [state, tone] = MR_STATES[stage];
-    Object.assign(r, {stage, state, tone, at: NOW}, extra || {});
-    render();
-  }
-  // What the check finds, chosen on the page (mockup only).
+  let mrTimer = null, mrApplyTimers = [];
+  // What the dry run finds, chosen in the page's Mockup only bar.
   function mrCheck(rows, outcome) {
     const previous = (REFRESHES.find(r => r.tone === "success" && r.rows) || {rows: 187402}).rows;
     if (outcome !== "delta" && Math.abs(rows - previous) > previous / 20) rows = previous + 8; // a list that would pass the delta threshold
@@ -1221,118 +1214,117 @@
     if (outcome === "other") return {...base, result: "failed", errors: MR_PROBLEMS};
     return {...base, result: "passed", errors: []};
   }
-  // Mockup only: tonight's ETL refresh, open, so the page has one to close: started and waiting for its servable list,
-  // or being checked, which Serena never closes (version 50): the admin waits for it to finish.
-  const BUSY_STATES = ["Checking the servable list", "Updating servability"];
+  // Mockup only: tonight's ETL refresh, open: started and waiting for its ETL list (Apply asks to close it), or being
+  // checked (Apply says to wait).
   function mrOpenEtl(which) {
     const k = REFRESHES.findIndex(x => x.openEtl && x.tone === "info");
     if (k >= 0) REFRESHES.splice(k, 1);
     if (which === "started" && !openRefresh()) REFRESHES.unshift({id: nextId(), date: "2026-10-13", state: "Started", tone: "info", rows: null, at: "2026-10-13T10:01:00Z", openEtl: true, scenario: true, reasons: []});
     if (which === "checking" && !openRefresh()) REFRESHES.unshift({id: nextId(), date: "2026-10-13", state: "Checking the servable list", tone: "info", rows: 187410, at: "2026-10-13T10:02:10Z", uploaded: "2026-10-13T10:02:04Z", openEtl: true, scenario: true, reasons: []});
   }
-  function mrStart() {
+  // The choice made so far, so a dry run is of what's chosen: changing the choice drops the dry run's result.
+  const mrChoice = () => S.mr.source === "recent" ? `etl:${S.mr.pick || ""}` : `upload:${S.mr.fileName || ""}`;
+  // Back to "Replace with:" and nothing chosen: Cancel, and "Replace with another ETL list" after an Apply.
+  function mrStartOver() {
     clearTimeout(mrTimer);
-    const open = openRefresh(), id = nextId(), full = `${S.museum}-${id}`, etl = S.mr.source === "recent", outcome = S.mr.outcome;
+    Object.assign(S.mr, {source: null, pick: null, fileName: "", uploadDate: "", dry: null, applyReason: "", kind: "", live: false, applied: null, pickerOpen: true});
+  }
+  // The dry run: Serena answers at once (in the request, not the worker), with nothing stored and nothing changed.
+  function mrDryRun() {
+    clearTimeout(mrTimer);
+    const lists = etlLists(), from = S.mr.source === "recent" ? lists.find(x => x.id === S.mr.pick) : null, choice = mrChoice();
+    S.mr.dry = {running: true, choice};
+    render();
+    mrTimer = setTimeout(() => {
+      if (!S.mr.dry || S.mr.dry.choice !== choice) return;
+      const last = REFRESHES.find(x => x.tone === "success" && x.rows);
+      S.mr.dry = {choice, at: NOW, against: last ? `${S.museum}-${last.id}` : null, outcome: S.mr.outcome, check: mrCheck(from ? from.rows : 187410, S.mr.outcome)};
+      render(); $("#mr-dry-head")?.focus();
+    }, 1500);
+  }
+  // Apply refresh: an ordinary manual refresh starts, and Serena checks the ETL list again and applies it by itself;
+  // the page shows a summary. The open refresh it was confirmed to close is closed as abandoned.
+  function mrApply(why, kind) {
+    clearTimeout(mrTimer);
+    const open = openRefresh(), id = nextId(), full = `${S.museum}-${id}`, etl = S.mr.source === "recent", dry = S.mr.dry;
     const from = etl ? REFRESHES.find(x => x.id === S.mr.pick) : null;
     if (open) {
       clearTimeout(rechecked);
-      Object.assign(open, {state: "Abandoned", tone: "neutral", stage: "abandoned", at: NOW, actions: [], reasons: [...(open.reasons || []), {admin: true, text: `closed by the manual refresh ${full}`}]});
+      Object.assign(open, {state: "Abandoned", tone: "neutral", at: NOW, actions: [], reasons: [...(open.reasons || []), {admin: true, text: `closed by the manual refresh ${full}`}]});
       AUDIT.unshift({at: NOW, admin: "Serena", action: "refresh outcome", target: `${S.museum}-${open.id}`, details: "State: abandoned", scenario: true});
     }
-    const r = {id, date: "2026-10-13", rows: etl ? from.rows : 187410, admin: true, mr: true, scenario: true, source: etl ? "etl" : "upload",
-      listDate: etl ? from.date : S.mr.uploadDate, fromId: etl ? from.id : null, uploaded: NOW, actions: []};
-    r.reasons = [{admin: true, text: `started by ${S.user} as a manual refresh, with ${sourceText(r)}`}];
+    const r = {id, date: "2026-10-13", rows: dry.check.rows, admin: true, mr: true, scenario: true, source: etl ? "etl" : "upload",
+      listDate: etl ? from.date : S.mr.uploadDate || "2026-10-13", fromId: etl ? from.id : null, uploaded: NOW, actions: [],
+      state: "Checking the servable list", tone: "info", at: NOW, check: dry.check};
+    r.reasons = [{admin: true, text: `started by ${S.user} as a manual refresh, with ${sourceText(r)}: ${kind ? `${KINDS[kind]}: ` : ""}${why}`}];
     REFRESHES.unshift(r);
     AUDIT.unshift({at: NOW, admin: S.user, action: "refresh start", target: full, scenario: true,
-      details: `Manual refresh · ${etl ? `ETL list for ${r.listDate}, from ${S.museum}-${r.fromId}` : `Uploaded list for ${r.listDate}`} · SHA-256: ${fakeSha(etl ? from.id : full)}${open ? ` · Closed ${S.museum}-${open.id}` : ""}`});
-    S.mr.run = id; S.mr.runReason = ""; S.mr.pick = null; S.mr.fileName = ""; S.mr.source = null; // version 55: no bottom card until the next choice
-    mrStage(r, "checking");
-    mrTimer = setTimeout(() => {
-      const c = mrCheck(r.rows, outcome);
-      if (c.result === "passed") { mrStage(r, "checked", {check: c, rows: c.rows}); return; }
-      ALERTS.unshift({at: NOW, date: "2026-10-13", title: "A servable list check failed", about: full, msg: `Refresh ${full} failed its servable list check. Its page says more.`, ack: null, scenario: true});
-      mrStage(r, "failed", {check: c, rows: c.rows, actions: outcome === "delta" ? ["override"] : [],
-        reasons: [...r.reasons, `${c.errors.length} problem${c.errors.length > 1 ? "s" : ""} in the servable list`]});
-    }, 3000);
+      details: `Manual refresh · ${etl ? `ETL list for ${r.listDate}, from ${S.museum}-${r.fromId}` : `Uploaded list for ${r.listDate}`} · SHA-256: ${fakeSha(etl ? from.id : full)}${open ? ` · Closed ${S.museum}-${open.id}` : ""} · Reason: ${why}`});
+    if (kind) {
+      // Applied with the delta threshold overridden: recorded and emailed now, as every override is.
+      r.override = {by: S.user, at: NOW, kind, reason: why};
+      r.reasons.push({admin: true, override: true, text: `delta threshold overridden by ${S.user}`});
+      ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin overrode the delta threshold", about: full, msg: `An admin overrode the delta threshold for ${name()}'s manual refresh ${full} (${deltaPct(dry.check.delta)}% of the rows change). Serena checks the ETL list without it and, on a pass, updates. Reason: ${KINDS[kind]}: ${why}`, ack: null, scenario: true});
+      AUDIT.unshift({at: NOW, admin: S.user, action: "threshold override", target: full, details: `Reason: ${KINDS[kind]}: ${why} · Delta percent: ${dry.check.delta}`, scenario: true});
+    }
+    // The refresh goes on by itself; the page doesn't follow it (Past refreshes and Overview do).
+    const c = {...dry.check, result: "passed", errors: [], warnings: kind ? [`the delta threshold was overridden by an admin for this refresh (${deltaPct(dry.check.delta)}% of the rows change; the threshold is ${dry.check.threshold}%)`] : []};
+    mrApplyTimers.push(setTimeout(() => { Object.assign(r, {state: "Updating servability", at: NOW, check: c}); render(); }, 4000));
+    mrApplyTimers.push(setTimeout(() => {
+      Object.assign(r, {state: "Updated", tone: "success", at: NOW, update: {deleted: c.removed, written: c.added, unchanged: c.previous - c.removed}});
+      AUDIT.unshift({at: NOW, admin: "Serena", action: "refresh outcome", target: full, details: `State: updated${kind ? " by override" : ""}`, scenario: true});
+      render();
+    }, 7000));
+    const applied = {id: full, with: sourceText(r), why, kind, closed: open ? `${S.museum}-${open.id}` : null, at: NOW};
+    mrStartOver();
+    S.mr.applied = applied;
+    render(); $("#mr-applied-head")?.focus();
   }
-  // An override from the Manual refresh page or the refresh's page (MR11): checked again without the delta threshold,
-  // then, like a passed check, it waits for an admin to apply the refresh.
-  function mrOverride(r, kind, words) {
-    clearTimeout(mrTimer);
-    const full = `${S.museum}-${r.id}`;
-    r.override = {by: S.user, at: NOW, kind, reason: words};
-    r.reasons = [...r.reasons, {admin: true, override: true, text: `delta threshold overridden by ${S.user}`}];
-    ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin overrode the delta threshold", about: full, msg: `An admin overrode the delta threshold for ${name()}'s refresh ${full} (${deltaPct(r.check.delta)}% of the rows change). Serena checks the same servable list again without it; if it passes, the refresh waits for an admin to apply it. Reason: ${KINDS[kind]}: ${words}`, ack: null, scenario: true});
-    AUDIT.unshift({at: NOW, admin: S.user, action: "threshold override", target: full, details: `Reason: ${KINDS[kind]}: ${words} · Delta percent: ${r.check.delta}`, scenario: true});
-    mrStage(r, "rechecking", {actions: []});
-    mrTimer = setTimeout(() => mrStage(r, "checked", {check: {...r.check, result: "passed", errors: [], warnings: [`the delta threshold was overridden by an admin for this refresh (${deltaPct(r.check.delta)}% of the rows change; the threshold is ${r.check.threshold}%)`]}}), 3000);
+  const countsHtml = c => `${c.rows.toLocaleString("en-US")} rows; ${c.added.toLocaleString("en-US")} added, ${c.removed.toLocaleString("en-US")} removed, ${c.changed.toLocaleString("en-US")} changed: ${deltaHtml(c)}${overBy(c) ? "" : `; the threshold is ${c.threshold}%`}.`;
+  // The dry run's result and, if it can be applied, what applying needs: the reason (with the override's kind when
+  // it failed only on the delta threshold), the warnings and confirmations, Apply refresh and Cancel.
+  function mrDryHtml(older, olderWarn, open) {
+    const d = S.mr.dry;
+    if (d.running) return `<p role="status" id="mr-dry"><span class="spin" aria-hidden="true"></span>Checking the ETL list: a dry run, which changes nothing…</p>`;
+    const c = d.check, deltaOnly = d.outcome === "delta", failed = c.result !== "passed", n = c.errors.length;
+    const head = !failed ? "The dry run passed" : deltaOnly ? "The dry run failed only on the delta threshold" : `The dry run found ${n} problem${n === 1 ? "" : "s"}`;
+    const result = `<h3 id="mr-dry-head" tabindex="-1">${head}</h3>
+      <p class="secondary" style="margin-top:0">Checked ${when(d.at)}${d.against ? `, against the last servability update (${refreshLink(d.against)})` : ""}. Nothing has changed.</p>
+      <p>${countsHtml(c)}</p>
+      ${deltaOnly ? farNote(c, true) : ""}
+      ${failed && !deltaOnly ? `<div class="tw"><table id="mr-problems"><thead><tr><th>Line</th><th>Field</th><th>Problem</th></tr></thead><tbody>${c.errors.slice(0, 20).map(p => `<tr><td>${esc(p.line)}</td><td>${esc(p.field)}</td><td>${esc(p.problem)}</td></tr>`).join("")}</tbody></table></div>
+        <p class="secondary">The first ${Math.min(20, n)} of ${n}, by line.</p>
+        <p>These problems can't be overridden. Fix the ETL list, or make a new one with the servable list script on the ETL server, and check it again.</p>
+        <p><button type="button" id="mrCancel">Cancel</button></p>` : ""}`;
+    if (failed && !deltaOnly) return `<section class="mr-result" id="mr-dry" aria-labelledby="mr-dry-head">${result}</section>`;
+    const busy = open && BUSY_STATES.includes(open.state);
+    const openNote = !open ? "" : busy
+      ? `<div class="warn-note" id="mr-open" role="note">${ICON_FAILED}<div><strong>${esc(`${S.museum}-${open.id}`)} is being ${open.state.startsWith("Checking") ? "checked" : "updated"}.</strong> Serena runs one refresh at a time and doesn't stop one while it's checking or updating: wait for it to finish (a few minutes), then apply.</div></div>`
+      : `<div class="warn-note" id="mr-open" role="note">${ICON_FAILED}<div><strong>${esc(`${S.museum}-${open.id}`)} is still open</strong> (${esc(open.state)}). Serena runs one refresh at a time, so applying closes it as abandoned: it stops where it is and won't update. You'll be asked to confirm.</div></div>`;
+    return `<section class="mr-result" id="mr-dry" aria-labelledby="mr-dry-head">${result}
+      <h3>Apply it</h3>
+      <p class="secondary" style="margin-top:0">Applying starts a manual refresh with this ETL list: Serena checks it again${deltaOnly ? " without the delta threshold" : ""} and, if it passes, updates what it serves. ${deltaOnly ? "It overrides the delta threshold for this refresh, and the team is emailed." : ""}</p>
+      ${olderWarn}
+      ${openNote}
+      ${S.mr.source === "upload" ? `<label style="display:flex;gap:8px;margin-bottom:4px"><input type="checkbox" id="mrLive" ${S.mr.live ? "checked" : ""}> This ETL list was made from the live public core: I ran the servable list script on the ETL server.</label><div class="err-text" id="mrLiveMsg" role="alert"></div>` : ""}
+      ${deltaOnly ? `<fieldset class="kinds" aria-describedby="mrKindMsg"><legend>Why is the change expected? (required)</legend>${Object.entries(KINDS).map(([k, v]) => `<label><input type="radio" name="mrKind" value="${k}" ${S.mr.kind === k ? "checked" : ""}> ${esc(v)}</label>`).join("")}</fieldset><div class="err-text" id="mrKindMsg" role="alert"></div>` : ""}
+      <label class="field" style="max-width:640px">Reason (required) <textarea id="mrApplyReason" rows="2" aria-describedby="mrApplyReasonHint mrApplyReasonMsg"></textarea></label><div class="muted" id="mrApplyReasonHint" style="margin:-6px 0 4px;font-size:12px">${deltaOnly ? `Required, at least ${REASON_MIN} characters: what changed, and how you know it's expected. Recorded in the refresh, ${esc(TO_TEAM)}.` : "Required: why now. Recorded in the refresh and the audit log."} No personal data, please.</div><div class="err-text" id="mrApplyReasonMsg" role="alert"></div>
+      <p style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:0"><button type="button" class="${deltaOnly ? "danger" : "primary"}" id="mrApply">${deltaOnly ? "Apply with override" : "Apply refresh"}</button><button type="button" id="mrCancel">Cancel</button></p>
+      <div class="err-text" id="mrApplyMsg" role="alert" style="margin-top:6px"></div></section>`;
   }
-  // Apply refresh (MR9; "Run the servability update" before October 28, 2026): only an admin's press does it, with a reason (Richard, October 28, 2026: the
-  // reason is asked for here, when the ETL list is applied, not for the check), and it's audited.
-  function mrRun(r, why) {
-    clearTimeout(mrTimer);
-    const full = `${S.museum}-${r.id}`;
-    r.reasons = [...r.reasons, {admin: true, text: `servability update run by ${S.user}: ${why}`}];
-    S.mr.runReason = "";
-    AUDIT.unshift({at: NOW, admin: S.user, action: "servability update run", target: full, details: `Manual refresh · Reason: ${why}`, scenario: true});
-    mrStage(r, "updating");
-    mrTimer = setTimeout(() => {
-      const c = r.check;
-      AUDIT.unshift({at: NOW, admin: "Serena", action: "refresh outcome", target: full, details: `State: updated${r.override ? " by override" : ""}`, scenario: true});
-      mrStage(r, "updated", {update: {deleted: c.removed, written: c.added, unchanged: c.previous - c.removed}});
-    }, 3000);
-  }
-  // Cancel (Richard, October 28, 2026): the admin backs out of the ETL list they chose, a mini reset of Manual refresh:
-  // the page starts over, with nothing chosen and no result. The check Serena already made can't be unmade, so it's
-  // closed as abandoned behind the scenes (else it would stay open, and the next check would replace it). Nothing
-  // changes, so no reason or confirmation.
-  function mrCancel(r) {
-    clearTimeout(mrTimer);
-    const full = `${S.museum}-${r.id}`;
-    r.reasons = [...r.reasons, {admin: true, text: `cancelled by ${S.user}: closed without applying it`}];
-    r.cancelled = true;
-    AUDIT.unshift({at: NOW, admin: S.user, action: "refresh cancel", target: full, details: "Manual refresh", scenario: true});
-    AUDIT.unshift({at: NOW, admin: "Serena", action: "refresh outcome", target: full, details: "State: abandoned", scenario: true});
-    const [state, tone] = MR_STATES.abandoned;
-    Object.assign(r, {stage: "abandoned", state, tone, at: NOW, actions: []});
-    Object.assign(S.mr, {run: null, source: null, pick: null, runReason: "", fileName: "", uploadDate: "", pickerOpen: true});
-    if (S.page === "refresh") { S.page = "manual"; S.from = null; } // from the refresh's page: back to Manual refresh
-    render(); document.querySelector('input[name="mrSource"]')?.focus();
-  }
-  // What happens next, on either page; the refresh's page has its own override button and banner.
-  function mrNext(r, where) {
-    const spin = t => `<p role="status"><span class="spin" aria-hidden="true"></span>${t}</p>`;
-    if (r.stage === "checking") return spin("Serena is checking the ETL list. Nothing changes until it passes and you apply the refresh. This page checks again every few seconds.");
-    if (r.stage === "rechecking") return where === "manual" ? spin("Serena is checking the same ETL list again without the delta threshold (every other check still applies).") : "";
-    if (r.stage === "updating") return spin("Serena is applying the refresh: the servability update is running.");
-    if (r.stage === "checked") return `<p><strong>The check passed${r.override ? " without the delta threshold" : ""}.</strong> Nothing has changed yet: the refresh waits for you. Applying it runs the servability update with this ETL list: why now?</p>
-      <div style="max-width:640px">${reasonField("mrRunReason", "the refresh and the audit log")}</div>
-      <p style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" data-mr-run="${esc(r.id)}">Apply refresh</button><button type="button" data-mr-cancel="${esc(r.id)}">Cancel</button></p>
-      <p class="secondary">Applying it is in the audit log. Cancel backs out: nothing changes, and Manual refresh starts over. If tonight's ETL refresh or another manual refresh starts first, Serena closes it as abandoned too; it doesn't time out.</p>`;
-    if (r.stage === "failed" && !(r.actions || []).includes("override")) return "<p>These problems can't be overridden. Fix the ETL list, or make a new one with the servable list script on the ETL server, and check it again.</p>";
-    if (r.stage === "abandoned") return r.cancelled ? "<p>Cancelled: closed as abandoned. Nothing changed.</p>" : "<p>Closed as abandoned: another refresh started before it was applied. Nothing changed.</p>";
-    return "";
-  }
-  // Layout A: the check's progress and result on the Manual refresh page (MR10).
-  function mrResult(r) {
-    const c = r.check, full = `${S.museum}-${r.id}`, o = r.override, n = c ? c.errors.length : 0, delta = (r.actions || []).includes("override");
-    return `<section class="mr-result" id="mr-result" aria-labelledby="mr-result-head"><h3 id="mr-result-head">Your check: ${refreshLink(full)} ${statePill(r)}${overrideMark(r)}</h3>
-      <p class="secondary" style="margin-top:0">With ${esc(sourceText(r))}.</p>
-      ${o ? `<p>Delta threshold overridden by ${esc(o.by)} at ${when(o.at)}. Reason: <strong>${esc(KINDS[o.kind])}</strong>: ${esc(o.reason)}</p>` : ""}
-      ${c ? `<p>${c.rows.toLocaleString("en-US")} rows; ${c.added.toLocaleString("en-US")} added, ${c.removed.toLocaleString("en-US")} removed, ${c.changed.toLocaleString("en-US")} changed: ${deltaHtml(c)}${overBy(c) ? "" : `; the threshold is ${c.threshold}%`}.</p>` : ""}
-      ${delta ? `${farNote(c, true)}<p>The check failed only on the delta threshold. Override it only if you know the change is expected: Serena then checks the same ETL list again without it, and you apply the refresh as for a passed check. The team is emailed.</p>
-        <p><button type="button" class="danger" id="ovOpen">Override the delta threshold</button></p>` : ""}
-      ${r.stage === "failed" && !delta && n ? `<p><strong>The ETL list has ${n} problem${n > 1 ? "s" : ""}</strong>, so nothing changed.</p>
-        <div class="tw"><table id="mr-problems"><thead><tr><th>Line</th><th>Field</th><th>Problem</th></tr></thead><tbody>${c.errors.slice(0, 20).map(p => `<tr><td>${esc(p.line)}</td><td>${esc(p.field)}</td><td>${esc(p.problem)}</td></tr>`).join("")}</tbody></table></div>
-        <p class="secondary">The first ${Math.min(20, n)} of ${n}, by line.</p>` : ""}
-      ${mrNext(r, "manual")}
-      ${r.update ? `<p>Updated: ${r.update.deleted.toLocaleString("en-US")} deleted, ${r.update.written.toLocaleString("en-US")} written, ${r.update.unchanged.toLocaleString("en-US")} unchanged.</p>` : ""}</section>`;
+  // After Apply: what the admin did, and where to follow the refresh. The page doesn't follow it.
+  function mrAppliedHtml(a) {
+    return `<section class="mr-result" id="mr-applied" aria-labelledby="mr-applied-head"><h3 id="mr-applied-head" tabindex="-1">Applied: ${refreshLink(a.id)} started</h3>
+      <p style="margin-top:0">At ${when(a.at)}, with ${esc(a.with)}. Reason: ${a.kind ? `<strong>${esc(KINDS[a.kind])}</strong>: ` : ""}${esc(a.why)}${a.kind ? " (the delta threshold is overridden for it, and the team was emailed)" : ""}.</p>
+      ${a.closed ? `<p>It closed ${refreshLink(a.closed)} as abandoned.</p>` : ""}
+      <p>Serena now checks the ETL list again and, if it passes, updates what it serves, by itself. Follow it on <button type="button" class="link" data-go="refreshes">Past refreshes</button> or <button type="button" class="link" data-go="overview">Overview</button>; if it fails, the team is emailed and its page says what to do.</p>
+      <p style="margin-bottom:0"><button type="button" id="mrAgain">Replace with another ETL list</button></p></section>`;
   }
   function manualPage() {
-    const lists = etlLists(), newest = lists[0], open = openRefresh(), run = S.mr.run && REFRESHES.find(x => x.id === S.mr.run);
-    const pick = S.mr.pick && lists.find(x => x.id === S.mr.pick), older = !!pick && pick !== newest;
+    const lists = etlLists(), newest = lists[0], open = openRefresh();
+    const pick = S.mr.pick && lists.find(x => x.id === S.mr.pick), older = S.mr.source === "recent" && !!pick && pick !== newest;
     const sw = (key, choices) => choices.map(([k, v]) => `<button type="button" data-mr-mock="${key}:${k}" aria-pressed="${S.mr[key] === k}">${v}</button>`).join("");
-    const mock = `<div class="layout-switch" role="group" aria-label="Mockup only">Mockup only. The check: ${sw("outcome", [["passes", "passes"], ["delta", "fails on the delta threshold"], ["other", "fails on other problems"]])}
+    const mock = `<div class="layout-switch" role="group" aria-label="Mockup only">Mockup only. The dry run: ${sw("outcome", [["passes", "passes"], ["delta", "fails on the delta threshold"], ["other", "fails on other problems"]])}
       · Open refresh: ${sw("open", [["none", "none"], ["started", "tonight's, waiting for its ETL list"], ["checking", "tonight's, being checked"]])}
       · <button type="button" id="mrReset" title="Remove the refreshes this page and Mockup settings made, with their alerts and audit entries">Reset</button></div>`;
     const days = Math.round((ms(newest ? newest.date : NOW) - ms(pick ? pick.date : NOW)) / DAY);
@@ -1340,52 +1332,36 @@
       <div class="tw" style="max-width:960px"><table id="mr-lists"><thead><tr><th><span class="sr">Use</span></th><th>Refresh date</th><th>Uploaded</th><th>Rows</th><th>The refresh's outcome</th><th>SHA-256</th><th>Refresh</th></tr></thead><tbody>${lists.map((r, k) => `<tr class="${pick === r ? "picked" : ""}">
         <td><input type="radio" name="mrPick" value="${esc(r.id)}" ${pick === r ? "checked" : ""} aria-label="Use the ETL list for ${esc(r.date)}${k === 0 ? ", the newest" : ""}"></td>
         <td class="nowrap">${esc(r.date)}${k === 0 ? ' <span class="pill t-neutral">newest</span>' : ""}</td><td>${when(listUploaded(r))}</td><td class="num">${r.rows.toLocaleString("en-US")}</td>
-        <td>${statePill(r)}${overrideMark(r)}</td><td>${shortCopy(fakeSha(r.id))}</td><td>${refreshLink(`${S.museum}-${r.id}`)}</td></tr>`).join("")}</tbody></table></div>
-      `;
+        <td>${statePill(r)}${overrideMark(r)}</td><td>${shortCopy(fakeSha(r.id))}</td><td>${refreshLink(`${S.museum}-${r.id}`)}</td></tr>`).join("")}</tbody></table></div>`;
     const olderWarn = !older ? "" : `<div class="warn-note" id="mr-older" role="note">${ICON_FAILED}<div><strong>This isn't the newest ETL list.</strong> It's the ETL list for ${esc(pick.date)}, ${days} day${days === 1 ? "" : "s"} older than the newest (${esc(newest.date)}).
-        <p>Using it sets servability back to that day's public core while Solr keeps today's: the portals may link to images Serena then refuses, and Serena may serve images that have since stopped being public.</p>
-        <p><strong>Better:</strong> run the servable list script on the ETL server (or ask whoever runs it) to make an ETL list from today's public core, then pick it here or upload it. Serena can't start the ETL itself.</p></div></div>`;
+        <p>Applying it sets servability back to that day's public core while Solr keeps today's: the portals may link to images Serena then refuses, and Serena may serve images that have since stopped being public.</p>
+        <p><strong>Better:</strong> run the servable list script on the ETL server (or ask whoever runs it) to make an ETL list from today's public core, then pick it here or upload it. Serena can't start the ETL itself. You'll be asked to confirm.</p></div></div>`;
     const upload = `<label class="field">The ETL list file (.tsv or .tsv.gz) <input type="file" id="mrFile" accept=".tsv,.gz,.txt"></label><div class="err-text" id="mrFileMsg" role="alert"></div>
-      <label class="field" style="max-width:260px">The refresh date the ETL list is for <input type="date" id="mrDate" value="2026-10-13" max="2026-10-13"></label><div class="err-text" id="mrDateMsg" role="alert"></div>
-      <label style="display:flex;gap:8px;margin-bottom:4px"><input type="checkbox" id="mrConfirm"> This ETL list was made from the live public core: I ran the servable list script on the ETL server.</label><div class="err-text" id="mrConfirmMsg" role="alert"></div>`;
-    const openWarn = !open ? "" : BUSY_STATES.includes(open.state)
-      ? `<div class="warn-note" id="mr-open" role="note">${ICON_FAILED}<div><strong>${esc(`${S.museum}-${open.id}`)} is being ${open.state.startsWith("Checking") ? "checked" : "updated"}.</strong> Serena doesn't close a refresh while it's checking or updating: wait for it to finish, then check an ETL list.</div></div>`
-      // When the open refresh is the admin's own check, say so plainly (Richard, October 28, 2026).
-      : run && open === run ? `<div class="warn-note" id="mr-open" role="note">${ICON_FAILED}<div><strong>This replaces your check above.</strong> Serena runs one refresh at a time, so checking this ETL list closes ${esc(`${S.museum}-${open.id}`)} as abandoned: its servability update won't run. You'll be asked to confirm.</div></div>`
-      : `<div class="warn-note" id="mr-open" role="note">${ICON_FAILED}<div><strong>${esc(`${S.museum}-${open.id}`)} is still open</strong> (${esc(open.state)}). Checking an ETL list closes it as abandoned: it stops where it is and won't update. You'll be asked to confirm.</div></div>`;
-    // Version 55: everything happens in the card at the top: the list chosen (from the picker below), the warnings,
-    // the reason, "Check the servable list", and then the check's result, override and update. The picker below folds
-    // away, and folds by itself once a check starts. While the check's own next step waits for the admin ("Run the
-    // servability update" or the override), "Check the servable list" for another list is outlined, not a second blue
-    // button (Richard, October 28, 2026).
-    const waitsOnYou = !!run && (run.stage === "checked" || (run.actions || []).includes("override"));
-    // The museum's current refresh, for context (Richard, October 28, 2026): the open one if any, else the newest. Not
-    // while it's the admin's own check, which "Your check" shows.
-    const current = open || REFRESHES.find(x => !x.cancelled); // a check the admin cancelled isn't context
-    const currentHtml = !current || (run && current === run) ? "" : `<p class="mr-current" id="mr-current"><strong>Current refresh:</strong> ${refreshLink(`${S.museum}-${current.id}`)} ${statePill(current)}${overrideMark(current)}
+      <label class="field" style="max-width:260px">The refresh date the ETL list is for <input type="date" id="mrDate" value="${esc(S.mr.uploadDate || "2026-10-13")}" max="2026-10-13"></label><div class="err-text" id="mrDateMsg" role="alert"></div>`;
+    // The museum's current refresh, for context: its newest.
+    const current = REFRESHES[0];
+    const currentHtml = !current ? "" : `<p class="mr-current" id="mr-current"><strong>Current refresh:</strong> ${refreshLink(`${S.museum}-${current.id}`)} ${statePill(current)}${overrideMark(current)}
       <span class="secondary">· refresh date ${esc(current.date)} · ${current.rows ? `${current.rows.toLocaleString("en-US")} rows` : "no ETL list yet"} · last change ${when(current.at)}</span></p>`;
-    // Checking needs no reason: the check changes nothing. The reason is asked for when the admin runs the
-    // servability update, which applies the ETL list (Richard, October 28, 2026).
-    // "Check the ETL list", with the warnings about what it would do, shows only once an ETL list is chosen: hidden,
-    // not disabled, since no button is ever disabled (Richard, October 14 and 28, 2026).
+    // "Check the ETL list" shows once an ETL list is chosen and until its dry run: hidden, not disabled, since no
+    // button is ever disabled (Richard, October 14 and 28, 2026).
     const listChosen = S.mr.source === "recent" ? !!pick : S.mr.source === "upload" && !!S.mr.fileName;
-    const card =`<section class="mr-card" id="mr-card" aria-labelledby="mr-card-head">
+    const dryHere = !!S.mr.dry && S.mr.dry.choice === mrChoice();
+    const card = S.mr.applied ? `<section class="mr-card" id="mr-card">${currentHtml}${mrAppliedHtml(S.mr.applied)}</section>`
+      : `<section class="mr-card" id="mr-card" aria-labelledby="mr-card-head">
       ${currentHtml}
-      ${run ? `${mrResult(run)}<hr>` : ""}
       <h3 id="mr-card-head">Replace with:</h3>
       <fieldset class="source" aria-labelledby="mr-card-head" aria-describedby="mrSourceMsg">${[["recent", "Choose from previous"], ["upload", "Upload one"]].map(([k, v]) => `<label><input type="radio" name="mrSource" value="${k}" ${S.mr.source === k ? "checked" : ""}> ${v}</label>`).join("")}</fieldset>
       <div class="err-text" id="mrSourceMsg" role="alert"></div>
       ${S.mr.source ? `<p class="mr-chosen" id="mr-chosen">${chosenHtml(pick, newest)}</p>` : ""}
       <div class="err-text" id="mrPickMsg" role="alert"></div>
-      <div id="mr-check" ${listChosen ? "" : "hidden"}>
-      ${olderWarn}
-      ${openWarn}
-      <p class="secondary" style="margin:0 0 10px">Checking changes nothing, so it needs no reason. You give one when you apply the refresh.</p>
-      <button class="${waitsOnYou ? "" : "primary"}" type="submit">Check the ETL list</button><div class="err-text" id="mrCheckMsg" role="alert" style="margin-top:6px"></div></div></section>`;
-    // The bottom card: the previous ETL lists or the upload fields, once one is chosen above; none before.
-    const picker = !S.mr.source ? "" : `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>${S.mr.source === "recent" ? "Previous ETL lists" : "Upload an ETL list file"}</summary>
+      <div id="mr-check" ${listChosen && !dryHere ? "" : "hidden"}>
+      <p class="secondary" style="margin:0 0 10px">The check is a dry run: it shows what applying this ETL list would change, and changes nothing.</p>
+      <button class="primary" type="submit">Check the ETL list</button></div>
+      ${dryHere ? mrDryHtml(older, olderWarn, open) : ""}</section>`;
+    // The bottom card: the previous ETL lists or the upload fields, once one is chosen above; none before or after Apply.
+    const picker = !S.mr.source || S.mr.applied ? "" : `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>${S.mr.source === "recent" ? "Previous ETL lists" : "Upload an ETL list file"}</summary>
       ${S.mr.source === "recent" ? recent : `<div style="max-width:640px">${upload}</div>`}</details>`;
-    return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Bring an ETL list into Serena now, when a refresh failed or its ETL list didn't reach Serena. Choose one of the previous ETL lists or upload one: Serena checks it without changing anything. If the check passes, you give a reason and apply the refresh; if it fails only on the delta threshold, you can override it first.</p>
+    return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Replace the current ETL list with one from a previous refresh or one you upload, when a refresh failed or its ETL list didn't reach Serena. Check it first: a dry run shows what would change, and changes nothing. Then apply it: Serena starts a manual refresh, checks the ETL list again and updates what it serves by itself. Follow it on Past refreshes or Overview.</p>
       ${mock}
       <form id="mrForm" novalidate>${card}${picker}</form>`;
   }
@@ -1699,7 +1675,7 @@
       // Version 47 (issue #117): the dialog says how far past the threshold the list is, and the reason has a kind
       // (required) and at least REASON_MIN characters of the admin's own words, so the audit log says why.
       // Version 49 (issue #118): the refresh shown, on its page or the Manual refresh page's result.
-      const target = S.page === "manual" ? REFRESHES.find(x => x.id === S.mr.run) : REFRESHES.find(x => `${S.museum}-${x.id}` === S.refresh);
+      const target = REFRESHES.find(x => `${S.museum}-${x.id}` === S.refresh);
       const c = (target && target.check) || todayCheck, manual = !!(target && target.mr);
       dialog("Override the delta threshold", `<p style="margin-top:0">The servable list check failed only because more rows change than the delta threshold allows: this list changes ${deltaHtml(c)}. Do this once you know the change is expected. Serena checks the same servable list again without the delta threshold (every other check still applies) and, if it passes, ${manual ? "waits for you to apply the refresh" : "updates Serena from it"}. The team is emailed.</p>
         ${farNote(c, true)}
@@ -1713,7 +1689,6 @@
         $("#relReasonMsg").textContent = !words ? "Give a reason first." : words.length < REASON_MIN ? `Say a little more: at least ${REASON_MIN} characters (${words.length} so far).` : "";
         if (!kind) { document.querySelector('input[name="ovKind"]').focus(); return; }
         if (words.length < REASON_MIN) { box.focus(); return; }
-        if (manual) { close(); mrOverride(target, clean(kind.value), words); return; }
         Object.assign(OVERRIDE, {by: S.user, at: NOW, kind: clean(kind.value), reason: words}); close(); refreshScenario("rechecking", true);
       };
     };
@@ -1778,15 +1753,14 @@
     if (lk) lk.onsubmit = e => { e.preventDefault(); const q = typed($("#lookupInput")).trim(); if (q) openLookup(q); };
     document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { const t = clean(b.dataset.copy); Promise.resolve().then(() => navigator.clipboard.writeText(t)).then(() => { const was = b.textContent; b.textContent = "Copied"; setTimeout(() => { b.textContent = was; }, 1500); }, () => { b.textContent = "Select it"; }); });
     const tb = $("#recallBtn"); if (tb) tb.onclick = () => { recallForm(); bindDialog(); };
-    // Manual refresh (version 49, issue #118): pressed too soon, it says what's missing under each field, focus on the
-    // first; an older list or an open refresh is confirmed in a dialog first (MR6, MR13).
-    // Mockup only (version 55, Richard, October 28, 2026): back to Serena with no pending refreshes. The refreshes this
+    // Manual refresh (version 55, Richard, October 28, 2026). Pressed too soon, a button says what's missing under each
+    // field, focus on the first. Mockup only: Reset goes back to Serena with no pending refreshes: the refreshes this
     // page and Mockup settings made go, with their alerts and audit entries, and the page is as it first opens.
     const mreset = $("#mrReset"); if (mreset) mreset.onclick = () => {
-      clearTimeout(mrTimer); clearTimeout(rechecked);
+      clearTimeout(rechecked); mrApplyTimers.forEach(clearTimeout); mrApplyTimers = [];
       const drop = list => list.splice(0, list.length, ...list.filter(x => !x.scenario));
       drop(REFRESHES); drop(ALERTS); drop(AUDIT);
-      Object.assign(S.mr, {source: null, pick: null, runReason: "", run: null, outcome: "passes", open: "none", pickerOpen: true, fileName: "", uploadDate: ""});
+      mrStartOver(); Object.assign(S.mr, {outcome: "passes", open: "none"});
       todayCheck = TODAY_CHECK; $("#mockRefresh").value = "sample";
       render(); $("#mrReset")?.focus();
     };
@@ -1797,22 +1771,26 @@
     });
     document.querySelectorAll('input[name="mrSource"]').forEach(b => b.onchange = () => { S.mr.source = clean(b.value); S.mr.pickerOpen = true; render(); const again = document.querySelector(`input[name="mrSource"][value="${S.mr.source}"]`); if (again) again.focus(); });
     const mp = $("#mrPicker"); if (mp) mp.ontoggle = () => { S.mr.pickerOpen = mp.open; };
-    // The file chosen shows in the top card at once; no redraw, so the file input keeps it.
+    // The file chosen shows in the top card at once; no redraw, so the file input keeps it. A dry run of another
+    // choice goes.
     const mfile = $("#mrFile"); if (mfile) mfile.onchange = () => {
       S.mr.fileName = clean((mfile.files[0] || {}).name || "");
       $("#mr-chosen").innerHTML = chosenHtml(null, null);
       $("#mr-check").hidden = !S.mr.fileName;
+      $("#mr-dry")?.remove();
       if (S.mr.fileName) $("#mrFileMsg").textContent = "";
     };
+    const mdate = $("#mrDate"); if (mdate) mdate.onchange = () => { S.mr.uploadDate = clean(mdate.value); };
     document.querySelectorAll('input[name="mrPick"]').forEach(b => b.onchange = () => { S.mr.pick = clean(b.value); render(); const again = document.querySelector(`input[name="mrPick"][value="${S.mr.pick}"]`); if (again) again.focus(); });
-    const mrr = $("#mrRunReason");
-    if (mrr) { mrr.value = S.mr.runReason || ""; mrr.oninput = () => { S.mr.runReason = typed(mrr); if (mrr.value.trim()) $("#mrRunReasonMsg").textContent = ""; }; }
-    document.querySelectorAll("[data-mr-cancel]").forEach(b => b.onclick = () => { const r = REFRESHES.find(x => x.id === clean(b.dataset.mrCancel)); if (r && r.stage === "checked") mrCancel(r); });
-    // Never disabled: without a reason it says so under the field and moves focus there, as every reason does.
-    document.querySelectorAll("[data-mr-run]").forEach(b => b.onclick = () => {
-      const r = REFRESHES.find(x => x.id === clean(b.dataset.mrRun));
-      if (r && r.stage === "checked" && reasonGiven("mrRunReason")) mrRun(r, typed($("#mrRunReason")).trim());
-    });
+    // What applying needs, kept as typed while the page redraws.
+    const mar = $("#mrApplyReason");
+    if (mar) { mar.value = S.mr.applyReason || ""; mar.oninput = () => { S.mr.applyReason = typed(mar); if (mar.value.trim()) $("#mrApplyReasonMsg").textContent = ""; }; }
+    document.querySelectorAll('input[name="mrKind"]').forEach(b => b.onchange = () => { S.mr.kind = clean(b.value); $("#mrKindMsg").textContent = ""; });
+    const mlive = $("#mrLive"); if (mlive) mlive.onchange = () => { S.mr.live = mlive.checked; if (mlive.checked) $("#mrLiveMsg").textContent = ""; };
+    // Cancel backs out of the ETL list chosen, and after an Apply, "Replace with another ETL list" starts over: both
+    // back to "Replace with:" and nothing chosen. Nothing was made, so there's nothing to close.
+    [$("#mrCancel"), $("#mrAgain")].forEach(b => { if (b) b.onclick = () => { mrStartOver(); render(); document.querySelector('input[name="mrSource"]')?.focus(); }; });
+    // Check the ETL list: the dry run.
     const mf = $("#mrForm");
     if (mf) mf.onsubmit = e => {
       e.preventDefault();
@@ -1821,24 +1799,35 @@
       if (!S.mr.source) { document.querySelector('input[name="mrSource"]').focus(); return; }
       if (S.mr.source === "recent") say("mrPick", !!S.mr.pick, "Choose an ETL list first.");
       else {
-        say("mrFile", $("#mrFile").files.length > 0, "Choose the ETL list file first.");
+        say("mrFile", $("#mrFile").files.length > 0 || !!S.mr.fileName, "Choose the ETL list file first.");
         say("mrDate", /^\d{4}-\d{2}-\d{2}$/.test($("#mrDate").value) && $("#mrDate").value <= "2026-10-13", "Give a refresh date of today (2026-10-13) or earlier.");
-        say("mrConfirm", $("#mrConfirm").checked, "Confirm the ETL list was made from the live public core.");
       }
-      // A list or file still to choose is in the picker below (version 55): open it, keeping what's typed, and go there.
-      if (missing.length && !$("#mrPicker").open) { $("#mrPicker").open = true; S.mr.pickerOpen = true; }
+      // A list or file still to choose is in the bottom card: open it, keeping what's typed, and go there.
+      if (missing.length && $("#mrPicker") && !$("#mrPicker").open) { $("#mrPicker").open = true; S.mr.pickerOpen = true; }
       if (missing.length) { (missing[0] === "mrPick" ? document.querySelector('input[name="mrPick"]') : $("#" + missing[0])).focus(); return; }
       if (S.mr.source === "upload") S.mr.uploadDate = clean($("#mrDate").value);
-      const lists = etlLists(), pick = lists.find(x => x.id === S.mr.pick), older = S.mr.source === "recent" && pick !== lists[0], open = openRefresh();
-      if (open && BUSY_STATES.includes(open.state)) { $("#mrCheckMsg").textContent = `${S.museum}-${open.id} is ${open.state.toLowerCase()}: wait for it to finish.`; return; }
-      if (!older && !open) { mrStart(); return; }
+      mrDryRun();
+    };
+    // Apply refresh (or Apply with override): its reason, the override's kind, the upload's confirmation; then a
+    // refresh being checked or updated means waiting, and an open one or an older ETL list is confirmed first.
+    const mapply = $("#mrApply"); if (mapply) mapply.onclick = () => {
+      const c = S.mr.dry.check, deltaOnly = S.mr.dry.outcome === "delta", why = typed($("#mrApplyReason")).trim();
+      const missing = [], say = (id, ok, text) => { const m = $("#" + id + "Msg"); if (m) m.textContent = ok ? "" : text; if (!ok) missing.push(id); };
+      if (S.mr.source === "upload") say("mrLive", $("#mrLive").checked, "Confirm the ETL list was made from the live public core.");
+      if (deltaOnly) say("mrKind", !!S.mr.kind, "Choose why the change is expected.");
+      say("mrApplyReason", !!why && (!deltaOnly || why.length >= REASON_MIN), !why ? "Give a reason first." : `Say a little more: at least ${REASON_MIN} characters (${why.length} so far).`);
+      if (missing.length) { (missing[0] === "mrKind" ? document.querySelector('input[name="mrKind"]') : $("#" + missing[0])).focus(); return; }
+      const open = openRefresh(), lists = etlLists(), pick = lists.find(x => x.id === S.mr.pick), older = S.mr.source === "recent" && pick !== lists[0];
+      if (open && BUSY_STATES.includes(open.state)) { $("#mrApplyMsg").textContent = `${S.museum}-${open.id} is ${open.state.toLowerCase()}: wait for it to finish, then apply.`; return; }
+      const kind = deltaOnly ? S.mr.kind : "";
+      if (!older && !open) { mrApply(why, kind); return; }
       const openId = open ? `${S.museum}-${open.id}` : "";
-      dialog(open ? `Close ${esc(openId)} and check this ETL list?` : "Check an older ETL list?",
-        `${older ? `<p style="margin-top:0"><strong>The ETL list for ${esc(pick.date)} isn't the newest</strong> (${esc(lists[0].date)}). If its check passes and you apply the refresh, servability goes back to that day's public core while Solr keeps today's: the portals may link to images Serena refuses, and Serena may serve images that are no longer public. An ETL list made today with the servable list script on the ETL server is better.</p>` : ""}
+      dialog(open ? `Close ${esc(openId)} and apply this ETL list?` : "Apply an older ETL list?",
+        `${older ? `<p style="margin-top:0"><strong>The ETL list for ${esc(pick.date)} isn't the newest</strong> (${esc(lists[0].date)}). Applying it sets servability back to that day's public core while Solr keeps today's: the portals may link to images Serena refuses, and Serena may serve images that are no longer public. An ETL list made today with the servable list script on the ETL server is better.</p>` : ""}
         ${open ? `<p${older ? "" : ' style="margin-top:0"'}><strong>${esc(openId)} is still open</strong> (${esc(open.state)}). Serena closes it as abandoned: it stops where it is and won't update. Its page will say which refresh closed it.</p>` : ""}`,
-        `<button type="button" data-close>Cancel</button><button type="button" class="${open ? "danger" : "primary"}" id="mrGo">${open ? "Close it and check the ETL list" : "Check the older ETL list"}</button>`);
+        `<button type="button" data-close>Cancel</button><button type="button" class="${open || kind ? "danger" : "primary"}" id="mrGo">${open ? "Close it and apply" : "Apply the older ETL list"}</button>`);
       bindDialog();
-      $("#mrGo").onclick = () => { close(); mrStart(); };
+      $("#mrGo").onclick = () => { close(); mrApply(why, kind); };
     };
     // A Settings change: its value and a reason; "Save" (or "Use default") is never disabled (Richard, Oct 14).
     document.querySelectorAll("[data-setting]").forEach(b => b.onclick = () => {
