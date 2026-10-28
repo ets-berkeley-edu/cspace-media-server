@@ -33,7 +33,7 @@ from serenade.pages.sign_in_page import SignInPage
 pytestmark = pytest.mark.usefixtures("built_dataset")
 
 ADMIN = ("admin", "admin")  # the simulator's synthetic account: its password is its username
-CHECK_FAILED = "A servable list check failed"
+CHECK_FAILED = "An ETL list check failed"
 
 
 def alerts_page(driver: WebDriver, base_url: str) -> AlertsPage:
@@ -62,7 +62,7 @@ def test_t24_the_alerts_text_in_words_with_its_refresh_id_as_a_link(driver: WebD
     page = alerts_page(driver, base_url)
     failed = refresh_id(UCJEPS_FAILED)
     row = page.wait_for(page.row_with(failed)).text
-    assert f"Refresh {failed} failed its servable list check: " in row
+    assert f"Refresh {failed} failed its ETL list check: " in row
     assert "check_failed" not in row
     page.click((By.XPATH, f"{page.row_with(failed)[1]}//div[contains(@class, 'alert-message')]"
                           f"//a[normalize-space()='{failed}']"))

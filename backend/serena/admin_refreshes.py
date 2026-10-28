@@ -18,7 +18,7 @@ import os
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any
 from urllib.parse import unquote
 
@@ -29,7 +29,7 @@ from . import uploads
 from .admin_api import SignedIn, changes, services
 from .alerts import Alert, Alerts, Kind
 from .audit import Action
-from .refreshes import BUSY, Busy, OutOfOrder, ReasonKind, Refresh, Refreshes, State, Upload, reason_kinds
+from .refreshes import BUSY, PACIFIC, Busy, OutOfOrder, ReasonKind, Refresh, Refreshes, State, Upload, reason_kinds
 
 log = logging.getLogger("serena.admin")
 
@@ -145,6 +145,16 @@ def actions(refresh: Refresh, newest: bool) -> list[str]:
     return []
 
 
+def deadline_at(refresh: Refresh, deadline: str) -> str | None:
+    """When the watchdog's deadline for an ETL refresh's day passes, in UTC (mockup version 55): the app says so
+    beside a refresh still waiting or working after it. A manual refresh has none."""
+    if refresh.admin_refresh is not None:
+        return None
+    hours, minutes = (int(part) for part in deadline.split(":"))
+    at = datetime.combine(date.fromisoformat(refresh.refresh_date), time(hours, minutes), tzinfo=PACIFIC)
+    return at.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 def _clean(reason: str) -> str:
     return " ".join(reason.split())
 
@@ -188,10 +198,22 @@ def create_router() -> APIRouter:
                                      f"{'' if newest else ', and a later refresh has started'}: it can't be done now.")
         return refresh
 
+    def watchdog_deadline(request: Request, tenant: str) -> str:
+        museum = services(request).museums[tenant]
+        deadline: str = request.app.state.museum_settings.get(museum).watchdog_deadline
+        return deadline
+
     @router.get("/status")
-    def status(session: SignedIn, r: Refreshes_) -> dict[str, Any]:
+    def status(session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
+        """The museum's newest refresh, and (mockup version 55, decided October 28, 2026) its current refresh, the
+        newest updated one, which Serena serves from, and its pending refresh, the newest while it is open."""
         newest = r.refreshes.newest(session.tenant)
+        current = newest if newest and newest.state == State.UPDATED else r.refreshes.latest_updated(session.tenant)
+        deadline = watchdog_deadline(request, session.tenant)
         return {"newest": detail(newest, True) if newest else None,
+                "current": detail(current, newest is current) if current else None,
+                "pending": {**detail(newest, True), "deadline_at": deadline_at(newest, deadline)}
+                if newest and newest.open else None,
                 "unacknowledged": sum(1 for a in r.alerts.recent(session.tenant, _since(r))
                                       if not a["acknowledged_at"])}
 
@@ -202,9 +224,10 @@ def create_router() -> APIRouter:
                 "refreshes": [summary(refresh) for refresh in r.refreshes.since(session.tenant, _since(r))]}
 
     @router.get("/refreshes/{refresh_id}")
-    def get_refresh(refresh_id: str, session: SignedIn, r: Refreshes_) -> dict[str, Any]:
+    def get_refresh(refresh_id: str, session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
         refresh, newest = newest_or_404(r, session.tenant, refresh_id)
-        return detail(refresh, newest)
+        deadline = watchdog_deadline(request, session.tenant)
+        return {**detail(refresh, newest), "deadline_at": deadline_at(refresh, deadline)}
 
     @router.post("/refreshes/{refresh_id}/retry-update", dependencies=[Depends(changes)])
     def retry_update(refresh_id: str, body: Reason, session: SignedIn, r: Refreshes_,
@@ -214,7 +237,7 @@ def create_router() -> APIRouter:
         reason = _clean(body.reason)
         try:
             refresh = r.refreshes.transition(refresh, State.UPDATING,
-                                             reason=f"servability update retried by an admin: {reason}",
+                                             reason=f"ETL list update retried by an admin: {reason}",
                                              reason_kind=ReasonKind.ADMIN)
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
@@ -246,7 +269,7 @@ def create_router() -> APIRouter:
             raise HTTPException(409, error.detail) from None
         delta = (refresh.check or {}).get("delta_percent")
         museum = services(request).museums[session.tenant]
-        then = ("on a pass, waits for an admin to run the servability update" if refresh.admin_refresh is not None
+        then = ("on a pass, waits for an admin to run the ETL list update" if refresh.admin_refresh is not None
                 else "on a pass, updates")
         r.alerts.raise_(Alert(session.tenant, r.refreshes.today(), Kind.THRESHOLD_OVERRIDDEN, refresh.refresh_id,
                               f"An admin overrode the delta threshold for {museum.name}'s refresh "
@@ -263,7 +286,7 @@ def create_router() -> APIRouter:
         reason: the admin gave one when starting the refresh."""
         refresh = acting_on(r, session.tenant, refresh_id, "run_update")
         try:
-            refresh = r.refreshes.transition(refresh, State.UPDATING, reason="servability update run by an admin",
+            refresh = r.refreshes.transition(refresh, State.UPDATING, reason="ETL list update run by an admin",
                                              reason_kind=ReasonKind.ADMIN)
         except OutOfOrder as error:
             raise HTTPException(409, error.detail) from None
@@ -288,13 +311,13 @@ def create_router() -> APIRouter:
         reason = _clean(body.reason)
         source = r.refreshes.get(session.tenant, body.refresh_id)
         if source is None or source.upload is None or source.admin_refresh is not None:
-            raise HTTPException(404, "No such servable list from the ETL.")
+            raise HTTPException(404, "No such ETL list.")
         before = closing(r, session.tenant, body.open_refresh)
         try:
             refresh, _ = r.refreshes.start(session.tenant, "closed by the manual refresh {refresh_id}")
         except OutOfOrder as error:  # Busy included
             raise HTTPException(409, error.detail) from None
-        note = (f"manual refresh with the ETL's servable list for {source.refresh_date}, from {source.refresh_id}: "
+        note = (f"manual refresh with the ETL list for {source.refresh_date}, from {source.refresh_id}: "
                 f"{reason}")
         # The list stays where the ETL's upload put it: Serena never deletes a servable list.
         upload = Upload(source.upload.sha256, source.upload.rows, source.upload.bytes, source.upload.key,
@@ -328,7 +351,7 @@ def create_router() -> APIRouter:
         to run the servability update. Refused while the worker is checking or updating a refresh."""
         admin = services(request)
         if x_live_core_confirmed != "yes":
-            raise HTTPException(422, "Confirm that the servable list was made from the live public core.")
+            raise HTTPException(422, "Confirm that the ETL list was made from the live public core.")
         reason = _clean(unquote(x_reason))  # sent URL-encoded: a header carries only ASCII
         if not reason or len(reason) > 500:
             raise HTTPException(422, "Give a reason, up to 500 characters (D62).")
@@ -362,8 +385,8 @@ def create_router() -> APIRouter:
                 raise HTTPException(409, error.detail) from None
             key = f"servable-list/{refresh.refresh_id}/{refresh.file_name}.gz"
             await asyncio.to_thread(uploads.store, r.s3, bucket, key, received)
-            name = FILE_NAME.sub("", os.path.basename(unquote(x_file_name)))[:120] or "the servable list"
-            note = (f"manual refresh with the servable list {name}"
+            name = FILE_NAME.sub("", os.path.basename(unquote(x_file_name)))[:120] or "the ETL list"
+            note = (f"manual refresh with the ETL list {name}"
                     + (f", for the refresh date {refresh_date}" if refresh_date else "") + f": {reason}")
             try:
                 refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note, reason_kind=ReasonKind.ADMIN,

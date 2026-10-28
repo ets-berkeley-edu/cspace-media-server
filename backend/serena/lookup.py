@@ -173,7 +173,7 @@ def _next(listed: bool, blob: str, noun: str, record: MediaRecord, changed: bool
         if changed:
             return ("The Media record changed in CollectionSpace after the last refresh: the next refresh shows "
                     "whether it's public now.")
-        return ("CollectionSpace has it, but the ETL's rules left it out of the servable list (for example, it isn't "
+        return ("CollectionSpace has it, but the ETL's rules left it out of the ETL list (for example, it isn't "
                 "published, or its Object is marked sensitive). Nothing changes at the next refresh unless the "
                 "record does.")
     if record.state is MediaState.DELETED:
@@ -184,7 +184,7 @@ def _next(listed: bool, blob: str, noun: str, record: MediaRecord, changed: bool
             return ("The Media record has a new Blob in CollectionSpace since the last refresh. The next refresh lists "
                     f"the new Blob and drops this one; until then, a cached size is the old {noun}, and any other size "
                     "is fetched from the Media record, which returns the new one.")
-        return ("CollectionSpace's Media record has another Blob. The servable list still has this one, and a request "
+        return ("CollectionSpace's Media record has another Blob. The ETL list still has this one, and a request "
                 f"for it is answered with the Media record's current {noun}.")
     if changed:
         return ("The Media record changed in CollectionSpace after the last refresh. The next refresh shows whether "
@@ -204,10 +204,10 @@ def _blob(museum: Museum, blob: str, sizes: list[str | None], store: Store,
     record = store.servability(museum.key, blob)
     steps = []
     if record is None:
-        steps.append(_step("In the servable list", "Not in the servable list of the last servability update.",
+        steps.append(_step("In the ETL list", "Not in the ETL list of the last ETL list update.",
                            False))
     else:
-        steps.append(_step("In the servable list", "Listed in the servable list of the last servability update.",
+        steps.append(_step("In the ETL list", "Listed in the ETL list of the last ETL list update.",
                            True))
         steps.append(_step("Kind", kind_word(record.kind) + ("" if record.kind in SERVED_KINDS else ": not served"),
                            record.kind in SERVED_KINDS))

@@ -26,7 +26,7 @@ describe('how far past the delta threshold (issue #120)', () => {
     expect(timesOver(check(19))).toBeCloseTo(3.8)
     expect(timesOver(check(5))).toBe(0)
     expect(timesOver(check(2))).toBe(0)
-    expect(timesOver(check(null, null))).toBe(0) // a first servability update: nothing to compare with
+    expect(timesOver(check(null, null))).toBe(0) // a first ETL list update: nothing to compare with
     expect(timesOver(check(50, 0))).toBe(0)
   })
 

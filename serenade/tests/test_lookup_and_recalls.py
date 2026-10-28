@@ -134,7 +134,7 @@ def test_t71_an_unknown_csid(driver: WebDriver, base_url: str) -> None:
     page = LookUpPage(driver, base_url)
     page.look_up(MUSEUM, unknown)
     page.wait_for_answer(unknown)
-    assert page.text_of(page.VERDICT).startswith("Not served: not in the servable list")
+    assert page.text_of(page.VERDICT).startswith("Not served: not in the ETL list")
     assert "Not in CollectionSpace" in page.text_of(page.CSPACE_PANEL)
     assert "CollectionSpace has no Blob or Media record with this CSID either." in page.text_of(page.NEXT)
     assert page.count(page.HEADING) == 0

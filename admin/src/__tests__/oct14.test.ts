@@ -64,7 +64,7 @@ describe('starting a manual refresh', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     const text = document.body.textContent || ''
-    expect(text).toContain('Choose the servable list first.')
+    expect(text).toContain('Choose the ETL list first.')
     expect(text).toContain('Confirm the list was made from the live public core.')
     expect(calls.filter(c => c.method === 'POST')).toHaveLength(0)
     wrapper.unmount()

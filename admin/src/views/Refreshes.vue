@@ -3,7 +3,7 @@
     <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Past refreshes</h1>
     <p class="mb-4">
       This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it; hover over it for what it holds. Open a refresh
-      to see its servable list, its checks and what an admin can do. "Overridden" shows only the refreshes whose delta
+      to see its ETL list, its checks and what an admin can do. "Overridden" shows only the refreshes whose delta
       threshold an admin overrode; each has an orange bar at its left edge.
     </p>
     <LoadError :message="error" />
@@ -84,9 +84,9 @@ import {useQueryValue, useTableState} from '@/tableState'
 // Every column has a meaningful order (D94); the state sorts by its label, as shown.
 const headers = [
   {title: 'Refresh', key: 'refresh_id', help: 'The refresh\'s ID: <museum>-<refresh date>-<number>. Opens its page.'},
-  {title: 'Refresh date', key: 'refresh_date', help: 'The day, in Pacific time, whose servable list it brings in. An admin refresh says which day\'s list it used.'},
+  {title: 'Refresh date', key: 'refresh_date', help: 'The day, in Pacific time, whose ETL list it brings in. An admin refresh says which day\'s list it used.'},
   {title: 'State', key: 'state', value: (item: RefreshSummary) => refreshStateOf(item), help: 'How far it got: Updated is done; a failed check or update says so, and its page says what an admin can do. Updated by override, or a shield: a check failed and an admin overrode the delta threshold.'},
-  {title: 'Rows', key: 'rows', help: 'Rows in its servable list: one per Blob the ETL lists.'},
+  {title: 'Rows', key: 'rows', help: 'Rows in its ETL list: one per Blob the ETL lists.'},
   {title: 'Last change', key: 'updated_at', help: 'When its state last changed (UTC).'}
 ]
 

@@ -112,7 +112,7 @@ describe('links and copy buttons', () => {
       {key: 'k1', refresh_date: '2026-10-12', kind: 'recall_kept', title: 'Recalled in Serena, but still public',
         subject: MEDIA, message: 'Refresh pahma-2026-10-12-1 still lists it.', created_at: '2026-10-12T10:41:00Z',
         acknowledged_by: null, acknowledged_at: null},
-      {key: 'k2', refresh_date: '2026-10-11', kind: 'check_failed', title: 'A servable list check failed',
+      {key: 'k2', refresh_date: '2026-10-11', kind: 'check_failed', title: 'An ETL list check failed',
         subject: 'pahma-2026-10-11-1', message: 'Too many rows removed.', created_at: '2026-10-11T10:41:00Z',
         acknowledged_by: 'admin', acknowledged_at: '2026-10-11T15:00:00Z'}]}}})
     const {wrapper} = await at('/pahma/alerts', Alerts)

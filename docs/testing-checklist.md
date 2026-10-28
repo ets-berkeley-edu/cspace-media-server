@@ -1500,3 +1500,31 @@ to PAHMA:
   "manual refresh with the ETL's servable list for …: <your reason>" under What admins did.
 - [ ] **5. Abandoned by the ETL.** Leave the new one waiting, and run `./serena etl pahma`. Open it again: "a later
   refresh started before the servability update ran" under What went wrong.
+
+## 44. "ETL list", waiting or working, and the current and pending refreshes, on the local stack (15 minutes; before merging the pull request that adds it)
+
+What it checks: mockup version 55's state pills, the "since" line, Overview's current and pending refreshes and a
+pending refresh's four steps (decided October 28, 2026). With `./serena up`, sign in to PAHMA:
+
+- [ ] **1. None yet.** Before any refresh, Overview's Current refresh says "None yet: Serena hasn't had an ETL list
+  update." and Pending refresh says "None" and "Nothing under way.".
+- [ ] **2. Working.** Run `./serena etl pahma` and watch Overview while it runs: Pending refresh shows "Checking the
+  ETL list" or "Applying the ETL list" in blue with a small spinner, and "Checking since <time> UTC (just now):
+  usually a few minutes."; then Current refresh shows the new refresh, Updated, its rows and time, and Pending says
+  "None".
+- [ ] **3. Reduced motion.** Turn on Reduce motion (macOS: System Settings › Accessibility › Display) and repeat 2:
+  the spinner shows but doesn't turn.
+- [ ] **4. Needs an admin.** Run `./serena etl pahma --rows 3`. Pending refresh is outlined in red, "Pending refresh:
+  needs an admin", the pill "ETL list check failed" with the failure icon, and "Nothing changed. Fix the ETL list and
+  rerun the ETL job, or apply another ETL list." (or, failed only on the delta threshold, "override it on its page…").
+  Current refresh still shows the one from 2.
+- [ ] **5. Its steps.** Open the pending refresh: four steps under its state line: Started, ETL list received and ETL
+  list checked… with the third in red ("ETL list check failed") and the fourth "Apply the ETL list" to come; under
+  them the same words as on Overview, with "below" in place of "on its page". The updated refresh's page has no
+  steps.
+- [ ] **6. The words.** On Past refreshes, a refresh's page, Settings ("ETL list check"), Media look up ("last ETL list
+  update") and Alerts (a new "An ETL list check failed" alert from 4), no page says "servable list" or "servability
+  update", except "the servable list script" on Manual refresh, which is the ETL's own name for it.
+- [ ] **7. Past the deadline.** In Settings, set the watchdog deadline to a time already past today, then run
+  `./serena etl pahma` and open the refresh while it's checking: the "since" line ends, in the warning colour, "Past
+  the HH:MM Pacific deadline: the watchdog has alerted." Set the deadline back to 08:00.

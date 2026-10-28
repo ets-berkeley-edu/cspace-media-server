@@ -3,7 +3,7 @@
     <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Recalls</h1>
     <p class="mb-3">
       A recall stops Serena serving a Media record's file at once, until CollectionSpace and a later refresh catch up.
-      Change the record in CollectionSpace too: a refresh, on a later day, ends the recall once its servable list
+      Change the record in CollectionSpace too: a refresh, on a later day, ends the recall once its ETL list
       no longer has the file as public. If the list still has it as public, the recall stays and Serena raises an
       alert, and an admin can release it if CollectionSpace is right. Until a refresh decides it, an admin can cancel a
       recall made by mistake.
@@ -425,7 +425,7 @@ const endedHeaders = [
   {title: 'Identification number', key: 'identification_number', help: NUMBER_HELP,
    value: (r: EndedRow) => r.identification_number || r.media_csid},
   {title: 'Ended (UTC)', key: 'at', help: 'When the recall ended.'},
-  {title: 'How', key: 'action', help: 'Ended by a refresh (its servable list no longer had the file as public), released, or cancelled.'},
+  {title: 'How', key: 'action', help: 'Ended by a refresh (its ETL list no longer had the file as public), released, or cancelled.'},
   {title: 'By', key: 'by', help: 'The admin who released or cancelled it, or Serena for a refresh.'},
   {title: 'Why', key: 'details', sortable: false, help: 'The admin\'s reason, or why the refresh ended it.'}
 ]

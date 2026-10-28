@@ -25,8 +25,8 @@ from .store import Store
 FAILED = {State.CHECK_FAILED: Kind.CHECK_FAILED, State.UPDATE_FAILED: Kind.UPDATE_FAILED,
           State.ABANDONED: Kind.ABANDONED}
 # How an alert says what happened, in words rather than the state's name (Richard, October 14, 2026).
-FAILED_WORDS = {State.CHECK_FAILED: "failed its servable list check",
-                State.UPDATE_FAILED: "failed its servability update", State.ABANDONED: "was abandoned"}
+FAILED_WORDS = {State.CHECK_FAILED: "failed its ETL list check",
+                State.UPDATE_FAILED: "failed its ETL list update", State.ABANDONED: "was abandoned"}
 NOT_UPDATED_AFTER = timedelta(hours=24)
 
 
@@ -91,14 +91,14 @@ class Watchdog:
             updated_at = datetime.fromisoformat(updated.updated_at)
             if now - updated_at > NOT_UPDATED_AFTER:
                 found.append(Alert(tenant, today, Kind.NOT_UPDATED, updated.refresh_id,
-                                   f"The last servability update was on {updated.refresh_date} "
+                                   f"The last ETL list update was on {updated.refresh_date} "
                                    f"({updated.refresh_id}, updated {updated.updated_at})."))
             museum = self.museums[tenant]
             blob = museum.placeholder_blob_csid
             if (blob and self.store is not None and self.store.servability(tenant, blob) is not None
                     and self.museum_settings.get(museum).placeholder_media_csid is None):
                 found.append(Alert(tenant, updated.refresh_date, Kind.PLACEHOLDER_NOT_SET, updated.refresh_id,
-                                   f"Refresh {updated.refresh_id}'s servable list lists {museum.name}'s placeholder "
+                                   f"Refresh {updated.refresh_id}'s ETL list lists {museum.name}'s placeholder "
                                    f"image (Blob {blob}), but no Media record is named for it, so the public sees "
                                    "Serena's generic picture. Name the record on the Settings page."))
         for alert in found:

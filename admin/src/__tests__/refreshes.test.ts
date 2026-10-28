@@ -14,7 +14,7 @@ import {pacificDate} from '@/words'
 
 const REFRESH = {
   refresh_id: 'pahma-2026-10-10-1', refresh_date: '2026-10-10', state: 'update_failed', created_at: '2026-10-10T10:00:00+00:00',
-  updated_at: '2026-10-10T10:05:00+00:00', rows: 40, reasons: ['servability update failed after 3 attempts'], newest: true,
+  updated_at: '2026-10-10T10:05:00+00:00', rows: 40, reasons: ['ETL list update failed after 3 attempts'], newest: true,
   file_name: 'servable-list.pahma.2026-10-10.tsv', upload: null, check: null, update: null, override: null,
   actions: ['retry_update']
 }
@@ -28,7 +28,7 @@ async function at(path: string, component: unknown) {
 }
 
 describe('a refresh', () => {
-  it('retries a servability update only with a reason', async () => {
+  it('retries an ETL list update only with a reason', async () => {
     const calls = fakeApi({
       'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: REFRESH},
       'POST /museums/pahma/refreshes/pahma-2026-10-10-1/retry-update': {body: {...REFRESH, state: 'updating', actions: []}}
@@ -49,7 +49,7 @@ describe('a refresh', () => {
     reason.dispatchEvent(new Event('input'))
     await flushPromises()
     confirm().click()
-    await vi.waitFor(() => expect(wrapper.find('#refresh-state').text()).toBe('Updating servability'))
+    await vi.waitFor(() => expect(wrapper.find('#refresh-state').text()).toBe('Applying the ETL list'))
     const post = calls.find(c => c.method === 'POST')
     expect(post?.body).toEqual({reason: 'DynamoDB is back'})
     expect(post?.headers['X-Serena-Admin']).toBe('1')
@@ -60,12 +60,12 @@ describe('a refresh', () => {
 describe('a refresh\'s reasons (issue #120)', () => {
   it('puts each reason in the list Serena says, and says "None." for an empty one', async () => {
     const closed = {...REFRESH, state: 'abandoned', actions: [], reasons: [
-      'manual refresh with the servable list servable-list.tsv: the ETL\'s list didn\'t arrive',
-      'a later refresh started before the servability update ran'], reason_kinds: ['admin', 'problem']}
+      'manual refresh with the ETL list servable-list.tsv: the ETL\'s list didn\'t arrive',
+      'a later refresh started before the ETL list update ran'], reason_kinds: ['admin', 'problem']}
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: closed}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     expect(wrapper.text()).not.toContain('Reasons')
-    expect(wrapper.find('#refresh-problems').text()).toBe('a later refresh started before the servability update ran')
+    expect(wrapper.find('#refresh-problems').text()).toBe('a later refresh started before the ETL list update ran')
     expect(wrapper.find('#refresh-admin-actions').text()).toContain('the ETL\'s list didn\'t arrive')
     wrapper.unmount()
 
@@ -77,7 +77,7 @@ describe('a refresh\'s reasons (issue #120)', () => {
   })
 
   it('counts a reason without a kind as what went wrong, never guessing from its words', async () => {
-    const before = {...REFRESH, reasons: ['servability update retried by an admin: fixed', 'servability update failed']}
+    const before = {...REFRESH, reasons: ['ETL list update retried by an admin: fixed', 'ETL list update failed']}
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: before}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     expect(wrapper.findAll('#refresh-problems li')).toHaveLength(2)
@@ -122,7 +122,7 @@ describe('overriding the delta threshold', () => {
     expect(dialogText()).not.toContain('Choose why the change is expected.')
     expect(dialogText()).not.toContain('Say a little more')
     confirm()
-    await vi.waitFor(() => expect(wrapper.find('#refresh-state').text()).toBe('Checking the servable list'))
+    await vi.waitFor(() => expect(wrapper.find('#refresh-state').text()).toBe('Checking the ETL list'))
     expect(calls.find(c => c.method === 'POST')?.body).toEqual({kind: 'bulk_change', reason: 'PAHMA republished many images'})
     expect(wrapper.find('#override-threshold').exists()).toBe(false)
     wrapper.unmount()
@@ -136,7 +136,7 @@ const FAILED_CHECK = {result: 'failed', rows: 40, added: 0, removed: 20, changed
   delta_percent: 50, error_count: 1, errors: [{line: 0, field: 'file', problem: THRESHOLD}], warnings: []}
 const OVERRIDE = {at: '2026-10-10T16:00:00+00:00', by: 'pahma-admin', kind: 'bulk_change', reason: 'PAHMA republished many images'}
 const OVERRIDDEN = {...REFRESH, state: 'checking', actions: [], check: FAILED_CHECK, override: OVERRIDE,
-  reasons: ['1 problem in the servable list',
+  reasons: ['1 problem in the ETL list',
     'delta threshold overridden by an admin: Known bulk change in CollectionSpace: PAHMA republished many images'],
   reason_kinds: ['problem', 'override']}
 
@@ -153,7 +153,7 @@ describe('how far past the delta threshold', () => {
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...FAILED, check: {...PAST_CHECK, delta_percent: 19}}}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     expect(wrapper.find('#check-counts').text()).toBe('500 rows; 0 added, 19 removed, 0 changed (19% of the 500 rows of the ' +
-      'last servability update; 3.8 times the 5% threshold).')
+      'last ETL list update; 3.8 times the 5% threshold).')
     expect(wrapper.find('#check-counts .delta-over').text()).toBe('19%')
     expect(wrapper.find('#check-far-past').exists()).toBe(false)
     await wrapper.find('#override-threshold').trigger('click')
@@ -168,7 +168,7 @@ describe('how far past the delta threshold', () => {
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...FAILED, check: FAR_CHECK}}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
     expect(wrapper.find('#check-counts').text()).toContain('5,751 times the 5% threshold')
-    const note = 'Far past the delta threshold. 28756.76% is 5,751 times the threshold: the last servability update had ' +
+    const note = 'Far past the delta threshold. 28756.76% is 5,751 times the threshold: the last ETL list update had ' +
       '37 rows, this list has 10678. A change this large is usually a first load or the wrong file. Check that the file ' +
       'is the right one before you override.'
     expect(wrapper.find('#check-far-past').text()).toBe(note)
@@ -191,7 +191,7 @@ describe('how far past the delta threshold', () => {
     const within = {...PAST_CHECK, result: 'passed', delta_percent: 3.8, error_count: 0, errors: []}
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...REFRESH, state: 'updated', actions: [], check: within}}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
-    expect(wrapper.find('#check-counts').text()).toContain('(3.8% of the 500 rows of the last servability update; the threshold is 5%)')
+    expect(wrapper.find('#check-counts').text()).toContain('(3.8% of the 500 rows of the last ETL list update; the threshold is 5%)')
     expect(wrapper.find('#check-counts .delta-over').exists()).toBe(false)
     wrapper.unmount()
     const first = {...within, previous_rows: null, delta_percent: null}
@@ -211,7 +211,7 @@ describe('an overridden refresh', () => {
     // Issue #110: it leads with the check that failed and by how much.
     expect(wrapper.find('#override-lead').text()).toBe('A safety check failed, and an admin overrode it')
     // Issue #120: in red, with how many times the threshold it is.
-    expect(wrapper.find('#override-overshoot').text()).toBe('The servable list changes 50% of the rows, 10.0 times the 5% threshold: far past it.')
+    expect(wrapper.find('#override-overshoot').text()).toBe('The ETL list changes 50% of the rows, 10.0 times the 5% threshold: far past it.')
     expect(wrapper.find('#override-overshoot .delta-over').text()).toBe('50%')
     expect(wrapper.find('#check-far-past').exists()).toBe(false) // the banner says it
     expect(banner.text()).toContain('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC.')
@@ -219,12 +219,12 @@ describe('an overridden refresh', () => {
     expect(banner.text()).toContain('This page checks again every few seconds')
     // Issue #120: the reasons in two lists, as Serena records them; the override's reason is in the banner, and its
     // line under What admins did says who and when.
-    expect(wrapper.find('#refresh-problems').text()).toBe('1 problem in the servable list')
+    expect(wrapper.find('#refresh-problems').text()).toBe('1 problem in the ETL list')
     expect(wrapper.find('#refresh-admin-actions').text()).toBe('Delta threshold overridden by pahma-admin at ' +
       '2026-10-10 16:00:00 UTC; its reason is in the banner above.')
-    expect(wrapper.find('#check-heading').text()).toContain('Servable list check: failed, overridden by admin')
+    expect(wrapper.find('#check-heading').text()).toContain('ETL list check: failed, overridden by admin')
     expect(wrapper.find('#check-overridden').exists()).toBe(false) // the heading says it already
-    expect(wrapper.find('#refresh-state').text()).toBe('Checking the servable list')
+    expect(wrapper.find('#refresh-state').text()).toBe('Checking the ETL list')
     const row = wrapper.find('#check-problems tbody tr')
     expect(row.classes()).toContain('overridden-problem')
     expect(row.find('s').text()).toBe(THRESHOLD)
@@ -248,7 +248,7 @@ describe('an overridden refresh', () => {
       expect(wrapper.find('#refresh-state').classes()).toContain('text-warning')
       expect(wrapper.find('#refresh-state').classes()).toContain('refresh-state-overridden')
       expect(calls.at(-1)?.headers['X-Serena-Background']).toBe('1') // not activity: an idle tab still signs out
-      expect(wrapper.find('#check-heading').text()).toContain('Servable list check: failed, overridden by admin')
+      expect(wrapper.find('#check-heading').text()).toContain('ETL list check: failed, overridden by admin')
       expect(wrapper.find('#check-heading').text()).not.toContain('passed')
       expect(wrapper.find('#check-overridden').exists()).toBe(false)
       expect(wrapper.find('#check-passed-without-threshold').exists()).toBe(true)
@@ -267,7 +267,7 @@ describe('an overridden refresh', () => {
     const other = {...FAILED_CHECK, errors: [{line: 3, field: 'kind', problem: 'not a kind Serena serves'}]}
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...OVERRIDDEN, state: 'check_failed', check: other}}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
-    expect(wrapper.find('#check-heading').text()).toContain('Servable list check: failed')
+    expect(wrapper.find('#check-heading').text()).toContain('ETL list check: failed')
     expect(wrapper.find('#check-heading').text()).not.toContain('overridden by admin')
     expect(wrapper.find('#check-overridden').text()).toBe('Delta threshold overridden')
     wrapper.unmount()
@@ -352,13 +352,13 @@ describe('the alert banner', () => {
     const alert = {key: '2026-10-10#missed_deadline#2026-10-10', refresh_date: '2026-10-10', kind: 'missed_deadline',
       title: 'Today\'s refresh isn\'t finished by the deadline', subject: '2026-10-10', message: 'Not updated by 08:00',
       created_at: '2026-10-10T15:00:00+00:00', acknowledged_by: null, acknowledged_at: null}
-    const newer = {...alert, key: 'newer', title: 'A servable list check failed', created_at: '2026-10-10T16:00:00+00:00'}
+    const newer = {...alert, key: 'newer', title: 'An ETL list check failed', created_at: '2026-10-10T16:00:00+00:00'}
     const calls = fakeApi({
       'GET /museums/pahma/alerts': {body: {alerts: [alert, newer, {...alert, key: 'old', acknowledged_at: 'x', acknowledged_by: 'admin'}]}}
     })
     const {wrapper} = await at('/pahma', AlertBanner)
     expect(wrapper.find('#alert-banner').text()).toContain('2 alerts:')
-    expect(wrapper.find('#alert-banner-title').text()).toBe('A servable list check failed')
+    expect(wrapper.find('#alert-banner-title').text()).toBe('An ETL list check failed')
     expect(wrapper.find('#open-alerts').attributes('href')).toContain('/pahma/alerts')
     expect(waiting.alerts).toHaveLength(2) // the bell counts these
     // The banner's checks don't count as activity, so an open tab still signs out when idle.
@@ -402,7 +402,7 @@ describe('Manual refresh (issue #118)', () => {
       const rows = wrapper.findAll('#manual-lists tbody tr')
       expect(rows).toHaveLength(2)
       expect(rows[0].text()).toContain('newest')
-      expect(rows[0].text()).toContain('Servable list check failed') // whatever the refresh's outcome (MR3)
+      expect(rows[0].text()).toContain('ETL list check failed') // whatever the refresh's outcome (MR3)
       expect(wrapper.find('#manual-open').text()).toContain('pahma-2026-10-11-1 is still open') // MR13
       expect(wrapper.find('#manual-older').exists()).toBe(false)
       await wrapper.find('#pick-pahma-2026-10-10-1').setValue(true)
@@ -431,14 +431,14 @@ describe('Manual refresh (issue #118)', () => {
       await vi.advanceTimersByTimeAsync(5000)
       await flushPromises()
       expect(calls.filter(c => c.path.endsWith('pahma-2026-10-12-1')).at(-1)?.headers['X-Serena-Background']).toBe('1')
-      expect(wrapper.find('#manual-result-state').text()).toBe('Waiting for the servability update')
+      expect(wrapper.find('#manual-result-state').text()).toBe('Waiting for the ETL list update')
       expect(wrapper.find('#manual-counts').text()).toContain('41 rows; 1 added')
       answers['POST /museums/pahma/refreshes/pahma-2026-10-12-1/run-update'] = {body: {...RUN, state: 'updating'}}
       await wrapper.find('#run-update').trigger('click')
       await flushPromises()
       expect(calls.at(-1)?.path).toBe('/museums/pahma/refreshes/pahma-2026-10-12-1/run-update')
       expect(calls.at(-1)?.headers['X-Serena-Admin']).toBe('1')
-      expect(wrapper.find('#manual-working').text()).toContain('running the servability update')
+      expect(wrapper.find('#manual-working').text()).toContain('running the ETL list update')
       wrapper.unmount()
     } finally {
       vi.useRealTimers()
@@ -488,7 +488,7 @@ describe('Manual refresh (issue #118)', () => {
     await flushPromises()
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.find('#manual-error').text()).toContain('pahma-2026-10-11-1 is checking the servable list: wait for it to finish')
+    expect(wrapper.find('#manual-error').text()).toContain('pahma-2026-10-11-1 is checking the ETL list: wait for it to finish')
     expect(calls.filter(c => c.method === 'POST')).toHaveLength(0)
     wrapper.unmount()
   })
@@ -539,14 +539,14 @@ describe('Manual refresh (issue #118)', () => {
     await second.find('form').trigger('submit')
     await flushPromises()
     expect(second.find('#manual-override').exists()).toBe(false) // MR12
-    expect(second.find('#manual-result').text()).toContain('The servable list has 3 problems')
+    expect(second.find('#manual-result').text()).toContain('The ETL list has 3 problems')
     expect(second.find('#manual-problems').text()).toContain('isn\'t a kind Serena serves')
     second.unmount()
   })
 })
 
 describe('a manual refresh elsewhere', () => {
-  it('waits on its page for Run the servability update, and is tagged on Past refreshes', async () => {
+  it('waits on its page for Run the ETL list update, and is tagged on Past refreshes', async () => {
     const waiting = {...REFRESH, state: 'waiting', actions: ['run_update'], manual: true, admin_refresh_date: '2026-10-09',
       admin_refresh_from: 'pahma-2026-10-09-1'}
     const calls = fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: waiting},
@@ -555,13 +555,13 @@ describe('a manual refresh elsewhere', () => {
         {...waiting, admin_refresh_date: '2026-10-09'}, {...waiting, refresh_id: 'pahma-2026-10-10-2', admin_refresh_from: null,
           admin_refresh_date: '2026-10-10'}, {...REFRESH, refresh_id: 'pahma-2026-10-09-1', refresh_date: '2026-10-09', manual: false}]}}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
-    expect(wrapper.find('#refresh-state').text()).toBe('Waiting for the servability update')
+    expect(wrapper.find('#refresh-state').text()).toBe('Waiting for the ETL list update')
     expect(wrapper.find('#refresh-manual').text()).toContain('a manual refresh, with the ETL\'s list for 2026-10-09')
     expect(wrapper.find('#refresh-waiting').text()).toContain('The check passed.')
     await wrapper.find('#run-update').trigger('click')
     await flushPromises()
     expect(calls.at(-1)?.path).toBe('/museums/pahma/refreshes/pahma-2026-10-10-1/run-update')
-    expect(wrapper.find('#refresh-state').text()).toBe('Updating servability')
+    expect(wrapper.find('#refresh-state').text()).toBe('Applying the ETL list')
     wrapper.unmount()
 
     const list = (await at('/pahma/refreshes', Refreshes)).wrapper
@@ -595,7 +595,7 @@ describe('a refresh\'s state', () => {
     fakeApi({'GET /museums/pahma/refreshes': {body: {days: 30, refreshes: [row(2, 'check_failed'), row(1, 'updated')]}}})
     const {wrapper} = await at('/pahma/refreshes', Refreshes)
     const [failed, updated] = wrapper.findAll('#refreshes-table tbody .refresh-state')
-    expect(failed.text()).toBe('Servable list check failed') // the label alone is read out
+    expect(failed.text()).toBe('ETL list check failed') // the label alone is read out
     expect(failed.classes()).toContain('text-error')
     expect(failed.find('.refresh-state-icon').attributes('aria-hidden')).toBe('true')
     expect(updated.text()).toBe('Updated')
@@ -608,7 +608,7 @@ describe('a refresh\'s state', () => {
   it('says the same on the refresh\'s page', async () => {
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: REFRESH}})
     const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
-    expect(wrapper.find('#refresh-state').text()).toBe('Servability update failed')
+    expect(wrapper.find('#refresh-state').text()).toBe('ETL list update failed')
     expect(wrapper.find('#refresh-state').classes()).toContain('text-error')
     expect(wrapper.find('#refresh-state .refresh-state-icon').exists()).toBe(true)
     wrapper.unmount()
@@ -625,7 +625,7 @@ describe('Past refreshes and Overview, while a refresh is working', () => {
       const answers = {'GET /museums/pahma/refreshes': list('checking')}
       const calls = fakeApi(answers)
       const {wrapper} = await at('/pahma/refreshes', Refreshes)
-      expect(wrapper.find('#refreshes-table tbody .refresh-state').text()).toBe('Checking the servable list')
+      expect(wrapper.find('#refreshes-table tbody .refresh-state').text()).toBe('Checking the ETL list')
       expect(calls[0].headers['X-Serena-Background']).toBeUndefined() // opening the page is activity
       answers['GET /museums/pahma/refreshes'] = list('updated')
       await vi.advanceTimersByTimeAsync(5000)
@@ -687,16 +687,19 @@ describe('Past refreshes and Overview, while a refresh is working', () => {
     vi.useFakeTimers()
     try {
       session.signedIn = [{museum: 'pahma', name: 'PAHMA', user: 'admin'}]
-      const answers = {'GET /museums/pahma/status': {body: {newest: row('checking') as unknown, unacknowledged: 0}}}
+      const checking = row('checking')
+      const answers = {'GET /museums/pahma/status': {body: {newest: checking, current: null, pending: checking, unacknowledged: 0} as unknown}}
       const calls = fakeApi(answers)
       const {wrapper} = await at('/pahma', Overview)
-      expect(wrapper.find('#newest-refresh-state').text()).toBe('Checking the servable list')
-      answers['GET /museums/pahma/status'] = {body: {newest: row('updated'), unacknowledged: 0}}
+      expect(wrapper.find('#pending-refresh-state').text()).toBe('Checking the ETL list')
+      const updated = row('updated')
+      answers['GET /museums/pahma/status'] = {body: {newest: updated, current: updated, pending: null, unacknowledged: 0}}
       await vi.advanceTimersByTimeAsync(5000)
       await flushPromises()
       expect(calls).toHaveLength(2)
       expect(calls[1].headers['X-Serena-Background']).toBe('1')
-      expect(wrapper.find('#newest-refresh-state').text()).toBe('Updated')
+      expect(wrapper.find('#current-refresh-state').text()).toBe('Updated')
+      expect(wrapper.find('#pending-none').text()).toBe('None')
       await vi.advanceTimersByTimeAsync(15000)
       expect(calls).toHaveLength(2)
       wrapper.unmount()

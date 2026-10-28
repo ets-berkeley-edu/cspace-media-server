@@ -94,7 +94,7 @@ def test_first_servability_update_has_no_threshold() -> None:
     result = checking.check(UCJEPS, gz(HEADER + "\n" + rows(1000)), None, 5)
     assert result.passed
     assert result.previous_rows is None and result.delta_percent is None
-    assert "first servability update: the delta threshold doesn't apply" in result.warnings
+    assert "first ETL list update: the delta threshold doesn't apply" in result.warnings
     assert checking.check(UCJEPS, gz(HEADER + "\n" + rows(10)), {}, 5).passed  # an empty last file: the same
 
 

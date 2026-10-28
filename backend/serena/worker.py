@@ -221,7 +221,7 @@ class Worker:
     def _check(self, refresh: Refresh) -> None:
         museum = self.s.museums[refresh.tenant]
         if refresh.upload is None:  # can't happen: a refresh is checking only after an upload
-            self.s.refreshes.transition(refresh, State.CHECK_FAILED, reason="no servable list uploaded", release=True)
+            self.s.refreshes.transition(refresh, State.CHECK_FAILED, reason="no ETL list uploaded", release=True)
             return
         previous_refresh = self.s.refreshes.latest_updated(refresh.tenant)
         previous = None
@@ -241,7 +241,7 @@ class Worker:
         if not result.passed:
             self.s.refreshes.transition(refresh, State.CHECK_FAILED, results={"check": result.summary()},
                                         reason=f"{result.error_count} problem{'' if result.error_count == 1 else 's'}"
-                                               " in the servable list",
+                                               " in the ETL list",
                                         release=True)
             self._alert(refresh)
             return
@@ -255,7 +255,7 @@ class Worker:
 
     def _update(self, refresh: Refresh) -> None:
         if refresh.upload is None:  # can't happen: a refresh is updating only after a passed check
-            self.s.refreshes.transition(refresh, State.UPDATE_FAILED, reason="no servable list uploaded", release=True)
+            self.s.refreshes.transition(refresh, State.UPDATE_FAILED, reason="no ETL list uploaded", release=True)
             return
         with self._file(refresh.tenant, refresh.upload.key) as handle:
             rows = read_rows(handle)
@@ -268,7 +268,7 @@ class Worker:
                             extra={"refresh_id": refresh.refresh_id, "attempt": attempt, "error": type(error).__name__})
                 if attempt == UPDATE_ATTEMPTS:
                     self.s.refreshes.transition(refresh, State.UPDATE_FAILED, release=True,
-                                                reason=f"servability update failed after {UPDATE_ATTEMPTS} attempts "
+                                                reason=f"ETL list update failed after {UPDATE_ATTEMPTS} attempts "
                                                        f"({type(error).__name__}); an admin can retry it")
                     self._alert(refresh)
                     return

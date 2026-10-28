@@ -9,7 +9,7 @@
     role="note"
   >
     <strong>Far past the delta threshold.</strong> {{ check.delta_percent }}% is {{ timesText(times) }} times the
-    threshold: the last servability update had {{ check.previous_rows }} rows, this list has {{ check.rows }}. A change
+    threshold: the last ETL list update had {{ check.previous_rows }} rows, this list has {{ check.rows }}. A change
     this large is usually a first load or the wrong file.
     <span v-if="beforeOverride">Check that the file is the right one before you override.</span>
   </v-alert>

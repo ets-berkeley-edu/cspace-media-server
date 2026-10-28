@@ -1,14 +1,77 @@
 /** How the app names refresh states and timestamps (one place, so every page says the same). */
+// Mockup version 55 (decided October 28, 2026): a refresh under way says whether Serena is waiting for the ETL job's
+// next call (started, received) or working (checking, updating), in the ETL list's words.
 export const STATES: Record<string, string> = {
-  started: 'Started',
-  received: 'File received',
-  checking: 'Checking the servable list',
-  check_failed: 'Servable list check failed',
-  updating: 'Updating servability',
+  started: 'Waiting for the ETL list',
+  received: 'ETL list received',
+  checking: 'Checking the ETL list',
+  check_failed: 'ETL list check failed',
+  updating: 'Applying the ETL list',
   updated: 'Updated',
-  update_failed: 'Servability update failed',
-  waiting: 'Waiting for the servability update', // a manual refresh's passed check (issue #118)
+  update_failed: 'ETL list update failed',
+  waiting: 'Waiting for the ETL list update', // a manual refresh's passed check (issue #118)
   abandoned: 'Abandoned'
+}
+
+/** A state's words inside a sentence: "checking the ETL list", keeping "ETL" as it is. */
+export function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1)
+}
+
+/** Serena waits for the ETL job's next call: a clock beside the state. */
+export const WAITING_STATES = new Set(['started', 'received'])
+/** Serena is working: a small spinner beside the state. */
+export const WORKING_STATES = new Set(['checking', 'updating'])
+
+/** A refresh is open until it is updated or abandoned; the museum's open refresh, if any, is its pending refresh. */
+export function isOpen(state: string): boolean {
+  return state !== 'updated' && state !== 'abandoned'
+}
+
+/**
+ * What an admin can do about a pending refresh that needs one, in a line (mockup version 55): on the refresh's own
+ * page the button is "below", elsewhere it's "on its page".
+ */
+export function fixText(refresh: {state: string, actions?: string[]}, onPage = false): string {
+  const where = onPage ? 'below' : 'on its page'
+  if (refresh.state === 'update_failed') {
+    return `Serena serves some of each ETL list. Retry the ETL list update ${where} once the cause is fixed, or apply another ETL list.`
+  }
+  if (refresh.state !== 'check_failed') {
+    return ''
+  }
+  return (refresh.actions || []).includes('override_threshold')
+    ? `It failed only on the delta threshold: override it ${where} if the change is expected, or apply another ETL list.`
+    : 'Nothing changed. Fix the ETL list and rerun the ETL job, or apply another ETL list.'
+}
+
+/** How long since a time, as the "since" line says it: "just now", "3 min", "6 h 59 min". */
+export function took(iso: string, now: Date = new Date()): string {
+  const mins = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 60000))
+  return mins < 1 ? 'just now' : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`
+}
+
+/**
+ * Beside a refresh waiting or working, where there's room (mockup version 55): since when, and what's normal, so a
+ * normal wait can be told from a stuck one ("Checking since 16:57 UTC (3 min): usually a few minutes."). `late` says
+ * whether an ETL refresh is past the watchdog's deadline; empty for any other state.
+ */
+export function stateSince(refresh: {state: string, updated_at: string, deadline_at?: string | null},
+                           now: Date = new Date()): {text: string, late: string} {
+  const {state, updated_at: at} = refresh
+  if (!WAITING_STATES.has(state) && !WORKING_STATES.has(state)) {
+    return {text: '', late: ''}
+  }
+  const since = `since ${when(at).slice(11, 16)} UTC (${took(at, now)})`
+  const text = state === 'started' ? `Waiting ${since}: the ETL job uploads it.`
+    : state === 'received' ? `Received ${since}: the ETL job asks Serena to check it next.`
+    : `${state === 'checking' ? 'Checking' : 'Applying'} ${since}: usually a few minutes.`
+  const deadline = refresh.deadline_at ? new Date(refresh.deadline_at) : null
+  const pacific = deadline && new Intl.DateTimeFormat('en-GB', {timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit'}).format(deadline)
+  const late = deadline && now.getTime() > deadline.getTime()
+    ? `Past the ${pacific} Pacific deadline: the watchdog has alerted${WAITING_STATES.has(state) ? ', and the ETL job may have failed' : ''}.`
+    : ''
+  return {text, late}
 }
 
 /** An audit action's words: the stored name, except "admin_refresh", which the app calls a manual refresh (issue #118). */

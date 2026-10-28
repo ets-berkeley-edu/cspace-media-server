@@ -266,7 +266,7 @@ class Refreshes:
                     raise Busy(newest.refresh_id, newest.state,
                                f"refresh {newest.refresh_id} is still being {step}; try again")
                 reason = (closing_reason.format(refresh_id=f"{tenant}-{refresh_date}-{n}") if closing_reason
-                          else "a later refresh started before the servability update ran" if waiting
+                          else "a later refresh started before the ETL list update ran" if waiting
                           else "a later refresh date's refresh started")
                 try:
                     self.transition(newest, State.ABANDONED, reason=reason,

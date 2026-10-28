@@ -148,7 +148,7 @@ describe('Media look up', () => {
     changed_since_refresh: true, fields: [{label: 'Approved for web', value: 'No'}],
     next: 'The Media record changed in CollectionSpace after the last refresh.'}
   const ITEM = {blob_csid: BLOB, media_csid: MEDIA, kind: 'image', access: 'public',
-    steps: [{check: 'In the servable list', outcome: 'Listed.', ok: true},
+    steps: [{check: 'In the ETL list', outcome: 'Listed.', ok: true},
       {check: 'Recall', outcome: 'Recalled by admin at 2026-10-15T06:02:15+00:00: Testing.', ok: false}],
     sizes: [{size: 'Thumbnail', served: false, reason: 'recalled', verdict: 'not served', stored: null},
       {size: 'Medium', served: false, reason: 'recalled', verdict: 'not served',
