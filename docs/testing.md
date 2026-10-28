@@ -78,7 +78,7 @@ cd admin && npm ci && npm run lint && npm run typecheck && npm test
 
 **Proves:** the code, its types, its tests and its dependencies. **Doesn't prove:** anything about AWS, a real
 CollectionSpace or the browser checks (those are schemes 2 and 4). `terraform test` covers only the CloudFront front
-door until D298 adds the split front door.
+door until the shared root's test is added (D298).
 
 ---
 
@@ -308,7 +308,7 @@ what its tasks cost. **Doesn't prove:** the split front door or real records.
 ## Planned schemes
 
 Proposed October 24, 2026, with Richard's answers in `serena-testing-plan-questions.xlsx`; not yet written as
-decisions. They depend on a permanent QA/Dev environment with the split front door (D300 to be rewritten), webapps-qa's
+decisions. They depend on a permanent QA/Dev environment with the split front door (stage 2 itself, D300), webapps-qa's
 Apache in front of it (Q22), accounts from Lyrasis (Q8, Q10) and the changed ETL (CSW-1027, E1).
 
 ### 7. QA/Dev: three museums in one permanent environment
@@ -369,5 +369,5 @@ PAHMA first, the other museums later (Q14); the legacy imageserver keeps running
   alarm), a CloudFront signing-key rotation, a failed refresh repaired in the admin app, all in AWS.
 - **Cinefiles' signed PDF links** with Glimmer QA and its own portal key (Q16).
 - **A security scan** of the public paths and the admin app (for example an OWASP ZAP baseline).
-- **The split front door in CI:** `terraform test` planning both front doors (D298), and the AWS tests taking a file
+- **The split front door in CI:** `terraform test` for each Terraform root (D298), and the AWS tests taking a file
   URL beside the app URL, with read-only tests of the address rules (D299).

@@ -11,7 +11,8 @@ Serena serves the images and documents that the UC Berkeley museums' public port
 `imageserver` uses today. It decides what it may serve from the daily Solr ETL's output, keeps its own private copy
 of every file it has served, and hands browsers short-lived signed links to that copy.
 
-It runs as an AWS service: a FastAPI app on ECS Fargate behind CloudFront and an internal load balancer, a worker that takes in each day's
+It runs as an AWS service: a FastAPI app on ECS Fargate behind a load balancer (in QA and production a public one on a
+campus domain; in personal environments and stage 1, CloudFront in front of an internal one), a worker that takes in each day's
 ETL list, an admin web app, DynamoDB for its records, private S3 buckets for the files and CloudFront for delivery.
 
 Key decisions:
@@ -158,7 +159,7 @@ Constraints (also in `CLAUDE.md`):
 
 ```mermaid
 flowchart LR
-  B[Browser on a portal page] -->|image or document URL| A[CloudFront + WAF, internal load balancer]
+  B[Browser on a portal page] -->|image or document URL| A[Front door: public load balancer + WAF in QA and production; CloudFront + internal load balancer elsewhere]
   A --> S[Serena app: FastAPI on ECS Fargate]
   S -->|servability, recalls, cache index| D[(DynamoDB)]
   S -->|on a miss: Media record, then file| C[CollectionSpace at Lyrasis]
@@ -482,10 +483,13 @@ shows every unserved request by reason, and "Media look up" explains any one fil
   public keys, the current one and the one before it, are in an SSM parameter (`/serena-<env>/cloudfront-public-keys`)
   that Terraform reads into the key group, so a URL signed with the previous key keeps working after a rotation (a
   URL lives at most 30 minutes; rotations are further apart). No private key is in Terraform's state or a file.
-- One distribution per environment, the same one as the app's (`SERENA_CDN_BASE_URL` is its address); a stored file's
-  URL is `<base>/<tenant>/objects/<sha256>` (decided October 9, 2026). Each museum has a cache behavior,
-  `/<tenant>/objects/*`, to its bucket; a CloudFront Function (the one that applies the address rules) removes
-  `/<tenant>` from the path, so the object's key stays `objects/<sha256>` (D195). These paths never clash with the
+- One distribution per environment (`SERENA_CDN_BASE_URL` is its address): in personal environments and stage 1 the
+  same one as the app's; in QA and production a distribution for the files and the unavailable images only, at its
+  own `*.cloudfront.net` address, beside the app's load balancer (D289, D293, D301). A stored file's URL is
+  `<base>/<tenant>/objects/<sha256>` (decided October 9, 2026). Each museum has a cache behavior,
+  `/<tenant>/objects/*`, to its bucket; a CloudFront Function removes `/<tenant>` from the path, so the object's key
+  stays `objects/<sha256>` (D195). In personal environments and stage 1 that function also applies the address rules;
+  in QA and production it only rewrites the path, and the signature is the files' only gate (D307). These paths never clash with the
   legacy `/<tenant>/imageserver/…` paths, which go to the app.
 - **Origin access control (D196).** Each bucket's policy lets only this distribution read, and only under
   `objects/` (never the ETL lists); the KMS key's policy lets CloudFront decrypt for this distribution only.
@@ -685,8 +689,9 @@ list), an admin can always bring Serena up to date. The steps go in a runbook, r
 
 ### The ETL API
 
-Under `/etl/v1/`, over HTTPS, through CloudFront like every other path (D183) but never cached there, and accepted only
-from the ETL server's address (`ETL_CIDRS`, checked by the CloudFront Function, D185). Each museum has its own bearer
+Under `/etl/v1/`, over HTTPS, through the front door like every other path but never cached, and accepted only from
+the ETL server's address (`ETL_CIDRS`: checked by the CloudFront Function in personal environments and stage 1, D185;
+by the load balancer's listener rules in QA and production, D291). Each museum has its own bearer
 token, kept in Secrets Manager on Serena's side and in the ETL server's own secret store; during a rotation Serena
 accepts the old and the new token. Errors are `application/problem+json` with reasons, never internals.
 
@@ -1219,8 +1224,10 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
   nothing is fetched. Each task has 50 GB of ephemeral storage (decided October 10, 2026).
 - **Waiting on a large fetch.** A miss answers the 302 only once the file is stored. The load balancer's idle timeout
   is 300 seconds, for large originals; a fetch the browser gave up on still finishes, so the next request is a hit
-  (decided October 10, 2026). CloudFront, in front of the load balancer, waits 60 seconds (180 with a quota increase);
-  a longer first fetch gets a 504 there, and the next request is a hit (D184).
+  (decided October 10, 2026). In QA and production nothing else limits the wait: Apache's proxy timeout for Serena's
+  paths is at least 300 seconds too, so a first request for a very large original gets the image (D295). In personal
+  environments and stage 1, CloudFront, in front of the load balancer, waits 60 seconds; a longer first fetch gets a
+  504 there, and the next request is a hit (D184). No CloudFront timeout quota increase is needed.
 
 ## Storage
 
@@ -1257,8 +1264,11 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
 ## Admin web app
 
 Required from the start (decided October 9, 2026). Built as in the BMU: Vue, TypeScript and Vuetify, served by
-Serena's FastAPI app under `/admin`, with its API under `/admin/v1`. It is reached through CloudFront, which caches
-only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, checked by the CloudFront Function, D185).
+Serena's FastAPI app under `/admin`, with its API under `/admin/v1`, and only from campus networks (`ADMIN_CIDRS`). In
+personal environments and stage 1 it is reached through CloudFront, which caches only its built files (D183), and the
+CloudFront Function checks the address (D185). In QA and production it is reached through the load balancer, whose
+listener rules check the address (D291), and the app serves the built files itself with a long `Cache-Control` on
+their hashed names, with no CDN (D296).
 
 - **Sign-in.** With the admin's own CollectionSpace account, plus a CollectionSpace role that marks a Serena admin, per
   museum. Serena never stores the password. The app shows only the museums where the signed-in user has the role;
@@ -1615,15 +1625,34 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     `--first-row` maps onto new records for another cold one. It runs only against an environment with the simulator
     and closed image paths, so a miss never reaches a museum's CollectionSpace, and it ends with the web and worker
     services' CPU and memory from CloudWatch for the run.
-- **Front door (decided October 14, 2026, D183 to D186).** CloudFront, at its own `*.cloudfront.net` address for
-  HTTPS until there is a domain (then an alternate name and a certificate on the same distribution), in front of an
+- **Front door in QA and production: the split (decided October 23 to 28, 2026, D289 to D301, D306, D307).**
+  Operations chose this design on October 27, 2026 (D301), over sending browsers to S3 presigned URLs: CloudFront's
+  URLs are the same for every web task within a window, so browsers reuse images; it serves HTTP/2 and HTTP/3; viewers'
+  addresses never reach S3's logs and links don't show the account ID; and there is one signing path.
+  - **The app** is behind an internet-facing load balancer on a campus domain from DevOps, one per environment, with
+    an ACM certificate validated by DNS and renewed by AWS (D293, D294). Apache on the museums' webapps hosts
+    reverse-proxies the legacy paths to it over HTTPS, so the URLs and the portals don't change (D290).
+  - **Address rules** are at the load balancer: its security group admits only the Apache hosts, the ETL server and
+    campus and VPN ranges; listener rules with source-address conditions send `/etl/` only from `ETL_CIDRS` and
+    `/admin` only from `ADMIN_CIDRS` to the app and answer anything else with a fixed 403. Terraform generates as many
+    rules as the address lists need (D291).
+  - **AWS WAF** is a regional web ACL on the load balancer, with the same rules as on CloudFront (below), and none on
+    CloudFront (D292). Since most image requests come from the Apache hosts, the rate limit has two rules: requests
+    from the Apache hosts' addresses are limited by `X-Forwarded-For`, everything else by source address (D306).
+  - **The files and the unavailable images** stay on CloudFront: a distribution with only the file and SVG paths,
+    signed URLs, origin access control and the static bucket, at its own `*.cloudfront.net` address (D293). It has no
+    address rule and no web ACL; a file needs a fresh signature from Serena, which is issued only through the load
+    balancer and its WAF. Its function only rewrites the path (D307). See Signed URLs and Unavailable images.
+  - **Timeouts.** See Image fetch (D295).
+- **Front door in personal environments and stage 1 (decided October 14, 2026, D183 to D186).** CloudFront, at
+  its own `*.cloudfront.net` address for HTTPS until there is a domain (then an alternate name and a certificate on the same distribution), in front of an
   internal load balancer through a VPC origin, as in the BMU; the load balancer is never on the internet, and its
-  idle timeout is 300 seconds. CloudFront waits at most 60 seconds for an answer (180 with a quota increase, to ask
-  for before production): a first request whose fetch takes longer gets a 504, the fetch finishes, and the next
+  idle timeout is 300 seconds. CloudFront waits at most 60 seconds for an answer (180 with a quota increase, not
+  needed, since QA and production don't use this front door): a first request whose fetch takes longer gets a 504, the fetch finishes, and the next
   request is a hit (D184). Of the app's answers, only the admin app's built files are cached there; the same
   distribution delivers the museums' files and the unavailable images (see Signed URLs and Unavailable images). A CloudFront Function checks the
   visitor's address (D185): `/etl/` only from the ETL servers, `/admin` only from campus networks, the image paths
-  and `/health` from anywhere in production; personal-dev and QA are open only to listed addresses. AWS WAF on the
+  and `/health` from anywhere where images are open (`open_images`), otherwise only from listed addresses. AWS WAF on the
   distribution, where it's switched on (D186): AWS's common rule set (its body-size rule counting, not blocking, so a
   ETL list can be uploaded), known bad inputs, the IP reputation list, a rate limit per address, and Bot
   Control in count mode first, since the catalog is crawled routinely and blocking crawlers could hide images from
@@ -1631,9 +1660,13 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
 - **Network (D187).** The BMU's: a VPC across two zones, the tasks in public subnets with public addresses and no
   NAT gateway (their security groups take traffic only from the load balancer), the load balancer in private
   subnets, and gateway endpoints for S3 and DynamoDB. No fixed outbound addresses: Lyrasis doesn't restrict callers
-  by address.
-- **Routing.** The legacy imageserver's paths on each museum's webapps host are sent on to Serena's CloudFront
-  address, one museum at a time.
+  by address. That is the personal root's network. In QA and production Serena uses the VPC Operations provides
+  (for QA, its development and QA VPC): the environment's settings name the VPC, Terraform finds its subnets, the tasks
+  run in private subnets behind its NAT gateway, the load balancer is in its public subnets, and Terraform adds the
+  S3 and DynamoDB gateway endpoints only if they're missing. Serena's deployer then needs no VPC, subnet, route or
+  gateway changes (D303).
+- **Routing.** The legacy imageserver's paths on each museum's webapps host are sent on to Serena, one museum at a
+  time: reverse-proxied by Apache to the load balancer in QA and production (D290).
 - **Infrastructure as code.** Terraform, in `deploy/terraform/` (the image repositories, then the app), with state
   in an S3 bucket in each account, applied by `./serena aws` (`deploy/aws.sh`, modeled on the BMU's; D181); who
   runs it, and where, is under Deploys. CI checks the Terraform code and that its tables and settings match the app, with no
@@ -1641,6 +1674,18 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   sets it (D191): a museum's CollectionSpace account as typed, a random ETL token or portal signing key shown once
   for the ETL or the portal, the old one kept as "previous". The first environment is personal-dev, in Richard's
   personal account (D182); QA and production follow in the UC Berkeley account. `deploy/README.md` has the commands.
+  - **Two roots (decided October 28, 2026, D302).** `deploy/terraform/personal` for personal environments and stage 1
+    (CloudFront in front of everything) and `deploy/terraform/shared` for QA and production (the split), built from
+    shared modules. A files module (the distribution's file and SVG paths, origin access control, key group, response
+    headers policies, the static bucket) is used by both. The shared root adds a function that only rewrites file
+    paths; the personal root adds the VPC origin, the app's paths on CloudFront and its address-rule function, which
+    also rewrites file paths. The move keeps personal-dev's resources in place (`moved` blocks).
+  - **CI.** `terraform test` against the mock provider runs for each root. The shared root's asserts the
+    internet-facing load balancer, its HTTPS listener and per-path listener rules, the certificate, the regional web
+    ACL, and a CloudFront distribution with only the file paths: no VPC origin, a function that only rewrites the
+    path, no CloudFront web ACL (D298).
+  - **Budget.** One AWS budget per account, in `deploy/terraform/registry`, filtered by the project's cost allocation
+    tag and alerting the alert address. Which tag key it uses waits on Operations' tagging conventions (D304).
 - **Deploys (decided October 22, 2026, D268 to D277).** An environment with real data (stage 2, pre-production, then
   production) is deployed only by a pipeline, never from someone's laptop (D268; D193 now covers only personal-dev).
   - **How it runs.** After the approval, a GitHub Actions job signs in to AWS through OIDC with a role per environment
@@ -1670,6 +1715,14 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     deploy isn't the pipeline's first run (D269).
   - **personal-dev** and each developer's own account are unchanged: `./serena aws` from the developer's own
     machine, the simulator and the fake ETL only (D182, D193, D277).
+  - **The deployer's permissions** (`deploy/iam/`). Stage 1 keeps its own policy. QA and production's allows only what
+    the shared root builds: the internet-facing load balancer and its listeners, rules and target groups; ACM
+    certificates; a regional web ACL and its logging; for the files, CloudFront distributions, origin access control,
+    key groups, public keys, response headers policies and the path-rewrite function; and the services stage 1 uses.
+    No CloudFront VPC origin, no CloudFront web ACL in us-east-1, and no VPC, subnet, route or gateway changes (D297,
+    D303). Writes to security groups, the load balancer, target groups, listeners, CloudFront distributions and the
+    web ACL are limited to resources tagged `project=serena` wherever AWS allows it, since production workloads share
+    the account (D305).
 - **Protecting data (D192).** Where the data matters (QA, production), tables can't be deleted, a destroy won't
   empty the buckets, and deleted secrets and the key wait 30 days; personal-dev can be thrown away. Everywhere:
   point-in-time recovery on every table but the admin sessions, bucket versioning, no lifecycle rule that deletes,
@@ -1788,6 +1841,10 @@ The design went through several versions in Google Drive before this file:
    stops or undoes it; an admin repairs Serena when it fails. The Solr refresh status report and "Record the Solr
    refresh" went away, and an override checks the failed refresh's own ETL list again. The agreed terms
    (refresh, refresh date, ETL list check, ETL list update) replaced run, night, preflight and apply.
+8. **The split front door (October 23 to 28, 2026).** Operations saw no need for CloudFront in front of the app in QA
+   and production. The app moved behind a public load balancer with a campus domain, and the files stayed on
+   CloudFront (D289 to D300). Dropping CloudFront for the files too, with S3 presigned URLs, was reviewed and not
+   adopted (D301). Terraform became two roots, personal and shared (D302 to D307).
 
 ## Open questions and findings
 
@@ -1885,3 +1942,16 @@ Unit and integration tests run in CI against the CollectionSpace simulator and l
 has its own unit tests and Selenium tests. Checks that need a real CollectionSpace tenant or AWS are in
 `docs/testing-checklist.md`. `docs/testing.md` describes every testing scheme, from CI to a museum's cutover: what each
 sets up, its steps in order, and what it proves.
+
+The split (QA and production) is tested as follows (decided October 28, 2026):
+
+- **The AWS tests** (`serenade/aws`) take a file URL (the CloudFront address) beside the app URL, so the tests of the
+  302 and the unavailable image work whether the files are on the app's host or not; new read-only tests check the
+  address rules (`/etl/` and `/admin` refused from an unlisted address, `/health` over HTTPS on the campus domain).
+  Tests that change data run only against a simulator museum (D299). Where the address-rule tests run from (a laptop
+  off the VPN, a CI runner) is settled when they're written.
+- **End to end in stage 2 itself:** deployed from the shared root with only the simulator museum until every AWS test
+  passes, then given PAHMA's QA records; later changes to the load balancer, WAF or files distribution are tested on
+  its simulator museum (D300). A stage 2 section of the testing checklist covers what the tests can't check from one
+  place: access from the Apache hosts, campus, the VPN and off campus; WAF limiting per visitor, not per Apache host;
+  a slow first fetch answered rather than cut off.
