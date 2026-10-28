@@ -32,7 +32,7 @@ class Action(StrEnum):
     UPDATE_RETRY = "update_retry"
     THRESHOLD_OVERRIDE = "threshold_override"
     ADMIN_REFRESH = "admin_refresh"  # a manual refresh started (the admin app calls it that since issue #118)
-    UPDATE_RUN = "update_run"  # an admin ran a manual refresh's servability update (issue #118)
+    UPDATE_RUN = "update_run"  # an admin ran a manual refresh's servability update (October 27 to 28, 2026)
     PLACEHOLDER_UPLOAD = "placeholder_upload"
     ALERT_ACKNOWLEDGE = "alert_acknowledge"
     # The ETL's calls that change something, by "ETL (<museum>)", and each refresh's outcome, by the refresh (D150).

@@ -44,6 +44,13 @@ export interface Problem {
   problem: string
 }
 
+/** Manual refresh's dry run (mockup version 55): the check's result, when, and against which update; nothing kept. */
+export interface DryRun {
+  check: Check
+  checked_at: string
+  against: {refresh_id: string, updated_at: string} | null // null: there's no ETL list update yet
+}
+
 export interface Check {
   result: string
   rows: number
@@ -60,7 +67,7 @@ export interface Check {
 
 export type ReasonKind = 'problem' | 'admin' | 'override'
 
-export type RefreshAction = 'retry_update' | 'override_threshold' | 'run_update'
+export type RefreshAction = 'retry_update' | 'override_threshold'
 
 /** An admin's override of the delta threshold for a refresh's ETL list (D83): one made before issue #108 has only `at`. */
 export interface Override {
@@ -432,11 +439,15 @@ export const api = {
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/retry-update`, {reason}),
   overrideThreshold: (museum: string, refreshId: string, kind: string, reason: string) =>
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {kind, reason}),
-  // An admin refresh, with the ETL list as the body. The file name and reason are URL-encoded: a header carries
-  // only ASCII.
-  // A manual refresh (issue #118), with an uploaded list or one of the ETL's. openRefresh: the open refresh the admin
-  // was shown and agreed to close; Serena closes no other.
-  startRefresh: (museum: string, file: File, refreshDate: string, reason: string, openRefresh = '') =>
+  // Manual refresh (mockup version 55): a dry run of an ETL list, which changes nothing, then Apply, which starts a
+  // manual refresh that checks and updates by itself. An upload is sent with each. The file name and reason are
+  // URL-encoded: a header carries only ASCII. openRefresh: the pending refresh the admin was shown and confirmed
+  // stopping (rule D); kind: Apply with override.
+  dryRunUpload: (museum: string, file: File) =>
+    call<DryRun>('POST', `/museums/${museum}/servable-lists/dry-run`, undefined, {file, headers: {}}),
+  dryRunList: (museum: string, refreshId: string) =>
+    call<DryRun>('POST', `/museums/${museum}/servable-lists/${refreshId}/dry-run`),
+  startRefresh: (museum: string, file: File, refreshDate: string, reason: string, openRefresh = '', kind = '') =>
     call<Refresh>('POST', `/museums/${museum}/refreshes`, undefined, {
       file,
       headers: {
@@ -444,14 +455,14 @@ export const api = {
         'X-File-Name': encodeURIComponent(file.name),
         'X-Refresh-Date': refreshDate,
         'X-Reason': encodeURIComponent(reason),
-        'X-Open-Refresh': openRefresh
+        'X-Open-Refresh': openRefresh,
+        'X-Override-Kind': kind
       }
     }),
-  startFromList: (museum: string, refreshId: string, reason: string, openRefresh = '') =>
-    call<Refresh>('POST', `/museums/${museum}/refreshes/from-list`, {refresh_id: refreshId, reason, open_refresh: openRefresh}),
+  startFromList: (museum: string, refreshId: string, reason: string, openRefresh = '', kind = '') =>
+    call<Refresh>('POST', `/museums/${museum}/refreshes/from-list`,
+      {refresh_id: refreshId, reason, open_refresh: openRefresh, kind}),
   servableLists: (museum: string) => call<{lists: ServableList[]}>('GET', `/museums/${museum}/servable-lists`),
-  runUpdate: (museum: string, refreshId: string) =>
-    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/run-update`),
   // background: the banner's own checks, which don't count as activity (the session still signs out when idle)
   alerts: (museum: string, background = false) => call<{alerts: AlertItem[]}>('GET', `/museums/${museum}/alerts`,
     undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),

@@ -45,23 +45,12 @@
       {{ error }}
     </v-alert>
 
-    <!-- A manual refresh whose check passed waits for an admin (issue #118, MR9). -->
+    <!-- A manual refresh left waiting by the October 27 flow: the next refresh that starts closes it. -->
     <p v-if="refresh?.state === 'waiting'" id="refresh-waiting" class="mb-2">
-      <strong>The check passed{{ refresh.override ? ' without the delta threshold' : '' }}.</strong> Nothing has changed
-      yet: the refresh waits for an admin to run the ETL list update. Running it is in the audit log. If tonight's ETL
-      refresh or another manual refresh starts first, Serena closes this one as abandoned.
+      <strong>The check passed.</strong> Nothing has changed: this manual refresh was left waiting for an admin, which
+      Serena no longer does. Apply an ETL list in Manual refresh, or the next refresh, to replace it.
     </p>
     <div v-if="refresh?.actions.length" class="mb-6">
-      <v-btn
-        v-if="refresh.actions.includes('run_update')"
-        id="run-update"
-        color="primary"
-        variant="flat"
-        :loading="busy"
-        @click="runUpdate"
-      >
-        Run the ETL list update
-      </v-btn>
       <v-btn
         v-if="refresh.actions.includes('retry_update')"
         id="retry-update"
@@ -244,8 +233,8 @@ import StateSince from '@/components/StateSince.vue'
 import {alertsChanged, museumName} from '@/session'
 import {fixText, isOpen, overrideBy, overrideReason, overrideWords, retryText, stateSince, timesOver, when} from '@/words'
 
-// The actions with a dialog and a reason; "Run the ETL list update" has neither (the reason was given at the start).
-type Dialogued = Exclude<RefreshAction, 'run_update'>
+// The actions, each with a dialog and a reason.
+type Dialogued = RefreshAction
 const titles: Record<Dialogued, string> = {
   retry_update: 'Retry the ETL list update',
   override_threshold: 'Override the delta threshold'
@@ -261,7 +250,7 @@ const explanations = computed<Record<Dialogued, string>>(() => ({
     : 'The ETL list check failed only because more rows change than the delta threshold allows. ') +
     'Do this once you know the change is expected. Serena checks the same ETL list again without the delta ' +
     'threshold (every other check still applies) and, if it passes, ' +
-    `${refresh.value?.manual ? 'waits for an admin to run the ETL list update' : 'updates Serena from it'}. The team is emailed.`
+    'updates Serena from it. The team is emailed.'
 }))
 
 const route = useRoute()
@@ -317,15 +306,12 @@ const overshoot = computed(() => {
 })
 const afterOverride = computed(() => {
   const state = refresh.value?.state || ''
-  const manual = !!refresh.value?.manual // a manual refresh waits for an admin after its check (issue #118)
-  if (state === 'checking' || (state === 'updating' && !manual)) {
+  if (state === 'checking') {
     return 'Serena is checking the same ETL list again without the delta threshold (every other check still ' +
-      `applies) and, if it passes, ${manual ? 'waits for an admin to run the ETL list update' : 'updates'}. ` +
-      'This page checks again every few seconds until it\'s done.'
+      'applies) and, if it passes, updates. This page checks again every few seconds until it\'s done.'
   }
-  const then = state === 'updated' ? ' and updated from it' : state === 'waiting'
-    ? ': it passed, and waits for an admin to run the ETL list update'
-    : state === 'updating' ? ': it passed, and Serena is running the ETL list update' : ''
+  const then = state === 'updated' ? ' and updated from it'
+    : state === 'updating' ? ': it passed, and Serena is applying the ETL list' : ''
   return `Serena checked the same ETL list again without the delta threshold (every other check still applied)${then}. ` +
     'The team was emailed.'
 })
@@ -345,22 +331,6 @@ async function load(background = false) {
     error.value = failure(e)
   }
   checkAgain()
-}
-
-async function runUpdate() {
-  if (!refresh.value) {
-    return
-  }
-  busy.value = true
-  error.value = ''
-  try {
-    refresh.value = await api.runUpdate(museum.value, refresh.value.refresh_id)
-    checkAgain()
-  } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'That didn\'t work.'
-  } finally {
-    busy.value = false
-  }
 }
 
 function open(which: Dialogued) {

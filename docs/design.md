@@ -906,8 +906,11 @@ The actions:
   mockup versions 49 and 50; reworked October 28, 2026, mockup version 55, Richard; called an admin refresh in D66,
   D75 and D82, and Start a refresh before). An admin replaces the current ETL list, when a refresh failed or its ETL
   list didn't reach Serena, with one from a previous refresh or one they upload. **A dry run first, then Apply.**
-  Not yet built: the app and the admin API still have the October 27 flow (a check that waits for "Run the
-  servability update").
+  The admin API: `POST …/servable-lists/{refresh ID}/dry-run` and `POST …/servable-lists/dry-run` (the upload as
+  the body) answer with the check, when and against which update, and store and audit nothing; Apply is `POST
+  …/refreshes/from-list` or `POST …/refreshes` (the upload again), with the override's kind when there is one
+  (`kind`, `X-Override-Kind`) and the pending refresh the admin confirmed stopping (`open_refresh`,
+  `X-Open-Refresh`).
   - **The choice.** "Replace with:" **Choose from previous** (one of the museum's 10 most recent ETL lists from the
     ETL, `GET …/servable-lists`: one per refresh, that refresh's last, whatever its outcome, never a manual refresh's;
     each with its refresh, refresh date, upload time, rows, SHA-256 and the refresh's state) or **Upload one** (an
@@ -918,9 +921,10 @@ The actions:
     against the last ETL list update, as the worker would, and keeps nothing. No refresh is made, so it never
     conflicts with one, and it needs no reason. The result says when it was checked and against which update, then
     the counts and the delta (with the far-past note), or the first 20 problems and their total, which can't be
-    overridden. Choosing another ETL list drops the result. Serena answers within the request if a check of a large
-    list (some 187,000 rows) is fast enough, to measure first; otherwise the worker runs it as a job that is never a
-    refresh. An upload is sent with the dry run and again with Apply: nothing is stored in between.
+    overridden. Choosing another ETL list drops the result. Serena answers within the request (decided October 28,
+    2026): a check of a 187,000-row list against one as large took about 0.6 seconds on a laptop (0.2 to read the
+    last updated list, 0.4 to check), so even a few times that on Fargate, with both lists read from S3, fits one
+    request. An upload is sent with the dry run and again with Apply: nothing is stored in between.
   - **Apply refresh** is the last step, under a result that can be applied. It needs a reason (why now), for an
     upload the checkbox that the list was made from the live public core (D75), and, for an ETL list older than the
     newest, a confirmation (what it does to what Serena serves, and that a new list from the servable list script is
@@ -944,7 +948,9 @@ The actions:
   - **Gone** with this (from the October 27 flow): the `waiting` state, "Run the servability update" (`POST
     …/run-update`, audited as `update_run`), the check and its result followed on the page, and closing an open
     refresh when a check starts. The pages never say "close": a failed pending refresh gets a link to its page, one
-    on its way "stops", and a busy one "wait".
+    on its way "stops", and a busy one "wait". A refresh left `waiting` from before is still read (its page says
+    so) and closed by the next refresh that starts; old `update_run` entries stay in the Audit log. The refresh a
+    manual refresh replaces says "replaced by the manual refresh <refresh ID>" (it said "closed by" before).
 
 ### Watchdog and alerts
 
@@ -1849,9 +1855,6 @@ The F numbers follow the team's list of follow-ups.
   The file's name is part of the ETL API (Serena returns it when a refresh starts), so Serena would accept both for a
   while; the stored audit action `etl_servable_list_upload` would be read under both names, old entries keeping theirs
   (October 28, 2026).
-- **Manual refresh's dry run, in the request or the worker.** Measure a check of a real large list (some 187,000 rows)
-  in the admin API before building it; if it's too slow for one request, the worker runs it as a job that is never a
-  refresh (October 28, 2026).
 - **CORS on delivered files (D205).** Whether the portals' JavaScript viewers (PAHMA's 3D models, a PDF viewer) read
   Serena's files from script and so need `Access-Control-Allow-Origin`; none is sent until QA shows a need.
 - **The Media record behind a Blob.** Confirm against a real museum's CollectionSpace how the recall form finds the

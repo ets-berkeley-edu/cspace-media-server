@@ -1557,3 +1557,35 @@ With `./serena up`, run `./serena etl pahma`, then `./serena failed-update pahma
 - [ ] **6. The alert.** On Alerts, "An ETL list update failed" for the refresh from 5 says "Serena tries the update
   again every 10 minutes, until HH:MM UTC." (The alert after the last try, "Serena has stopped retrying it", is
   covered by the backend's tests: it would take 6 hours here.)
+
+## 46. Manual refresh as a dry run and Apply, on the local stack (20 minutes; before merging the pull request that adds it)
+
+What it checks: Manual refresh reworked (decided October 28, 2026, mockup version 55); it replaces section 39 for
+this page. With `./serena up`, run `./serena etl pahma` twice (two ETL lists to choose from), and sign in to PAHMA:
+
+- [ ] **1. The top card.** Manual refresh starts with "Current refresh:" (the newest, Updated, its rows, "Serena serves
+  from it") and "Pending refresh: none.", then "Replace with:" and its two choices. No list, no check button yet.
+- [ ] **2. Choose from previous.** The bottom card "Previous ETL lists" shows the last lists, newest first. "Check the
+  ETL list" shows only once one is picked; the top card says which.
+- [ ] **3. The dry run.** Pick the older list and check it: "The dry run passed", when, against which update, the
+  counts, "Nothing has changed."; the bottom card folds away. Past refreshes and the Audit log have nothing new. Pick
+  the other list: the result goes and the check shows again.
+- [ ] **4. Apply.** Check the older list again. Under "Apply it": the older-list warning. Press Apply refresh without
+  a reason: "Give a reason first." Give one and apply: a dialog asks to confirm the older list; confirm. The summary
+  says the refresh started, with which list and the reason, and points to Past refreshes and Overview. There the
+  refresh checks and is Updated by itself, with no "Run the update". "Replace with another ETL list" starts over.
+- [ ] **5. An upload.** Run `./serena etl pahma --file-only > /tmp/list.tsv` (outside the repository), choose "Upload
+  one", choose the file and check it. Apply without the live public core checkbox: it says so. Tick it, give a
+  reason and apply: Updated by itself; Past refreshes tags it "manual refresh · uploaded list".
+- [ ] **6. Apply with override.** Make a list that changes too much (`./serena etl pahma --rows 3 --file-only >
+  /tmp/three.tsv`), upload and check it: "The dry run failed only on the delta threshold", the far-past note if it
+  applies, and "Apply with override" in red. Apply without a kind, then with a reason under 20 characters: each says
+  what's missing. With both: the summary says the threshold is overridden; Alerts has "An admin overrode the delta
+  threshold"; the refresh is Updated by override. (Run `./serena etl pahma` afterwards to go back to 20 rows.)
+- [ ] **7. Other problems.** Upload a file that isn't an ETL list: "The dry run found N problems", the table, no
+  Apply; Cancel goes back to "Replace with:".
+- [ ] **8. A pending refresh in the way (rule D).** Run `./serena failed-update pahma`: the top card says the pending
+  refresh needs an admin, and the current one is partly replaced. Check and apply a list: no warning, no
+  confirmation; the summary says it replaced the failed refresh, whose page says "replaced by the manual refresh
+  <id>". A refresh waiting for the ETL job (the warning "is still under way … Applying your ETL list stops it", then
+  a confirmation) and a busy one ("wait for it to finish") are covered by the app's and the backend's tests.
