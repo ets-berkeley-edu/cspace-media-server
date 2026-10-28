@@ -52,7 +52,7 @@ export interface Check {
   changed: number
   previous_rows: number | null
   threshold_percent: number
-  delta_percent: number
+  delta_percent: number | null // null with nothing to compare with (a first servability update)
   error_count: number
   errors: Problem[]
   warnings: string[]

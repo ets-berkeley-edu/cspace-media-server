@@ -91,6 +91,69 @@ const OVERRIDE = {at: '2026-10-10T16:00:00+00:00', by: 'pahma-admin', reason: 'P
 const OVERRIDDEN = {...REFRESH, state: 'checking', actions: [], check: FAILED_CHECK, override: OVERRIDE,
   reasons: ['1 problem in the servable list', 'delta threshold overridden by an admin: PAHMA republished many images']}
 
+// Issue #120: past the delta threshold, the percent is in red and says how many times the threshold it is; from 10 times,
+// a note says it's far past it.
+const PAST_CHECK = {...FAILED_CHECK, rows: 500, added: 0, removed: 19, previous_rows: 500, delta_percent: 3.8,
+  errors: [{line: 0, field: 'file', problem: '3.8% of the rows would change; the threshold is 5.0%'}]}
+const FAR_CHECK = {...FAILED_CHECK, rows: 10678, added: 10641, removed: 0, previous_rows: 37, delta_percent: 28756.76,
+  errors: [{line: 0, field: 'file', problem: '28756.76% of the rows would change; the threshold is 5.0%'}]}
+const FAILED = {...REFRESH, state: 'check_failed', actions: ['override_threshold']}
+
+describe('how far past the delta threshold', () => {
+  it('says how many times the threshold a check is, without a note below 10 times', async () => {
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...FAILED, check: {...PAST_CHECK, delta_percent: 19}}}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#check-counts').text()).toBe('500 rows; 0 added, 19 removed, 0 changed (19% of the 500 rows of the ' +
+      'last servability update; 3.8 times the 5% threshold).')
+    expect(wrapper.find('#check-counts .delta-over').text()).toBe('19%')
+    expect(wrapper.find('#check-far-past').exists()).toBe(false)
+    await wrapper.find('#override-threshold').trigger('click')
+    await flushPromises()
+    expect(document.querySelector('#override-explanation')?.textContent).toContain('this list changes 19% of the rows, ' +
+      '3.8 times the 5% threshold. Do this once')
+    expect(document.querySelector('#override-far-past')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('from 10 times, says under the check and in the dialog that it\'s far past it', async () => {
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...FAILED, check: FAR_CHECK}}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#check-counts').text()).toContain('5,751 times the 5% threshold')
+    const note = 'Far past the delta threshold. 28756.76% is 5,751 times the threshold: the last servability update had ' +
+      '37 rows, this list has 10678. A change this large is usually a first load or the wrong file. Check that the file ' +
+      'is the right one before you override.'
+    expect(wrapper.find('#check-far-past').text()).toBe(note)
+    await wrapper.find('#override-threshold').trigger('click')
+    await flushPromises()
+    expect(document.querySelector('#override-explanation')?.textContent).toContain('5,751 times the 5% threshold: far past it.')
+    expect(document.querySelector('#override-far-past')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(note)
+    wrapper.unmount()
+  })
+
+  it('leaves out the advice to check the file where it can\'t be overridden', async () => {
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...FAILED, actions: [], newest: false, check: FAR_CHECK}}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#check-far-past').text()).toContain('usually a first load or the wrong file.')
+    expect(wrapper.find('#check-far-past').text()).not.toContain('before you override')
+    wrapper.unmount()
+  })
+
+  it('says nothing more within the threshold, or with nothing to compare with', async () => {
+    const within = {...PAST_CHECK, result: 'passed', delta_percent: 3.8, error_count: 0, errors: []}
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...REFRESH, state: 'updated', actions: [], check: within}}})
+    const {wrapper} = await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)
+    expect(wrapper.find('#check-counts').text()).toContain('(3.8% of the 500 rows of the last servability update; the threshold is 5%)')
+    expect(wrapper.find('#check-counts .delta-over').exists()).toBe(false)
+    wrapper.unmount()
+    const first = {...within, previous_rows: null, delta_percent: null}
+    fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: {...REFRESH, state: 'updated', actions: [], check: first}}})
+    const again = (await at('/pahma/refreshes/pahma-2026-10-10-1', RefreshDetail)).wrapper
+    expect(again.find('#check-counts').text()).toBe('500 rows; 0 added, 19 removed, 0 changed.')
+    expect(again.find('#check-far-past').exists()).toBe(false)
+    again.unmount()
+  })
+})
+
 describe('an overridden refresh', () => {
   it('says who overrode it, when and why, and marks the check it answered', async () => {
     fakeApi({'GET /museums/pahma/refreshes/pahma-2026-10-10-1': {body: OVERRIDDEN}})
@@ -98,7 +161,10 @@ describe('an overridden refresh', () => {
     const banner = wrapper.find('#override-banner')
     // Issue #110: it leads with the check that failed and by how much.
     expect(wrapper.find('#override-lead').text()).toBe('A safety check failed, and an admin overrode it')
-    expect(wrapper.find('#override-overshoot').text()).toBe('The servable list changes 50% of the rows; the threshold is 5%.')
+    // Issue #120: in red, with how many times the threshold it is.
+    expect(wrapper.find('#override-overshoot').text()).toBe('The servable list changes 50% of the rows, 10.0 times the 5% threshold: far past it.')
+    expect(wrapper.find('#override-overshoot .delta-over').text()).toBe('50%')
+    expect(wrapper.find('#check-far-past').exists()).toBe(false) // the banner says it
     expect(banner.text()).toContain('Delta threshold overridden by pahma-admin at 2026-10-10 16:00:00 UTC.')
     expect(wrapper.find('#override-reason').text()).toBe('Reason: PAHMA republished many images')
     expect(banner.text()).toContain('This page checks again every few seconds')
@@ -343,8 +409,13 @@ describe('Manual refresh (issue #118)', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     expect(wrapper.find('#manual-problems').exists()).toBe(false)
+    // Issue #120: 50% is 10 times the 5% threshold, so far past it, here and in the dialog.
+    expect(wrapper.find('#manual-counts').text()).toContain('10.0 times the 5% threshold')
+    expect(wrapper.find('#manual-far-past').text()).toContain('Check that the file is the right one before you override.')
     await wrapper.find('#manual-override').trigger('click')
     await flushPromises()
+    expect(document.querySelector('.v-dialog')?.textContent).toContain('this list changes 50% of the rows, 10.0 times the 5% threshold: far past it.')
+    expect(document.querySelector('#override-far-past')?.textContent).toContain('Far past the delta threshold.')
     const reason = document.querySelector('#override-reason') as HTMLTextAreaElement
     reason.value = 'a known bulk change'
     reason.dispatchEvent(new Event('input'))

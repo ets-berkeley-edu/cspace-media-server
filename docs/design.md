@@ -788,6 +788,13 @@ table, so a restart never loses a step.
   servability update (no updated servable list yet, or an empty one) has nothing to compare with, so the delta threshold
   doesn't apply to it; the refresh's warnings say so, and every other check still does. An admin can override the delta
   threshold for one refresh (below).
+  Wherever a check's delta is past the threshold (the check, the override banner and the override dialog, on a
+  refresh's page and on Manual refresh), the admin app shows the percent in red and how many times the threshold it is
+  ("3.8 times the 5% threshold"). From 10 times the threshold, a red note under the check and in the dialog says the
+  list is far past it, with the rows of the last servability update and of this list, and that a change this large is
+  usually a first load or the wrong file; once the threshold is overridden, the banner says it instead (issue #120,
+  decided October 27, 2026, mockup version 47). The 10 times is fixed, not a setting: the note changes neither what
+  Serena serves nor whether an override is allowed.
 - **The servability update** reads the museum's rows from the servability table itself, through its `by_tenant` index,
   so it is right even after a servability update that stopped partway (decided October 9, 2026). It first deletes the rows for Blobs no longer
   listed, then writes the new and changed rows, each with the time it was written (`listed_at`); unchanged rows aren't touched. Deleting before adding means a servability update
