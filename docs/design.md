@@ -12,14 +12,14 @@ Serena serves the images and documents that the UC Berkeley museums' public port
 of every file it has served, and hands browsers short-lived signed links to that copy.
 
 It runs as an AWS service: a FastAPI app on ECS Fargate behind CloudFront and an internal load balancer, a worker that takes in each day's
-servable list, an admin web app, DynamoDB for its records, private S3 buckets for the files and CloudFront for delivery.
+ETL list, an admin web app, DynamoDB for its records, private S3 buckets for the files and CloudFront for delivery.
 
 Key decisions:
 
 - **Same URLs, keyed by Blob CSID.** Glimmer and any other client keep requesting
   `…/<tenant>/imageserver/blobs/<blob CSID>/derivatives/<size>/content` and `…/blobs/<blob CSID>/content`; nothing
   in Glimmer changes. A URL keyed by Media CSID is added for clients that want it.
-- **The ETL decides what is public.** Each day, after it refreshes the public core, the ETL job makes a servable list
+- **The ETL decides what is public.** Each day, after it refreshes the public core, the ETL job makes an ETL list
   of every Blob in the live public core, with its Media CSID, kind and access, and hands it to Serena. Serena serves a
   Blob only if that list has it as public, in a kind Serena serves, and its Media record has no recall in Serena.
   Serena never reads Solr or CollectionSpace's Postgres.
@@ -51,13 +51,13 @@ Three things are easy to blur, and this design keeps them apart:
 
 | Part | What it is | Reads | Produces |
 | --- | --- | --- | --- |
-| The ETL (`cspace-solr-ucb`) | A daily job per museum | CollectionSpace's Postgres | The public Solr core, and the servable list for Serena |
+| The ETL (`cspace-solr-ucb`) | A daily job per museum | CollectionSpace's Postgres | The public Solr core, and the ETL list for Serena |
 | The public core | Data | n/a | What every client of the core sees |
 | Glimmer, and other clients | Applications | The public core, live | Requests to Serena's URLs |
-| Serena | The media server | The servable list (never Solr) | Images and documents |
+| Serena | The media server | The ETL list (never Solr) | Images and documents |
 
 Glimmer is the client we know; others may read the public cores, and this design assumes they do. Serena depends
-only on the public core, through the servable list, never on Glimmer. Changes on Glimmer's side (new URL
+only on the public core, through the ETL list, never on Glimmer. Changes on Glimmer's side (new URL
 shapes, a move to Media CSIDs) follow Glimmer's own timeline.
 
 Two rules follow (decided October 9, 2026):
@@ -95,7 +95,7 @@ What Serena improves:
 | Replacing a Media record's image always creates a new Blob record. The old Blob is left orphaned; CollectionSpace doesn't delete it. | A Blob CSID is never reused for different content. |
 | The Media service serves a Media record's current file: `media/<csid>/blob/content` and `media/<csid>/blob/derivatives/<name>/content`. It also returns soft-deleted Media records and their files. | Serena fetches through the Media service, after checking the record isn't deleted. |
 | Publication (`approvedforweb` / `postToPublic`), sensitivity (for PAHMA, the related Object's status) and access (for Cinefiles, the document's access code and record status) live on the Media, Object and Organization records, not on the Blob. | Serena doesn't evaluate them. The ETL does, per museum, in `cspace-solr-ucb`, and tells Serena the result (see Restricted files). |
-| The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its placeholder image; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The servable list mirrors these fields, with a kind and an access value per Blob. |
+| The public core lists Blob CSIDs in `blob_ss`, `card_ss`, the primary image field, the audio, video and 3D CSID fields, and (Cinefiles) `pdf_ss`. At PAHMA, images that aren't public appear as its placeholder image; the other museums leave them out. Cinefiles documents carry an access code; only code 4 ("World") is public. | The ETL list mirrors these fields, with a kind and an access value per Blob. |
 | Cinefiles staff set a document's access in CollectionSpace: "Access code override" on the document (Object) record, otherwise "Publication access code" on the Organization record named in its Source field. The values are PFA Staff Only, In House Only, Campus (UCB), Education (\*.edu) and World. A document's Record status must be approved for it to be in the public core. Cinefiles' ETL has no Media-level publish flag: every Media record of an included document is in the public core. | For Cinefiles, the access code restricts a PDF and the record status removes a whole document; unpublishing a Media record changes nothing. |
 | Cinefiles' access code is computed into a table (`cinefiles_denorm.doclist_view`, column `code`) by a daily "denorm" job that Lyrasis runs, not RTL; the ETL reads that table. | Restriction for Cinefiles depends on that job having run. The servable list script takes a PDF's access from `code_s` in the public core, so Glimmer and Serena agree. |
 | The ETL runs daily: cron starts `one_job.sh` at 21:01 server time (`crontab.app_cspace.PROD`, Jira CSW-1029), and it runs the museums one after another (since CSW-865). It empties each core and reloads it in place (delete, commit, then the day's CSV posted to Solr 8 on the ETL server); if a load fails it posts the previous day's CSV again. There is no staging core. Its output is immutable. | New files appear, and CollectionSpace-driven recalls take effect, within about 24 hours. |
@@ -168,8 +168,8 @@ flowchart LR
   F -->|origin access control| K
   E[Daily ETL] -->|public core| P[(Solr)]
   P --> G[Glimmer and other clients]
-  E -->|ETL API: servable list| A
-  W[Serena worker: servable list check, servability update, watchdog] --> D
+  E -->|ETL API: ETL list| A
+  W[Serena worker: ETL list check, ETL list update, watchdog] --> D
   W -->|alarms| N[SNS email]
   M[Admin web app] --> A
 ```
@@ -177,9 +177,9 @@ flowchart LR
 | Component | What it does |
 | --- | --- |
 | Serena app | Answers file requests (checks servability, finds or fetches the file, redirects); serves the ETL API and the admin app |
-| Worker | Checks each day's servable list and updates servability from it; runs the watchdog |
+| Worker | Checks each day's ETL list and updates servability from it; runs the watchdog |
 | DynamoDB | Servability records, recalls, refreshes, settings, alerts, the cache index, the audit log |
-| S3 buckets | One private, KMS-encrypted bucket per museum, holding every file Serena has fetched or watermarked, and each servable list it has updated from |
+| S3 buckets | One private, KMS-encrypted bucket per museum, holding every file Serena has fetched or watermarked, and each ETL list it has updated from |
 | CloudFront | Delivers files from S3 to browsers, only through signed URLs; serves the unavailable images and the generic placeholder picture without a signature |
 | Admin web app | Refreshes and alerts, settings, what Serena served and couldn't serve, recalls, placeholder images, why a file is or isn't served |
 | SNS | Emails alarms to the team's mailing list |
@@ -200,7 +200,7 @@ Serena answers the paths its clients build today, under each museum's prefix:
 - For clients that use Media CSIDs (pull request 15, decided October 14, 2026, D174 to D178):
   `…/<tenant>/imageserver/media/<media CSID>/blob/derivatives/<derivative>/content` and
   `…/media/<media CSID>/blob/content`. Such a request is answered as a request for the Media record's Blob in the
-  servable list of the last servability update (found through the `by_media` index), with every check a Blob request
+  ETL list of the last ETL list update (found through the `by_media` index), with every check a Blob request
   gets: listed, kind, access, recall, size. While a replaced image's old Blob is still listed beside the new one, the
   request is served if any of its listed Blobs passes, using the one listed most recently; when none passes, it gets
   the most recently listed Blob's reason, and `not_listed` when the record has none. Media URLs serve public files
@@ -213,9 +213,9 @@ and ignores any query string apart from the signature parameters on a request fo
 files). A request under a museum Serena doesn't serve gets the default unavailable image.
 
 A CSID is 1 to 64 letters, digits and hyphens (decided October 9, 2026). That covers the usual UUIDs and the CSIDs
-that aren't UUIDs, such as PAHMA's placeholder image. The same rule applies to the CSIDs in the servable list
+that aren't UUIDs, such as PAHMA's placeholder image. The same rule applies to the CSIDs in the ETL list
 and in each museum's configuration. It keeps malformed paths out; whether a Blob is served is decided only by the
-servable list.
+ETL list.
 
 Each museum's list of derivatives (decided October 9, 2026):
 
@@ -233,7 +233,7 @@ the access logs show which sizes are requested (see Open questions).
 
 ### Kinds
 
-Each Blob in the servable list has a kind (decided October 9, 2026):
+Each Blob in the ETL list has a kind (decided October 9, 2026):
 
 | Kind | Served | As | Checks on fetch | Watermarked |
 | --- | --- | --- | --- | --- |
@@ -252,9 +252,9 @@ files and 200 MB for PDFs, for every museum (decided October 9, 2026); the value
 
 Any museum may have images or documents that mustn't be public: PAHMA and Cinefiles do today. Which files are
 restricted is decided by the ETL, with each museum's own rules; Serena never encodes a museum's rule (decided October
-9, 2026). It sees only the result, per Blob, in the servable list:
+9, 2026). It sees only the result, per Blob, in the ETL list:
 
-| In the servable list | Meaning | Serena |
+| In the ETL list | Meaning | Serena |
 | --- | --- | --- |
 | Not listed | Not in the public core | Never serves it (`not_listed`) |
 | `access` restricted | In the public core, but only for readers a portal vouches for | Serves it only with a valid signed link, for a kind the museum allows signed access to; otherwise never |
@@ -265,7 +265,7 @@ What each museum's ETL does today:
 | Museum | Withheld or restricted by the ETL |
 | --- | --- |
 | PAHMA | Images not approved for the web, or whose Object is sensitive: left out of the public core and shown as its placeholder image (see Placeholder image). |
-| Cinefiles | Documents whose record status isn't approved: left out, with all their files. PDFs of documents whose access code isn't World: listed with `access` restricted; Glimmer shows them only to readers signed in to it, who have accepted Cinefiles' copyright terms. Page images of those documents: public, which Cinefiles staff accept (October 9, 2026). See The servable list for the rule. |
+| Cinefiles | Documents whose record status isn't approved: left out, with all their files. PDFs of documents whose access code isn't World: listed with `access` restricted; Glimmer shows them only to readers signed in to it, who have accepted Cinefiles' copyright terms. Page images of those documents: public, which Cinefiles staff accept (October 9, 2026). See The ETL list for the rule. |
 | BAMPFA, Botanical Garden, UCJEPS | Files their ETL rules don't publish: left out. |
 
 Signed access is part of each museum's configuration (its YAML file; not a setting admins change), listing the kinds
@@ -440,7 +440,7 @@ its own reason, so the admin app can say why a file isn't served:
 | `unknown_path` | Not one of the shapes in URLs |
 | `bad_csid` | The CSID isn't in CollectionSpace's format |
 | `derivative_not_served` | A derivative not on the museum's list |
-| `not_listed` | The Blob isn't in the servable list of the last servability update |
+| `not_listed` | The Blob isn't in the ETL list of the last ETL list update |
 | `kind_not_served` | Audio or video, for now |
 | `restricted` | A restricted Blob requested without a signed link, or of a kind the museum doesn't allow signed access to |
 | `signature_invalid` | A signed link that is malformed (a `uid` that isn't digits included), has an unknown key ID or doesn't match |
@@ -488,7 +488,7 @@ shows every unserved request by reason, and "Media look up" explains any one fil
   `/<tenant>` from the path, so the object's key stays `objects/<sha256>` (D195). These paths never clash with the
   legacy `/<tenant>/imageserver/…` paths, which go to the app.
 - **Origin access control (D196).** Each bucket's policy lets only this distribution read, and only under
-  `objects/` (never the servable lists); the KMS key's policy lets CloudFront decrypt for this distribution only.
+  `objects/` (never the ETL lists); the KMS key's policy lets CloudFront decrypt for this distribution only.
 - The 302 to a signed URL carries `Cache-Control: private, max-age=<the URL's remaining life>`. The URL is never logged:
   the log line says only that the museum's file was served from the cache.
 - 15-minute windows: a URL's expiry is the end of the 15-minute window after the current one, so every request for
@@ -560,31 +560,33 @@ The words this document, the code, the ETL API and the admin app use for the dai
 | --- | --- |
 | ETL job | The ETL's daily work for one museum (`cspace-solr-ucb`), from extracting the data to Serena's part |
 | Solr refresh | The ETL job's step that replaces the public core's documents with the day's |
-| Servable list | The list of the Blobs Serena may serve, made from the live public core (see The servable list) |
-| Servable list script | The ETL's script, on the ETL server, that makes a museum's servable list from its live public core |
+| ETL list | The list of the Blobs Serena may serve, made from the live public core (see The ETL list). Called the servable list until October 28, 2026 (Richard): the code, the ETL API, the tables, the S3 keys and the file's name keep "servable list" names until a later change |
+| Servable list script | The ETL's script, on the ETL server, that makes a museum's ETL list from its live public core |
 | `blobmedia_ss` | The public core's field that pairs each Blob with its Media record: `<blob CSID>:<media CSID>` |
-| Refresh | Serena's record of one museum's day: it takes a servable list through the servable list check and the servability update |
+| Refresh | Serena's record of one museum's day: it takes an ETL list through the ETL list check and the ETL list update |
 | Refresh date | The Pacific date a refresh started on; a refresh's ID is `<tenant>-<refresh date>-<n>` |
 | Daily sequence | The steps the ETL job and Serena take each day (see The daily sequence) |
-| Servable list check | The worker's checks of an uploaded servable list, the delta threshold among them, before anything changes |
-| Delta threshold | The largest share of rows, as a percentage, that may be added, removed or changed since the last servability update |
-| Servability update | The worker's update of the servability table from a servable list that passed the check |
-| First servability update | A museum's first, which has nothing to compare with, so the delta threshold doesn't apply |
+| ETL list check | The worker's checks of an uploaded ETL list, the delta threshold among them, before anything changes |
+| Delta threshold | The largest share of rows, as a percentage, that may be added, removed or changed since the last ETL list update |
+| ETL list update | The worker's update of the servability table from an ETL list that passed the check. Called the servability update until October 28, 2026; the code keeps that name. The admin app's state for it is "Applying the ETL list" |
+| First ETL list update | A museum's first, which has nothing to compare with, so the delta threshold doesn't apply |
 | Open and closed refresh | A refresh is closed once it is `updated` or `abandoned`, and open until then |
-| Failed refresh | A day when the public core was refreshed but Serena wasn't updated: its servable list didn't arrive, failed the check, or its servability update failed. An admin repairs it |
-| Retry the servability update | An admin action on a refresh whose servability update failed |
-| Override the delta threshold | An admin action on a refresh that failed only on the delta threshold: its servable list is checked again without it |
-| Admin refresh | A refresh an admin starts in the admin app with a servable list made by the servable list script, to repair a failed refresh (`POST /admin/v1/museums/{tenant}/refreshes`) |
+| Current refresh, pending refresh | The admin app's words (October 28, 2026): the current refresh is the newest `updated` one, which Serena serves from; the pending refresh is the open one, if any. The app never says "close" |
+| Dry run | Manual refresh's check of an ETL list that changes nothing and makes no refresh |
+| Failed refresh | A day when the public core was refreshed but Serena wasn't updated: its ETL list didn't arrive, failed the check, or its ETL list update failed. An admin repairs it |
+| Retry the ETL list update | An admin action on a refresh whose ETL list update failed |
+| Override the delta threshold | An admin action on a refresh that failed only on the delta threshold: its ETL list is checked again without it |
+| Admin refresh | A refresh an admin starts in the admin app with an ETL list made by the servable list script, to repair a failed refresh (`POST /admin/v1/museums/{tenant}/refreshes`) |
 | Rerun the ETL job | The ETL team runs a museum's ETL job again, the same day |
 | Recall | An admin's stop on serving a Media record's files, in Serena, until a refresh on a later day no longer lists them as public (see Recalls) |
-| Recall ended | A refresh ended a recall: its servable list no longer has the recalled Blob as public |
+| Recall ended | A refresh ended a recall: its ETL list no longer has the recalled Blob as public |
 | Release | The admin action that ends a recall a refresh kept, when CollectionSpace is right |
 | Cancel recall | The admin action that undoes a recall no refresh has decided yet (a mistake) |
 | Media look up | The admin app's page that says why Serena serves a file or not |
 | Past refreshes, Past requests | The admin app's pages of the last 30 days' refreshes, and of what Serena served and couldn't serve |
 
-Retired words: run (now refresh), night (refresh date), nightly (daily), preflight (servable list check), apply
-(servability update), change threshold (delta threshold), partial night (failed refresh). Retired with what they
+Retired words: run (now refresh), night (refresh date), nightly (daily), preflight (ETL list check), apply
+(ETL list update; since October 28, 2026, Apply refresh is Manual refresh's last step), change threshold (delta threshold), partial night (failed refresh). Retired with what they
 named (October 12, 2026): the Solr refresh status report (`solr-load`) and "Record the Solr refresh". Retired on
 October 13, 2026, after the admin app's UI review (D134, D135): takedown, take down and taken down (now recall and
 recalled, everywhere: the API, the recalls table, audit actions, alert kinds and the logged reason `recalled`), "Look up
@@ -598,9 +600,9 @@ where the table is read as a list, a sort key:
 
 | Table | Partition key | Sort key | Fields |
 | --- | --- | --- | --- |
-| Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access, and when the row was last written new or changed (`listed_at`, so a Media URL can pick the Blob listed most recently, D175); indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the servability update) |
-| Recalls | `<tenant>#<media CSID>` | | indexed by museum (`by_tenant`, for the Recalls page and the servability update); the Blob CSID the Media record had when it was recalled; who, when, why; and, once a servability update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A recall that ends is deleted; its history is in the audit log (see How a recall ends) |
-| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the servable list check's result, the servability update's counts, an admin's override, a manual refresh's list (its refresh date, and the refresh an ETL list came with), the worker's claim (owner, heartbeat), timestamps, reasons |
+| Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access, and when the row was last written new or changed (`listed_at`, so a Media URL can pick the Blob listed most recently, D175); indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the ETL list update) |
+| Recalls | `<tenant>#<media CSID>` | | indexed by museum (`by_tenant`, for the Recalls page and the ETL list update); the Blob CSID the Media record had when it was recalled; who, when, why; and, once an ETL list update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A recall that ends is deleted; its history is in the audit log (see How a recall ends) |
+| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the ETL list check's result, the ETL list update's counts, an admin's override, a manual refresh's list (its refresh date, and the refresh an ETL list came with), the worker's claim (owner, heartbeat), timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits, audit retention and the placeholder image's Media record (D169), over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its bell, banner and Alerts page |
 | Cache index | see Storage | | |
@@ -610,14 +612,14 @@ where the table is read as a list, a sort key:
 
 A Blob is servable when its servability record exists, its kind is served, its access is public (or restricted, with a
 valid signed link where the museum allows it), and its Media CSID has no active recall. The table holds the Blobs in
-the servable list of the last servability update. The museum's placeholder image must be listed there too, like any other (decided
+the ETL list of the last ETL list update. The museum's placeholder image must be listed there too, like any other (decided
 October 9, 2026).
 
-### The servable list
+### The ETL list
 
 The list of the files Serena may serve: every Blob the public core links to, with the Media record to fetch it
-through, its kind and who may see it. Serena checks it (the servable list check) and updates its servability table
-from it (the servability update). It was called the Blob-to-Media file until October 11, 2026.
+through, its kind and who may see it. Serena checks it (the ETL list check) and updates its servability table
+from it (the ETL list update). It was called the Blob-to-Media file until October 11, 2026.
 
 Made each day per museum by the servable list script, on the ETL server, from the museum's live public core, after the
 Solr refresh (Jira CSW-1027; decided October 11 and 12, 2026, D68 and D84). The script is the ETL team's, in
@@ -645,7 +647,7 @@ see, even when the Solr refresh fell back to the previous day's data, and it can
   "Education (\*.edu)", which CollectionSpace stores with an asterisk and the SQL doesn't. Only documents whose
   Record status is approved are in the table at all.
 - Only the museum's placeholder image may have an empty `media_csid`.
-- Immutable once uploaded: Serena keeps a copy of each servable list it receives in S3. The ETL server doesn't need to
+- Immutable once uploaded: Serena keeps a copy of each ETL list it receives in S3. The ETL server doesn't need to
   keep them, since the script can make the list again (D76).
 
 ### The daily sequence
@@ -654,24 +656,24 @@ Per museum (decided October 11 and 12, 2026, D70, D71, D80 and D81):
 
 1. Extract and merge, as today, writing `blobmedia_ss` too.
 2. The Solr refresh, as today, with its fallback to the previous day's data if the load fails.
-3. Run the servable list script: it makes the servable list from the live public core.
-4. Start a refresh with Serena; it returns the servable list's file name.
-5. Upload the servable list.
-6. Ask Serena to check it. If the check passes, Serena does the servability update at once.
+3. Run the servable list script: it makes the ETL list from the live public core.
+4. Start a refresh with Serena; it returns the ETL list's file name.
+5. Upload the ETL list.
+6. Ask Serena to check it. If the check passes, Serena does the ETL list update at once.
 7. Poll until the refresh is `updated`, `check_failed` or `update_failed`, and report the outcome.
 
 Serena's part never stops or undoes the Solr refresh (D71). If Serena can't be reached, a step doesn't finish within
-Serena's timeout, the check fails or the servability update fails, the ETL job reports it and carries on: the public
-core keeps the day's data, and Serena keeps its last servability update until an admin acts. That is a failed refresh.
-Serena raises an alert for a failed check or servability update at once, and the deadline alert when today's refresh
+Serena's timeout, the check fails or the ETL list update fails, the ETL job reports it and carries on: the public
+core keeps the day's data, and Serena keeps its last ETL list update until an admin acts. That is a failed refresh.
+Serena raises an alert for a failed check or ETL list update at once, and the deadline alert when today's refresh
 isn't `updated` in time (see Watchdog and alerts). An admin brings Serena up to date (see Admin actions on refreshes):
 
 - The check failed only on the delta threshold: override the delta threshold, after making sure the change is
   expected (for example a museum republished many images).
 - The check failed otherwise (a malformed list): once the cause is fixed, the ETL team reruns the ETL job, or an admin
   runs the servable list script again and starts a manual refresh.
-- The servability update failed: retry the servability update once whatever stopped it is fixed.
-- The servable list never reached Serena: run the servable list script on the ETL server, then start a manual refresh
+- The ETL list update failed: retry the ETL list update once whatever stopped it is fixed.
+- The ETL list never reached Serena: run the servable list script on the ETL server, then start a manual refresh
   (or start one with one of the ETL's recent lists).
 - Or wait: the next day's refresh catches up.
 
@@ -697,20 +699,21 @@ the AWS libraries' own logging stays at warnings, since at debug it would log a 
 | Method | Path | What it does |
 | --- | --- | --- |
 | `GET` | `/etl/v1/ping` | Checks connectivity and the token; answers with the museum the token belongs to, and nothing else |
-| `POST` | `/etl/v1/museums/{tenant}/refreshes` | Starts a refresh: Serena assigns the refresh ID and refresh date, and returns the servable list's file name, `poll_interval_seconds`, `step_timeout_seconds` and the links for the refresh's other calls. If a refresh for that museum and refresh date is still open, returns it |
+| `POST` | `/etl/v1/museums/{tenant}/refreshes` | Starts a refresh: Serena assigns the refresh ID and refresh date, and returns the ETL list's file name, `poll_interval_seconds`, `step_timeout_seconds` and the links for the refresh's other calls. If a refresh for that museum and refresh date is still open, returns it |
 | `GET` | `…/refreshes/{refresh_id}` | The refresh's status |
-| `PUT` | `…/refreshes/{refresh_id}/servable-list` | Uploads the servable list (`text/tab-separated-values`, gzip allowed), with `X-Row-Count` (data rows) and `X-Content-SHA256` (of the uncompressed file) |
-| `POST` | `…/refreshes/{refresh_id}/check` | The servable list check and, once it passes, the servability update (202; poll until `updated`, `check_failed` or `update_failed`). Allowed once a servable list is received, and again after a failed check with a corrected servable list |
+| `PUT` | `…/refreshes/{refresh_id}/servable-list` | Uploads the ETL list (`text/tab-separated-values`, gzip allowed), with `X-Row-Count` (data rows) and `X-Content-SHA256` (of the uncompressed file) |
+| `POST` | `…/refreshes/{refresh_id}/check` | The ETL list check and, once it passes, the ETL list update (202; poll until `updated`, `check_failed` or `update_failed`). Allowed once an ETL list is received, and again after a failed check with a corrected ETL list |
 | `GET` | `/etl/v1/museums/{tenant}` | The latest updated refresh (`404` if there is none yet) |
 
 Refresh states: `started` → `received` → `checking` → `check_failed`, or `updating` → `updated` or `update_failed`.
-A manual refresh's passed check goes to `waiting` instead, until an admin runs the servability update (`updating`; see
-Admin actions on refreshes). An open refresh becomes `abandoned` when a later refresh date's refresh or a manual
-refresh closes it. Rules:
+A manual refresh goes through the same states and updates as soon as its check passes, as an ETL refresh does
+(decided October 28, 2026, mockup version 55; before, its passed check waited in a `waiting` state for an admin to
+run the update, MR9). An open refresh becomes `abandoned` when a later refresh date's refresh or a manual refresh
+closes it. Rules:
 
-- A call out of order gets `409`. Repeating a call is safe: starting a refresh returns the open refresh; asking for a servable list check
+- A call out of order gets `409`. Repeating a call is safe: starting a refresh returns the open refresh; asking for an ETL list check
   that is queued, running or done returns the refresh as it is (`202` while queued or running, `200` once done);
-  uploading the same servable list changes nothing; a corrected servable list may replace the previous one while the
+  uploading the same ETL list changes nothing; a corrected ETL list may replace the previous one while the
   refresh is `started`, `received`, `check_failed` or `update_failed` (so a rerun of the ETL job repairs either), and
   must then be checked again; asking for a check of a `check_failed` refresh without a corrected list returns it as
   it is.
@@ -719,8 +722,6 @@ refresh closes it. Rules:
   and the API has no "force" option (Richard, October 13, 2026, D149): the delta threshold guards against a broken ETL
   run, so only an admin overrides it, in the admin app. Starting a later refresh date's refresh, or a manual refresh,
   closes an earlier open refresh as `abandoned`, except one the worker is checking or updating, which is never abandoned.
-  A manual refresh `waiting` for its servability update is closed by any refresh that starts, the same day's
-  included: the ETL's start then begins a new refresh rather than returning it (issue #118, MR9).
 - If the open refresh is one the worker is checking or updating, a later refresh date's refresh isn't started: `409`, and the
   ETL tries again until its step timeout, then carries on without Serena (decided October 9, 2026). So a museum has
   at most one open refresh, always its newest.
@@ -732,13 +733,13 @@ refresh closes it. Rules:
   change per museum in the admin app. The ETL's own HTTP calls use a connect timeout of 10 seconds, a read timeout of
   60 seconds and up to 3 retries with backoff.
 - The ETL can't override Serena's checks. Overriding the delta threshold for one refresh (for example after a museum
-  republishes many images) and retrying a servability update are admin actions (see Admin actions on refreshes).
+  republishes many images) and retrying an ETL list update are admin actions (see Admin actions on refreshes).
 - Every state change is a conditional write on the refresh's current state, so two calls at once can't both succeed.
 
 Uploads (decided October 9, 2026): the body is streamed to the task's disk while it's decompressed, hashed and
 counted, then stored gzip-compressed in the museum's bucket at `servable-list/<refresh ID>/<file name>.gz`. At most 500 MB
 uncompressed (a setting, `SERENA_UPLOAD_MAX_MB`). A gzip body is decompressed in bounded pieces, so a small body that
-expands hugely is refused like a large one. The format is checked by the servable list check, not here.
+expands hugely is refused like a large one. The format is checked by the ETL list check, not here.
 
 Answers: `200` or `201` (a refresh started), and these problems:
 
@@ -759,7 +760,7 @@ The API's OpenAPI description, with examples, is generated from the code. A copy
 `docs/api/etl-v1.json`, and CI fails when the copy no longer matches the code, so the ETL team can read it on GitHub.
 The admin app has a button that opens the same documentation.
 
-### Servable list check and servability update
+### ETL list check and ETL list update
 
 The worker (a separate process, as in the BMU: `python -m serena.worker`) does both, from work queued in the Refreshes
 table, so a restart never loses a step.
@@ -769,7 +770,7 @@ table, so a restart never loses a step.
   conditional write that sets an owner and a heartbeat; the heartbeat is renewed every 30 seconds while the step
   runs. A step whose heartbeat is more than 5 minutes old was interrupted, and another pass claims it and starts it
   again; both steps are safe to repeat. One worker task to start.
-- **The servable list check** reads the uploaded servable list and checks, failing on any of (decided October 9, 2026):
+- **The ETL list check** reads the uploaded ETL list and checks, failing on any of (decided October 9, 2026):
   - a header other than `blob_csid`, `media_csid`, `kind`, `access`, tab-separated; a missing header (empty file);
   - a line without exactly four fields; a line that isn't UTF-8; a line ending in CR (lines end in LF; the last may
     have no LF);
@@ -781,28 +782,60 @@ table, so a restart never loses a step.
   It warns, without failing, when the museum's placeholder image isn't listed and when one Media CSID is listed
   for several Blobs. The refresh shows the result: the rows, added, removed and changed counts, the delta as a percentage,
   the number of problems and the first 20, each with its line number, field and what is wrong, never the value. When
-  the check passes, the refresh goes to `updating` at once and the worker does the servability update (D80).
-- **The delta threshold** (decided October 9, 2026): the servable list is compared with the last updated refresh's, as
+  the check passes, the refresh goes to `updating` at once and the worker does the ETL list update (D80).
+- **The delta threshold** (decided October 9, 2026): the ETL list is compared with the last updated refresh's, as
   kept in S3. The added, removed and changed rows (a changed Media CSID, kind or access), as a percentage of that servable
   list's rows, may be at most the museum's delta threshold (5% to start, a per-museum setting). A museum's first
-  servability update (no updated servable list yet, or an empty one) has nothing to compare with, so the delta threshold
+  ETL list update (no updated ETL list yet, or an empty one) has nothing to compare with, so the delta threshold
   doesn't apply to it; the refresh's warnings say so, and every other check still does. An admin can override the delta
   threshold for one refresh (below).
   Wherever a check's delta is past the threshold (the check, the override banner and the override dialog, on a
   refresh's page and on Manual refresh), the admin app shows the percent in red and how many times the threshold it is
   ("3.8 times the 5% threshold"). From 10 times the threshold, a red note under the check and in the dialog says the
-  list is far past it, with the rows of the last servability update and of this list, and that a change this large is
+  list is far past it, with the rows of the last ETL list update and of this list, and that a change this large is
   usually a first load or the wrong file; once the threshold is overridden, the banner says it instead (issue #120,
   decided October 27, 2026, mockup version 47). The 10 times is fixed, not a setting: the note changes neither what
   Serena serves nor whether an override is allowed.
-- **The servability update** reads the museum's rows from the servability table itself, through its `by_tenant` index,
-  so it is right even after a servability update that stopped partway (decided October 9, 2026). It first deletes the rows for Blobs no longer
-  listed, then writes the new and changed rows, each with the time it was written (`listed_at`); unchanged rows aren't touched. Deleting before adding means a servability update
-  that stops halfway never serves a Blob that the new servable list dropped. Writes are batched (25 at a time), and what
-  DynamoDB leaves unprocessed is retried with backoff; a whole servability update that still fails is tried twice more
+- **The ETL list update** reads the museum's rows from the servability table itself, through its `by_tenant` index,
+  so it is right even after an ETL list update that stopped partway (decided October 9, 2026). It first deletes the rows for Blobs no longer
+  listed, then writes the new and changed rows, each with the time it was written (`listed_at`); unchanged rows aren't touched. Deleting before adding means an ETL list update
+  that stops halfway never serves a Blob that the new ETL list dropped. Writes are batched (25 at a time), and what
+  DynamoDB leaves unprocessed is retried with backoff; a whole ETL list update that still fails is tried twice more
   before the refresh ends `update_failed` with the reason. The refresh shows the counts: deleted, written, unchanged.
-- **Recalls, after the servability update.** Once the update has succeeded, the worker goes through the museum's
-  recalls and ends the ones the new servable list shows CollectionSpace has caught up with (see How a recall ends,
+  **An update that failed partway** (decided October 28, 2026): the batches are not one all-or-nothing change, so
+  what was done stays. Failing while deleting, some Blobs the new ETL list drops are no longer served; failing while
+  writing, all of those are gone and some of the new and changed rows are written, the rest not. Serena then serves
+  some of each ETL list, never a Blob the new one dropped. Retrying is always safe: each try reads the table again and
+  does only what's left, and "Retry the update" or the next refresh finishes the job. A worker that dies mid-update
+  doesn't cause this: its heartbeat goes stale and another pass finishes the step. Two rules keep the partial state
+  harmless and short (Richard, October 28, 2026; not yet built):
+  - **Tighten first, publish last.** The order is by effect, not by kind of write: first the deletes of Blobs the new
+    ETL list drops and every change that makes a file less available (public to restricted, a changed Media CSID or
+    kind); then the new rows and every change that makes one more available. An update that stops partway then never
+    serves a file it shouldn't: the worst is some newly listed files not served yet, which fails closed. (Today's
+    order, deletes then all writes, can leave a file the new list restricts still served as public.)
+  - **Retry by itself.** The worker tries an `update_failed` refresh's update again every 10 minutes for up to 6 hours
+    (starting values), so the partial state lasts minutes once its cause clears, not until an admin notices. While it
+    retries, the alert, the refresh's page and the pending card say so ("Serena tries the update again every 10
+    minutes, until <time>"); "Retry the update" still tries at once, and applying another ETL list still replaces
+    it. After the last try, the alert says Serena has stopped retrying and an admin is needed. A failed update usually
+    means DynamoDB is failing, and while it is Serena can't look a file up, so it serves the unavailable image
+    anyway: the partial state shows only once DynamoDB answers again.
+
+  The admin app flags the current refresh "partly replaced" while the pending refresh is `update_failed` (see Admin
+  web app). A revert to the last updated ETL list isn't offered: that list is older than the public core the portals
+  show, so it would serve files since dropped or restricted, and it is itself an update that can stop partway;
+  Manual refresh can apply a previous ETL list if an admin chooses to, with the older-list warning. The worker raises the
+  alert at once ("An ETL list update failed", emailed through SNS once it's recorded), audits the outcome, and logs a
+  warning for each failed try. All but the log are stored in DynamoDB too, so during a DynamoDB outage they can wait:
+  an alert that can't be recorded is raised again by the watchdog's later passes and emailed once DynamoDB answers,
+  and a refresh that can't be marked `update_failed` stays `updating` until its stale heartbeat lets another pass try
+  again. The team always hears, but in an outage the email can come after DynamoDB is back. The ETL job's polls read
+  the refresh too, so in that case the job reports Serena unreachable or its step timeout, not the failed update; and
+  Serena records no progress for a failed update, so neither the ETL nor the admin app can say how far it got (see
+  Open questions).
+- **Recalls, after the ETL list update.** Once the update has succeeded, the worker goes through the museum's
+  recalls and ends the ones the new ETL list shows CollectionSpace has caught up with (see How a recall ends,
   D119). The refresh shows how many it removed and how many it kept.
 ### Admin actions on refreshes
 
@@ -813,9 +846,9 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
 
 **A refresh's reasons in two lists** (issue #120, decided October 27, 2026, mockup version 47). Serena records each
 reason with its kind (`reason_kinds`, one per reason, beside `reasons`, which stay plain strings for the ETL API, the
-watchdog and the audit log): `problem` (a problem in the servable list, a failed update, a refresh abandoned when a
-later refresh started), `admin` (a retried update, a manual refresh, the servability update run on one, and the
-refresh a manual refresh closed) or `override`. The admin API returns `reason_kinds` with every refresh. A reason
+watchdog and the audit log): `problem` (a problem in the ETL list, a failed update, a refresh abandoned when a
+later refresh started), `admin` (a retried update, a manual refresh, and the refresh a manual refresh replaced) or
+`override`. The admin API returns `reason_kinds` with every refresh. A reason
 recorded before has no kind and counts as `problem`; since every later reason has one, the kinds stored belong to the
 newest reasons. A refresh's page shows **What went wrong** (`problem`) and **What admins did** (`admin` and
 `override`), each "None." when empty, in place of Reasons. The override's line there says who and when ("Delta
@@ -823,13 +856,13 @@ threshold overridden by <admin> at <time>; its reason is in the banner above.");
 Serena wrote for its override still counts as the override's. The app never guesses a list from a reason's words.
 The actions:
 
-- **Retry the servability update.** On an `update_failed` refresh: it goes back to `updating` and the worker does the
-  servability update again.
+- **Retry the ETL list update.** On an `update_failed` refresh: it goes back to `updating` and the worker does the
+  ETL list update again, at once (the worker also retries by itself, see An update that failed partway).
 - **Override the delta threshold.** On a `check_failed` refresh whose only problem is the delta threshold: it goes
-  back to `checking`, and the worker checks the same servable list again, skipping only the delta threshold (every
-  other check still applies); on a pass it does the servability update. The refresh's reasons and its check's warnings
+  back to `checking`, and the worker checks the same ETL list again, skipping only the delta threshold (every
+  other check still applies); on a pass it does the ETL list update. The refresh's reasons and its check's warnings
   say so. Nothing is left armed, so there is nothing to expire or cancel, and an override only ever applies to a
-  servable list an admin has looked at. Each override raises an alert, so the team is emailed every time. The refresh
+  ETL list an admin has looked at. Each override raises an alert, so the team is emailed every time. The refresh
   keeps the override's time, admin, kind and reason (`override`: `at`, `by`, `kind`, `reason`; an override made before
   October 26, 2026 has only `at`, and one made before issue #120 no `kind`), and the admin API returns it with every
   refresh, in lists too (issue #108, decided October 26, 2026, mockup version 44). **Why the change is expected**
@@ -857,34 +890,49 @@ The actions:
   default, the choice is kept in the address as `show=overridden`, the menu opens the page on All, and "No overridden
   refreshes in the last 30 days." when there are none. It needs nothing new from Serena: it reads each refresh's
   `override`.
-- **Manual refresh** (the admin app's Manual refresh page, issue #118, decided October 27, 2026 from MR1 to MR15
-  and mockup versions 49 and 50; called an admin refresh in D66, D75 and D82, and Start a refresh before). When a
-  servable list didn't reach Serena, needs replacing, or a refresh failed:
-  - **The list.** One of the museum's 10 most recent servable lists from the ETL (`GET …/servable-lists`): one per
-    refresh, that refresh's last, whatever its outcome, never a manual refresh's; each with its refresh, refresh date,
-    upload time, rows, SHA-256 and the refresh's state. The page warns when the list picked isn't the newest (what it
-    does to servability, and that running the servable list script on the ETL server for a new list is better) and
-    asks to confirm (MR6). Serena checks it again as stored (`POST …/refreshes/from-list` with the refresh's ID; the
-    new refresh points to the same S3 object, which is never deleted), and the refresh is for that list's own refresh
-    date (`admin_refresh_date`, with `admin_refresh_from` naming the refresh). **Or an upload** (`POST
-    …/refreshes`): the admin runs the servable list script on the ETL server, sends the list (plain or gzip, under
-    the same size limit as the ETL's uploads), gives the refresh date it is for (today, to start), and confirms with a
-    checkbox that the list was made from the live public core (D75). Either way a reason is required.
-  - **The open refresh** (MR13). Serena closes the museum's open refresh as `abandoned` ("closed by the manual
-    refresh <refresh ID>", D82) only if it is the one the admin was shown and confirmed closing (`open_refresh`, or
-    the `X-Open-Refresh` header for an upload): otherwise `409`. Refused while the worker is checking or updating a
-    refresh.
-  - **Check, then update** (MR9, MR10). Serena starts a new refresh (`201`) and checks the list. If the check
-    passes, the refresh is `waiting`: nothing changes until an admin presses **Run the servability update** (`POST
-    …/refreshes/{refresh_id}/run-update`, no reason, audited as `update_run`). A waiting refresh nobody updates is
-    closed as `abandoned` when the ETL or another manual refresh starts a refresh; it has no timeout. If the check
-    fails only on the delta threshold, the admin can override it on the page, as on the refresh's page (MR11): the
-    re-check that passes leaves it `waiting` too, and the alert says so. Any other failure shows the first 20
-    problems and their total, with no override (MR12). The progress and the result are on the Manual refresh page
-    (layout A), which checks again every 5 seconds while the refresh is checking or updating, with a link to the
-    refresh; its page has the Run button too. Audited as `admin_refresh` (shown as "manual refresh"). The refresh's
-    refresh date is today, as for every refresh; the list's date is recorded with it and shown beside it. ETL
-    refreshes still update as soon as their check passes.
+- **Manual refresh** (the admin app's Manual refresh page; issue #118, decided October 27, 2026, from MR1 to MR15 and
+  mockup versions 49 and 50; reworked October 28, 2026, mockup version 55, Richard; called an admin refresh in D66,
+  D75 and D82, and Start a refresh before). An admin replaces the current ETL list, when a refresh failed or its ETL
+  list didn't reach Serena, with one from a previous refresh or one they upload. **A dry run first, then Apply.**
+  Not yet built: the app and the admin API still have the October 27 flow (a check that waits for "Run the
+  servability update").
+  - **The choice.** "Replace with:" **Choose from previous** (one of the museum's 10 most recent ETL lists from the
+    ETL, `GET …/servable-lists`: one per refresh, that refresh's last, whatever its outcome, never a manual refresh's;
+    each with its refresh, refresh date, upload time, rows, SHA-256 and the refresh's state) or **Upload one** (an
+    ETL list made with the servable list script on the ETL server, plain or gzip, under the same size limit as the
+    ETL's uploads, with the refresh date it is for, today to start). The table or the upload's fields appear only once
+    one is chosen.
+  - **Check the ETL list: a dry run.** It shows what applying it would change and changes nothing: Serena checks it
+    against the last ETL list update, as the worker would, and keeps nothing. No refresh is made, so it never
+    conflicts with one, and it needs no reason. The result says when it was checked and against which update, then
+    the counts and the delta (with the far-past note), or the first 20 problems and their total, which can't be
+    overridden. Choosing another ETL list drops the result. Serena answers within the request if a check of a large
+    list (some 187,000 rows) is fast enough, to measure first; otherwise the worker runs it as a job that is never a
+    refresh. An upload is sent with the dry run and again with Apply: nothing is stored in between.
+  - **Apply refresh** is the last step, under a result that can be applied. It needs a reason (why now), for an
+    upload the checkbox that the list was made from the live public core (D75), and, for an ETL list older than the
+    newest, a confirmation (what it does to what Serena serves, and that a new list from the servable list script is
+    better, MR6). It starts an ordinary manual refresh (`201`) that checks the ETL list again, since the last update
+    may have moved since the dry run, and, on a pass, updates by itself, as an ETL refresh does. A dry run that failed
+    only on the delta threshold offers **Apply with override** instead: "Why is the change expected?" and a reason of
+    at least 20 characters, and the refresh starts with the threshold overridden, which is emailed then. **Cancel**
+    goes back to "Replace with:" with nothing chosen; nothing was made, so there's nothing to undo.
+  - **A pending refresh in the way** (rule D, October 28, 2026; MR13 before). On its way and waiting (`started`,
+    `received`): Apply says it stops it ("the ETL job's list won't be applied, and its run ends with an error") and
+    asks to confirm; Serena then closes it as `abandoned` ("replaced by the manual refresh <refresh ID>", D82), only
+    if it's the one the admin was shown (`open_refresh`, or the `X-Open-Refresh` header for an upload): otherwise
+    `409`. Being checked or applied (`checking`, `updating`): Apply says to wait a few minutes; Serena refuses it
+    meanwhile. Failed (`check_failed`, `update_failed`): no warning or confirmation, since applying another ETL list
+    is one of its fixes; Serena closes it the same way.
+  - **After Apply**, the page shows a summary (the refresh it started, with which ETL list, the reason or the
+    override, the pending refresh it replaced) and points to Past refreshes and Overview to follow it; "Replace with
+    another ETL list" starts over. The page doesn't follow the refresh. Audited as `admin_refresh` (shown as "manual
+    refresh"), with the reason. The refresh's refresh date is today, as for every refresh; the ETL list's date is
+    recorded with it and shown beside it.
+  - **Gone** with this (from the October 27 flow): the `waiting` state, "Run the servability update" (`POST
+    …/run-update`, audited as `update_run`), the check and its result followed on the page, and closing an open
+    refresh when a check starts. The pages never say "close": a failed pending refresh gets a link to its page, one
+    on its way "stops", and a busy one "wait".
 
 ### Watchdog and alerts
 
@@ -895,8 +943,8 @@ The watchdog runs in the worker every 5 minutes, in Pacific time (daylight savin
 - a museum's newest refresh is `check_failed`, `update_failed` or `abandoned` (an abandoned refresh's reasons say whether
   a later refresh date's refresh or a manual refresh closed it). The worker raises the first two at once, when the
   step fails; the watchdog's later passes raise them again, which records and emails nothing more;
-- Serena hasn't had a servability update for a museum in 24 hours. Only a museum that has had one can be late: before
-  its first servability update there's nothing to compare with.
+- Serena hasn't had an ETL list update for a museum in 24 hours. Only a museum that has had one can be late: before
+  its first ETL list update there's nothing to compare with.
 
 An alert counts on the admin app's bell and shows in its one-line banner (checked on every page change and every
 minute; see Admin web app, Layout) until an admin acknowledges it on the Alerts page, which lists the last 30 days'
@@ -930,14 +978,14 @@ unsubscribe. Without a topic (local development) alerts are recorded and logged,
 
 Each alert is keyed by what it is about, `<refresh date>#<kind>#<subject>` (the subject is the refresh ID or the refresh date), so the
 watchdog raises it on every pass while it holds but it is recorded, logged and emailed once (decided October 9,
-2026). The 24-hour alert's refresh date is the day it is raised, so it comes again once a day until a servability update. An
+2026). The 24-hour alert's refresh date is the day it is raised, so it comes again once a day until an ETL list update. An
 alert whose email failed is sent again on the next pass. Alerts carry museum names, refresh dates, refresh IDs and reasons,
 never personal data.
 
 Recalls raise their own alerts (see How a recall ends): an admin's recall, a recall a refresh kept because
 CollectionSpace still has the file as public, an admin's release, and a notice when a refresh ended recalls.
 
-Once per refresh date, while the last servability update's servable list lists a museum's placeholder image and no
+Once per refresh date, while the ETL list of the last ETL list update has a museum's placeholder image and no
 Media record is named for it, the watchdog raises "The placeholder image isn't set": the public sees Serena's generic
 picture (decided October 14, 2026, D173, replacing D127).
 
@@ -1003,16 +1051,16 @@ picture (decided October 14, 2026, D173, replacing D127).
 #### How a recall ends
 
 A successful ETL refresh is the source of truth for what Serena serves (decided October 12, 2026, D119). So only a
-successful servability update ends a recall, and only when the servable list shows that CollectionSpace has caught up.
+successful ETL list update ends a recall, and only when the ETL list shows that CollectionSpace has caught up.
 An admin can end a recall by hand in two narrow cases, below: Cancel recall, before a refresh has decided it, and
 Release, once a refresh has kept it.
 
-After each successful servability update, the worker looks at each of the museum's recalls:
+After each successful ETL list update, the worker looks at each of the museum's recalls:
 
 1. **Too early: kept, silently.** The refresh's refresh date isn't after the day the recall was made (Pacific). The
    ETL job starts reading CollectionSpace at 21:01 server time and Serena gets a museum's list after that museum's Solr
    refresh, so a list for the same day may have been made before staff changed CollectionSpace.
-2. **CollectionSpace has caught up: ended.** The new servable list no longer lists the recalled Blob as public:
+2. **CollectionSpace has caught up: ended.** The new ETL list no longer lists the recalled Blob as public:
    - not listed at all: the Media record was unpublished, its Object marked sensitive, or (Cinefiles) its document's
      record status changed;
    - listed with a different Blob, the old one gone: staff replaced the image and made the record public again;
@@ -1020,7 +1068,7 @@ After each successful servability update, the worker looks at each of the museum
 
    The recall is deleted, the audit log records it (`recall_ended`, "ended by refresh pahma-2026-10-14-1: no
    longer listed as public"), and the team gets one notice per refresh that removed any, naming how many.
-3. **Still public: kept, with an alert.** The new servable list still lists the same Blob as public. Either staff
+3. **Still public: kept, with an alert.** The new ETL list still lists the same Blob as public. Either staff
    haven't changed CollectionSpace (or the change hasn't reached the public core: at Cinefiles, unpublishing a Media
    record changes nothing, and Lyrasis's denorm job must run before the ETL), or the recall was a mistake. The list
    can't tell which, so Serena keeps serving the unavailable image and raises an alert, "Recalled in Serena, but
@@ -1077,7 +1125,7 @@ about it (decided October 9, 2026).
 Its picture comes from a Media record in the museum's CollectionSpace that an admin names in the admin app (decided
 October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided in D124 to D127):
 - **Every museum** can name one (D167). It's served only for the Blob in the museum's configuration, when its
-  servable list lists it: today only PAHMA's ETL does. For another museum, a named record is ready for when its ETL
+  ETL list lists it: today only PAHMA's ETL does. For another museum, a named record is ready for when its ETL
   lists a placeholder.
 - **Until one is named** (D168), a request for the placeholder gets Serena's generic "Image restricted" picture, the
   same for every museum and every size: a 302 with `no-store` to `<base URL>/default/placeholder.svg`, served by
@@ -1166,9 +1214,9 @@ October 14, 2026, D166 to D173, Richard's idea; they replace the upload decided 
 - **Cache index.** `<tenant>#<blob CSID>#<derivative>` (`original` for the original file) → hash, content type,
   size, fetched-at, and last served, to the day (D142; see Admin web app, Media look up). Watermarked copies have
   their own entries, with the hash they were made from; how they are keyed is open (F1). Files served by Media CSID share
-  their Blob's entries (the Blob listed for the Media record in the servable list of the last servability update, D176),
+  their Blob's entries (the Blob listed for the Media record in the ETL list of the last ETL list update, D176),
   so a file requested both ways is fetched and stored once, and a replaced image, which gets a new Blob in the next
-  servable list, is fetched again after the next daily update. The placeholder image's copies, fetched through the Media record named for it,
+  ETL list, is fetched again after the next daily update. The placeholder image's copies, fetched through the Media record named for it,
   are indexed under the Blob CSID in the museum's configuration (D172).
 - **Never deleted.** A recall leaves objects and index entries in place. When it ends (see How a recall ends), they
   are served again without another fetch.
@@ -1262,21 +1310,39 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     Cancel and Back included. Plain text is only for links. Recalls' "Recall…" is outlined red: it only opens the
     form, whose "Recall <n> Media records" is the filled red one (Richard, October 14, 2026).
   - **A reason is never a disabled button** (Richard, October 14, 2026, for accessibility). In every dialog that needs
-    a reason (Recall, Release, Cancel recall, a Settings change, Retry the servability update, Override the delta
+    a reason (Recall, Release, Cancel recall, a Settings change, Retry the ETL list update, Override the delta
     threshold, Manual refresh), the action's button stays enabled. Pressed without a reason, it sends nothing, says
     "Give a reason first." under the Reason field and moves focus there; a hint under the field says it's required
     and where it's recorded. An override also says "Choose why the change is expected." under its kinds, with focus
-    on the first, and a reason under 20 characters says how many it has (issue #120). Manual refresh does the same for its list or its file, its refresh date and its
-    confirmation, and a
-    Settings change for its value.
+    on the first, and a reason under 20 characters says how many it has (issue #120). Manual refresh does the same for its choice,
+    its ETL list or file, its refresh date, its confirmation and Apply's reason, and a Settings change for its value.
+    A button that can't act yet is hidden until it can, never disabled: Manual refresh's "Check the ETL list" shows
+    once an ETL list is chosen (Richard, October 28, 2026).
   - **Column help** (D164). A column's name with a dotted underline has a description, shown on hover or keyboard
     focus (a Vuetify tooltip): every column of the Past refreshes, Alerts, Past requests, Recalls and Audit log
     tables.
   - **A refresh's state is a pill** (issue #107, as the mockup's version 43), the same on Past refreshes, the
-    refresh's page and Overview: Updated in green; a failed state (Servable list check failed, Servability update
-    failed) in red, with a failure icon so the cue isn't colour alone; a refresh still running, or a manual refresh
-    Waiting for the servability update, in blue; Abandoned in grey. The label is what a screen reader reads; the icon
-    is hidden from it. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
+    refresh's page, Overview and Manual refresh: Updated in green; a failed state (ETL list check failed, ETL list
+    update failed) in red, with a failure icon so the cue isn't colour alone; a refresh under way in blue; Abandoned
+    in grey. The label is what a screen reader reads; the icon is hidden from it. **Waiting or working** (decided
+    October 28, 2026, mockup version 55): a refresh under way says whether Serena is waiting for the ETL job's next
+    call, with a clock ("Waiting for the ETL list" for `started`; "ETL list received" for `received`, until the ETL
+    job asks for the check), or working, with a small spinner, still for those who ask for reduced motion
+    ("Checking the ETL list", "Applying the ETL list" for `updating`). Where there's room (a refresh's page, Manual
+    refresh), a line says how long and what's normal ("Checking since 16:57 UTC (3 min): usually a few minutes."), and,
+    for an ETL refresh past the watchdog's deadline, says so in the warning colour, adding, while it still waits for
+    its ETL list, that the ETL job may have failed.
+  - **The current refresh and the pending one** (decided October 28, 2026, mockup version 55). The **current
+    refresh** is the museum's newest `updated` refresh: the ETL list Serena serves from. The **pending refresh** is
+    its newest refresh while it's open (in Serena's words; the app says "pending"): four states on their way, in blue,
+    and two that need an admin, in red with what to do (override or retry on its page, or apply another ETL list). A
+    museum has at most one. **Overview** shows them side by side, "Current refresh (Serena serves from it)" and
+    "Pending refresh" (or "None"), in place of the "Last refresh" card, and Manual refresh's card starts with the
+    same two; the pending refresh links to its page. While the pending refresh is `update_failed`, the current one is
+    flagged **partly replaced**, with when Serena tries the update again (see An update that failed partway). **A pending refresh's page** shows its four
+    steps under the state line (Started, ETL list received, ETL list checked, ETL list applied): done ones ticked in
+    green, the current one in blue with its clock or spinner, or, failed, in red with what to do, and the rest to
+    come. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
     list came from and, when it isn't the refresh's own day, the list's date: "manual refresh · ETL list for
     2026-10-09" or "manual refresh · uploaded list" (issue #116, folded into #118).
   - **Links** (D157, D158). A refresh ID opens that refresh's page wherever it appears: in an alert's text and its
@@ -1336,7 +1402,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     504, "Serena can't be reached right now. Try again in a minute. (502)"; any other code, "Serena gave an unexpected
     answer. (<code>)".
   - **Keeping an admin's place** (Richard, October 14, 2026). Manual refresh is kept alive too (issue #118), so coming
-    back from a refresh's page finds the list picked, what was typed and the check's result. The list pages (Past
+    back from a refresh's page finds the ETL list chosen, what was typed and the dry run's result. The list pages (Past
     requests, Recalls, Alerts, the Audit log, Past refreshes) keep their filters and each table's sort, page and page size in the address, defaults
     left out, and are kept alive (one per museum), so Back, "← Back to …" or a shared address finds the same view,
     scrolled where it was; coming back reloads Alerts, Recalls, the Audit log and Past refreshes, and Past requests
@@ -1353,7 +1419,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
 - **First-release features:**
   - alerts: the bell, the banner, the Alerts page and acknowledging there, one at a time or all at once (see Watchdog
     and alerts);
-  - refreshes: history, status, reasons and the servable list check's problems; the actions in Admin actions on refreshes;
+  - refreshes: history, status, reasons and the ETL list check's problems; the actions in Admin actions on refreshes;
   - the Past refreshes, Alerts and Audit log pages show the last 30 days, newest first; the browser sorts all 30 days by a
     column's name (each click switches between ascending and descending; a table is always sorted) and pages them, 25 rows to start (10, 25, 50 or 100) (decided October 12, 2026, D91 to D94);
   - per-museum settings, on a Settings page (D86 to D90, D95): the watchdog deadline (one time a day, HH:MM Pacific),
@@ -1378,12 +1444,12 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - an "API documentation" button: Swagger UI, bundled with the app (no CDN), read-only, showing the ETL API's
     description generated from the code (decided October 10, 2026);
   - an audit log of every admin action: sign-in, sign-out, signing everyone out, recall, release, cancel, a settings change
-    (before and after), a retried servability update, an override of the delta threshold, an acknowledged alert, a
-    manual refresh (stored as `admin_refresh`, shown as "manual refresh"), a manual refresh's servability update run
-    and an audit export (the placeholder image's Media record is a settings change), each
+    (before and after), a retried ETL list update, an override of the delta threshold, an acknowledged alert, a
+    manual refresh (stored as `admin_refresh`, shown as "manual refresh", with Apply's reason; until the October 28,
+    2026 flow is built, also a manual refresh's update run, `update_run`) and an audit export (the placeholder image's Media record is a settings change), each
     with the admin's username and its target; never a password, token or file's content (decided October 10, 2026).
     The ETL's calls that change something are there too (Richard, October 13, 2026, D150): starting a refresh,
-    uploading a servable list and asking for the check, by "ETL (<museum>)", with which of the museum's two tokens it
+    uploading an ETL list and asking for the check, by "ETL (<museum>)", with which of the museum's two tokens it
     used (`which_key`: current or previous, never the token, so a rotation's progress shows), and each refresh's
     outcome (updated, check_failed, update_failed, abandoned) by the refresh. Not the ETL's polls, `GET`s or ping, which
     it makes every few seconds while Serena checks.
@@ -1400,7 +1466,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **Serena's answer.** The verdict first (served; served only on a signed link; or the one reason it isn't), what to
     do next, then each size: served or why not, the cached copy (content type, size), when Serena last served it and
     when it first cached it. Each step of the servability check, in order, is in the "In Serena" panel's Details: in
-    the servable list (and the refresh it came from), kind, access and signed access, recall, derivative allowed,
+    the ETL list (and the refresh it came from), kind, access and signed access, recall, derivative allowed,
     watermarked size.
   - **First cached and last served** (D142, D143). First cached is the cache index's fetched-at. Last served is the
     cache index's `last_served`, to the day: written when a copy is fetched, then on a request that finds it only if
@@ -1427,7 +1493,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   - **Lines.** The app logs one line per request (D103): "served", with the path, the size (a derivative, or
     `original`; October 14, 2026), the kind, the cache (`hit`, or `miss` when the file was just fetched) and whether a
     signed link was used; or "unserved", with the reason, the
-    path and, when Serena found the Blob in its servable list (a recalled or restricted file, say), the kind, so the
+    path and, when Serena found the Blob in its ETL list (a recalled or restricted file, say), the kind, so the
     Kind column is blank only for a file Serena doesn't know (see Requests Serena doesn't serve). Paths come without the PDF link suffix or a query string; no line holds
     an IP address, a signed link's `uid` or `sig`, or an email address. The page reads these two lines only, not the
     fetch lines: a failed fetch ends in an unserved request with its reason (D104).
@@ -1541,7 +1607,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   visitor's address (D185): `/etl/` only from the ETL servers, `/admin` only from campus networks, the image paths
   and `/health` from anywhere in production; personal-dev and QA are open only to listed addresses. AWS WAF on the
   distribution, where it's switched on (D186): AWS's common rule set (its body-size rule counting, not blocking, so a
-  servable list can be uploaded), known bad inputs, the IP reputation list, a rate limit per address, and Bot
+  ETL list can be uploaded), known bad inputs, the IP reputation list, a rate limit per address, and Bot
   Control in count mode first, since the catalog is crawled routinely and blocking crawlers could hide images from
   search engines.
 - **Network (D187).** The BMU's: a VPC across two zones, the tasks in public subnets with public addresses and no
@@ -1601,15 +1667,15 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   tables (the admin app's recalls and settings are served by the app), the cache index (its `last_served` too, D142),
   refreshes, alerts,
   audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
-  uploaded servable lists; use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
+  uploaded ETL lists; use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
   check, fetches, the recall form's lookups and thumbnails, and Media look up's read of the Media record, and the
   CloudFront signing key); and run Logs Insights queries on its own log group
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110), and read
   the request counts (issue #96). The worker's role can read and write
-  servability (deleting rows included, for a servability update), refreshes and alerts, read the settings, read and
+  servability (deleting rows included, for an ETL list update), refreshes and alerts, read the settings, read and
   update and delete recalls (D119), read, put and delete audit entries (the entries for ended recalls, and the daily removal,
   D98), read and write the request counts and run Logs Insights queries on the app's log group, for the daily request
-  counts (issue #96), read and put the servable lists in S3, and publish to the alert topic. Neither can delete S3
+  counts (issue #96), read and put the ETL lists in S3, and publish to the alert topic. Neither can delete S3
   objects or create or delete tables. With the simulator, the fake ETL's role reads its museums' ETL tokens and
   nothing else.
 - **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30
@@ -1649,7 +1715,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
   at start-up: random ETL tokens and signing keys, and the simulator's synthetic account; nothing secret is in the
   repository, and moto forgets it all when the stack stops. A fake ETL (`./serena etl <museum>`) runs a whole daily
   refresh through the ETL API, after adding the refresh's synthetic Media records to the simulator (the stand-in for
-  the Solr refresh), and prints its counts; `--failed` makes the servable list but never calls Serena (D85).
+  the Solr refresh), and prints its counts; `--failed` makes the ETL list but never calls Serena (D85).
   `./serena smoke` runs a daily refresh and fetches, stores and serves one of its images; CI runs it on every code
   change. `./serena up` prints the clone's branch and commit, and the admin app shows them beside the environment
   (`SERENA_BUILD`), so a tester sees at once which code the stack runs. The app also writes its log lines to a file
@@ -1699,11 +1765,11 @@ The design went through several versions in Google Drive before this file:
    and Serena coordinate through Serena's ETL API, replacing the scheduled Sync. Serena serves 3D files and public
    PDFs as well as images, by kind. The admin web app is required from the start. The public core and its clients
    (Glimmer among them) are kept apart.
-7. **The daily refresh (October 11 and 12, 2026).** The servable list is made from the live public core after the
+7. **The daily refresh (October 11 and 12, 2026).** The ETL list is made from the live public core after the
    Solr refresh, with Media CSIDs from a new `blobmedia_ss` field. Serena's part comes after the Solr refresh and never
    stops or undoes it; an admin repairs Serena when it fails. The Solr refresh status report and "Record the Solr
-   refresh" went away, and an override checks the failed refresh's own servable list again. The agreed terms
-   (refresh, refresh date, servable list check, servability update) replaced run, night, preflight and apply.
+   refresh" went away, and an override checks the failed refresh's own ETL list again. The agreed terms
+   (refresh, refresh date, ETL list check, ETL list update) replaced run, night, preflight and apply.
 
 ## Open questions and findings
 
@@ -1712,32 +1778,32 @@ The F numbers follow the team's list of follow-ups.
 - **F1. Watermarked copies.** How watermarked copies are keyed in the cache index (a version number or a hash of the
   settings), and whether the unwatermarked copy of a watermarked size should be stored at all. To settle before
   watermarking is built.
-- **F2. Recovery runbook.** What an admin does for each failure (each alert, a failed refresh, a failed servability update), who is
+- **F2. Recovery runbook.** What an admin does for each failure (each alert, a failed refresh, a failed ETL list update), who is
   told, and where the runbook lives; built on the principle in The daily sequence.
 - **F3. "Fetch again now".** Whether the admin app could pick up a Media record's current image at once, and whether
   the rules deciding what is restricted could live in one place shared by Serena and the ETL. Possibly a dead end.
 - **F6. API documentation.** Whether the admin API is documented the same way as the ETL API.
-- **F7. Review with DevOps.** Failed refreshes, the servable list rules and the refresh rules, to be documented and reviewed by the
+- **F7. Review with DevOps.** Failed refreshes, the ETL list rules and the refresh rules, to be documented and reviewed by the
   DevOps team.
 - **Both or neither (after version 1; D77).** The goal: the public core and Serena change together or not at all, so
   the public core's other clients see no change unless Serena can be updated too. Version 1 accepts a difference of up
   to a day on a failed refresh (see The daily sequence). The approach for later: the ETL loads a staging core, makes
-  the servable list from it, and Serena checks it; only then does the ETL swap the staging core for the public one
-  (Solr's core SWAP) and Serena do its servability update. What `cspace-solr-ucb` shows today (commit 610e50c): Solr
+  the ETL list from it, and Serena checks it; only then does the ETL swap the staging core for the public one
+  (Solr's core SWAP) and Serena do its ETL list update. What `cspace-solr-ucb` shows today (commit 610e50c): Solr
   8, standalone, on the ETL server (localhost:8983); each public core loaded in place (delete, commit, then the day's
   CSV posted), with a fallback that posts the previous day's CSV again; cron runs `one_job.sh` at 03:01; Cinefiles is
   loaded from two files. So the ETL would need a staging core per museum and a swap step.
 - **F8. Cinefiles PDFs.** Settled October 9, 2026: restricted PDFs are served only with a link Glimmer signs (see
   Restricted files), and restricted documents' page images stay public. Still to confirm with Cinefiles staff: that code
   4 alone means public; what PFA Staff Only and In House Only should mean (served to signed-in readers like the other
-  restricted codes, or never), and if they differ, whether the servable list should carry the access code itself;
+  restricted codes, or never), and if they differ, whether the ETL list should carry the access code itself;
   whether records of who read which PDF are wanted (Serena would record `uid`); whether the email address can come out
   of Glimmer's PDF links; whether documents with several PDFs should show them all; whether the unavailable image is
   acceptable where a portal embeds a restricted PDF whose link has expired; whether documents with neither an access
   code override nor a Source should be public, as they are today. And with Lyrasis: whether their denorm job runs the
   repository's `doclist_view.sql` unchanged, when it runs relative to the ETL, and who is told when it fails.
 - **Audio and video.** Whether Serena serves them, as kinds audio and video; to be settled from the access logs and
-  whether clients other than Glimmer request them. The servable list lists them either way.
+  whether clients other than Glimmer request them. The ETL list lists them either way.
 - **URL forms in use.** Confirm from the access logs which URL shapes and derivative names are requested, and which
   clients use the legacy imageserver. This sets each museum's exact list of sizes.
 - **Size limits.** Confirm with the museums and the DevOps team the size limits for production (starting values in
@@ -1754,6 +1820,26 @@ The F numbers follow the team's list of follow-ups.
   address: to decide, weighing viewers whose address changes and the browser reuse that the 15-minute windows allow.
 - **Notifications list.** Which team mailing list receives alerts and alarms in QA and production (each environment's
   `ALERT_EMAIL`; in personal-dev, Richard's address).
+- **How far a failed update got.** Serena records an update's counts only when it succeeds. Recording its progress as
+  it goes ("deleted 120 of 120, written 9,000 of 27,341") would let a refresh's page and the ETL's report say how
+  much of the new ETL list is served after an `update_failed` (October 28, 2026).
+- **The ETL confirming what Serena applied.** Serena's final answer could echo the SHA-256 and rows of the ETL list it
+  applied, for the ETL job to compare with what it sent, catching a wrong-file or partial-apply bug a bare `updated`
+  would hide; the job would report a mismatch, never fail or undo the Solr refresh (D71). To agree with the ETL team.
+  An end-to-end check (a few public and restricted files fetched after each update) is better as Serena's own
+  monitoring than the ETL's (October 28, 2026).
+- **How the ETL job tells admins.** The daily sequence says the job "reports the outcome", but not where. Proposed:
+  the job's own log and email for everything, with Serena's notification list copied (it works when Serena is
+  down), and an ETL API call that raises an alert in Serena for what only the ETL can see (a mismatch above). To
+  agree with the ETL team; it depends on the notifications list (October 28, 2026).
+- **ETL-side names.** With "ETL list" in the admin app and this document, proposed for the ETL team, on their
+  timeline: the servable list script as the ETL list script, and the file as `etl-list.<tenant>.<YYYY-MM-DD>.tsv`.
+  The file's name is part of the ETL API (Serena returns it when a refresh starts), so Serena would accept both for a
+  while; the stored audit action `etl_servable_list_upload` would be read under both names, old entries keeping theirs
+  (October 28, 2026).
+- **Manual refresh's dry run, in the request or the worker.** Measure a check of a real large list (some 187,000 rows)
+  in the admin API before building it; if it's too slow for one request, the worker runs it as a job that is never a
+  refresh (October 28, 2026).
 - **CORS on delivered files (D205).** Whether the portals' JavaScript viewers (PAHMA's 3D models, a PDF viewer) read
   Serena's files from script and so need `Access-Control-Allow-Origin`; none is sent until QA shows a need.
 - **The Media record behind a Blob.** Confirm against a real museum's CollectionSpace how the recall form finds the
@@ -1764,7 +1850,7 @@ The F numbers follow the team's list of follow-ups.
   `museum`) and `datefloor` behave as expected.
 - **The ETL's schedule.** Since CSW-1029 (October 2026) the ETL job starts at 21:01 server time, not 03:01. To
   confirm with the ETL team: whether the ETL server's clock is Pacific or UTC, and so whether a museum's refresh can
-  start after midnight Pacific, which gives it the next refresh date. The servable list's name and the watchdog
+  start after midnight Pacific, which gives it the next refresh date. The ETL list's name and the watchdog
   deadline (08:00 Pacific) follow from the refresh date.
 - **Deploy pipeline prerequisites (D268 to D277).** From Ops: whether the production ETL server (cspace-prod-01)
   has an EC2 instance profile, and in which AWS account (D275); the break-glass permission set (D276). For the
