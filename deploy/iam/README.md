@@ -9,10 +9,13 @@ limited to resources named `serena-*` (or tagged `project=serena`, for the KMS k
 | `serena-deployer-policy-mvp.json` | Stage 1 (Jira CS-9523): the `SerenaStage1Deployer` role Ops created in the cspace account | us-west-2 only; no WAF; includes `SimulatorServiceDiscovery` (Cloud Map and a private Route 53 zone), which only an environment running the simulated CollectionSpace needs |
 | `serena-deployer-policy.json` | Stage 2 and production (draft) | The stage 1 policy plus AWS WAF and its log delivery in us-east-1 (as CloudFront requires), and Cost Explorer read access (`CostVisibility`) |
 
-**Stage 2's policy is a draft.** It still describes CloudFront in front of everything. Since Operations said on
-October 23, 2026 that stage 2 and production don't need that (with a campus domain and certificate instead), it will
-change once that design is decided (D289–D297), and again for the deploy pipeline (D268–D277: GitHub OIDC and
-CodeBuild). Stage 1 keeps CloudFront in front, so its policy is unaffected.
+**Stage 2's policy is a draft.** It still describes CloudFront in front of everything. Stage 2 and production use the
+split (decided October 27, 2026, D301): a public load balancer for the app, CloudFront for the files only. The policy
+changes with the Terraform pull request that adds the shared root: it keeps the CloudFront actions for the files and
+the path-rewrite function, adds the internet-facing load balancer, ACM and a regional web ACL, drops the VPC origin,
+CloudFront's WAF in us-east-1 and the VPC actions (Operations' VPC), and limits writes by the `project=serena` tag
+(D297, D303, D305). It changes again for the deploy pipeline (D268–D277: GitHub OIDC and CodeBuild). Stage 1 keeps
+CloudFront in front, so its policy is unaffected.
 
 ## Where the policies can't be narrower
 
