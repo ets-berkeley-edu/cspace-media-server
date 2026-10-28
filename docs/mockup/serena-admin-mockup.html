@@ -382,7 +382,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
-      <li><strong>Version 55 (October 28, 2026; for review; Richard, after trying version 54):</strong> <strong>Manual refresh's action is all in the card at the top.</strong> The card starts with the museum's <strong>current refresh</strong>, for context: the open one if there is one, else the newest, with its state, refresh date, rows and last change (hidden while it's your own check, which "Your check" shows). Then <strong>Replace with:</strong> and two choices, <strong>Choose from previous</strong> and <strong>Upload one</strong>; once one is chosen, which ETL list it will check ("The ETL list: the one for 2026-10-12 (the newest), …", or "none yet"); and, only once an ETL list is chosen (a row picked, or a file), the older-list and open-refresh warnings and <strong>Check the ETL list</strong>: hidden until then, not disabled, since no button is ever disabled (Richard, October 28, 2026). When the open refresh is your own waiting check, its warning says so: "This replaces your check above. Serena runs one refresh at a time, so checking this ETL list closes … as abandoned: its servability update won't run." <strong>Checking needs no reason:</strong> it changes nothing. The reason is asked for when you <strong>run the servability update</strong>, which applies the ETL list: its Reason field is beside that button, and the button, never disabled, says "Give a reason first." and moves focus there. Once a check starts, its result, the override and "Run the servability update" appear at the top of the card, with "Replace with:" below them for another ETL list. While the check's own next step waits for you ("Run the servability update", or "Override the delta threshold"), "Check the ETL list" for another one is <strong>outlined</strong>, not a second filled button; it's blue again once that's done. <strong>The bottom card</strong> appears only once a choice is made: <strong>Previous ETL lists</strong> (the table of the last 10) for "Choose from previous", or <strong>Upload an ETL list file</strong> (the file, its refresh date and the live public core checkbox) for "Upload one". Before either choice, and again once a check starts, there is none. It folds away, and opens again, with focus on it, when the check is pressed without an ETL list or a file. <strong>"ETL list"</strong> replaces "list" and "servable list" in the page's own words; Serena's state names ("Checking the servable list", "Servable list check failed") and the override dialog, which a refresh's page shares, are unchanged. <strong>Mockup only:</strong> <strong>Reset</strong>, in the page's dashed bar, goes back to Serena with no pending refreshes: the refreshes this page and "Today's refresh" in Mockup settings made go, with their alerts and audit entries, and the page is as it first opens (the sample's own refreshes stay, the October 3 override among them). <strong>For the app:</strong> starting a manual refresh takes no reason (today Serena requires one: the design's Manual refresh, "The list"), and "Run the servability update" takes one (today it has none), recorded in the refresh's reasons and the audit log; closing an open refresh still asks to confirm. A refresh's page asks for the same reason before its own "Run the servability update".</li>
+      <li><strong>Version 55 (October 28, 2026; for review; Richard, after trying version 54):</strong> <strong>Manual refresh's action is all in the card at the top.</strong> The card starts with the museum's <strong>current refresh</strong>, for context: the open one if there is one, else the newest, with its state, refresh date, rows and last change (hidden while it's your own check, which "Your check" shows). Then <strong>Replace with:</strong> and two choices, <strong>Choose from previous</strong> and <strong>Upload one</strong>; once one is chosen, which ETL list it will check ("The ETL list: the one for 2026-10-12 (the newest), …", or "none yet"); and, only once an ETL list is chosen (a row picked, or a file), the older-list and open-refresh warnings and <strong>Check the ETL list</strong>: hidden until then, not disabled, since no button is ever disabled (Richard, October 28, 2026). When the open refresh is your own waiting check, its warning says so: "This replaces your check above. Serena runs one refresh at a time, so checking this ETL list closes … as abandoned: its servability update won't run." <strong>Checking needs no reason:</strong> it changes nothing. The reason is asked for when you <strong>apply the refresh</strong>, which runs the servability update with the ETL list: its Reason field is above <strong>Apply refresh</strong> (called "Run the servability update" before), with an outlined <strong>Cancel</strong> to its right, which closes the waiting check as abandoned, with no reason or confirmation, since nothing changes (Richard, October 28, 2026); Apply refresh, and the button, never disabled, says "Give a reason first." and moves focus there. Once a check starts, its result, the override and Apply refresh appear at the top of the card, with "Replace with:" below them for another ETL list. While the check's own next step waits for you (Apply refresh, or "Override the delta threshold"), "Check the ETL list" for another one is <strong>outlined</strong>, not a second filled button; it's blue again once that's done. <strong>The bottom card</strong> appears only once a choice is made: <strong>Previous ETL lists</strong> (the table of the last 10) for "Choose from previous", or <strong>Upload an ETL list file</strong> (the file, its refresh date and the live public core checkbox) for "Upload one". Before either choice, and again once a check starts, there is none. It folds away, and opens again, with focus on it, when the check is pressed without an ETL list or a file. <strong>"ETL list"</strong> replaces "list" and "servable list" in the page's own words; Serena's state names ("Checking the servable list", "Servable list check failed") and the override dialog, which a refresh's page shares, are unchanged. <strong>Mockup only:</strong> <strong>Reset</strong>, in the page's dashed bar, goes back to Serena with no pending refreshes: the refreshes this page and "Today's refresh" in Mockup settings made go, with their alerts and audit entries, and the page is as it first opens (the sample's own refreshes stay, the October 3 override among them). <strong>For the app:</strong> starting a manual refresh takes no reason (today Serena requires one: the design's Manual refresh, "The list"), and applying the refresh ("Run the servability update" today) takes one (today it has none), recorded in the refresh's reasons and the audit log; closing an open refresh still asks to confirm. A refresh's page has the same reason, Apply refresh and Cancel. Cancel is new: an audited "refresh cancel" that closes a waiting manual refresh as abandoned, and Serena's words for the step become "apply the refresh".</li>
       <li><strong>Version 54 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's second idea, <strong>Reasons in two lists</strong>, is in the app as shown here: a refresh's page has What went wrong and What admins did, each "None." when empty. Serena records which list each reason goes in; a reason recorded before has none and goes under What went wrong. In the app, an abandoned refresh closed by a manual refresh lists "closed by the manual refresh …" under What admins did, and one closed by the ETL's next refresh lists it under What went wrong. With this, all four of version 47's ideas are in the app.</li>
       <li><strong>Version 53 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's fourth idea, <strong>a more useful override reason</strong>, is in the app as shown here: the override dialog, on a refresh's page and on Manual refresh, asks <strong>Why is the change expected?</strong> first, then the reason, at least 20 characters. Serena checks both, stores the kind beside the reason (an override made before has none, and shows its reason alone), and the banner, the alert email and the audit log give the kind's words first. In the app, the Audit log shows the kind in its Reason line rather than as a field of its own. Nothing else changes; idea 2, Reasons in two lists, is still to come.</li>
       <li><strong>Version 52 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's third idea, <strong>the Overridden filter</strong> on Past refreshes, is in the app as shown here: All and Overridden (n) above the table, like Alerts' All and Waiting. In the app, the choice is kept in the address (<code>show=overridden</code>), so Back and a shared link keep it, and the menu opens the page on All. Nothing else changes.</li>
@@ -1095,8 +1095,8 @@
       const banner = o ? `<div class="override-banner" id="override-banner" role="note">${ICON_OVERRIDE}<div><strong class="lead-in">A safety check failed, and an admin overrode it</strong>
         <p>${c ? `The servable list changes ${deltaHtml(c)}. ` : ""}<strong>Delta threshold overridden</strong> by ${esc(o.by)} at ${when(o.at)}.</p>
         <p>Reason: ${o.kind ? `<strong>${esc(KINDS[o.kind])}</strong>: ` : ""}${esc(o.reason)}</p>
-        <p>${running ? `Serena is checking the same servable list again without the delta threshold (every other check still applies) and, if it passes, ${r.mr ? "waits for an admin to run the servability update" : "updates"}. This page checks again every few seconds until it's done.`
-          : `Serena checked the same servable list again without the delta threshold (every other check still applied)${r.tone === "success" ? " and updated from it" : r.stage === "checked" ? ": it passed, and waits for an admin to run the servability update" : r.stage === "updating" ? ": it passed, and Serena is running the servability update" : ""}. The team was emailed.`}</p></div></div>` : "";
+        <p>${running ? `Serena is checking the same servable list again without the delta threshold (every other check still applies) and, if it passes, ${r.mr ? "waits for an admin to apply the refresh" : "updates"}. This page checks again every few seconds until it's done.`
+          : `Serena checked the same servable list again without the delta threshold (every other check still applied)${r.tone === "success" ? " and updated from it" : r.stage === "checked" ? ": it passed, and waits for an admin to apply the refresh" : r.stage === "updating" ? ": it passed, and Serena is running the servability update" : ""}. The team was emailed.`}</p></div></div>` : "";
       // Version 45 (issue #110): after an override the heading says the check failed, not "passed", and needs no pill.
       const checkHeading = !c ? "" : !o ? esc(c.result) : `<span style="color:var(--text-danger)">failed</span>, overridden by admin`;
       const checkHtml = !c ? "" : `<h3>Servable list check: ${checkHeading}</h3>
@@ -1195,7 +1195,7 @@
   // (MR9); its name is to be decided.
   const MR_STATES = {checking: ["Checking the servable list", "info"], checked: ["Waiting for the servability update", "info"],
     failed: ["Servable list check failed", "danger"], rechecking: ["Checking the servable list", "info"],
-    updating: ["Updating servability", "info"], updated: ["Updated", "success"]};
+    updating: ["Updating servability", "info"], updated: ["Updated", "success"], abandoned: ["Abandoned", "neutral"]};
   const MR_PROBLEMS = [{line: "1042", field: "blob_csid", problem: "not a CSID: 9f9f-0000"},
     {line: "20581", field: "kind", problem: "\"thumbnail\" isn't a kind Serena serves"},
     {line: "88310", field: "blob_csid", problem: "the same Blob CSID as line 88309"}];
@@ -1256,18 +1256,18 @@
     }, 3000);
   }
   // An override from the Manual refresh page or the refresh's page (MR11): checked again without the delta threshold,
-  // then, like a passed check, it waits for an admin to run the servability update.
+  // then, like a passed check, it waits for an admin to apply the refresh.
   function mrOverride(r, kind, words) {
     clearTimeout(mrTimer);
     const full = `${S.museum}-${r.id}`;
     r.override = {by: S.user, at: NOW, kind, reason: words};
     r.reasons = [...r.reasons, {admin: true, override: true, text: `delta threshold overridden by ${S.user}`}];
-    ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin overrode the delta threshold", about: full, msg: `An admin overrode the delta threshold for ${name()}'s refresh ${full} (${deltaPct(r.check.delta)}% of the rows change). Serena checks the same servable list again without it; if it passes, the refresh waits for an admin to run the servability update. Reason: ${KINDS[kind]}: ${words}`, ack: null, scenario: true});
+    ALERTS.unshift({at: NOW, date: "2026-10-13", title: "An admin overrode the delta threshold", about: full, msg: `An admin overrode the delta threshold for ${name()}'s refresh ${full} (${deltaPct(r.check.delta)}% of the rows change). Serena checks the same servable list again without it; if it passes, the refresh waits for an admin to apply it. Reason: ${KINDS[kind]}: ${words}`, ack: null, scenario: true});
     AUDIT.unshift({at: NOW, admin: S.user, action: "threshold override", target: full, details: `Reason: ${KINDS[kind]}: ${words} · Delta percent: ${r.check.delta}`, scenario: true});
     mrStage(r, "rechecking", {actions: []});
     mrTimer = setTimeout(() => mrStage(r, "checked", {check: {...r.check, result: "passed", errors: [], warnings: [`the delta threshold was overridden by an admin for this refresh (${deltaPct(r.check.delta)}% of the rows change; the threshold is ${r.check.threshold}%)`]}}), 3000);
   }
-  // Run the servability update (MR9): only an admin's press does it, with a reason (Richard, October 28, 2026: the
+  // Apply refresh (MR9; "Run the servability update" before October 28, 2026): only an admin's press does it, with a reason (Richard, October 28, 2026: the
   // reason is asked for here, when the ETL list is applied, not for the check), and it's audited.
   function mrRun(r, why) {
     clearTimeout(mrTimer);
@@ -1282,18 +1282,29 @@
       mrStage(r, "updated", {update: {deleted: c.removed, written: c.added, unchanged: c.previous - c.removed}});
     }, 3000);
   }
+  // Cancel (Richard, October 28, 2026): a check waiting to be applied closes as abandoned, and nothing changes. No
+  // reason or confirmation: it changes nothing, and the same ETL list can be checked again.
+  function mrCancel(r) {
+    clearTimeout(mrTimer);
+    const full = `${S.museum}-${r.id}`;
+    r.reasons = [...r.reasons, {admin: true, text: `cancelled by ${S.user}: closed without applying it`}];
+    r.cancelled = true;
+    AUDIT.unshift({at: NOW, admin: S.user, action: "refresh cancel", target: full, details: "Manual refresh", scenario: true});
+    AUDIT.unshift({at: NOW, admin: "Serena", action: "refresh outcome", target: full, details: "State: abandoned", scenario: true});
+    mrStage(r, "abandoned", {actions: []});
+  }
   // What happens next, on either page; the refresh's page has its own override button and banner.
   function mrNext(r, where) {
     const spin = t => `<p role="status"><span class="spin" aria-hidden="true"></span>${t}</p>`;
-    if (r.stage === "checking") return spin("Serena is checking the ETL list. Nothing changes until it passes and you run the servability update. This page checks again every few seconds.");
+    if (r.stage === "checking") return spin("Serena is checking the ETL list. Nothing changes until it passes and you apply the refresh. This page checks again every few seconds.");
     if (r.stage === "rechecking") return where === "manual" ? spin("Serena is checking the same ETL list again without the delta threshold (every other check still applies).") : "";
-    if (r.stage === "updating") return spin("Serena is running the servability update.");
-    if (r.stage === "checked") return `<p><strong>The check passed${r.override ? " without the delta threshold" : ""}.</strong> Nothing has changed yet: the refresh waits for you. Running the servability update applies the ETL list: why now?</p>
+    if (r.stage === "updating") return spin("Serena is applying the refresh: the servability update is running.");
+    if (r.stage === "checked") return `<p><strong>The check passed${r.override ? " without the delta threshold" : ""}.</strong> Nothing has changed yet: the refresh waits for you. Applying it runs the servability update with this ETL list: why now?</p>
       <div style="max-width:640px">${reasonField("mrRunReason", "the refresh and the audit log")}</div>
-      <p><button type="button" class="primary" data-mr-run="${esc(r.id)}">Run the servability update</button></p>
-      <p class="secondary">Running it is in the audit log. If tonight's ETL refresh or another manual refresh starts first, Serena closes this one as abandoned; it doesn't time out.</p>`;
+      <p style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" data-mr-run="${esc(r.id)}">Apply refresh</button><button type="button" data-mr-cancel="${esc(r.id)}">Cancel</button></p>
+      <p class="secondary">Applying it is in the audit log. Cancel closes it as abandoned, and nothing changes. If tonight's ETL refresh or another manual refresh starts first, Serena closes it as abandoned too; it doesn't time out.</p>`;
     if (r.stage === "failed" && !(r.actions || []).includes("override")) return "<p>These problems can't be overridden. Fix the ETL list, or make a new one with the servable list script on the ETL server, and check it again.</p>";
-    if (r.stage === "abandoned") return "<p>Closed as abandoned: another refresh started before the servability update ran. Nothing changed.</p>";
+    if (r.stage === "abandoned") return r.cancelled ? "<p>Cancelled: closed as abandoned. Nothing changed.</p>" : "<p>Closed as abandoned: another refresh started before it was applied. Nothing changed.</p>";
     return "";
   }
   // Layout A: the check's progress and result on the Manual refresh page (MR10).
@@ -1303,7 +1314,7 @@
       <p class="secondary" style="margin-top:0">With ${esc(sourceText(r))}.</p>
       ${o ? `<p>Delta threshold overridden by ${esc(o.by)} at ${when(o.at)}. Reason: <strong>${esc(KINDS[o.kind])}</strong>: ${esc(o.reason)}</p>` : ""}
       ${c ? `<p>${c.rows.toLocaleString("en-US")} rows; ${c.added.toLocaleString("en-US")} added, ${c.removed.toLocaleString("en-US")} removed, ${c.changed.toLocaleString("en-US")} changed: ${deltaHtml(c)}${overBy(c) ? "" : `; the threshold is ${c.threshold}%`}.</p>` : ""}
-      ${delta ? `${farNote(c, true)}<p>The check failed only on the delta threshold. Override it only if you know the change is expected: Serena then checks the same ETL list again without it, and you run the servability update as for a passed check. The team is emailed.</p>
+      ${delta ? `${farNote(c, true)}<p>The check failed only on the delta threshold. Override it only if you know the change is expected: Serena then checks the same ETL list again without it, and you apply the refresh as for a passed check. The team is emailed.</p>
         <p><button type="button" class="danger" id="ovOpen">Override the delta threshold</button></p>` : ""}
       ${r.stage === "failed" && !delta && n ? `<p><strong>The ETL list has ${n} problem${n > 1 ? "s" : ""}</strong>, so nothing changed.</p>
         <div class="tw"><table id="mr-problems"><thead><tr><th>Line</th><th>Field</th><th>Problem</th></tr></thead><tbody>${c.errors.slice(0, 20).map(p => `<tr><td>${esc(p.line)}</td><td>${esc(p.field)}</td><td>${esc(p.problem)}</td></tr>`).join("")}</tbody></table></div>
@@ -1363,12 +1374,12 @@
       <div id="mr-check" ${listChosen ? "" : "hidden"}>
       ${olderWarn}
       ${openWarn}
-      <p class="secondary" style="margin:0 0 10px">Checking changes nothing, so it needs no reason. You give one when you run the servability update.</p>
+      <p class="secondary" style="margin:0 0 10px">Checking changes nothing, so it needs no reason. You give one when you apply the refresh.</p>
       <button class="${waitsOnYou ? "" : "primary"}" type="submit">Check the ETL list</button><div class="err-text" id="mrCheckMsg" role="alert" style="margin-top:6px"></div></div></section>`;
     // The bottom card: the previous ETL lists or the upload fields, once one is chosen above; none before.
     const picker = !S.mr.source ? "" : `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>${S.mr.source === "recent" ? "Previous ETL lists" : "Upload an ETL list file"}</summary>
       ${S.mr.source === "recent" ? recent : `<div style="max-width:640px">${upload}</div>`}</details>`;
-    return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Bring an ETL list into Serena now, when a refresh failed or its ETL list didn't reach Serena. Choose one of the previous ETL lists or upload one: Serena checks it without changing anything. If the check passes, you give a reason and run the servability update; if it fails only on the delta threshold, you can override it first.</p>
+    return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Bring an ETL list into Serena now, when a refresh failed or its ETL list didn't reach Serena. Choose one of the previous ETL lists or upload one: Serena checks it without changing anything. If the check passes, you give a reason and apply the refresh; if it fails only on the delta threshold, you can override it first.</p>
       ${mock}
       <form id="mrForm" novalidate>${card}${picker}</form>`;
   }
@@ -1684,7 +1695,7 @@
       // Version 49 (issue #118): the refresh shown, on its page or the Manual refresh page's result.
       const target = S.page === "manual" ? REFRESHES.find(x => x.id === S.mr.run) : REFRESHES.find(x => `${S.museum}-${x.id}` === S.refresh);
       const c = (target && target.check) || todayCheck, manual = !!(target && target.mr);
-      dialog("Override the delta threshold", `<p style="margin-top:0">The servable list check failed only because more rows change than the delta threshold allows: this list changes ${deltaHtml(c)}. Do this once you know the change is expected. Serena checks the same servable list again without the delta threshold (every other check still applies) and, if it passes, ${manual ? "waits for you to run the servability update" : "updates Serena from it"}. The team is emailed.</p>
+      dialog("Override the delta threshold", `<p style="margin-top:0">The servable list check failed only because more rows change than the delta threshold allows: this list changes ${deltaHtml(c)}. Do this once you know the change is expected. Serena checks the same servable list again without the delta threshold (every other check still applies) and, if it passes, ${manual ? "waits for you to apply the refresh" : "updates Serena from it"}. The team is emailed.</p>
         ${farNote(c, true)}
         <fieldset class="kinds" aria-describedby="ovKindMsg"><legend>Why is the change expected? (required)</legend>${Object.entries(KINDS).map(([k, v]) => `<label><input type="radio" name="ovKind" value="${k}"> ${esc(v)}</label>`).join("")}</fieldset><div class="err-text" id="ovKindMsg" role="alert"></div>
         <label class="field">Reason (required) <textarea id="relReason" rows="2" aria-describedby="relReasonHint relReasonMsg"></textarea></label><div class="muted" id="relReasonHint" style="margin:-6px 0 4px;font-size:12px">Required, at least ${REASON_MIN} characters: what changed, and how you know it's expected. Recorded in the refresh, ${esc(TO_TEAM)}. No personal data, please.</div><div class="err-text" id="relReasonMsg" role="alert"></div>`,
@@ -1790,6 +1801,7 @@
     document.querySelectorAll('input[name="mrPick"]').forEach(b => b.onchange = () => { S.mr.pick = clean(b.value); render(); const again = document.querySelector(`input[name="mrPick"][value="${S.mr.pick}"]`); if (again) again.focus(); });
     const mrr = $("#mrRunReason");
     if (mrr) { mrr.value = S.mr.runReason || ""; mrr.oninput = () => { S.mr.runReason = typed(mrr); if (mrr.value.trim()) $("#mrRunReasonMsg").textContent = ""; }; }
+    document.querySelectorAll("[data-mr-cancel]").forEach(b => b.onclick = () => { const r = REFRESHES.find(x => x.id === clean(b.dataset.mrCancel)); if (r && r.stage === "checked") mrCancel(r); });
     // Never disabled: without a reason it says so under the field and moves focus there, as every reason does.
     document.querySelectorAll("[data-mr-run]").forEach(b => b.onclick = () => {
       const r = REFRESHES.find(x => x.id === clean(b.dataset.mrRun));
@@ -1816,7 +1828,7 @@
       if (!older && !open) { mrStart(); return; }
       const openId = open ? `${S.museum}-${open.id}` : "";
       dialog(open ? `Close ${esc(openId)} and check this ETL list?` : "Check an older ETL list?",
-        `${older ? `<p style="margin-top:0"><strong>The ETL list for ${esc(pick.date)} isn't the newest</strong> (${esc(lists[0].date)}). If its check passes and you run the servability update, servability goes back to that day's public core while Solr keeps today's: the portals may link to images Serena refuses, and Serena may serve images that are no longer public. An ETL list made today with the servable list script on the ETL server is better.</p>` : ""}
+        `${older ? `<p style="margin-top:0"><strong>The ETL list for ${esc(pick.date)} isn't the newest</strong> (${esc(lists[0].date)}). If its check passes and you apply the refresh, servability goes back to that day's public core while Solr keeps today's: the portals may link to images Serena refuses, and Serena may serve images that are no longer public. An ETL list made today with the servable list script on the ETL server is better.</p>` : ""}
         ${open ? `<p${older ? "" : ' style="margin-top:0"'}><strong>${esc(openId)} is still open</strong> (${esc(open.state)}). Serena closes it as abandoned: it stops where it is and won't update. Its page will say which refresh closed it.</p>` : ""}`,
         `<button type="button" data-close>Cancel</button><button type="button" class="${open ? "danger" : "primary"}" id="mrGo">${open ? "Close it and check the ETL list" : "Check the older ETL list"}</button>`);
       bindDialog();
