@@ -249,6 +249,38 @@ describe('an overridden refresh', () => {
     expect(plain.find('.override-mark').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('shows only the overridden ones, from the address too, and All from the menu (issue #120)', async () => {
+    const row = (n: number, override: unknown) => ({...REFRESH, refresh_id: `pahma-2026-10-1${n}-1`,
+      refresh_date: `2026-10-1${n}`, state: 'updated', updated_at: `2026-10-1${n}T11:00:00+00:00`, admin_refresh_date: null, override})
+    const list = {body: {days: 30, refreshes: [row(3, null), row(2, OVERRIDE), row(1, null)]}}
+    fakeApi({'GET /museums/pahma/refreshes': list})
+    const {wrapper, router} = await at('/pahma/refreshes', Refreshes)
+    const ids = () => wrapper.findAll('#refreshes-table tbody tr').map(r => r.find('a').text())
+    expect(ids()).toHaveLength(3)
+    expect(wrapper.find('#refreshes-show-all').classes()).toContain('v-btn--active')
+    expect(wrapper.find('#refreshes-show-overridden').text()).toBe('Overridden (1)')
+    await wrapper.find('#refreshes-show-overridden').trigger('click')
+    await flushPromises()
+    expect(ids()).toEqual(['pahma-2026-10-12-1'])
+    await vi.waitFor(() => expect(router.currentRoute.value.query.show).toBe('overridden'))
+    // The menu's link has no show=, so the page, kept alive, goes back to All.
+    await router.push('/pahma/refreshes')
+    await flushPromises()
+    expect(ids()).toHaveLength(3)
+    wrapper.unmount()
+
+    fakeApi({'GET /museums/pahma/refreshes': list})
+    const shared = await at('/pahma/refreshes?show=overridden', Refreshes)
+    expect(shared.wrapper.findAll('#refreshes-table tbody tr')).toHaveLength(1)
+    shared.wrapper.unmount()
+
+    fakeApi({'GET /museums/pahma/refreshes': {body: {days: 30, refreshes: [row(3, null)]}}})
+    const none = await at('/pahma/refreshes?show=overridden', Refreshes)
+    expect(none.wrapper.find('#refreshes-show-overridden').text()).toBe('Overridden (0)')
+    expect(none.wrapper.find('#refreshes-table').text()).toContain('No overridden refreshes in the last 30 days.')
+    none.wrapper.unmount()
+  })
 })
 
 describe('the alert banner', () => {
