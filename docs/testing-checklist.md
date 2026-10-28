@@ -1443,3 +1443,17 @@ delta threshold alone, about 2 times past it), and sign in to PAHMA:
   dialog. Cancel.
 - [ ] **6. Within it.** Open the refresh from step 1's first `./serena etl pahma` (Updated): expect "the threshold is
   5%", not in red, and no note.
+
+## 41. The Overridden filter on Past refreshes, on the local stack (5 minutes; before merging the pull request that adds it)
+
+What it checks: issue #120's third idea (mockup version 47). With `./serena up`, run `./serena etl pahma`, then
+`./serena etl pahma --rows 3` (its check fails on the delta threshold), and sign in to PAHMA:
+
+- [ ] **1. None yet.** Open Past refreshes from the menu. Expect "All" chosen and "Overridden (0)" beside it, above the
+  table. Click "Overridden (0)": expect "No overridden refreshes in the last 30 days."
+- [ ] **2. One.** Open the failed refresh and override it with a reason. Open Past refreshes from the menu: expect All
+  again, "Overridden (1)", and every refresh listed, the overridden one with its orange bar.
+- [ ] **3. Overridden.** Click "Overridden (1)": expect only the overridden refresh, and `?show=overridden` in the
+  address. Reload: still Overridden.
+- [ ] **4. Back and the menu.** Open the refresh and use the browser's Back: still Overridden. Click "Past refreshes"
+  in the menu: All again.

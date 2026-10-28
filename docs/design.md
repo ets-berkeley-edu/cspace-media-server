@@ -833,7 +833,11 @@ refresh's reasons and the audit log, and is offered only on the museum's newest 
   "A safety check failed, and an admin overrode it" and how far the list went past the delta threshold; the check's
   heading reads "failed, overridden by admin" while the worker checks again and once the check passes, never "passed"
   on its own, with no chip, since the heading says it; and on Past refreshes an overridden refresh's row has a bar in
-  the warning colour down its left edge.
+  the warning colour down its left edge. Above Past refreshes' table, "All · Overridden (<n>)" shows every refresh or only those an
+  admin overrode, like Alerts' All and Waiting (issue #120, decided October 27, 2026, mockup version 47): All is the
+  default, the choice is kept in the address as `show=overridden`, the menu opens the page on All, and "No overridden
+  refreshes in the last 30 days." when there are none. It needs nothing new from Serena: it reads each refresh's
+  `override`.
 - **Manual refresh** (the admin app's Manual refresh page, issue #118, decided October 27, 2026 from MR1 to MR15
   and mockup versions 49 and 50; called an admin refresh in D66, D75 and D82, and Start a refresh before). When a
   servable list didn't reach Serena, needs replacing, or a refresh failed:

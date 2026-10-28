@@ -3,13 +3,28 @@
     <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Past refreshes</h1>
     <p class="mb-4">
       This museum's daily refreshes of the last 30 days, newest first. Click a column's name to sort by it; hover over it for what it holds. Open a refresh
-      to see its servable list, its checks and what an admin can do.
+      to see its servable list, its checks and what an admin can do. "Overridden" shows only the refreshes whose delta
+      threshold an admin overrode; each has an orange bar at its left edge.
     </p>
     <LoadError :message="error" />
+    <!-- All or only the overridden ones (issue #120), like Alerts' All and Waiting; the menu opens All. -->
+    <v-btn-toggle
+      id="refreshes-show"
+      v-model="show"
+      mandatory
+      density="compact"
+      variant="outlined"
+      color="primary"
+      aria-label="Show"
+      class="mb-3"
+    >
+      <v-btn id="refreshes-show-all" value="all">All</v-btn>
+      <v-btn id="refreshes-show-overridden" value="overridden">Overridden ({{ overridden.length }})</v-btn>
+    </v-btn-toggle>
     <v-data-table
       id="refreshes-table"
       :headers="headers"
-      :items="refreshes"
+      :items="listed"
       :sort-by="table.sortBy"
       must-sort
       :items-per-page="table.itemsPerPage"
@@ -19,7 +34,7 @@
       :row-props="rowProps"
       item-value="refresh_id"
       density="compact"
-      no-data-text="No refreshes in the last 30 days."
+      :no-data-text="show === 'overridden' ? 'No overridden refreshes in the last 30 days.' : 'No refreshes in the last 30 days.'"
       @update:sort-by="(v: {key: string, order: 'asc' | 'desc'}[]) => table.sortBy = v"
       @update:page="(v: number) => table.page = v"
       @update:items-per-page="(v: number) => table.itemsPerPage = v"
@@ -64,7 +79,7 @@ import OverrideMark from '@/components/OverrideMark.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import WhenText from '@/components/WhenText.vue'
 import {PAGE_SIZES, byOverride, refreshStateOf} from '@/words'
-import {useTableState} from '@/tableState'
+import {useQueryValue, useTableState} from '@/tableState'
 
 // Every column has a meaningful order (D94); the state sorts by its label, as shown.
 const headers = [
@@ -97,6 +112,20 @@ const museum = computed(() => ownMuseum)
 const refreshes = ref<RefreshSummary[]>([])
 const loaded = ref(false)
 const error = ref('')
+
+// All or Overridden (issue #120), in the address as show=overridden. The menu links without it, so it shows All. The
+// page is kept alive, so it follows the address each time it's shown.
+const show = useQueryValue('show', 'all', ['all', 'overridden'] as const)
+const overridden = computed(() => refreshes.value.filter(r => r.override))
+const listed = computed(() => show.value === 'overridden' ? overridden.value : refreshes.value)
+watch(show, () => {
+  table.page = 1
+})
+watch(() => route.fullPath, () => {
+  if (route.name === 'refreshes' && String(route.params.museum) === ownMuseum) {
+    show.value = route.query.show === 'overridden' ? 'overridden' : 'all'
+  }
+})
 
 // While a refresh is checking or updating, the page loads the list again by itself (checkAgain.ts), keeping what it
 // shows meanwhile; one that fails leaves the list as it was and tries again.
