@@ -807,8 +807,25 @@ table, so a restart never loses a step.
   writing, all of those are gone and some of the new and changed rows are written, the rest not. Serena then serves
   some of each ETL list, never a Blob the new one dropped. Retrying is always safe: each try reads the table again and
   does only what's left, and "Retry the update" or the next refresh finishes the job. A worker that dies mid-update
-  doesn't cause this: its heartbeat goes stale and another pass finishes the step. The admin app flags the current
-  refresh "partly replaced" while the pending refresh is `update_failed` (see Admin web app). The worker raises the
+  doesn't cause this: its heartbeat goes stale and another pass finishes the step. Two rules keep the partial state
+  harmless and short (Richard, October 28, 2026; not yet built):
+  - **Tighten first, publish last.** The order is by effect, not by kind of write: first the deletes of Blobs the new
+    ETL list drops and every change that makes a file less available (public to restricted, a changed Media CSID or
+    kind); then the new rows and every change that makes one more available. An update that stops partway then never
+    serves a file it shouldn't: the worst is some newly listed files not served yet, which fails closed. (Today's
+    order, deletes then all writes, can leave a file the new list restricts still served as public.)
+  - **Retry by itself.** The worker tries an `update_failed` refresh's update again every 10 minutes for up to 6 hours
+    (starting values), so the partial state lasts minutes once its cause clears, not until an admin notices. While it
+    retries, the alert, the refresh's page and the pending card say so ("Serena tries the update again every 10
+    minutes, until <time>"); "Retry the update" still tries at once, and applying another ETL list still replaces
+    it. After the last try, the alert says Serena has stopped retrying and an admin is needed. A failed update usually
+    means DynamoDB is failing, and while it is Serena can't look a file up, so it serves the unavailable image
+    anyway: the partial state shows only once DynamoDB answers again.
+
+  The admin app flags the current refresh "partly replaced" while the pending refresh is `update_failed` (see Admin
+  web app). A revert to the last updated ETL list isn't offered: that list is older than the public core the portals
+  show, so it would serve files since dropped or restricted, and it is itself an update that can stop partway;
+  Manual refresh can apply a previous ETL list if an admin chooses to, with the older-list warning. The worker raises the
   alert at once ("An ETL list update failed", emailed through SNS once it's recorded), audits the outcome, and logs a
   warning for each failed try. All but the log are stored in DynamoDB too, so during a DynamoDB outage they can wait:
   an alert that can't be recorded is raised again by the watchdog's later passes and emailed once DynamoDB answers,
@@ -840,7 +857,7 @@ Serena wrote for its override still counts as the override's. The app never gues
 The actions:
 
 - **Retry the ETL list update.** On an `update_failed` refresh: it goes back to `updating` and the worker does the
-  ETL list update again.
+  ETL list update again, at once (the worker also retries by itself, see An update that failed partway).
 - **Override the delta threshold.** On a `check_failed` refresh whose only problem is the delta threshold: it goes
   back to `checking`, and the worker checks the same ETL list again, skipping only the delta threshold (every
   other check still applies); on a pass it does the ETL list update. The refresh's reasons and its check's warnings
@@ -1322,7 +1339,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     museum has at most one. **Overview** shows them side by side, "Current refresh (Serena serves from it)" and
     "Pending refresh" (or "None"), in place of the "Last refresh" card, and Manual refresh's card starts with the
     same two; the pending refresh links to its page. While the pending refresh is `update_failed`, the current one is
-    flagged **partly replaced** (see An update that failed partway). **A pending refresh's page** shows its four
+    flagged **partly replaced**, with when Serena tries the update again (see An update that failed partway). **A pending refresh's page** shows its four
     steps under the state line (Started, ETL list received, ETL list checked, ETL list applied): done ones ticked in
     green, the current one in blue with its clock or spinner, or, failed, in red with what to do, and the rest to
     come. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
