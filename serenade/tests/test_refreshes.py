@@ -1,11 +1,11 @@
-"""Refreshes: Past refreshes, a refresh's page and Start a refresh, checks T16 to T21 of the test inventory
+"""Refreshes: Past refreshes, a refresh's page and Manual refresh, checks T16 to T21 of the test inventory
 (serena-test-inventory.xlsx; docs/testing-checklist.md sections 11, 14, 15 and 21). T22 is covered by the backend's
 tests.
 
 T16 and T20 only look, at PAHMA. T17 to T21 act on UCJEPS, a reserved museum no PAHMA test uses, after the alerts
 tests have read its failed refresh's alert (conftest.py's FILE_ORDER): T17 looks at the dataset's failed refresh, T18
-overrides its threshold (so UCJEPS publishes 3 rows), T19 repairs a failed admin refresh with the 3-row list, and T21
-adds admin refreshes until UCJEPS has 30."""
+overrides its threshold (so UCJEPS publishes 3 rows), T19 repairs a failed manual refresh with the 3-row list, and T21
+adds manual refreshes until UCJEPS has 30."""
 from __future__ import annotations
 
 import re
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.usefixtures("built_dataset")
 ADMIN = ("admin", "admin")  # the simulator's synthetic account: its password is its username
 GIVE_A_REASON = "Give a reason first."
 OVERRIDE_REASON = "serenade T18: a test override"
-REPAIR_REASON = "serenade T19: a test admin refresh"
+REPAIR_REASON = "serenade T19: a test manual refresh"
 
 
 def signed_in(driver: WebDriver, base_url: str, museum: str) -> RefreshesPage:
@@ -42,16 +42,19 @@ def test_t16_past_refreshes_lists_the_datasets_refresh(driver: WebDriver, base_u
     assert (cells["State"], cells["Rows"]) == ("Updated", "21"), cells  # 20 rows and the placeholder image
 
 
-def test_t20_start_a_refresh_says_whats_missing(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 21. Nothing is started."""
+def test_t20_manual_refresh_says_whats_missing(driver: WebDriver, base_url: str) -> None:
+    """Checklist section 21; issue #118. Nothing is started, from the ETL's lists or an upload."""
     page = signed_in(driver, base_url, MUSEUM)
     before = len(page.refreshes(MUSEUM))
-    page.open(f"{MUSEUM}/start-refresh")
+    page.open(f"{MUSEUM}/manual-refresh")
+    page.click(page.START)
+    assert page.wait_for_text(page.PICK_ERROR, "Choose a list first.")
+    assert page.wait_for_text(page.REASON_MESSAGES, GIVE_A_REASON)  # the message fades in
+    page.click(page.SOURCE_UPLOAD)
     page.click(page.START)
     assert page.wait_for_text(page.FILE_MESSAGES, "Choose the servable list first.")
-    assert GIVE_A_REASON in page.text_of(page.REASON_MESSAGES)
     assert "Confirm the list was made from the live public core." in page.text_of(page.CONFIRM_MESSAGES)
-    assert driver.current_url.endswith(f"/{MUSEUM}/start-refresh")
+    assert driver.current_url.endswith(f"/{MUSEUM}/manual-refresh")
     assert len(page.refreshes(MUSEUM)) == before
 
 
@@ -91,31 +94,37 @@ def test_t18_overriding_the_delta_threshold(driver: WebDriver, base_url: str) ->
 
 
 @pytest.mark.after("test_t18_overriding_the_delta_threshold")
-def test_t19_an_admin_refresh_repairs_an_open_failed_refresh(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 14, steps 5 and 6. First a failed refresh to repair: an admin refresh with the 20-row list,
-    which fails against the 3 rows UCJEPS publishes. Then Start a refresh with the 3-row list repairs it."""
+def test_t19_a_manual_refresh_repairs_an_open_failed_refresh(driver: WebDriver, base_url: str) -> None:
+    """Checklist section 14, steps 5 and 6; issue #118. First a failed refresh to repair: a manual refresh with the
+    20-row list, which fails against the 3 rows UCJEPS publishes. Then Manual refresh, with the 3-row list uploaded,
+    closes it once confirmed, checks, waits, and updates when asked."""
     page = signed_in(driver, base_url, UCJEPS)
     failed = page.admin_refresh(UCJEPS, servable_list("ucjeps-20").read_text(), "serenade T19: a refresh to repair")
     assert failed["state"] == "check_failed", failed["state"]
-    page.open(f"{UCJEPS}/start-refresh")
+    page.open(f"{UCJEPS}/manual-refresh")
+    page.click(page.SOURCE_UPLOAD)
     page.choose_file(page.FILE, str(Path(servable_list("ucjeps-3")).resolve()))
     page.type(page.REASON, REPAIR_REASON)
     page.click(page.CONFIRM_LIVE_CORE)
     page.click(page.START)
-    page.wait_for((By.XPATH, "//h1[@id='page-title'][contains(normalize-space(), 'refresh ucjeps-')]"))
-    repaired = driver.current_url.rstrip("/").rsplit("/", 1)[1]
+    page.click(page.MANUAL_CONFIRM)  # it closes the failed refresh (MR13)
+    page.wait_for_text(page.RESULT_STATE, "Waiting for the servability update", timeout=60)
+    assert driver.current_url.endswith(f"/{UCJEPS}/manual-refresh"), "the result is on the page (layout A)"
+    repaired = page.wait_for((By.XPATH, "//*[@id='manual-result-heading']//a")).text
     assert repaired != failed["refresh_id"]
-    page.wait_for_state(UCJEPS, repaired, "Updated")
+    page.click(page.RUN_UPDATE)
+    page.wait_for_text(page.RESULT_STATE, "Updated", timeout=60)
+    page.open_refresh(UCJEPS, repaired)
     assert REPAIR_REASON in page.text_of(page.REASONS)
     page.open_refresh(UCJEPS, failed["refresh_id"])
     assert page.text_of(page.STATE) == "Abandoned"
-    assert "closed by an admin refresh" in page.text_of(page.REASONS)
+    assert f"closed by the manual refresh {repaired}" in page.text_of(page.REASONS)
 
 
-@pytest.mark.after("test_t19_an_admin_refresh_repairs_an_open_failed_refresh")
+@pytest.mark.after("test_t19_a_manual_refresh_repairs_an_open_failed_refresh")
 def test_t21_sorting_and_paging_past_refreshes(driver: WebDriver, base_url: str) -> None:
-    """Checklist section 15, step 7. UCJEPS is brought up to 30 refreshes with admin refreshes of the list it already
-    publishes (each passes and updates): the slowest set-up in the suite, so it runs last of UCJEPS's tests."""
+    """Checklist section 15, step 7. UCJEPS is brought up to 30 refreshes with manual refreshes of the list it already
+    publishes (each passes and is updated): the slowest set-up in the suite, so it runs last of UCJEPS's tests."""
     page = signed_in(driver, base_url, UCJEPS)
     three_rows = servable_list("ucjeps-3").read_text()
     for n in range(30 - len(page.refreshes(UCJEPS))):

@@ -7,7 +7,8 @@ Every few seconds it reads each museum's newest refresh (a museum has at most on
 A refresh in `checking` or `updating` is claimed with a conditional write that sets an owner and a heartbeat, renewed
 while the step runs; a step whose heartbeat has gone stale was interrupted and is started again, so a restart never
 loses a step (decided October 9, 2026, D33). Both steps are safe to repeat. A passed check goes straight on to the
-servability update, under the same claim (decided October 12, 2026, D80), and a successful servability update
+servability update, under the same claim (decided October 12, 2026, D80), except a manual refresh's, which waits for an
+admin to run the servability update (issue #118); a successful servability update
 ends the recalls CollectionSpace has caught up with (D119). Once a day it also removes audit entries older than each
 museum's audit retention (D98), and counts each museum's requests of the day before (issue #96)."""
 from __future__ import annotations
@@ -243,6 +244,10 @@ class Worker:
                                                " in the servable list",
                                         release=True)
             self._alert(refresh)
+            return
+        if refresh.admin_refresh is not None:
+            # A manual refresh only checks: it waits until an admin runs the servability update (issue #118, MR9).
+            self.s.refreshes.transition(refresh, State.WAITING, results={"check": result.summary()}, release=True)
             return
         # Passed: the servability update follows at once, under the same claim (D80).
         self.s.refreshes.transition(refresh, State.UPDATING, results={"check": result.summary()})

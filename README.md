@@ -26,8 +26,8 @@ placeholder image's Media record among them. Watermarking (the Botanical Garden)
 - Fetch a file from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
 - Add a watermark for the museums that want one.
-- Give admins a web app to follow daily refreshes and alerts, see what Serena served and couldn't serve and why, recall
-  files and change settings.
+- Give admins a web app to follow daily refreshes and alerts, bring a servable list in by hand when a refresh fails
+  (Manual refresh), see what Serena served and couldn't serve and why, recall files and change settings.
 
 ## Layout
 
@@ -106,6 +106,7 @@ to start:
 | 19 | Media look up beside CollectionSpace, and the file dialogs |
 | 22 | The placeholder image's Media record |
 | 23 | Media URLs |
+| 39 | Manual refresh: the ETL's recent lists or an upload, checked, then updated when an admin says |
 
 Sections 18, 20 and 21 check later changes to the same pages, step by step.
 

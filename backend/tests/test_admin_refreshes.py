@@ -97,7 +97,7 @@ def test_refreshes_and_a_refresh(admin: TestClient, etl: TestClient, worker: Wor
     refreshes = admin.get("/admin/v1/museums/pahma/refreshes").json()["refreshes"]
     assert [r["refresh_id"] for r in refreshes] == [refresh["refresh_id"]] and refreshes[0]["state"] == "updated"
     one = refresh_of(admin, refresh["refresh_id"])
-    assert one["newest"] and one["actions"] == [] and one["upload"]["rows"] == len(BLOBS)
+    assert one["newest"] and one["actions"] == [] and one["upload"]["rows"] == len(BLOBS) and not one["manual"]
     assert one["update"]["written"] == len(BLOBS)
     assert admin.get("/admin/v1/museums/pahma/refreshes/pahma-2026-10-10-9").status_code == 404
     assert admin.get("/admin/v1/museums/cinefiles/refreshes").status_code == 401  # signed in to PAHMA only
@@ -228,83 +228,184 @@ def test_a_new_list_drops_an_override(store: Store, clock: Any) -> None:
     assert refresh.override is None and stored is not None and stored.override is None
 
 
-# --- an admin refresh (D66, D75, D82)
+# --- a manual refresh (D66, D75, D82; issue #118): an uploaded list or one of the ETL's, checked, then waiting for an
+# admin to run the servability update
 
 def admin_refresh(admin: TestClient, body: bytes, confirmed: bool = True,
-                 reason: str = "ETL%20log%20checked%3A%20caf%C3%A9") -> Any:
+                 reason: str = "ETL%20log%20checked%3A%20caf%C3%A9", open_refresh: str = "") -> Any:
     return admin.post("/admin/v1/museums/pahma/refreshes", content=body, headers={
-        **CHANGES, "X-Live-Core-Confirmed": "yes" if confirmed else "",
+        **CHANGES, "X-Live-Core-Confirmed": "yes" if confirmed else "", "X-Open-Refresh": open_refresh,
         "X-File-Name": "servable-list.pahma.2026-10-09.tsv", "X-Refresh-Date": "2026-10-09", "X-Reason": reason})
 
 
+def run_update(admin: TestClient, refresh_id: str, headers: dict[str, str] = CHANGES) -> Any:
+    return admin.post(f"/admin/v1/museums/pahma/refreshes/{refresh_id}/run-update", headers=headers)
+
+
 @pytest.mark.parametrize("compress", [False, True])
-def test_an_admin_refresh(admin: TestClient, etl: TestClient, worker: Worker, store: Store,
-                              compress: bool) -> None:
+def test_a_manual_refresh(admin: TestClient, etl: TestClient, worker: Worker, store: Store, compress: bool) -> None:
     body = file_of(BLOBS)
     response = admin_refresh(admin, gzip.compress(body) if compress else body)
     assert response.status_code == 201, response.text
     refresh = response.json()
     assert refresh["state"] == "checking" and refresh["upload"]["rows"] == len(BLOBS)
     assert refresh["admin_refresh_date"] == "2026-10-09"  # the refresh's own refresh date is today
-    assert any("admin refresh with the servable list servable-list.pahma.2026-10-09.tsv, for the refresh date "
+    assert refresh["manual"] and refresh["admin_refresh_from"] is None  # uploaded, not one of the ETL's lists
+    assert any("manual refresh with the servable list servable-list.pahma.2026-10-09.tsv, for the refresh date "
                "2026-10-09: ETL log checked: café" in r for r in refresh["reasons"])
-    assert worker.tick() == 1  # the servable list check; it passes, and the servability update follows at once
+    # The check passes; the refresh waits for an admin (MR9), and nothing changes until then.
+    assert worker.tick() == 1
+    waiting = refresh_of(admin, refresh["refresh_id"])
+    assert waiting["state"] == "waiting" and waiting["actions"] == ["run_update"]
+    assert waiting["check"]["result"] == "passed" and waiting["update"] is None
+    assert store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"] == []
+    assert worker.tick() == 0  # the worker leaves it alone
+    assert run_update(admin, refresh["refresh_id"], headers={}).status_code == 403  # without the app's header
+    response = run_update(admin, refresh["refresh_id"])
+    assert response.status_code == 200 and response.json()["state"] == "updating"
+    assert run_update(admin, refresh["refresh_id"]).status_code == 409  # once
+    assert worker.tick() == 1
     assert refresh_of(admin, refresh["refresh_id"])["state"] == "updated"
     rows = store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"]
     assert len(rows) == len(BLOBS)
-    entry = audit(admin)[0]
-    assert entry["action"] == "admin_refresh" and entry["details"]["rows"] == len(BLOBS)
+    ran, started = audit(admin)[:2]
+    assert (ran["action"], ran["target"], ran["details"]) == ("update_run", refresh["refresh_id"], {})
+    assert started["action"] == "admin_refresh" and started["details"]["rows"] == len(BLOBS)
     outcome = audit(admin, "refresh")[0]  # the refresh's outcome, by the refresh (D150)
     assert (outcome["action"], outcome["target"], outcome["details"]["state"]) == (
         "refresh_outcome", refresh["refresh_id"], "updated")
 
 
-def test_an_admin_refresh_whose_check_fails_changes_nothing(admin: TestClient, worker: Worker,
+def test_a_manual_refresh_whose_check_fails_changes_nothing(admin: TestClient, worker: Worker,
                                                                store: Store) -> None:
     refresh = admin_refresh(admin, b"not\ta\tservable\tlist\n").json()
     worker.tick()
     assert refresh_of(admin, refresh["refresh_id"])["state"] == "check_failed"
     assert store.client.scan(TableName=store.table(tables.SERVABILITY))["Items"] == []
+    assert run_update(admin, refresh["refresh_id"]).status_code == 409
     outcome = audit(admin, "refresh")[0]  # by the refresh, next to the ETL's calls (D150)
     assert (outcome["target"], outcome["details"]["state"]) == (refresh["refresh_id"], "check_failed")
 
 
-def test_an_admin_refresh_refused(admin: TestClient, etl: TestClient) -> None:
+def test_a_manual_refresh_refused(admin: TestClient, etl: TestClient) -> None:
     assert admin_refresh(admin, file_of(BLOBS), confirmed=False).status_code == 422
     assert admin_refresh(admin, file_of(BLOBS), reason="").status_code == 422
     refresh = start(etl)
     upload(etl, refresh, file_of(BLOBS))
     etl.post(refresh["links"]["check"], headers=auth())  # the worker is on it now
-    assert admin_refresh(admin, file_of(BLOBS)).status_code == 409
+    response = admin_refresh(admin, file_of(BLOBS), open_refresh=refresh["refresh_id"])
+    assert response.status_code == 409 and "wait for it to finish" in response.json()["detail"]
 
 
-def test_an_admin_refresh_closes_todays_open_refresh(admin: TestClient, etl: TestClient, worker: Worker) -> None:
-    """D82: the ETL job reached Serena, then failed; an admin refresh repairs it."""
+def test_a_manual_refresh_closes_only_the_open_refresh_it_was_shown(admin: TestClient, etl: TestClient,
+                                                                    worker: Worker) -> None:
+    """D82, MR13: the ETL job reached Serena, then failed; a manual refresh repairs it, once the admin confirms
+    closing the open refresh the page named."""
     stuck = start(etl)
     upload(etl, stuck, file_of(BLOBS))  # received, never checked
-    response = admin_refresh(admin, file_of(BLOBS))
+    unnamed = admin_refresh(admin, file_of(BLOBS))
+    assert unnamed.status_code == 409 and stuck["refresh_id"] in unnamed.json()["detail"]
+    assert admin_refresh(admin, file_of(BLOBS), open_refresh="pahma-2026-10-10-9").status_code == 409
+    assert refresh_of(admin, stuck["refresh_id"])["state"] == "received"  # still open: nothing was closed
+    response = admin_refresh(admin, file_of(BLOBS), open_refresh=stuck["refresh_id"])
     assert response.status_code == 201, response.text
     new = response.json()
     assert new["refresh_id"] == stuck["refresh_id"][:-1] + "2"  # the same refresh date, the second refresh
     old = refresh_of(admin, stuck["refresh_id"])
-    assert old["state"] == "abandoned" and "closed by an admin refresh" in old["reasons"]
+    assert old["state"] == "abandoned" and f"closed by the manual refresh {new['refresh_id']}" in old["reasons"]
+    assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "waiting"
+    assert run_update(admin, new["refresh_id"]).status_code == 200
     assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "updated"
-    outcomes = [(e["target"], e["details"]["state"]) for e in audit(admin, "refresh")]
-    assert (stuck["refresh_id"], "abandoned") in outcomes and (new["refresh_id"], "updated") in outcomes  # D150
+    outcomes = [(e["target"], e["details"]) for e in audit(admin, "refresh")]
+    closing = {"state": "abandoned", "reasons": [f"closed by the manual refresh {new['refresh_id']}"]}
+    assert (stuck["refresh_id"], closing) in outcomes  # D150
+    assert (new["refresh_id"], "updated") in [(t, d["state"]) for t, d in outcomes]
 
 
-def test_an_admin_refresh_after_an_earlier_day_was_left_open(admin: TestClient, etl: TestClient, worker: Worker,
+def test_a_manual_refresh_after_an_earlier_day_was_left_open(admin: TestClient, etl: TestClient, worker: Worker,
                                                      clock: Any) -> None:
-    """Yesterday's servable list check failed (not on the threshold) and today no refresh started: an admin refresh
+    """Yesterday's servable list check failed (not on the threshold) and today no refresh started: a manual refresh
     still works."""
     updated_refresh(etl, worker, BLOBS)
     clock.now += timedelta(days=1)
     failed = checked(etl, worker, {**BLOBS, "not a CSID!": "1a2b3c4d-0000-4000-8000-000000000001"})
     assert failed["state"] == "check_failed" and refresh_of(admin, failed["refresh_id"])["actions"] == []
     clock.now += timedelta(days=1)
-    response = admin_refresh(admin, file_of(BLOBS))
+    response = admin_refresh(admin, file_of(BLOBS), open_refresh=failed["refresh_id"])
     assert response.status_code == 201, response.text
     assert refresh_of(admin, failed["refresh_id"])["state"] == "abandoned"
+
+
+def test_the_etls_recent_lists_and_a_manual_refresh_with_one(admin: TestClient, etl: TestClient, worker: Worker,
+                                                            clock: Any) -> None:
+    """MR3 to MR7: the ETL's lists, whatever their refresh's outcome, never an admin's upload; a manual refresh with
+    one checks it again and is for that list's refresh date."""
+    good = updated_refresh(etl, worker, BLOBS)
+    clock.now += timedelta(days=1)
+    failed = checked(etl, worker, changed(BLOBS, 0.5))  # fails on the delta threshold, and stays open
+    lists = admin.get("/admin/v1/museums/pahma/servable-lists").json()["lists"]
+    assert [x["refresh_id"] for x in lists] == [failed["refresh_id"], good["refresh_id"]]  # newest first
+    assert (lists[0]["state"], lists[1]["state"]) == ("check_failed", "updated")
+    assert lists[1]["rows"] == len(BLOBS) and len(lists[1]["sha256"]) == 64 and lists[1]["uploaded_at"]
+
+    url = "/admin/v1/museums/pahma/refreshes/from-list"
+    ask = {"refresh_id": good["refresh_id"], "reason": "yesterday's list", "open_refresh": failed["refresh_id"]}
+    assert admin.post(url, json=ask).status_code == 403  # without the app's header
+    assert admin.post(url, headers=CHANGES, json={**ask, "reason": ""}).status_code == 422
+    assert admin.post(url, headers=CHANGES, json={**ask, "open_refresh": ""}).status_code == 409  # not confirmed
+    assert admin.post(url, headers=CHANGES, json={**ask, "refresh_id": "pahma-2026-10-01-1"}).status_code == 404
+    response = admin.post(url, headers=CHANGES, json=ask)
+    assert response.status_code == 201, response.text
+    new = response.json()
+    assert new["state"] == "checking" and new["refresh_date"] == failed["refresh_date"]  # today's
+    assert (new["admin_refresh_date"], new["admin_refresh_from"]) == (good["refresh_date"], good["refresh_id"])
+    assert new["upload"]["sha256"] == lists[1]["sha256"] and new["upload"]["rows"] == len(BLOBS)
+    assert any(f"manual refresh with the ETL's servable list for {good['refresh_date']}, from {good['refresh_id']}: "
+               "yesterday's list" in r for r in new["reasons"])
+    assert refresh_of(admin, failed["refresh_id"])["state"] == "abandoned"
+    started = audit(admin)[0]
+    assert started["action"] == "admin_refresh" and started["details"]["from"] == good["refresh_id"]
+    # A manual refresh's list isn't one of the ETL's, and the ETL's list can't be picked by a manual refresh's ID.
+    assert [x["refresh_id"] for x in admin.get("/admin/v1/museums/pahma/servable-lists").json()["lists"]] == [
+        failed["refresh_id"], good["refresh_id"]]
+    again = {"refresh_id": new["refresh_id"], "reason": "no", "open_refresh": new["refresh_id"]}
+    assert admin.post(url, headers=CHANGES, json=again).status_code == 404
+    assert worker.tick() == 1 and refresh_of(admin, new["refresh_id"])["state"] == "waiting"  # no change: it passes
+
+
+def test_a_waiting_refresh_is_closed_by_the_next_refresh(admin: TestClient, etl: TestClient, worker: Worker) -> None:
+    """MR9: a passed manual refresh nobody updated is closed as abandoned when the ETL starts a refresh, even the same
+    day; it never times out."""
+    waiting = admin_refresh(admin, file_of(BLOBS)).json()
+    assert worker.tick() == 1 and refresh_of(admin, waiting["refresh_id"])["state"] == "waiting"
+    nightly = start(etl)
+    assert nightly["refresh_id"] != waiting["refresh_id"]  # a new refresh, not the waiting one
+    closed = refresh_of(admin, waiting["refresh_id"])
+    assert closed["state"] == "abandoned" and closed["actions"] == []
+    assert "a later refresh started before the servability update ran" in closed["reasons"]
+    outcome = audit(admin, "refresh")[0]
+    assert (outcome["target"], outcome["details"]["reasons"]) == (
+        waiting["refresh_id"], ["a later refresh started before the servability update ran"])
+
+
+def test_an_override_on_a_manual_refresh_waits_too(admin: TestClient, etl: TestClient, worker: Worker,
+                                                   clock: Any) -> None:
+    """MR11: overriding a manual refresh's delta threshold checks its list again; on a pass it waits for the same
+    button as a passed check."""
+    updated_refresh(etl, worker, BLOBS)
+    clock.now += timedelta(days=1)
+    failed = admin_refresh(admin, file_of(changed(BLOBS, 0.5))).json()
+    assert worker.tick() == 1 and refresh_of(admin, failed["refresh_id"])["actions"] == ["override_threshold"]
+    response = admin.post(f"/admin/v1/museums/pahma/refreshes/{failed['refresh_id']}/override-threshold",
+                          headers=CHANGES, json={"reason": "PAHMA republished half its images"})
+    assert response.status_code == 200, response.text
+    alert = admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"][0]
+    assert "on a pass, waits for an admin to run the servability update" in alert["message"]
+    assert worker.tick() == 1
+    after = refresh_of(admin, failed["refresh_id"])
+    assert after["state"] == "waiting" and after["actions"] == ["run_update"] and after["override"]
+    assert run_update(admin, failed["refresh_id"]).status_code == 200
+    assert worker.tick() == 1 and refresh_of(admin, failed["refresh_id"])["state"] == "updated"
 
 
 # --- alerts (D67)

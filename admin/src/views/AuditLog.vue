@@ -41,7 +41,7 @@
         <ColumnHeader v-bind="slot" :help="h.help" />
       </template>
       <template #[`item.at`]="{item}"><WhenText :at="item.at" /></template>
-      <template #[`item.action`]="{item}">{{ item.action.replace(/_/g, ' ') }}</template>
+      <template #[`item.action`]="{item}">{{ actionWords(item.action) }}</template>
       <template #[`item.target`]="{item}">
         <span class="audit-target">
           <RefreshLink v-if="REFRESH_ID.test(item.target)" :id="item.target" />
@@ -79,7 +79,7 @@ import CopyButton from '@/components/CopyButton.vue'
 import LoadError from '@/components/LoadError.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import WhenText from '@/components/WhenText.vue'
-import {PAGE_SIZES, REFRESH_ID, detailLines, isCsid, short, targetOf} from '@/words'
+import {PAGE_SIZES, REFRESH_ID, actionWords, detailLines, isCsid, short, targetOf} from '@/words'
 import {useTableState} from '@/tableState'
 
 // Sortable: time, by, action and target; the details aren't (D94). "By", not "Admin": the ETL and Serena act too.

@@ -33,7 +33,17 @@
         <router-link :to="{name: 'refresh', params: {museum, refreshId: item.refresh_id}}">{{ item.refresh_id }}</router-link>
       </template>
       <template #[`item.refresh_date`]="{item}">
-        {{ item.refresh_date }}<span v-if="item.admin_refresh_date"> (admin refresh, list for {{ item.admin_refresh_date }})</span>
+        <!-- A manual refresh: where its list came from and, when it isn't the refresh's own day, the list's date, in
+             words, not colour alone (issue #116, folded into #118). -->
+        {{ item.refresh_date }}<v-chip
+          v-if="manual(item)"
+          class="manual-tag ml-2"
+          color="info"
+          size="small"
+          variant="tonal"
+        >
+          {{ manual(item) }}
+        </v-chip>
       </template>
       <template #[`item.state`]="{item}"><RefreshState :state="item.state" :override="item.override" /><OverrideMark v-if="!byOverride(item)" :override="item.override" /></template>
       <template #[`item.updated_at`]="{item}"><WhenText :at="item.updated_at" /></template>
@@ -64,6 +74,15 @@ const headers = [
   {title: 'Rows', key: 'rows', help: 'Rows in its servable list: one per Blob the ETL lists.'},
   {title: 'Last change', key: 'updated_at', help: 'When its state last changed (UTC).'}
 ]
+
+function manual(item: RefreshSummary): string {
+  if (!item.manual) {
+    return ''
+  }
+  const list = item.admin_refresh_from ? 'ETL list' : 'uploaded list'
+  const day = item.admin_refresh_date && item.admin_refresh_date !== item.refresh_date ? ` for ${item.admin_refresh_date}` : ''
+  return `manual refresh · ${list}${day}`
+}
 
 // An overridden refresh (issue #110): a bar in the warning colour down the row's left edge, like a waiting alert's.
 function rowProps({item}: {item: RefreshSummary}) {

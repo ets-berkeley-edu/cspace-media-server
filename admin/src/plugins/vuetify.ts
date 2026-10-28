@@ -21,6 +21,8 @@ import {VMain} from 'vuetify/components/VMain'
 import {VMenu} from 'vuetify/components/VMenu'
 import {VNavigationDrawer} from 'vuetify/components/VNavigationDrawer'
 import {VProgressCircular} from 'vuetify/components/VProgressCircular'
+import {VRadio} from 'vuetify/components/VRadio'
+import {VRadioGroup} from 'vuetify/components/VRadioGroup'
 import {VSelect} from 'vuetify/components/VSelect'
 import {VTable} from 'vuetify/components/VTable'
 import {VTextField} from 'vuetify/components/VTextField'
@@ -36,7 +38,7 @@ export default createVuetify({
   components: {
     VAlert, VApp, VAppBar, VAppBarTitle, VBadge, VBtn, VBtnToggle, VCard, VCardActions, VCardText, VCardTitle, VCheckbox, VChip,
     VContainer, VDataTable, VDialog, VFileInput, VForm, VIcon, VList, VListItem, VListItemTitle, VListSubheader, VMain, VMenu, VNavigationDrawer,
-    VProgressCircular, VSelect, VSpacer, VTable, VTextField, VTextarea, VTooltip
+    VProgressCircular, VRadio, VRadioGroup, VSelect, VSpacer, VTable, VTextField, VTextarea, VTooltip
   },
   icons: {defaultSet: 'mdi', aliases, sets: {mdi}},
   defaults: {

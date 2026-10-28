@@ -5,7 +5,7 @@ CollectionSpace (deploy/README.md: ./serena aws etl <museum>), where every museu
     python -m devtools.fake_etl --museum pahma           # a whole daily refresh: the Solr refresh's stand-in, the
                                                          # servable list, then start, upload, check and poll
     python -m devtools.fake_etl --museum pahma --failed  # a failed refresh: Serena is never called, as when it can't
-                                                         # be reached; the repair is an admin refresh (D85)
+                                                         # be reached; the repair is a manual refresh (D85)
     python -m devtools.fake_etl --museum pahma --sizes 100KB:900,5MB:90,100MB:2
                                                          # 992 records whose files are about a real file's size, in
                                                          # that order, for ./serena aws replay (D283), which prints it
@@ -202,16 +202,16 @@ def why_not_here(secretsmanager_endpoint: str | None, tenants: dict[str, str], s
 
 
 def repair_hint(museum: str, count: int, in_aws: bool) -> str:
-    """What --failed prints. In AWS the servable list for the admin refresh is made on the local stack: its CSIDs
+    """What --failed prints. In AWS the servable list for the manual refresh is made on the local stack: its CSIDs
     depend only on the museum and --rows, so the file matches the records just added to the environment's simulator."""
     make = f"./serena etl {museum} --rows {count} --file-only > <file>"
     if in_aws:
-        where = (f"With the local stack up (./serena up): {make}, then \"Start a refresh\" in this environment's "
-                 "admin app.")
+        where = (f"With the local stack up (./serena up): {make}, then upload it on "
+                 "Manual refresh in this environment's admin app.")
     else:
-        where = f"{make}, then \"Start a refresh\" in the admin app."
+        where = f"{make}, then upload it on Manual refresh in the admin app."
     return (f"Failed refresh: {museum}'s records were added and its servable list made, but Serena wasn't called.\n"
-            f"  Repair it with an admin refresh. {where}")
+            f"  Repair it with a manual refresh. {where}")
 
 
 def threshold_hint(refresh_id: str, in_aws: bool) -> str:

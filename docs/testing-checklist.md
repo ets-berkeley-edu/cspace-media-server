@@ -269,18 +269,21 @@ go once every alert is acknowledged on the Alerts page (the bell opens it).
 - [ ] In a terminal: `./serena etl pahma`. Expect `pahma-<today>-3: check_failed` and `servable list: 21 rows; 17 added,
   0 removed, 0 changed (425.0% of the last servability update's 4 rows)`: after the override, Serena serves the
   3-row list (4 rows with the placeholder image), so the default 20 rows are far over the delta threshold. This is
-  on purpose: leave the refresh `check_failed` (open), and the admin refresh below repairs it.
+  on purpose: leave the refresh `check_failed` (open), and the manual refresh below repairs it.
 - [ ] In a terminal: `./serena etl pahma --rows 3 --file-only > /tmp/pahma-servable-list.tsv` (the stand-in for running
-  the servable list script on the ETL server). In the app, open "Start a refresh". Choose the file (in the Mac
-  file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and press Return). The refresh date starts as
-  today, with a calendar picker; leave it. Type a reason, tick "This servable list was made from the live public core"
-  and click "Start the refresh" (clicked too soon, it says what's missing under each field: section 21). Expect the new refresh's page, "an admin refresh, with
-  the servable list for <today>", and, after reloading the page, `Updated`. On "Past refreshes", expect the `check_failed`
-  refresh now `Abandoned`, its reasons naming the admin refresh.
-- [ ] Open "Audit log". Expect the override, each acknowledgement and the admin refresh, each with `admin`. Expect the
+  the servable list script on the ETL server). In the app, open "Manual refresh" (in the Admin group) and choose
+  "Upload a file". Choose the file (in the Mac file picker, press Cmd+Shift+G, type `/tmp/pahma-servable-list.tsv` and
+  press Return). The refresh date starts as today, with a calendar picker; leave it. Type a reason, tick "This
+  servable list was made from the live public core" and click "Check the servable list" (clicked too soon, it says
+  what's missing under each field: section 21). Confirm closing the open `check_failed` refresh. Expect, on the page,
+  "Your check:" with the new refresh, then "Waiting for the servability update"; click "Run the servability update"
+  and expect `Updated`. On "Past refreshes", expect the `check_failed` refresh now `Abandoned`, its reasons naming the
+  manual refresh, and the new one tagged "manual refresh · uploaded list".
+- [ ] Open "Audit log". Expect the override, each acknowledgement, the manual refresh and its "update run", each with
+  `admin`. Expect the
   ETL's calls too, by `ETL (pahma)`, which key `current`: for each `./serena etl pahma`, an `etl_refresh_start`, an
   `etl_servable_list_upload` (with its rows) and an `etl_check_request`; and each refresh's outcome, by `refresh
-  pahma-<today>-<n>`: `refresh_outcome` with `updated` or `check_failed`, and `abandoned` for the one the admin
+  pahma-<today>-<n>`: `refresh_outcome` with `updated` or `check_failed`, and `abandoned` for the one the manual
   refresh closed. Nothing for the fake ETL's polls.
 - [ ] In a terminal: `./serena logs --no-follow web | grep threshold_overridden`. Expect the override's alert, logged
   once by the web app, which records it; the worker emails it, and locally there's no email topic. Then
@@ -314,8 +317,8 @@ http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`).
   and the pages. Click "Last change" in the header: expect the oldest refresh first, taken from all 30, not only the
   page on screen; click again for newest first, and a third time for oldest first again (a column is always sorted, one
   way or the other; there's no unsorted state). Choose 100 per page: expect all 30 on one page.
-- [ ] Expect every page's title but the Overview's to start with "PAHMA" (for example "PAHMA Past refreshes", "PAHMA:
-  Start a refresh", "PAHMA Media look up", "PAHMA refresh pahma-<today>-1").
+- [ ] Expect every page's title but the Overview's to start with "PAHMA" (for example "PAHMA Past refreshes", "PAHMA
+  Manual refresh", "PAHMA Media look up", "PAHMA refresh pahma-<today>-1").
 - [ ] Open Alerts (the bell) and "Audit log": expect the same sorting by any column's name (on the Audit log, every column but
   Details), and the same choice of page sizes.
 - [ ] On "Audit log", click "Export CSV". Expect a file `serena-audit-pahma-<today>.csv`. Open it in Excel: expect
@@ -442,8 +445,8 @@ and the one-line banner, the Settings gear, and "recall" in place of the old wor
 after `./serena up --build` (or `./serena down` and `./serena up` if the stack was running).
 
 - [ ] Open http://localhost:5373/admin/ and sign in to PAHMA as `admin` (password `admin`). Expect the menu on the left
-  in three groups, their headings in bold capitals: DAILY REFRESH (Overview, Start a refresh, Past refreshes), MEDIA
-  RECORDS (Past requests, Media look up, Recalls) and ADMIN (Audit log, API documentation). Expect no Alerts or
+  in three groups, their headings in bold capitals: DAILY REFRESH (Overview, Past refreshes), MEDIA RECORDS (Past
+  requests, Media look up, Recalls) and ADMIN (Manual refresh, Audit log, API documentation). Expect no Alerts or
   Settings in the menu.
 - [ ] Expect, at the top right, a bell, a gear, then "PAHMA · admin". Hover over the gear: expect "PAHMA settings".
   Click it: expect the title "PAHMA Settings".
@@ -453,8 +456,7 @@ after `./serena up --build` (or `./serena down` and `./serena up` if the stack w
   for a failed servable list check instead, and expect "A servable list check failed".)
 - [ ] Click "Open alerts": expect the title "PAHMA Alerts". Acknowledge the alert. Expect the badge and the banner gone
   (at once, or within a minute), and the bell still there; click it: expect the Alerts page again.
-- [ ] Open each page in the menu: expect the titles "PAHMA Past refreshes", "PAHMA: Start a refresh", "PAHMA Past
-  requests", "PAHMA Media look up", "PAHMA Recalls", "PAHMA Audit log" and "PAHMA ETL API documentation".
+- [ ] Open each page in the menu: expect the titles "PAHMA Past refreshes", "PAHMA Past requests", "PAHMA Media look up", "PAHMA Recalls", "PAHMA Manual refresh", "PAHMA Audit log" and "PAHMA ETL API documentation".
 - [ ] On "Recalls", expect "Recall…", "Active recalls" and "Ended in the last 30 days", and nowhere the word
   "takedown". Recall one of the simulator's Media records (section 17's steps), then open "Past requests" after
   requesting its image: expect the reason `recalled`. Open "Audit log": expect the action `recall`.
@@ -626,8 +628,9 @@ CSID (in its URL) and `<MEDIA>` its Media CSID (on Media look up).
   it is selected (not just the part between hyphens). Click "View file": its file. Click "Cancel recall…" and then
   "Cancel recall" without a reason: expect the same message under the field. Keep the recall.
 - [ ] On "Settings", click "Change" on any setting, then "Save" without a reason: expect "Give a reason first." and the
-  cursor in the Reason field; click "Cancel". On "Start a refresh", click "Start the refresh" with nothing filled in:
-  expect a message under the file, the Reason field and the confirmation, and nothing started.
+  cursor in the Reason field; click "Cancel". On "Manual refresh", click "Check the servable list" with nothing filled
+  in: expect "Choose a list first." under the lists and a message under the Reason field; choose "Upload a file" and
+  click it again: expect a message under the file and the confirmation, and nothing started.
 - [ ] On "Media look up", look up `<MEDIA>`: expect "Media 2026.1.<n>" with no ⧉ (one click selects the number; the
   Media CSID beside it too), and under the stamps one line, "Sizes (6): none served (recalled) · cached: Medium",
   closed. Open it: expect the sizes table. Click "Medium": expect its file in a dialog with its path and ⧉, "Dismiss"
@@ -1372,3 +1375,48 @@ refresh at "Checking the servable list". With `./serena up`, run `./serena etl p
   with the header, then "Updated by override" without a reload, and no more requests.
 - [ ] **6. Nothing working.** With no refresh checking or updating, leave Past refreshes or Overview open for a
   minute: no `refreshes` or `status` requests (the `alerts` banner's own checks carry on).
+
+## 39. Manual refresh, on the local stack (20 minutes; before merging the pull request that adds it)
+
+What it checks: issue #118 (decisions MR1 to MR15; mockup versions 49 and 50). With `./serena up`, run
+`./serena etl pahma` twice (two ETL lists, the second the same as the first), and sign in to PAHMA:
+
+- [ ] **1. Where it is.** Expect "Manual refresh" in the menu's ADMIN group, none in DAILY REFRESH, and on Overview
+  "When a refresh failed, or its servable list didn't reach Serena: Manual refresh." The old address,
+  `…/pahma/start-refresh`, opens Manual refresh.
+- [ ] **2. The ETL's lists.** Expect "A recent list from the ETL" chosen, and a table of PAHMA's lists, newest first,
+  "newest" on the first: refresh date, uploaded (UTC), rows, the refresh's outcome as a pill, a short SHA-256 with ⧉
+  (copies all of it), and the refresh's ID as a link.
+- [ ] **3. Too soon.** Click "Check the servable list": expect "Choose a list first." and "Give a reason first.", and
+  focus on the first list. Nothing starts.
+- [ ] **4. An older list.** Pick the second list: expect at once a warning that it isn't the newest, what that does,
+  and that a new list from the servable list script is better. Type a reason and click "Check the servable list":
+  expect a dialog, "Check an older list?". Cancel.
+- [ ] **5. The newest list, checked here.** Pick the newest list, give a reason and check it (no dialog: no open
+  refresh, the newest list). Expect, at the top of the page, "Your check: pahma-<today>-3" with a blue pill, "With the
+  ETL's list for <today> (from pahma-<today>-2)", and a spinner line; within about 10 seconds, without a reload,
+  "Waiting for the servability update", the counts (21 rows; 0 added), "The check passed." and "Run the servability
+  update". The address is still Manual refresh's.
+- [ ] **6. Waiting means waiting.** Open the refresh's link: its page says "a manual refresh, with the ETL's list for
+  <today>", that it waits for an admin, and has "Run the servability update". Click "← Back to Manual refresh":
+  the page is as you left it. On Past refreshes, its Refresh date has "manual refresh · ETL list".
+- [ ] **7. Run it.** Click "Run the servability update": expect "Updating servability" with a spinner, then
+  "Updated" and the update's counts. On the Audit log: "manual refresh" (its details: from, refresh date, rows,
+  SHA-256, reason) and "update run", both by `admin`.
+- [ ] **8. An open refresh.** Run `./serena etl pahma --rows 3` (fails on the delta threshold; it stays open). Reload
+  Manual refresh: a warning names it, "still open". Pick any list, give a reason and check: the dialog asks to close
+  it. Confirm: the old refresh is Abandoned, its reasons saying "closed by the manual refresh pahma-<today>-<n>".
+- [ ] **9. A waiting refresh is closed by the next.** Let the new one reach "Waiting for the servability update", don't
+  run it, and run `./serena etl pahma`: the waiting one is Abandoned ("a later refresh started before the servability
+  update ran"), and, once Manual refresh is shown again, its result says it was closed.
+- [ ] **10. Override on the page.** Pick the list of the failed `--rows 3` refresh, check it (confirm closing the open
+  one if asked): expect it to fail only on the delta threshold, with "Override the delta threshold". Override with a
+  reason: expect "Delta threshold overridden by admin…", then "Waiting for the servability update" with "The check
+  passed without the delta threshold", and an alert saying it waits for an admin. Run it, or leave it.
+- [ ] **11. Busy.** With the worker stopped (`docker compose -p serena stop worker`), start any check; while it's
+  "Checking the servable list", reload Manual refresh: the warning says it's being checked and to wait, and checking
+  another list says so too, without a dialog. Start the worker again (`docker compose -p serena start worker`).
+- [ ] **12. Upload.** Choose "Upload a file": the same fields as Start a refresh had (file, refresh date, the live
+  public core checkbox). Upload `./serena etl pahma --file-only > /tmp/pahma.tsv`'s file with a reason: the result
+  says "With an uploaded list for <today>", and Past refreshes' tag "manual refresh · uploaded list".
+

@@ -22,13 +22,13 @@ pytestmark = pytest.mark.usefixtures("built_dataset")
 ADMIN = ("admin", "admin")  # the simulator's synthetic account: its password is its username
 # The menu's groups and their pages, in order (App.vue's NAV), by each item's route name and title.
 MENU = {
-    "DAILY REFRESH": [("overview", "Overview"), ("start-refresh", "Start a refresh"), ("refreshes", "Past refreshes")],
+    "DAILY REFRESH": [("overview", "Overview"), ("refreshes", "Past refreshes")],
     "MEDIA RECORDS": [("requests", "Past requests"), ("lookup", "Media look up"), ("recalls", "Recalls")],
-    "ADMIN": [("audit", "Audit log"), ("api", "API documentation")],
+    "ADMIN": [("manual-refresh", "Manual refresh"), ("audit", "Audit log"), ("api", "API documentation")],
 }
 # Each page's title, opened from the menu (checklist section 18).
 TITLES = {
-    "refreshes": "PAHMA Past refreshes", "start-refresh": "PAHMA: Start a refresh", "requests": "PAHMA Past requests",
+    "refreshes": "PAHMA Past refreshes", "manual-refresh": "PAHMA Manual refresh", "requests": "PAHMA Past requests",
     "lookup": "PAHMA Media look up", "recalls": "PAHMA Recalls", "audit": "PAHMA Audit log",
     "api": "PAHMA ETL API documentation",
 }

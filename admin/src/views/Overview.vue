@@ -21,6 +21,10 @@
       page; "<router-link :to="{name: 'lookup', params: {museum: String(route.params.museum)}}">Media look up</router-link>"
       says why for any one file.
     </p>
+    <p id="overview-manual" class="mb-6">
+      When a refresh failed, or its servable list didn't reach Serena:
+      <router-link :to="{name: 'manual-refresh', params: {museum: String(route.params.museum)}}">Manual refresh</router-link>.
+    </p>
     <v-btn
       id="sign-out-all"
       variant="outlined"
