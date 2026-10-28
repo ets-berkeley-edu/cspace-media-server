@@ -1351,7 +1351,7 @@ only its built files (D183), and only from campus networks (`ADMIN_CIDRS`, check
     flagged **partly replaced**, with when Serena tries the update again (see An update that failed partway). **A pending refresh's page** shows its four
     steps under the state line (Started, ETL list received, ETL list checked, ETL list applied): done ones ticked in
     green, the current one in blue with its clock or spinner, or, failed, in red with what to do, and the rest to
-    come. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
+    come. The admin API's museum status returns both (`current`, `pending`), and a refresh's page and the pending refresh carry `deadline_at`, when the watchdog's deadline for an ETL refresh's day passes, in UTC, for the line that says it's late. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
     list came from and, when it isn't the refresh's own day, the list's date: "manual refresh · ETL list for
     2026-10-09" or "manual refresh · uploaded list" (issue #116, folded into #118).
   - **Links** (D157, D158). A refresh ID opens that refresh's page wherever it appears: in an alert's text and its

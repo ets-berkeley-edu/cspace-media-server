@@ -342,6 +342,6 @@ def after_update(museum: Museum, refresh_id: str, refresh_date: str, store: Stor
     if counts.ended and alerts is not None:
         what = "1 recall" if counts.ended == 1 else f"{counts.ended} recalls"
         alerts.raise_(Alert(museum.key, refresh_date, Kind.RECALLS_ENDED, refresh_id,
-                            f"Refresh {refresh_id} ended {what} for {museum.name}: its servable list no longer has "
+                            f"Refresh {refresh_id} ended {what} for {museum.name}: its ETL list no longer has "
                             "their files as public."))
     return counts

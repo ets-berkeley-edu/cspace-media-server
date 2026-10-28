@@ -62,7 +62,7 @@ def test_a_first_day(client: TestClient, worker: Worker, store: Store) -> None:
     refresh = refresh_date(client, worker, blobs)
     assert refresh["state"] == "updated"
     assert refresh["check"]["result"] == "passed"
-    assert "first servability update: the delta threshold doesn't apply" in refresh["check"]["warnings"]
+    assert "first ETL list update: the delta threshold doesn't apply" in refresh["check"]["warnings"]
     assert set(refresh["links"]) == {"self", "servable_list", "check"}  # no Solr refresh report or update call (D72)
     assert refresh["update"] == {"deleted": 0, "written": 50, "unchanged": 0, "recalls_ended": 0,
                                  "recalls_kept": 0}

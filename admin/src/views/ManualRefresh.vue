@@ -2,9 +2,9 @@
   <v-container fluid>
     <h1 id="page-title" class="text-h5 mb-4">{{ museumName(museum) }} Manual refresh</h1>
     <p class="mb-4">
-      Bring a servable list into Serena now, when a refresh failed or its servable list didn't reach Serena. Pick one of
+      Bring an ETL list into Serena now, when a refresh failed or its ETL list didn't reach Serena. Pick one of
       the ETL's recent lists or upload one: Serena checks it without changing anything. If the check passes, you run the
-      servability update; if it fails only on the delta threshold, you can override it first.
+      ETL list update; if it fails only on the delta threshold, you can override it first.
     </p>
     <v-alert
       v-if="error"
@@ -50,7 +50,7 @@
         />
         <p class="mb-2">
           The check failed only on the delta threshold. Override it only if you know the change is expected: Serena then
-          checks the same list again without it, and you run the servability update as for a passed check. The team is
+          checks the same list again without it, and you run the ETL list update as for a passed check. The team is
           emailed.
         </p>
         <v-btn
@@ -64,7 +64,7 @@
         </v-btn>
       </template>
       <template v-else-if="run.state === 'check_failed' && run.check">
-        <p class="mb-2"><strong>The servable list has {{ run.check.error_count }} problem{{ run.check.error_count === 1 ? '' : 's' }}</strong>, so nothing changed.</p>
+        <p class="mb-2"><strong>The ETL list has {{ run.check.error_count }} problem{{ run.check.error_count === 1 ? '' : 's' }}</strong>, so nothing changed.</p>
         <v-table id="manual-problems" density="compact" class="mb-2">
           <thead>
             <tr><th>Line</th><th>Field</th><th>Problem</th></tr>
@@ -109,7 +109,7 @@
           :loading="running"
           @click="runUpdate"
         >
-          Run the servability update
+          Run the ETL list update
         </v-btn>
         <p class="mb-2 text-medium-emphasis">
           Running it is in the audit log. If tonight's ETL refresh or another manual refresh starts first, Serena closes
@@ -120,7 +120,7 @@
         Updated: {{ run.update.deleted }} deleted, {{ run.update.written }} written, {{ run.update.unchanged }} unchanged.
       </p>
       <p v-if="run.state === 'abandoned'" class="mb-2">
-        Closed as abandoned: another refresh started before the servability update ran. Nothing changed.
+        Closed as abandoned: another refresh started before the ETL list update ran. Nothing changed.
       </p>
     </section>
 
@@ -129,7 +129,7 @@
         id="manual-source"
         v-model="source"
         inline
-        label="Where the servable list comes from"
+        label="Where the ETL list comes from"
         hide-details
         class="mb-2"
       >
@@ -139,7 +139,7 @@
 
       <template v-if="source === 'etl'">
         <p class="mb-2 text-medium-emphasis">
-          The ETL's last 10 servable lists for {{ museumName(museum) }}, one per refresh, newest first, whatever the
+          The last 10 ETL lists for {{ museumName(museum) }}, one per refresh, newest first, whatever the
           refresh's outcome. Lists an admin uploaded aren't here.
         </p>
         <v-table id="manual-lists" density="compact" class="mb-1">
@@ -181,7 +181,7 @@
               <td><RefreshLink :id="list.refresh_id" /></td>
             </tr>
             <tr v-if="loadedLists && !lists.length">
-              <td colspan="7">No servable lists from the ETL yet.</td>
+              <td colspan="7">No ETL lists yet.</td>
             </tr>
           </tbody>
         </v-table>
@@ -199,7 +199,7 @@
           <strong>This isn't the newest list.</strong> It's the ETL's list for {{ pickedList.refresh_date }},
           {{ olderDays }} day{{ olderDays === 1 ? '' : 's' }} older than the newest ({{ lists[0].refresh_date }}).
           <p class="mt-1">
-            Using it sets servability back to that day's public core while Solr keeps today's: the portals may link to
+            Using it sets what Serena serves back to that day's public core while Solr keeps today's: the portals may link to
             images Serena then refuses, and Serena may serve images that have since stopped being public.
           </p>
           <p class="mt-1">
@@ -213,7 +213,7 @@
           id="file"
           ref="fileField"
           v-model="file"
-          label="The servable list (.tsv or .tsv.gz)"
+          label="The ETL list (.tsv or .tsv.gz)"
           accept=".tsv,.gz,.txt"
           :error-messages="problems.file ? [problems.file] : []"
         />
@@ -223,14 +223,14 @@
           v-model="refreshDate"
           type="date"
           :max="today"
-          label="The refresh date the servable list is for"
+          label="The refresh date the ETL list is for"
           :error-messages="problems.date ? [problems.date] : []"
         />
         <v-checkbox
           id="confirm-live-core"
           ref="confirmField"
           v-model="confirmed"
-          label="This servable list was made from the live public core: I ran the servable list script on the ETL server."
+          label="This ETL list was made from the live public core: I ran the servable list script on the ETL server."
           :error-messages="problems.confirmed ? [problems.confirmed] : []"
         />
       </div>
@@ -270,7 +270,7 @@
         variant="flat"
         :loading="busy"
       >
-        Check the servable list
+        Check the ETL list
       </v-btn>
     </v-form>
 
@@ -280,7 +280,7 @@
         <v-card-text>
           <p v-if="older && pickedList && lists[0]" class="mb-3">
             <strong>The list for {{ pickedList.refresh_date }} isn't the newest</strong> ({{ lists[0].refresh_date }}). If
-            its check passes and you run the servability update, servability goes back to that day's public core while
+            its check passes and you run the ETL list update, what Serena serves goes back to that day's public core while
             Solr keeps today's: the portals may link to images Serena refuses, and Serena may serve images that are no
             longer public. A list made today with the servable list script on the ETL server is better.
           </p>
@@ -310,10 +310,10 @@
         <v-card-title>Override the delta threshold</v-card-title>
         <v-card-text>
           <p class="mb-4">
-            The servable list check failed only because more rows change than the delta threshold allows<span v-if="run?.check && timesOver(run.check)">: this list changes <DeltaPast :check="run.check" /></span>.
+            The ETL list check failed only because more rows change than the delta threshold allows<span v-if="run?.check && timesOver(run.check)">: this list changes <DeltaPast :check="run.check" /></span>.
             Do this once
-            you know the change is expected. Serena checks the same servable list again without the delta threshold (every
-            other check still applies) and, if it passes, waits for you to run the servability update. The team is emailed.
+            you know the change is expected. Serena checks the same ETL list again without the delta threshold (every
+            other check still applies) and, if it passes, waits for you to run the ETL list update. The team is emailed.
           </p>
           <FarPastNote
             v-if="run?.check"
@@ -365,10 +365,10 @@ import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import WhenText from '@/components/WhenText.vue'
 import {alertsChanged, museumName} from '@/session'
-import {STATES, byOverride, overrideBy, overrideWords, pacificDate, timesOver, when} from '@/words'
+import {STATES, byOverride, lowerFirst, overrideBy, overrideWords, pacificDate, timesOver, when} from '@/words'
 
-// Manual refresh (issue #118, decisions MR1 to MR15, reviewed October 27, 2026): one of the ETL's recent servable lists
-// or an uploaded one, checked without updating; a passed check waits for "Run the servability update", and a failure
+// Manual refresh (issue #118, decisions MR1 to MR15, reviewed October 27, 2026): one of the ETL's recent ETL lists
+// or an uploaded one, checked without updating; a passed check waits for "Run the ETL list update", and a failure
 // on the delta threshold alone can be overridden here. Kept alive (App.vue), one per museum, so coming back from a
 // refresh's page finds it as it was left.
 const route = useRoute()
@@ -402,14 +402,14 @@ const openBusy = computed(() => working([open.value]))
 const workingText = computed(() => {
   const state = run.value?.state
   if (state === 'updating') {
-    return 'Serena is running the servability update.'
+    return 'Serena is running the ETL list update.'
   }
   return run.value?.override
-    ? 'Serena is checking the same servable list again without the delta threshold (every other check still applies).'
-    : 'Serena is checking the servable list. Nothing changes until it passes and you run the servability update.'
+    ? 'Serena is checking the same ETL list again without the delta threshold (every other check still applies).'
+    : 'Serena is checking the ETL list. Nothing changes until it passes and you run the ETL list update.'
 })
 
-// What's missing, under each field, once "Check the servable list" is pressed; a field's message goes when it's filled.
+// What's missing, under each field, once "Check the ETL list" is pressed; a field's message goes when it's filled.
 const problems = reactive({pick: '', file: '', date: '', confirmed: ''})
 type Focusable = {focus: () => void} | null
 const fileField = ref<Focusable>(null)
@@ -474,7 +474,7 @@ function complete(): boolean {
   if (source.value === 'etl') {
     problems.pick = picked.value ? '' : 'Choose a list first.'
   } else {
-    problems.file = chosen.value ? '' : 'Choose the servable list first.'
+    problems.file = chosen.value ? '' : 'Choose the ETL list first.'
     problems.date = /^\d{4}-\d{2}-\d{2}$/.test(refreshDate.value) && refreshDate.value <= today
       ? '' : `Give a refresh date of today (${today}) or earlier.`
     problems.confirmed = confirmed.value ? '' : 'Confirm the list was made from the live public core.'
@@ -497,7 +497,7 @@ async function submit() {
     return
   }
   if (open.value && openBusy.value) {
-    error.value = `Refresh ${open.value.refresh_id} is ${(STATES[open.value.state] || open.value.state).toLowerCase()}: wait for it to finish.`
+    error.value = `Refresh ${open.value.refresh_id} is ${lowerFirst(STATES[open.value.state] || open.value.state)}: wait for it to finish.`
     return
   }
   if (older.value || open.value) {
@@ -540,7 +540,7 @@ async function runUpdate() {
     run.value = await api.runUpdate(ownMuseum, run.value.refresh_id)
     after(working([run.value]))
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : 'The servability update didn\'t start.'
+    error.value = e instanceof ApiError ? e.message : 'The ETL list update didn\'t start.'
   } finally {
     running.value = false
   }

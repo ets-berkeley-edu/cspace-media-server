@@ -60,7 +60,7 @@
       </v-alert>
       <template v-if="item">
         <div v-if="result.items.length > 1" class="mb-3">
-          <p class="mb-2">This Media record has {{ result.items.length }} Blobs in the servable list:</p>
+          <p class="mb-2">This Media record has {{ result.items.length }} Blobs in the ETL list:</p>
           <v-btn-toggle
             id="lookup-blobs"
             v-model="index"
@@ -252,9 +252,9 @@
       <p id="lookup-refresh" class="text-caption text-medium-emphasis mt-4">
         Looked up {{ result.input }} ·
         <template v-if="result.refresh">
-          last servability update: refresh {{ result.refresh.refresh_id }} (refresh date {{ result.refresh.refresh_date }})
+          last ETL list update: refresh {{ result.refresh.refresh_id }} (refresh date {{ result.refresh.refresh_date }})
         </template>
-        <template v-else>no servability update yet</template>
+        <template v-else>no ETL list update yet</template>
       </p>
     </template>
     <FileDialog :file="file" @close="file = null" />
@@ -428,8 +428,8 @@ const verdict = computed<Verdict>(() => {
   const refresh = result.value?.refresh?.refresh_id
   const step = (check: string) => it.steps.find(s => s.check === check)
   if (!it.kind) {
-    return {tone: 'not', head: 'Not served: not in the servable list',
-            why: `${refresh ? `Refresh ${refresh}'s` : 'The'} servable list doesn't have this CSID, as a Blob or a Media record.`,
+    return {tone: 'not', head: 'Not served: not in the ETL list',
+            why: `${refresh ? `Refresh ${refresh}'s` : 'The'} ETL list doesn't have this CSID, as a Blob or a Media record.`,
             next: cs.value.next || 'Check the record in CollectionSpace: a change there shows here after the next refresh.'}
   }
   const access = step('Access')

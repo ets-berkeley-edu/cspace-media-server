@@ -2,7 +2,7 @@
   <span class="check-counts">{{ check.rows }} rows; {{ check.added }} added, {{ check.removed }} removed,
     {{ check.changed }} changed<template v-if="check.previous_rows !== null">
       (<span :class="{'delta-over': times}">{{ check.delta_percent }}%</span> of the {{ check.previous_rows }} rows of
-      the last servability update; <template v-if="times">{{ timesText(times) }} times the {{ check.threshold_percent }}%
+      the last ETL list update; <template v-if="times">{{ timesText(times) }} times the {{ check.threshold_percent }}%
         threshold</template><template v-else>the threshold is {{ check.threshold_percent }}%</template>)</template>.</span>
 </template>
 

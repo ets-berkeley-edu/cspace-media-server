@@ -37,10 +37,10 @@ class Kind(StrEnum):
 
 TITLES = {
     Kind.MISSED_DEADLINE: "Today's refresh isn't finished by the deadline",
-    Kind.CHECK_FAILED: "A servable list check failed",
-    Kind.UPDATE_FAILED: "A servability update failed",
+    Kind.CHECK_FAILED: "An ETL list check failed",
+    Kind.UPDATE_FAILED: "An ETL list update failed",
     Kind.ABANDONED: "A refresh was abandoned",
-    Kind.NOT_UPDATED: "Serena hasn't had a servability update in 24 hours",
+    Kind.NOT_UPDATED: "Serena hasn't had an ETL list update in 24 hours",
     Kind.THRESHOLD_OVERRIDDEN: "An admin overrode the delta threshold",
     Kind.SETTING_CHANGED: "An admin changed a setting",
     Kind.RECALL: "An admin recalled Media records",

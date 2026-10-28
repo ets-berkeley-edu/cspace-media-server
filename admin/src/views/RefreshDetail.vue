@@ -8,7 +8,13 @@
           <RefreshLink :id="refresh.admin_refresh_from" />)</template><template v-else>an uploaded list for
           {{ refresh.admin_refresh_date || refresh.refresh_date }}</template></span> · last change {{ when(refresh.updated_at) }}
       <span v-if="!refresh.newest"> · a later refresh has started</span>
+      <br v-if="refresh.newest && stateSince(refresh).text"><StateSince v-if="refresh.newest" :refresh="refresh" />
     </p>
+    <!-- The pending refresh's four steps, and what to do when it needs an admin (mockup version 55). -->
+    <template v-if="refresh?.newest && isOpen(refresh.state)">
+      <RefreshSteps :state="refresh.state" />
+      <p v-if="fixText(refresh, true)" id="refresh-fix" class="mb-4 text-medium-emphasis">{{ fixText(refresh, true) }}</p>
+    </template>
     <!-- Who overrode the delta threshold, when and why, for as long as the refresh is shown (issue #108). -->
     <v-alert
       v-if="refresh?.override"
@@ -23,7 +29,7 @@
       <strong id="override-lead" class="text-subtitle-1 font-weight-bold">A safety check failed, and an admin overrode it</strong>
       <!-- How far past, in red, with how many times the threshold it is (issue #120). -->
       <div v-if="refresh.check && timesOver(refresh.check)" id="override-overshoot">
-        The servable list changes <DeltaPast :check="refresh.check" />.
+        The ETL list changes <DeltaPast :check="refresh.check" />.
       </div>
       <div v-else-if="overshoot" id="override-overshoot">{{ overshoot }}</div>
       <div><strong>Delta threshold overridden</strong> by {{ overrideBy(refresh.override) }} at {{ when(refresh.override.at) }}.</div>
@@ -42,7 +48,7 @@
     <!-- A manual refresh whose check passed waits for an admin (issue #118, MR9). -->
     <p v-if="refresh?.state === 'waiting'" id="refresh-waiting" class="mb-2">
       <strong>The check passed{{ refresh.override ? ' without the delta threshold' : '' }}.</strong> Nothing has changed
-      yet: the refresh waits for an admin to run the servability update. Running it is in the audit log. If tonight's ETL
+      yet: the refresh waits for an admin to run the ETL list update. Running it is in the audit log. If tonight's ETL
       refresh or another manual refresh starts first, Serena closes this one as abandoned.
     </p>
     <div v-if="refresh?.actions.length" class="mb-6">
@@ -54,7 +60,7 @@
         :loading="busy"
         @click="runUpdate"
       >
-        Run the servability update
+        Run the ETL list update
       </v-btn>
       <v-btn
         v-if="refresh.actions.includes('retry_update')"
@@ -63,7 +69,7 @@
         variant="flat"
         @click="open('retry_update')"
       >
-        Retry the servability update
+        Retry the ETL list update
       </v-btn>
       <v-btn
         v-if="refresh.actions.includes('override_threshold')"
@@ -89,7 +95,7 @@
       </ul>
       <p v-else id="refresh-admin-actions-none" class="mb-4">None.</p>
 
-      <h2 class="text-h6 mb-2">The servable list</h2>
+      <h2 class="text-h6 mb-2">The ETL list</h2>
       <p v-if="refresh.upload" class="mb-4">
         {{ refresh.file_name }}: {{ refresh.upload.rows }} rows, {{ refresh.upload.bytes }} bytes, received {{ when(refresh.upload.uploaded_at) }}.
       </p>
@@ -98,7 +104,7 @@
       <template v-if="refresh.check">
         <h2 id="check-heading" class="text-h6 mb-2">
           <!-- After an override it never reads "passed" alone: the check failed, and an admin overrode it (issue #110). -->
-          Servable list check: <template v-if="overriddenCheck"><span class="text-error">failed</span>, overridden by admin</template><template v-else>{{ refresh.check.result }}</template>
+          ETL list check: <template v-if="overriddenCheck"><span class="text-error">failed</span>, overridden by admin</template><template v-else>{{ refresh.check.result }}</template>
           <!-- Only where the heading doesn't already say it: a re-check that failed on something else (issue #110). -->
           <v-chip
             v-if="refresh.override && !overriddenCheck"
@@ -161,7 +167,7 @@
       </template>
 
       <template v-if="refresh.update">
-        <h2 class="text-h6 mb-2">The servability update</h2>
+        <h2 class="text-h6 mb-2">The ETL list update</h2>
         <p class="mb-4">{{ refresh.update.deleted }} deleted, {{ refresh.update.written }} written, {{ refresh.update.unchanged }} unchanged.</p>
         <p v-if="refresh.update.recalls_ended || refresh.update.recalls_kept" id="update-recalls" class="mb-4">
           Recalls: {{ refresh.update.recalls_ended || 0 }} ended (no longer public in CollectionSpace),
@@ -175,7 +181,7 @@
         <v-card-title>{{ titles[action] }}</v-card-title>
         <v-card-text>
           <p v-if="action === 'override_threshold' && refresh?.check && timesOver(refresh.check)" id="override-explanation" class="mb-4">
-            The servable list check failed only because more rows change than the delta threshold allows: this list
+            The ETL list check failed only because more rows change than the delta threshold allows: this list
             changes <DeltaPast :check="refresh.check" />. {{ explanations[action] }}
           </p>
           <p v-else class="mb-4">{{ explanations[action] }}</p>
@@ -233,22 +239,24 @@ import OverrideReason from '@/components/OverrideReason.vue'
 import ReasonField from '@/components/ReasonField.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
+import RefreshSteps from '@/components/RefreshSteps.vue'
+import StateSince from '@/components/StateSince.vue'
 import {alertsChanged, museumName} from '@/session'
-import {overrideBy, overrideReason, overrideWords, timesOver, when} from '@/words'
+import {fixText, isOpen, overrideBy, overrideReason, overrideWords, stateSince, timesOver, when} from '@/words'
 
-// The actions with a dialog and a reason; "Run the servability update" has neither (the reason was given at the start).
+// The actions with a dialog and a reason; "Run the ETL list update" has neither (the reason was given at the start).
 type Dialogued = Exclude<RefreshAction, 'run_update'>
 const titles: Record<Dialogued, string> = {
-  retry_update: 'Retry the servability update',
+  retry_update: 'Retry the ETL list update',
   override_threshold: 'Override the delta threshold'
 }
 const explanations = computed<Record<Dialogued, string>>(() => ({
-  retry_update: 'The worker runs the servability update again. Do this once whatever stopped it is fixed.',
+  retry_update: 'The worker runs the ETL list update again. Do this once whatever stopped it is fixed.',
   override_threshold: (refresh.value?.check && timesOver(refresh.value.check) ? ''
-    : 'The servable list check failed only because more rows change than the delta threshold allows. ') +
-    'Do this once you know the change is expected. Serena checks the same servable list again without the delta ' +
+    : 'The ETL list check failed only because more rows change than the delta threshold allows. ') +
+    'Do this once you know the change is expected. Serena checks the same ETL list again without the delta ' +
     'threshold (every other check still applies) and, if it passes, ' +
-    `${refresh.value?.manual ? 'waits for an admin to run the servability update' : 'updates Serena from it'}. The team is emailed.`
+    `${refresh.value?.manual ? 'waits for an admin to run the ETL list update' : 'updates Serena from it'}. The team is emailed.`
 }))
 
 const route = useRoute()
@@ -287,7 +295,7 @@ const adminsDid = computed(() => {
       ? [`Delta threshold overridden by ${overrideBy(r.override)} at ${when(r.override.at)}; its reason is in the banner above.`]
       : [line])
 })
-// The failed check an override answered, still shown while Serena checks the servable list again. A re-check that
+// The failed check an override answered, still shown while Serena checks the ETL list again. A re-check that
 // fails on something else replaces it, and isn't marked.
 const overriddenFailure = computed(() => !!refresh.value?.override && refresh.value.state === 'checking' &&
   refresh.value.check?.result === 'failed')
@@ -295,25 +303,25 @@ const overriddenFailure = computed(() => !!refresh.value?.override && refresh.va
 const passedByOverride = computed(() => !!refresh.value?.override && refresh.value.check?.result === 'passed')
 // The check an admin overrode: "failed, overridden by admin" while Serena re-checks it and once the re-check passes.
 const overriddenCheck = computed(() => overriddenFailure.value || passedByOverride.value)
-// How far the servable list went past the delta threshold, for the banner (issue #110).
+// How far the ETL list went past the delta threshold, for the banner (issue #110).
 const overshoot = computed(() => {
   const check = refresh.value?.check
   return check && check.previous_rows !== null
-    ? `The servable list changes ${check.delta_percent}% of the rows; the threshold is ${check.threshold_percent}%.`
+    ? `The ETL list changes ${check.delta_percent}% of the rows; the threshold is ${check.threshold_percent}%.`
     : ''
 })
 const afterOverride = computed(() => {
   const state = refresh.value?.state || ''
   const manual = !!refresh.value?.manual // a manual refresh waits for an admin after its check (issue #118)
   if (state === 'checking' || (state === 'updating' && !manual)) {
-    return 'Serena is checking the same servable list again without the delta threshold (every other check still ' +
-      `applies) and, if it passes, ${manual ? 'waits for an admin to run the servability update' : 'updates'}. ` +
+    return 'Serena is checking the same ETL list again without the delta threshold (every other check still ' +
+      `applies) and, if it passes, ${manual ? 'waits for an admin to run the ETL list update' : 'updates'}. ` +
       'This page checks again every few seconds until it\'s done.'
   }
   const then = state === 'updated' ? ' and updated from it' : state === 'waiting'
-    ? ': it passed, and waits for an admin to run the servability update'
-    : state === 'updating' ? ': it passed, and Serena is running the servability update' : ''
-  return `Serena checked the same servable list again without the delta threshold (every other check still applied)${then}. ` +
+    ? ': it passed, and waits for an admin to run the ETL list update'
+    : state === 'updating' ? ': it passed, and Serena is running the ETL list update' : ''
+  return `Serena checked the same ETL list again without the delta threshold (every other check still applied)${then}. ` +
     'The team was emailed.'
 })
 

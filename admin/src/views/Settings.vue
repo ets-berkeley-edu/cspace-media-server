@@ -170,7 +170,7 @@ import {RETENTION_LABELS} from '@/words'
 const GROUPS: Record<string, string> = {
   watchdog: 'Watchdog',
   etl: 'The ETL job',
-  check: 'Servable list check',
+  check: 'ETL list check',
   size_limits: 'Size limits',
   audit: 'Audit log',
   placeholder: 'Placeholder image'

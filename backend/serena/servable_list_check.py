@@ -111,7 +111,7 @@ def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, thres
 
     # No updated servable list yet, or an empty one: nothing to compare with (decided October 9, 2026, D36).
     if not previous:
-        result.warnings.append("first servability update: the delta threshold doesn't apply")
+        result.warnings.append("first ETL list update: the delta threshold doesn't apply")
     else:
         result.previous_rows = len(previous)
         result.added = sum(1 for blob in rows if blob not in previous)

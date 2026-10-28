@@ -53,7 +53,7 @@ def test_t20_manual_refresh_says_whats_missing(driver: WebDriver, base_url: str)
     assert page.wait_for_text(page.REASON_MESSAGES, GIVE_A_REASON)  # the message fades in
     page.click(page.SOURCE_UPLOAD)
     page.click(page.START)
-    assert page.wait_for_text(page.FILE_MESSAGES, "Choose the servable list first.")
+    assert page.wait_for_text(page.FILE_MESSAGES, "Choose the ETL list first.")
     assert "Confirm the list was made from the live public core." in page.text_of(page.CONFIRM_MESSAGES)
     assert driver.current_url.endswith(f"/{MUSEUM}/manual-refresh")
     assert len(page.refreshes(MUSEUM)) == before
@@ -63,7 +63,7 @@ def test_t17_a_failed_servable_list_check_on_its_refreshs_page(driver: WebDriver
     """Checklist section 11, step 6; section 14, step 2."""
     page = signed_in(driver, base_url, UCJEPS)
     page.open_refresh(UCJEPS, refresh_id(UCJEPS_FAILED))
-    assert page.text_of(page.STATE) == "Servable list check failed"
+    assert page.text_of(page.STATE) == "ETL list check failed"
     assert re.search(r"\d+(\.\d+)?% of the rows would change; the threshold is \d", page.text_of(page.CHECK_PROBLEMS))
     override = page.wait_for(page.OVERRIDE)
     assert override.text == "Override the delta threshold"
@@ -117,7 +117,7 @@ def test_t19_a_manual_refresh_repairs_an_open_failed_refresh(driver: WebDriver, 
     page.click(page.CONFIRM_LIVE_CORE)
     page.click(page.START)
     page.click(page.MANUAL_CONFIRM)  # it closes the failed refresh (MR13)
-    page.wait_for_text(page.RESULT_STATE, "Waiting for the servability update", timeout=60)
+    page.wait_for_text(page.RESULT_STATE, "Waiting for the ETL list update", timeout=60)
     assert driver.current_url.endswith(f"/{UCJEPS}/manual-refresh"), "the result is on the page (layout A)"
     repaired = page.wait_for((By.XPATH, "//*[@id='manual-result-heading']//a")).text
     assert repaired != failed["refresh_id"]

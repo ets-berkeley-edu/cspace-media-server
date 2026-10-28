@@ -103,6 +103,25 @@ def test_refreshes_and_a_refresh(admin: TestClient, etl: TestClient, worker: Wor
     assert admin.get("/admin/v1/museums/cinefiles/refreshes").status_code == 401  # signed in to PAHMA only
 
 
+def test_the_current_and_pending_refreshes(admin: TestClient, etl: TestClient, worker: Worker,
+                                           monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mockup version 55: the current refresh is the newest updated one, the pending one the newest while it's open,
+    with when the watchdog's deadline for its day passes (08:00 Pacific to start: 15:00 UTC in October)."""
+    status = admin.get("/admin/v1/museums/pahma/status").json()
+    assert (status["current"], status["pending"]) == (None, None)
+    done = updated_refresh(etl, worker, BLOBS)
+    status = admin.get("/admin/v1/museums/pahma/status").json()
+    assert status["current"]["refresh_id"] == done["refresh_id"] and status["pending"] is None
+    failed = failed_update(etl, worker, monkeypatch)
+    status = admin.get("/admin/v1/museums/pahma/status").json()
+    assert status["current"]["refresh_id"] == done["refresh_id"] and not status["current"]["newest"]
+    pending = status["pending"]
+    assert pending["refresh_id"] == failed["refresh_id"] and pending["state"] == "update_failed"
+    assert pending["actions"] == ["retry_update"]
+    assert pending["deadline_at"] == f"{failed['refresh_date']}T15:00:00Z"
+    assert refresh_of(admin, failed["refresh_id"])["deadline_at"] == pending["deadline_at"]
+
+
 # --- retrying a servability update (D63)
 
 def failed_update(etl: TestClient, worker: Worker, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
@@ -133,7 +152,7 @@ def test_retry_a_failed_update(admin: TestClient, etl: TestClient, worker: Worke
     assert worker.tick() == 1
     after = refresh_of(admin, refresh["refresh_id"])
     assert after["state"] == "updated"
-    assert "servability update retried by an admin: DynamoDB is back" in after["reasons"]
+    assert "ETL list update retried by an admin: DynamoDB is back" in after["reasons"]
     entry = audit(admin)[0]
     assert entry["action"] == "update_retry" and entry["target"] == refresh["refresh_id"]
     assert entry["details"] == {"reason": "DynamoDB is back"}
@@ -267,7 +286,7 @@ def test_a_manual_refresh(admin: TestClient, etl: TestClient, worker: Worker, st
     assert refresh["state"] == "checking" and refresh["upload"]["rows"] == len(BLOBS)
     assert refresh["admin_refresh_date"] == "2026-10-09"  # the refresh's own refresh date is today
     assert refresh["manual"] and refresh["admin_refresh_from"] is None  # uploaded, not one of the ETL's lists
-    assert any("manual refresh with the servable list servable-list.pahma.2026-10-09.tsv, for the refresh date "
+    assert any("manual refresh with the ETL list servable-list.pahma.2026-10-09.tsv, for the refresh date "
                "2026-10-09: ETL log checked: café" in r for r in refresh["reasons"])
     # The check passes; the refresh waits for an admin (MR9), and nothing changes until then.
     assert worker.tick() == 1
@@ -378,7 +397,7 @@ def test_the_etls_recent_lists_and_a_manual_refresh_with_one(admin: TestClient, 
     assert new["state"] == "checking" and new["refresh_date"] == failed["refresh_date"]  # today's
     assert (new["admin_refresh_date"], new["admin_refresh_from"]) == (good["refresh_date"], good["refresh_id"])
     assert new["upload"]["sha256"] == lists[1]["sha256"] and new["upload"]["rows"] == len(BLOBS)
-    assert any(f"manual refresh with the ETL's servable list for {good['refresh_date']}, from {good['refresh_id']}: "
+    assert any(f"manual refresh with the ETL list for {good['refresh_date']}, from {good['refresh_id']}: "
                "yesterday's list" in r for r in new["reasons"])
     assert refresh_of(admin, failed["refresh_id"])["state"] == "abandoned"
     started = audit(admin)[0]
@@ -400,11 +419,11 @@ def test_a_waiting_refresh_is_closed_by_the_next_refresh(admin: TestClient, etl:
     assert nightly["refresh_id"] != waiting["refresh_id"]  # a new refresh, not the waiting one
     closed = refresh_of(admin, waiting["refresh_id"])
     assert closed["state"] == "abandoned" and closed["actions"] == []
-    assert "a later refresh started before the servability update ran" in closed["reasons"]
+    assert "a later refresh started before the ETL list update ran" in closed["reasons"]
     assert closed["reason_kinds"] == ["admin", "problem"]  # issue #120: the ETL's refresh closed it, not an admin
     outcome = audit(admin, "refresh")[0]
     assert (outcome["target"], outcome["details"]["reasons"]) == (
-        waiting["refresh_id"], ["a later refresh started before the servability update ran"])
+        waiting["refresh_id"], ["a later refresh started before the ETL list update ran"])
 
 
 def test_an_override_on_a_manual_refresh_waits_too(admin: TestClient, etl: TestClient, worker: Worker,
@@ -419,7 +438,7 @@ def test_an_override_on_a_manual_refresh_waits_too(admin: TestClient, etl: TestC
                           headers=CHANGES, json={"kind": "bulk_change", "reason": "PAHMA republished half its images"})
     assert response.status_code == 200, response.text
     alert = admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"][0]
-    assert "on a pass, waits for an admin to run the servability update" in alert["message"]
+    assert "on a pass, waits for an admin to run the ETL list update" in alert["message"]
     assert worker.tick() == 1
     after = refresh_of(admin, failed["refresh_id"])
     assert after["state"] == "waiting" and after["actions"] == ["run_update"] and after["override"]
@@ -483,7 +502,7 @@ def test_reasons_from_before_their_kinds_are_what_went_wrong(store: Store, clock
     recorded since belong to the newest reasons."""
     refreshes = Refreshes(store)
     refresh, _ = refreshes.start("pahma")
-    refresh = refreshes.transition(refresh, State.CHECK_FAILED, reason="no servable list uploaded")
+    refresh = refreshes.transition(refresh, State.CHECK_FAILED, reason="no ETL list uploaded")
     refresh.reasons.insert(0, "an older reason")  # as if recorded before
     assert reason_kinds(refresh) == ["problem", "problem"]
     refresh.reason_kinds = ["admin"]

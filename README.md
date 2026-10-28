@@ -7,8 +7,8 @@ PAHMA and UCJEPS. It replaces the legacy `imageserver` Django webapp in
 It's being built, one pull request at a time. It runs locally, and `./serena aws` deploys it to AWS, with image delivery
 through CloudFront, alert email and alarms (`deploy/README.md`). It answers the
 legacy imageserver's addresses (by Blob CSID or by Media CSID) and decides from its records whether each file may be
-served. It takes each day's servable list through its ETL API: its worker checks the list and updates servability from
-it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file from CollectionSpace,
+served. It takes each day's ETL list (the Blobs the ETL says may be served) through its ETL API: its worker checks the list
+and updates servability from it, and its watchdog raises alerts. On a cache miss it checks the Media record, fetches the file from CollectionSpace,
 checks it and stores it; every file is served through a signed CloudFront link, and restricted PDFs only on a portal's
 signed link. The admin app follows the daily refreshes and alerts, shows what Serena served and couldn't serve
 (Past requests), explains any one file (Media look up), recalls files, and changes each museum's settings, the
@@ -22,11 +22,11 @@ placeholder image's Media record among them. Watermarking (the Botanical Garden)
   legacy imageserver uses, so they keep working unchanged.
 - Serve only what the daily Solr ETL ([cspace-solr-ucb](https://github.com/cspace-deployment/cspace-solr-ucb))
   lists as public, unless it has been recalled in Serena. Anything else gets the museum's unavailable image.
-- Take in each daily servable list through its ETL API, in step with the public Solr core's refresh.
+- Take in each daily ETL list through its ETL API, in step with the public Solr core's refresh.
 - Fetch a file from CollectionSpace the first time it's asked for, keep it in Serena's own private storage, and
   serve it from there through short-lived signed links.
 - Add a watermark for the museums that want one.
-- Give admins a web app to follow daily refreshes and alerts, bring a servable list in by hand when a refresh fails
+- Give admins a web app to follow daily refreshes and alerts, bring an ETL list in by hand when a refresh fails
   (Manual refresh), see what Serena served and couldn't serve and why, recall files and change settings.
 
 ## Layout

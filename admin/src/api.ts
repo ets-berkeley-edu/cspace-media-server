@@ -52,7 +52,7 @@ export interface Check {
   changed: number
   previous_rows: number | null
   threshold_percent: number
-  delta_percent: number | null // null with nothing to compare with (a first servability update)
+  delta_percent: number | null // null with nothing to compare with (a first ETL list update)
   error_count: number
   errors: Problem[]
   warnings: string[]
@@ -62,7 +62,7 @@ export type ReasonKind = 'problem' | 'admin' | 'override'
 
 export type RefreshAction = 'retry_update' | 'override_threshold' | 'run_update'
 
-/** An admin's override of the delta threshold for a refresh's servable list (D83): one made before issue #108 has only `at`. */
+/** An admin's override of the delta threshold for a refresh's ETL list (D83): one made before issue #108 has only `at`. */
 export interface Override {
   at: string
   by?: string // the admin's CollectionSpace username
@@ -81,12 +81,12 @@ export interface RefreshSummary {
   // Which list each reason goes in, one per reason (issue #120): what went wrong, or what admins did
   reason_kinds?: ReasonKind[]
   manual: boolean // a manual refresh (issue #118; "admin refresh" in the earlier decisions)
-  admin_refresh_date: string | null // a manual refresh: the refresh date its servable list is for
+  admin_refresh_date: string | null // a manual refresh: the refresh date its ETL list is for
   admin_refresh_from: string | null // a manual refresh with one of the ETL's lists: the refresh it came with (issue #118)
   override: Override | null
 }
 
-/** One of the ETL's recent servable lists, by the refresh it came with, and that refresh's outcome (issue #118). */
+/** One of the ETL's recent ETL lists, by the refresh it came with, and that refresh's outcome (issue #118). */
 export interface ServableList {
   refresh_id: string
   refresh_date: string
@@ -104,10 +104,14 @@ export interface Refresh extends RefreshSummary {
   check: Check | null
   update: {deleted: number, written: number, unchanged: number, recalls_ended?: number, recalls_kept?: number} | null
   actions: RefreshAction[]
+  // When the watchdog's deadline for an ETL refresh's day passes, in UTC (mockup version 55); none for a manual one
+  deadline_at?: string | null
 }
 
 export interface Status {
   newest: Refresh | null
+  current: Refresh | null // the newest updated refresh: the ETL list Serena serves from (mockup version 55)
+  pending: Refresh | null // the newest refresh while it's open
   unacknowledged: number
 }
 
@@ -426,7 +430,7 @@ export const api = {
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/retry-update`, {reason}),
   overrideThreshold: (museum: string, refreshId: string, kind: string, reason: string) =>
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {kind, reason}),
-  // An admin refresh, with the servable list as the body. The file name and reason are URL-encoded: a header carries
+  // An admin refresh, with the ETL list as the body. The file name and reason are URL-encoded: a header carries
   // only ASCII.
   // A manual refresh (issue #118), with an uploaded list or one of the ETL's. openRefresh: the open refresh the admin
   // was shown and agreed to close; Serena closes no other.

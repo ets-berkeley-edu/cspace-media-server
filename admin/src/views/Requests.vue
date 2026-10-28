@@ -220,7 +220,7 @@ const HEADERS = [
   {title: 'Reason', key: 'reason', help: 'Why an unserved request wasn\'t served. Media look up says more for any one file.'},
   {title: 'Blob CSID', key: 'path', help: 'The file asked for, by its Blob CSID, shortened. Hover for the request\'s path; click it to see the file; ⧉ copies the path. A path that isn\'t a Blob path Serena serves shows the path itself, with "(not a Blob path)".'},
   {title: 'Size', key: 'size', help: SIZE_HELP},
-  {title: 'Kind', key: 'kind', help: 'The file\'s kind, from the servable list: blank only when Serena doesn\'t know the file.'},
+  {title: 'Kind', key: 'kind', help: 'The file\'s kind, from the ETL list: blank only when Serena doesn\'t know the file.'},
   {title: 'Cache', key: 'cache', help: 'Hit: served from Serena\'s cached copy. Miss: fetched from CollectionSpace just then, and cached.'},
   {title: 'Signed link', key: 'signed', help: 'Yes: a restricted file served on a portal\'s signed link.'}
 ]
