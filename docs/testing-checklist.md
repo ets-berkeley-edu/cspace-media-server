@@ -1457,3 +1457,27 @@ What it checks: issue #120's third idea (mockup version 47). With `./serena up`,
   address. Reload: still Overridden.
 - [ ] **4. Back and the menu.** Open the refresh and use the browser's Back: still Overridden. Click "Past refreshes"
   in the menu: All again.
+
+## 42. Why the change is expected, on the local stack (10 minutes; before merging the pull request that adds it)
+
+What it checks: issue #120's fourth idea (mockup version 47). With `./serena up`, run `./serena etl pahma`, then
+`./serena etl pahma --rows 3` (its check fails on the delta threshold), and sign in to PAHMA:
+
+- [ ] **1. The dialog.** Open the failed refresh and click "Override the delta threshold". Expect "Why is the change
+  expected? (required)" with First load, Known bulk change in CollectionSpace, Testing and Something else, none
+  chosen, then the Reason field, its hint "Required, at least 20 characters: what changed, and how you know it's
+  expected."
+- [ ] **2. Nothing chosen.** Type "too short" and click the button: expect "Choose why the change is expected." under
+  the kinds, with focus on First load, and "Say a little more: at least 20 characters (9 so far)." under the reason.
+  Nothing is sent: the refresh is still "Servable list check failed".
+- [ ] **3. Override.** Choose "Known bulk change in CollectionSpace": its message goes. Make the reason "PAHMA
+  republished many images" and click the button. Expect the banner's "Reason: Known bulk change in CollectionSpace:
+  PAHMA republished many images", and that line not under Reasons.
+- [ ] **4. The alert and the audit log.** On Alerts, expect the new alert's message to end "Reason: Known bulk change
+  in CollectionSpace: PAHMA republished many images" (the email carries the same message). On the Audit log, the "threshold override" entry's details read
+  "Reason: Known bulk change in CollectionSpace: PAHMA republished many images" and "Delta percent: …".
+- [ ] **5. Manual refresh.** Run `./serena etl pahma --rows 3` again. On Manual refresh, pick that list, check it
+  (confirm closing any open refresh), click "Override the delta threshold": the same kinds and hint. Choose
+  "Testing", give a reason of 20 characters or more, and confirm: expect "Reason: Testing: …" under the result.
+- [ ] **6. Other reasons.** Open a Recall, Retry the servability update or a Settings change: expect a plain reason,
+  with no kinds and no 20-character minimum.

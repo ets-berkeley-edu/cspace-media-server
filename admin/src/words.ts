@@ -21,9 +21,28 @@ export function overrideBy(override: {by?: string}): string {
   return override.by || 'an admin'
 }
 
+/**
+ * Why an admin expects the change an override lets through (issue #120): one of these, then the reason in their own
+ * words, at least OVERRIDE_REASON_MIN characters. Serena has the same words (admin_refreshes.py) for the alert, the
+ * refresh's reasons and the audit log.
+ */
+export const OVERRIDE_KINDS: Record<string, string> = {
+  first_load: 'First load',
+  bulk_change: 'Known bulk change in CollectionSpace',
+  testing: 'Testing',
+  other: 'Something else'
+}
+export const OVERRIDE_REASON_MIN = 20
+
+/** An override's reason with its kind's words first ("Testing: …"); an override made before issue #120 has no kind. */
+export function overrideWords(override: {kind?: string, reason?: string}): string {
+  const kind = override.kind && OVERRIDE_KINDS[override.kind]
+  return kind ? `${kind}: ${override.reason || ''}` : override.reason || ''
+}
+
 /** The line Serena adds to a refresh's reasons on an override: its page shows the reason in its banner instead (issue #108). */
-export function overrideReason(reason: string): string {
-  return `delta threshold overridden by an admin: ${reason}`
+export function overrideReason(override: {kind?: string, reason?: string}): string {
+  return `delta threshold overridden by an admin: ${overrideWords(override)}`
 }
 
 /** The states that need an admin: shown in red, with a failure icon so the cue isn't colour alone (issue #107). */
@@ -190,6 +209,12 @@ export interface DetailLine {
 }
 
 export function detailLines(details: Record<string, unknown>): DetailLine[] {
+  // An override's kind goes before its reason, as everywhere else (issue #120): "Reason: Testing: …".
+  const kind = typeof details.kind === 'string' && OVERRIDE_KINDS[details.kind]
+  if (kind && typeof details.reason === 'string') {
+    const rest = Object.fromEntries(Object.entries(details).filter(([key]) => key !== 'kind'))
+    return detailLines({...rest, reason: `${kind}: ${details.reason}`})
+  }
   return Object.entries(details)
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .map(([key, value]) => {

@@ -64,6 +64,7 @@ export type RefreshAction = 'retry_update' | 'override_threshold' | 'run_update'
 export interface Override {
   at: string
   by?: string // the admin's CollectionSpace username
+  kind?: string // why the change is expected (issue #120): one of OVERRIDE_KINDS; an override made before has none
   reason?: string
 }
 
@@ -419,8 +420,8 @@ export const api = {
     `/museums/${museum}/refreshes/${refreshId}`, undefined, background ? {headers: {'X-Serena-Background': '1'}} : undefined),
   retryUpdate: (museum: string, refreshId: string, reason: string) =>
     call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/retry-update`, {reason}),
-  overrideThreshold: (museum: string, refreshId: string, reason: string) =>
-    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {reason}),
+  overrideThreshold: (museum: string, refreshId: string, kind: string, reason: string) =>
+    call<Refresh>('POST', `/museums/${museum}/refreshes/${refreshId}/override-threshold`, {kind, reason}),
   // An admin refresh, with the servable list as the body. The file name and reason are URL-encoded: a header carries
   // only ASCII.
   // A manual refresh (issue #118), with an uploaded list or one of the ETL's. openRefresh: the open refresh the admin

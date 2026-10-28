@@ -167,22 +167,34 @@ def test_override_the_delta_threshold(admin: TestClient, etl: TestClient, worker
     assert failed["state"] == "check_failed"
     assert refresh_of(admin, failed["refresh_id"])["actions"] == ["override_threshold"]
     url = f"/admin/v1/museums/pahma/refreshes/{failed['refresh_id']}/override-threshold"
-    assert admin.post(url, json={"reason": "expected"}).status_code == 403  # without the app's header
-    assert admin.post(url, headers=CHANGES, json={"reason": ""}).status_code == 422  # a reason is required
-    response = admin.post(url, headers=CHANGES, json={"reason": "PAHMA republished half its images"})
+    given = {"kind": "bulk_change", "reason": "PAHMA republished half its images"}
+    assert admin.post(url, json=given).status_code == 403  # without the app's header
+    assert admin.post(url, headers=CHANGES, json={"kind": "bulk_change", "reason": ""}).status_code == 422
+    # Issue #120: why the change is expected, one of the kinds, and at least 20 characters of the admin's own words
+    # (spaces run together count once).
+    choose, more = "Choose why the change is expected.", "Say a little more: at least 20 characters."
+    for body, said in [({"reason": given["reason"]}, choose), ({"kind": "because", "reason": given["reason"]}, choose),
+                       ({"kind": "testing", "reason": "  too    short   "}, more)]:
+        response = admin.post(url, headers=CHANGES, json=body)
+        assert (response.status_code, response.json()["detail"]) == (422, said), body
+    assert refresh_of(admin, failed["refresh_id"])["state"] == "check_failed"
+    response = admin.post(url, headers=CHANGES, json={**given, "reason": " PAHMA republished  half its images "})
     assert response.status_code == 200, response.text
     assert response.json()["state"] == "checking" and response.json()["actions"] == []
     # Who overrode it and why, with when, so the app can say so on every page (issue #108).
     override = response.json()["override"]
-    assert (override["by"], override["reason"]) == ("admin", "PAHMA republished half its images") and override["at"]
+    assert (override["by"], override["kind"], override["reason"]) == ("admin", "bulk_change",
+                                                                     "PAHMA republished half its images")
+    assert override["at"]
     listed = admin.get("/admin/v1/museums/pahma/refreshes").json()["refreshes"]
     assert next(x for x in listed if x["refresh_id"] == failed["refresh_id"])["override"] == override
-    assert admin.post(url, headers=CHANGES, json={"reason": "twice"}).status_code == 409
+    assert admin.post(url, headers=CHANGES, json=given).status_code == 409
     status = admin.get("/admin/v1/museums/pahma/status").json()
     assert "override" not in status and status["unacknowledged"] == 1  # the override's alert (D62)
     alert = admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"][0]
     assert alert["kind"] == "threshold_overridden" and failed["refresh_id"] in alert["message"]
     assert alert["title"] == "An admin overrode the delta threshold"
+    assert alert["message"].endswith("Reason: Known bulk change in CollectionSpace: PAHMA republished half its images")
 
     # The worker checks the same servable list again without the delta threshold, then updates (no ETL rerun).
     caplog.set_level("INFO", logger="serena.worker")
@@ -190,7 +202,8 @@ def test_override_the_delta_threshold(admin: TestClient, etl: TestClient, worker
     after = refresh_of(admin, failed["refresh_id"])
     assert after["state"] == "updated" and after["update"]["written"] == len(BLOBS) // 2
     assert any("overridden by an admin" in w for w in after["check"]["warnings"])
-    assert "delta threshold overridden by an admin: PAHMA republished half its images" in after["reasons"]
+    assert ("delta threshold overridden by an admin: Known bulk change in CollectionSpace: PAHMA republished half its "
+            "images") in after["reasons"]
     assert after["override"] == override  # kept once the refresh is updated
     done = [r for r in caplog.records if r.getMessage() == "servable list check done"]
     assert done[-1].threshold_overridden is True  # type: ignore[attr-defined]
@@ -202,7 +215,8 @@ def test_override_the_delta_threshold(admin: TestClient, etl: TestClient, worker
     assert Alerts(store, sns, topic).resend_unsent("pahma") == 1
     entry = audit(admin)[0]
     assert entry["action"] == "threshold_override" and entry["target"] == failed["refresh_id"]
-    assert entry["details"] == {"reason": "PAHMA republished half its images", "delta_percent": 50.0}
+    assert entry["details"] == {"kind": "bulk_change", "reason": "PAHMA republished half its images",
+                                "delta_percent": 50.0}
 
 
 def test_no_override_when_the_check_failed_otherwise(admin: TestClient, etl: TestClient,
@@ -397,7 +411,7 @@ def test_an_override_on_a_manual_refresh_waits_too(admin: TestClient, etl: TestC
     failed = admin_refresh(admin, file_of(changed(BLOBS, 0.5))).json()
     assert worker.tick() == 1 and refresh_of(admin, failed["refresh_id"])["actions"] == ["override_threshold"]
     response = admin.post(f"/admin/v1/museums/pahma/refreshes/{failed['refresh_id']}/override-threshold",
-                          headers=CHANGES, json={"reason": "PAHMA republished half its images"})
+                          headers=CHANGES, json={"kind": "bulk_change", "reason": "PAHMA republished half its images"})
     assert response.status_code == 200, response.text
     alert = admin.get("/admin/v1/museums/pahma/alerts").json()["alerts"][0]
     assert "on a pass, waits for an admin to run the servability update" in alert["message"]

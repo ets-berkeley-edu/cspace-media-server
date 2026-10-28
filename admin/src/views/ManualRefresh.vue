@@ -37,7 +37,7 @@
       </p>
       <p v-if="run.override" id="manual-override-note" class="mb-2">
         Delta threshold overridden by {{ overrideBy(run.override) }} at {{ when(run.override.at) }}.
-        <template v-if="run.override.reason">Reason: {{ run.override.reason }}</template>
+        <template v-if="run.override.reason">Reason: {{ overrideWords(run.override) }}</template>
       </p>
       <p v-if="run.check && !working([run])" id="manual-counts" class="mb-2"><CheckCounts :check="run.check" /></p>
 
@@ -321,11 +321,13 @@
             :check="run.check"
             before-override
           />
-          <ReasonField
+          <OverrideReason
             id="override-reason"
             ref="overrideField"
-            v-model="overrideReason"
-            recorded="the refresh, the audit log and the alert emailed to the team"
+            :kind="overrideKind"
+            :reason="overrideReason"
+            @update:kind="(v: string) => overrideKind = v"
+            @update:reason="(v: string) => overrideReason = v"
           />
         </v-card-text>
         <v-card-actions>
@@ -356,13 +358,14 @@ import CheckCounts from '@/components/CheckCounts.vue'
 import CopyButton from '@/components/CopyButton.vue'
 import DeltaPast from '@/components/DeltaPast.vue'
 import FarPastNote from '@/components/FarPastNote.vue'
+import OverrideReason from '@/components/OverrideReason.vue'
 import OverrideMark from '@/components/OverrideMark.vue'
 import ReasonField from '@/components/ReasonField.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import WhenText from '@/components/WhenText.vue'
 import {alertsChanged, museumName} from '@/session'
-import {STATES, byOverride, overrideBy, pacificDate, timesOver, when} from '@/words'
+import {STATES, byOverride, overrideBy, overrideWords, pacificDate, timesOver, when} from '@/words'
 
 // Manual refresh (issue #118, decisions MR1 to MR15, reviewed October 27, 2026): one of the ETL's recent servable lists
 // or an uploaded one, checked without updating; a passed check waits for "Run the servability update", and a failure
@@ -388,6 +391,7 @@ const error = ref('')
 const confirming = ref(false)
 const overriding = ref(false)
 const overrideReason = ref('')
+const overrideKind = ref('') // why the change is expected (issue #120)
 
 const chosen = computed(() => (Array.isArray(file.value) ? file.value[0] : file.value) || null)
 const pickedList = computed(() => lists.value.find(list => list.refresh_id === picked.value) || null)
@@ -412,7 +416,7 @@ const fileField = ref<Focusable>(null)
 const dateField = ref<Focusable>(null)
 const confirmField = ref<Focusable>(null)
 const reasonField = ref<InstanceType<typeof ReasonField> | null>(null)
-const overrideField = ref<InstanceType<typeof ReasonField> | null>(null)
+const overrideField = ref<InstanceType<typeof OverrideReason> | null>(null)
 watch(picked, () => { problems.pick = '' })
 watch(chosen, () => { problems.file = '' })
 watch(refreshDate, () => { problems.date = '' })
@@ -544,6 +548,7 @@ async function runUpdate() {
 
 function openOverride() {
   overrideReason.value = ''
+  overrideKind.value = ''
   overrideField.value?.reset()
   overriding.value = true
 }
@@ -554,7 +559,7 @@ async function override() {
   }
   busy.value = true
   try {
-    run.value = await api.overrideThreshold(ownMuseum, run.value.refresh_id, overrideReason.value.trim())
+    run.value = await api.overrideThreshold(ownMuseum, run.value.refresh_id, overrideKind.value, overrideReason.value.trim())
     alertsChanged.value++ // the override's alert
     after(working([run.value]))
   } catch (e) {

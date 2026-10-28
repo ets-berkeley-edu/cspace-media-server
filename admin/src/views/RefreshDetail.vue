@@ -27,7 +27,7 @@
       </div>
       <div v-else-if="overshoot" id="override-overshoot">{{ overshoot }}</div>
       <div><strong>Delta threshold overridden</strong> by {{ overrideBy(refresh.override) }} at {{ when(refresh.override.at) }}.</div>
-      <div v-if="refresh.override.reason" id="override-reason">Reason: {{ refresh.override.reason }}</div>
+      <div v-if="refresh.override.reason" id="override-reason">Reason: {{ overrideWords(refresh.override) }}</div>
       <div>{{ afterOverride }}</div>
     </v-alert>
     <v-alert
@@ -179,10 +179,20 @@
             :check="refresh.check"
             before-override
           />
+          <!-- An override says why the change is expected, then the reason (issue #120); a retry, only a reason. -->
+          <OverrideReason
+            v-if="action === 'override_threshold'"
+            ref="overrideField"
+            :kind="kind"
+            :reason="reason"
+            @update:kind="(v: string) => kind = v"
+            @update:reason="(v: string) => reason = v"
+          />
           <ReasonField
+            v-else
             ref="reasonField"
             v-model="reason"
-            :recorded="action === 'override_threshold' ? 'the refresh, the audit log and the alert emailed to the team' : 'the refresh and the audit log'"
+            recorded="the refresh and the audit log"
           />
         </v-card-text>
         <v-card-actions>
@@ -213,11 +223,12 @@ import {useCheckAgain, working} from '@/checkAgain'
 import CheckCounts from '@/components/CheckCounts.vue'
 import DeltaPast from '@/components/DeltaPast.vue'
 import FarPastNote from '@/components/FarPastNote.vue'
+import OverrideReason from '@/components/OverrideReason.vue'
 import ReasonField from '@/components/ReasonField.vue'
 import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import {alertsChanged, museumName} from '@/session'
-import {overrideBy, overrideReason, timesOver, when} from '@/words'
+import {overrideBy, overrideReason, overrideWords, timesOver, when} from '@/words'
 
 // The actions with a dialog and a reason; "Run the servability update" has neither (the reason was given at the start).
 type Dialogued = Exclude<RefreshAction, 'run_update'>
@@ -245,6 +256,8 @@ const busy = ref(false)
 const museum = computed(() => String(route.params.museum))
 // Every action needs a reason (D62): its button stays enabled, and ReasonField says what's missing.
 const reasonField = ref<InstanceType<typeof ReasonField> | null>(null)
+const overrideField = ref<InstanceType<typeof OverrideReason> | null>(null)
+const kind = ref('') // why the change is expected, for an override (issue #120)
 
 // While the worker checks or updates, the page checks again by itself (issue #108), so an override's re-check and
 // update show without a reload. These checks don't count as activity: an open tab still signs out when idle.
@@ -253,7 +266,7 @@ const after = useCheckAgain(() => load(true))
 // The override's reason is in the banner, so Reasons leaves out the line Serena adds for it.
 const reasons = computed(() => {
   const given = refresh.value?.override?.reason
-  return (refresh.value?.reasons || []).filter(line => !given || line !== overrideReason(given))
+  return (refresh.value?.reasons || []).filter(line => !given || line !== overrideReason(refresh.value?.override || {}))
 })
 // The failed check an override answered, still shown while Serena checks the servable list again. A re-check that
 // fails on something else replaces it, and isn't marked.
@@ -321,13 +334,16 @@ async function runUpdate() {
 function open(which: Dialogued) {
   action.value = which
   reason.value = ''
+  kind.value = ''
   reasonField.value?.reset()
+  overrideField.value?.reset()
   error.value = ''
   dialog.value = true
 }
 
 async function act() {
-  if (!refresh.value || !reasonField.value?.check()) {
+  const field = action.value === 'override_threshold' ? overrideField.value : reasonField.value
+  if (!refresh.value || !field?.check()) {
     return
   }
   busy.value = true
@@ -336,7 +352,7 @@ async function act() {
     if (action.value === 'retry_update') {
       refresh.value = await api.retryUpdate(museum.value, id, reason.value.trim())
     } else {
-      refresh.value = await api.overrideThreshold(museum.value, id, reason.value.trim())
+      refresh.value = await api.overrideThreshold(museum.value, id, kind.value, reason.value.trim())
       alertsChanged.value++ // the override's alert
     }
     dialog.value = false
