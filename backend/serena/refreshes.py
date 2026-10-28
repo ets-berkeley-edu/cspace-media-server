@@ -106,6 +106,8 @@ class Refresh:
     # A manual refresh: the refresh date its list is for (D75) and, for one of the ETL's lists, the refresh it came
     # with ("from", issue #118).
     admin_refresh: dict[str, Any] | None = None
+    # A failed update: until when the worker tries it again by itself, in UTC (decided October 28, 2026).
+    retry_until: str | None = None
     owner: str | None = None  # the worker doing this refresh's step
     heartbeat_at: int | None = None  # when that worker last said it was still on it (Unix seconds)
 
@@ -147,7 +149,7 @@ def parse_refresh_id(tenant: str, refresh_id: str) -> tuple[str, int] | None:
     return refresh_date, number
 
 
-RESULTS = ("check", "update", "override", "admin_refresh")
+RESULTS = ("check", "update", "override", "admin_refresh", "retry_until")
 _serializer = TypeSerializer()
 _deserializer = TypeDeserializer()
 
@@ -203,6 +205,7 @@ def _from_item(item: dict[str, Any]) -> Refresh:
                    reasons=list(plain.get("reasons", [])), reason_kinds=list(plain.get("reason_kinds", [])),
                    check=_plain(plain.get("check")), update=_plain(plain.get("update")),
                    override=_plain(plain.get("override")), admin_refresh=_plain(plain.get("admin_refresh")),
+                   retry_until=plain.get("retry_until"),
                    owner=plain.get("owner"),
                    heartbeat_at=int(plain["heartbeat_at"]) if "heartbeat_at" in plain else None)
 
@@ -285,11 +288,12 @@ class Refreshes:
                          "another refresh was starting at the same time; try again")
 
     def transition(self, refresh: Refresh, to: State, *, upload: Upload | None = None, reason: str | None = None,
-                   reason_kind: ReasonKind = ReasonKind.PROBLEM, results: dict[str, dict[str, Any]] | None = None,
+                   reason_kind: ReasonKind = ReasonKind.PROBLEM, results: dict[str, Any] | None = None,
                    release: bool = False) -> Refresh:
         """Move the refresh to `to`, only if it is still in the state it was read in. `reason` is recorded with its
         kind: what went wrong unless an admin did it. `results` sets check, update, override or admin_refresh; a new
-        upload removes an earlier override, which was for the earlier list. `release` ends the worker's claim."""
+        upload removes an earlier override, which was for the earlier list, and a failed update's retries.
+        `release` ends the worker's claim."""
         now = self.now()
         names = {"#state": "state"}
         values: dict[str, Any] = {":to": {"S": to.value}, ":from": {"S": refresh.state.value}, ":now": {"S": now}}
@@ -311,6 +315,8 @@ class Refreshes:
         if upload is not None and "override" not in (results or {}):
             removing.append("#override")
             names["#override"] = "override"
+        if upload is not None:
+            removing.append("retry_until")
         if release:
             removing += ["#owner", "heartbeat_at"]
             names["#owner"] = "owner"
@@ -328,6 +334,7 @@ class Refreshes:
         refresh.state, refresh.updated_at = to, now
         if upload is not None:
             refresh.upload = upload
+            refresh.retry_until = None
             if "override" not in (results or {}):
                 refresh.override = None
         if reason is not None:

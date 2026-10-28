@@ -8,6 +8,8 @@
 #   ./serena logs --no-follow [service]   print them and stop, for grep
 #   ./serena etl <museum> [opts]   a daily refresh through the ETL API with the fake ETL (--failed, --rows N, --json)
 #                                  (--file-only prints the servable list instead, for the admin app's upload page)
+#   ./serena failed-update <museum>  record a failed ETL list update, repeating the museum's last updated list
+#                                  (testing checklist section 45; the worker retries it every 10 minutes)
 #   ./serena smoke                 a whole daily refresh for PAHMA, then fetch and serve one of its images (what CI runs)
 #   ./serena ui [pytest options]   the admin app's Selenium tests (serenade/), in headless Chrome; --headed shows it
 #   ./serena test [pytest options] the headless test suite (serenade/) on its own stack, started afresh, with its dataset
@@ -52,6 +54,9 @@ case "$cmd" in
   etl)
     museum="${1:?Usage: ./serena etl <museum> [--failed] [--rows N] [--json] [--file-only]}"; shift
     compose exec -T worker python -m devtools.fake_etl --museum "$museum" --public "http://localhost:$PORT" "$@" ;;
+  failed-update)
+    museum="${1:?Usage: ./serena failed-update <museum>}"
+    compose exec -T worker python -m devtools.failed_update --museum "$museum" ;;
   smoke)
     # The default --rows, like ./serena etl pahma, so a refresh before this one doesn't trip the servable list check's delta threshold.
     summary="$(compose exec -T worker python -m devtools.fake_etl --museum pahma --json)"

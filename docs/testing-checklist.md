@@ -1528,3 +1528,32 @@ pending refresh's four steps (decided October 28, 2026). With `./serena up`, sig
 - [ ] **7. Past the deadline.** In Settings, set the watchdog deadline to a time already past today, then run
   `./serena etl pahma` and open the refresh while it's checking: the "since" line ends, in the warning colour, "Past
   the HH:MM Pacific deadline: the watchdog has alerted." Set the deadline back to 08:00.
+
+## 45. A failed ETL list update, on the local stack (15 minutes; before merging the pull request that adds it)
+
+What it checks: the failed update's rules (decided October 28, 2026; mockup versions 55 and 56): Serena retries a
+failed update by itself, an admin's retry, a retry that comes second, and "partly replaced". An update can't be made
+to fail on the local stack, so `./serena failed-update` records one, repeating the museum's last updated ETL list.
+With `./serena up`, run `./serena etl pahma`, then `./serena failed-update pahma`, and sign in to PAHMA:
+
+- [ ] **1. Overview.** Current refresh: the updated one, with "partly replaced" in the warning colour and "<pending
+  refresh>'s update stopped partway, so Serena serves some of each ETL list, never a file either one restricts or
+  drops. Serena tries the update again every 10 minutes, until HH:MM UTC." (6 hours from now). Pending refresh,
+  outlined in red: "ETL list update failed", and "… Retry the ETL list update on its page to try now, or apply
+  another ETL list."
+- [ ] **2. Its page.** The four steps, the last in red, and the same words with "below". "Retry the ETL list update"
+  opens a dialog that says Serena runs the update again now, doing only what's left, and also tries again by itself
+  every 10 minutes until HH:MM UTC.
+- [ ] **3. Retry it.** Give a reason and retry: the state goes to "Applying the ETL list", then Updated; Overview's
+  current refresh is the retried one, with no "partly replaced", and Pending says "None". Under What admins did:
+  "ETL list update retried by admin: <your reason>". The Audit log has "update retry".
+- [ ] **4. A retry that comes second.** Run `./serena failed-update pahma` again and open the new refresh in two
+  tabs. Retry it in the first; in the second, open the dialog and retry: a red message "Not retried: admin retried it
+  first, and Serena is applying the ETL list now. This page shows the refresh as it is.", and the page shows the
+  refresh as it is, with no Retry button. The Audit log has one "update retry".
+- [ ] **5. Serena retries it.** Run `./serena failed-update pahma` again and wait 10 minutes (or follow
+  `./serena logs worker` for "ETL list update retried"): the refresh is Updated, with no admin's retry under What
+  admins did.
+- [ ] **6. The alert.** On Alerts, "An ETL list update failed" for the refresh from 5 says "Serena tries the update
+  again every 10 minutes, until HH:MM UTC." (The alert after the last try, "Serena has stopped retrying it", is
+  covered by the backend's tests: it would take 6 hours here.)

@@ -9,8 +9,11 @@ while the step runs; a step whose heartbeat has gone stale was interrupted and i
 loses a step (decided October 9, 2026, D33). Both steps are safe to repeat. A passed check goes straight on to the
 servability update, under the same claim (decided October 12, 2026, D80), except a manual refresh's, which waits for an
 admin to run the servability update (issue #118); a successful servability update
-ends the recalls CollectionSpace has caught up with (D119). Once a day it also removes audit entries older than each
-museum's audit retention (D98), and counts each museum's requests of the day before (issue #96)."""
+ends the recalls CollectionSpace has caught up with (D119). A failed servability update is tried again by itself every
+RETRY_EVERY until RETRY_FOR after it first failed (decided October 28, 2026): the retry claims it with the same
+conditional write an admin's retry makes, so whichever comes second does nothing. Once a day it also removes audit
+entries older than each museum's audit retention (D98), and counts each museum's requests of the day before (issue
+#96)."""
 from __future__ import annotations
 
 import logging
@@ -43,6 +46,9 @@ from .watchdog import Watchdog
 log = logging.getLogger("serena.worker")
 # Transient errors: the whole servability update is tried again (it's safe to repeat) before update_failed.
 UPDATE_ATTEMPTS = 3
+# A failed update is tried again by itself this often, for this long after it first failed (starting values).
+RETRY_EVERY = timedelta(minutes=10)
+RETRY_FOR = timedelta(hours=6)
 # A daily request count that failed for a museum is tried again after this long.
 COUNT_RETRY_SECONDS = 3600.0
 # Counting a month of one museum's log is two queries; they can take longer than the Past requests page waits.
@@ -96,6 +102,8 @@ class Worker:
         for tenant in sorted(self.s.museums):
             try:
                 refresh = self.s.refreshes.newest(tenant)
+                if refresh is not None and self._retry_due(refresh):
+                    refresh = self._retry(refresh)
                 if refresh is None or refresh.state not in (State.CHECKING, State.UPDATING):
                     continue
                 if not self.s.refreshes.claim(refresh, self.owner, self.s.settings.worker_heartbeat_stale_seconds):
@@ -105,6 +113,25 @@ class Worker:
             except Exception:
                 log.exception("worker step failed", extra={"museum": tenant})
         return done
+
+    def _retry_due(self, refresh: Refresh) -> bool:
+        """A failed update that is still the newest, still within its retries, and last tried RETRY_EVERY ago."""
+        if refresh.state != State.UPDATE_FAILED or refresh.retry_until is None:
+            return False
+        now = self.s.refreshes.clock()
+        return now < datetime.fromisoformat(refresh.retry_until) and \
+            now - datetime.fromisoformat(refresh.updated_at) >= RETRY_EVERY
+
+    def _retry(self, refresh: Refresh) -> Refresh | None:
+        """Back to updating, with the conditional write an admin's retry makes: if an admin retried it or replaced it
+        first, the worker skips it."""
+        try:
+            moved = self.s.refreshes.transition(refresh, State.UPDATING)
+        except OutOfOrder:
+            return None
+        log.info("ETL list update retried", extra={"museum": refresh.tenant, "refresh_id": refresh.refresh_id,
+                                                   "retry_until": refresh.retry_until})
+        return moved
 
     def watch(self) -> bool:
         """Run the watchdog if its interval has passed; returns whether it ran."""
@@ -251,9 +278,11 @@ class Worker:
             return
         # Passed: the servability update follows at once, under the same claim (D80).
         self.s.refreshes.transition(refresh, State.UPDATING, results={"check": result.summary()})
-        self._update(refresh)
+        self._update(refresh, first=True)
 
-    def _update(self, refresh: Refresh) -> None:
+    def _update(self, refresh: Refresh, first: bool = False) -> None:
+        """`first`: straight after its check, so a failure starts its retries afresh; a retry (an admin's, the
+        worker's, or a step started again after a worker stopped) keeps the time they end."""
         if refresh.upload is None:  # can't happen: a refresh is updating only after a passed check
             self.s.refreshes.transition(refresh, State.UPDATE_FAILED, reason="no ETL list uploaded", release=True)
             return
@@ -267,9 +296,16 @@ class Worker:
                 log.warning("servability update attempt failed",
                             extra={"refresh_id": refresh.refresh_id, "attempt": attempt, "error": type(error).__name__})
                 if attempt == UPDATE_ATTEMPTS:
+                    reason = (f"ETL list update failed after {UPDATE_ATTEMPTS} attempts ({type(error).__name__}); "
+                              "Serena tries it again by itself, and an admin can retry it")
+                    until = refresh.retry_until
+                    if first or until is None:
+                        until = (self.s.refreshes.clock() + RETRY_FOR).astimezone(UTC).isoformat(timespec="seconds")
+                    # A retry that fails the same way adds nothing to the reasons: the page says it's retrying.
+                    repeated = bool(refresh.reasons) and refresh.reasons[-1] == reason
                     self.s.refreshes.transition(refresh, State.UPDATE_FAILED, release=True,
-                                                reason=f"ETL list update failed after {UPDATE_ATTEMPTS} attempts "
-                                                       f"({type(error).__name__}); an admin can retry it")
+                                                reason=None if repeated else reason,
+                                                results={"retry_until": until})
                     self._alert(refresh)
                     return
                 self.sleep(2 ** attempt)

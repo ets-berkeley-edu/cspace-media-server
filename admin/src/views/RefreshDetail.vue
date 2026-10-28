@@ -242,7 +242,7 @@ import RefreshState from '@/components/RefreshState.vue'
 import RefreshSteps from '@/components/RefreshSteps.vue'
 import StateSince from '@/components/StateSince.vue'
 import {alertsChanged, museumName} from '@/session'
-import {fixText, isOpen, overrideBy, overrideReason, overrideWords, stateSince, timesOver, when} from '@/words'
+import {fixText, isOpen, overrideBy, overrideReason, overrideWords, retryText, stateSince, timesOver, when} from '@/words'
 
 // The actions with a dialog and a reason; "Run the ETL list update" has neither (the reason was given at the start).
 type Dialogued = Exclude<RefreshAction, 'run_update'>
@@ -250,8 +250,13 @@ const titles: Record<Dialogued, string> = {
   retry_update: 'Retry the ETL list update',
   override_threshold: 'Override the delta threshold'
 }
+// While Serena still retries a failed update by itself, until when (HH:MM, UTC); empty once it has stopped.
+const retryUntil = computed(() => retryText(refresh.value || {}).startsWith('Serena tries')
+  ? when(refresh.value?.retry_until).slice(11, 16) : '')
 const explanations = computed<Record<Dialogued, string>>(() => ({
-  retry_update: 'The worker runs the ETL list update again. Do this once whatever stopped it is fixed.',
+  // Mockup version 56: what a retry does, and that Serena retries by itself until when.
+  retry_update: 'Serena runs the ETL list update again now, doing only what\'s left. Do this once whatever stopped it is ' +
+    (retryUntil.value ? `fixed; Serena also tries again by itself every 10 minutes until ${retryUntil.value} UTC.` : 'fixed.'),
   override_threshold: (refresh.value?.check && timesOver(refresh.value.check) ? ''
     : 'The ETL list check failed only because more rows change than the delta threshold allows. ') +
     'Do this once you know the change is expected. Serena checks the same ETL list again without the delta ' +
@@ -387,6 +392,11 @@ async function act() {
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'That didn\'t work.'
     dialog.value = false
+    // Someone else got there first (mockup version 56): Serena says who or what, and the page shows the refresh as
+    // it is now, so it no longer offers what can't be done.
+    if (e instanceof ApiError && e.status === 409) {
+      await load(true)
+    }
   } finally {
     busy.value = false
   }

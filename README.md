@@ -66,6 +66,8 @@ cd cspace-media-server
 - `./serena etl pahma` runs a daily refresh for PAHMA through the ETL API, with synthetic records, and prints a few
   file addresses to open in your browser, at http://localhost:8300. Any museum works: `bampfa`, `botgarden`,
   `cinefiles`, `ucjeps`.
+- `./serena failed-update pahma` records a failed ETL list update, repeating PAHMA's last updated ETL list, for trying
+  the admin app's failed-update pages; the worker retries it 10 minutes later.
 - The admin app is at http://localhost:5373/admin/. It's ready about a minute after `./serena up` finishes (its
   container installs its packages first): if the page doesn't load, wait and reload. Sign in with one of the
   simulator's synthetic accounts, each with its name as its password:

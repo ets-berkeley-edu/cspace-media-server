@@ -2,9 +2,11 @@
 and servability update).
 
 It reads the museum's rows from the table itself (through the by_tenant index), so it is right even after a
-servability update that stopped partway (decided October 9, 2026, D35). It deletes the rows of Blobs no longer listed
-first, then writes the new and changed rows; unchanged rows aren't touched. Deleting first means a servability update
-that stops halfway never serves a Blob the new servable list dropped. Every write is safe to repeat."""
+servability update that stopped partway (decided October 9, 2026, D35); unchanged rows aren't touched. It tightens
+first and publishes last (decided October 28, 2026): first the deletes of Blobs no longer listed and every change that
+makes a file less available (public to restricted, a changed Media CSID or kind), then the new rows and every change
+that makes one more available. An update that stops partway then never serves a file it shouldn't: the worst is some
+newly listed files not served yet. Every write is safe to repeat."""
 from __future__ import annotations
 
 import time
@@ -58,6 +60,17 @@ def _write(store: Store, requests: list[dict[str, Any]], sleep: Callable[[float]
             raise RuntimeError("DynamoDB kept leaving writes unprocessed")
 
 
+# How available a file is by its access: public, then restricted (served only with a signed link), then anything else.
+OPENNESS = {"public": 2, "restricted": 1}
+
+
+def loosens(old: Row, new: Row) -> bool:
+    """Whether a changed row only makes the same file more available: its Media CSID and kind are the same, and its
+    access more open. Every other change tightens."""
+    return (old.media_csid, old.kind) == (new.media_csid, new.kind) and \
+        OPENNESS.get(new.access, 0) > OPENNESS.get(old.access, 0)
+
+
 def update(store: Store, tenant: str, rows: dict[str, Row], sleep: Callable[[float], None] = time.sleep,
            listed_at: str | None = None) -> Counts:
     """`listed_at` is written on each new or changed row: of a Media record listed with several Blobs (a replaced
@@ -66,11 +79,15 @@ def update(store: Store, tenant: str, rows: dict[str, Row], sleep: Callable[[flo
     now = current_rows(store, tenant)
     counts = Counts()
     deletes = [{"DeleteRequest": {"Key": {"pk": {"S": f"{tenant}#{blob}"}}}} for blob in now if blob not in rows]
-    _write(store, deletes, sleep)
+
+    def put(blob: str, row: Row) -> dict[str, Any]:
+        return {"PutRequest": {"Item": {**item(tenant, blob, row), "listed_at": {"S": listed_at}}}}
+    changed = {blob: row for blob, row in rows.items() if now.get(blob) != row}
+    tighten = [put(blob, row) for blob, row in changed.items() if blob in now and not loosens(now[blob], row)]
+    publish = [put(blob, row) for blob, row in changed.items() if blob not in now or loosens(now[blob], row)]
+    _write(store, deletes + tighten, sleep)
+    _write(store, publish, sleep)
     counts.deleted = len(deletes)
-    puts = [{"PutRequest": {"Item": {**item(tenant, blob, row), "listed_at": {"S": listed_at}}}}
-            for blob, row in rows.items() if now.get(blob) != row]
-    _write(store, puts, sleep)
-    counts.written = len(puts)
-    counts.unchanged = len(rows) - len(puts)
+    counts.written = len(changed)
+    counts.unchanged = len(rows) - len(changed)
     return counts

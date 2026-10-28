@@ -32,10 +32,14 @@ export function isOpen(state: string): boolean {
  * What an admin can do about a pending refresh that needs one, in a line (mockup version 55): on the refresh's own
  * page the button is "below", elsewhere it's "on its page".
  */
-export function fixText(refresh: {state: string, actions?: string[]}, onPage = false): string {
+export function fixText(refresh: {state: string, actions?: string[], retry_until?: string | null}, onPage = false,
+                        now: Date = new Date()): string {
   const where = onPage ? 'below' : 'on its page'
   if (refresh.state === 'update_failed') {
-    return `Serena serves some of each ETL list. Retry the ETL list update ${where} once the cause is fixed, or apply another ETL list.`
+    const retrying = retryText(refresh, now)
+    return retrying
+      ? `Serena serves some of each ETL list. ${retrying} Retry the ETL list update ${where} to try now, or apply another ETL list.`
+      : `Serena serves some of each ETL list. Retry the ETL list update ${where} once the cause is fixed, or apply another ETL list.`
   }
   if (refresh.state !== 'check_failed') {
     return ''
@@ -43,6 +47,19 @@ export function fixText(refresh: {state: string, actions?: string[]}, onPage = f
   return (refresh.actions || []).includes('override_threshold')
     ? `It failed only on the delta threshold: override it ${where} if the change is expected, or apply another ETL list.`
     : 'Nothing changed. Fix the ETL list and rerun the ETL job, or apply another ETL list.'
+}
+
+/**
+ * A failed update that Serena retries by itself (decided October 28, 2026): every 10 minutes until its retry_until,
+ * then it has stopped. Empty for a refresh from before, which Serena doesn't retry.
+ */
+export function retryText(refresh: {retry_until?: string | null}, now: Date = new Date()): string {
+  if (!refresh.retry_until) {
+    return ''
+  }
+  return now.getTime() < new Date(refresh.retry_until).getTime()
+    ? `Serena tries the update again every 10 minutes, until ${when(refresh.retry_until).slice(11, 16)} UTC.`
+    : 'Serena has stopped retrying it.'
 }
 
 /** How long since a time, as the "since" line says it: "just now", "3 min", "6 h 59 min". */

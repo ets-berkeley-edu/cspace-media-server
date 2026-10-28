@@ -71,6 +71,7 @@ The local stack, from the repository's root (Docker only; never AWS or a real Co
 ```
 ./serena up            # app, worker, simulator and moto: http://localhost:8300
 ./serena etl pahma     # a daily refresh through the ETL API with the fake ETL (--failed, --rows N)
+./serena failed-update pahma   # record a failed ETL list update, which the worker retries
 ./serena smoke         # a daily refresh, then one image fetched, stored and served (CI's `stack` job)
 ./serena logs worker   # follow a service's logs
 ./serena down          # stop; moto forgets everything
