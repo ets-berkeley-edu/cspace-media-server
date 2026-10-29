@@ -1614,3 +1614,18 @@ for a minute.
   `./serena aws confirm-alerts` first.
 - [ ] **5. Afterwards.** `./serena aws pause` to keep it, or `./serena aws destroy` (type `personal-dev`), then
   `./serena aws status`: "Not deployed".
+
+## 48. UC Berkeley data only in UC Berkeley accounts (5 minutes; before merging the pull request that adds it)
+
+What it checks: `./serena aws deploy` of an environment with a real CollectionSpace shows the rule and waits for the
+account's number (decided October 29, 2026). Nothing is deployed in steps 1 and 2. From this pull request's branch on
+the Mac, signed in (`aws sso login --profile bmu-personal`).
+
+- [ ] **1. A wrong answer stops it.** `./serena aws deploy --env personal-prod` (real CollectionSpace settings, in a
+  personal account, destroyed). Expect "WARNING: 'personal-prod' uses a real CollectionSpace: pahma", the account,
+  and the rule; press Enter without typing. Expect "Stopped; nothing was deployed." and `./serena aws status --env
+  personal-prod`: "Not deployed".
+- [ ] **2. Only the exact number goes on.** Run it again and type the account's number with a digit changed: the same
+  "Stopped". (Typing the right number would deploy, which must not happen in a personal account.)
+- [ ] **3. The simulator asks nothing.** `./serena aws plan --env personal-dev` and, if you're deploying anyway,
+  `./serena aws deploy --env personal-dev`: no warning.

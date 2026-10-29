@@ -117,6 +117,11 @@ image tag (commit and time, `-dirty` for uncommitted changes), so `status` shows
 
 ## Against a real CollectionSpace (QA, then production)
 
+**UC Berkeley data only in a UC Berkeley AWS account.** An environment with a real CollectionSpace, production or QA
+(Lyrasis's QA tenants hold a copy of production's database), copies the museums' files into its account. It may run
+only in a UC Berkeley AWS account, never in a personal one; a personal account is for the simulator only. Every
+`./serena aws deploy` of such an environment shows this rule and goes ahead only once you type the account's number.
+
 With `SIMULATED_CSPACE=false` and `CSPACE_TENANTS` set, after the first deploy:
 
 1. `./serena aws cspace-secret <museum>` for each museum: its read-only service account.

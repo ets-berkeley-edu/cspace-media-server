@@ -32,6 +32,8 @@ at a time, following the plan; the design is `docs/design.md`. `README.md` descr
   if it exists and isn't soft-deleted; then fetch through the Media service, which returns the record's current file.
   Never compare the record's `blobCsid` with the Blob asked for.
 - **Cached files are never deleted.** A recall stops serving them; it doesn't remove them.
+- **UC Berkeley data only in UC Berkeley AWS accounts.** An environment with a real CollectionSpace (production or
+  QA) never runs in a personal AWS account; `./serena aws deploy` asks the person deploying to confirm the account.
 - **Never read `.env` files, and never put a login, token, key or personal data in the repo, a test or a chat.**
 - **No personal data in logs.** The PDF link suffix carries a visitor's email address: strip it before anything is
   logged or recorded, and never forward it. Never log the signature on a signed PDF link, and don't log or record the
