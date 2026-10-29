@@ -155,11 +155,11 @@ tenants_var() {  # MUSEUMS as a Terraform map: {"pahma"="https://..."}
   printf '{%s}' "$out"
 }
 
-# The simulator's address in the VPC (Cloud Map): local.simulator_url in deploy/terraform/app/devtools.tf.
+# The simulator's address in the VPC (Cloud Map): local.simulator_url in deploy/terraform/modules/simulator/devtools.tf.
 sim_url() { echo "http://fakecspace.$NAME.internal:8180"; }
 
 signed_museum() {  # signed_museum MUSEUM: whether its configuration allows signed access (it then has a portal key;
-  # local.signed_museums in deploy/terraform/app/versions.tf)
+  # local.signed_museums in deploy/terraform/modules/core/versions.tf)
   grep -Eq '^signed_access_kinds: *\[ *[A-Za-z0-9]' "backend/serena/museums/$1.yaml"
 }
 
@@ -175,7 +175,7 @@ save_local() {  # save_local KEY VALUE: set one setting in the environment's .lo
 # name, it was deployed from somewhere else (another computer or clone, or someone sharing the account).
 check_not_someone_elses() {  # check_not_someone_elses ACCOUNT
   local key ok found=""
-  for key in app registry; do
+  for key in personal registry; do
     aws_ s3api head-object --bucket "serena-tfstate-$1-$AWS_REGION" --key "serena/$SERENA_ENV_NAME/$key.tfstate" >/dev/null 2>&1 &&
       found="s3://serena-tfstate-$1-$AWS_REGION/serena/$SERENA_ENV_NAME/" && break
   done
@@ -242,17 +242,31 @@ ensure_state_bucket() {
   aws_ s3api put-bucket-tagging --bucket "$STATE_BUCKET" --tagging 'TagSet=[{Key=project,Value=serena}]'
 }
 
-tf() {  # tf registry|app <terraform arguments>
+tf() {  # tf registry|personal <terraform arguments> (deploy/terraform/<part>; D302)
   local part="$1"; shift
   terraform -chdir="$TF_DIR/$part" "$@"
 }
 
-backend_config() {  # backend_config registry|app
+backend_config() {  # backend_config registry|personal
   BACKEND=(-backend-config="bucket=$STATE_BUCKET" -backend-config="key=serena/$SERENA_ENV_NAME/$1.tfstate"
            -backend-config="region=$AWS_REGION" -backend-config="use_lockfile=true")
 }
 
-tf_init() {  # tf_init registry|app: point Terraform at this environment's state (the lock is a file beside it)
+# Before D302 the personal root's state was app.tfstate. An environment deployed then and still holding resources there
+# must be destroyed from main's earlier code (or moved by hand); this code would otherwise see an empty state and try
+# to create everything again beside it.
+check_no_old_state() {
+  local dir="serena/$SERENA_ENV_NAME"
+  aws_ s3api head-object --bucket "$STATE_BUCKET" --key "$dir/personal.tfstate" >/dev/null 2>&1 && return 0
+  aws_ s3 cp "s3://$STATE_BUCKET/$dir/app.tfstate" - 2>/dev/null |
+    python3 -c 'import json, sys; sys.exit(1 if json.load(sys.stdin).get("resources") else 0)' 2>/dev/null && return 0
+  aws_ s3api head-object --bucket "$STATE_BUCKET" --key "$dir/app.tfstate" >/dev/null 2>&1 || return 0
+  die "'$ENV' still has resources in its old state, s3://$STATE_BUCKET/$dir/app.tfstate (before D302). Destroy it with
+the code from before the move (git switch --detach f4cad43 && ./serena aws destroy --env $ENV), then come back."
+}
+
+tf_init() {  # tf_init registry|personal: point Terraform at this environment's state (the lock is a file beside it)
+  [ "$1" != personal ] || check_no_old_state
   backend_config "$1"
   tf "$1" init -input=false -reconfigure "${BACKEND[@]}" >/dev/null ||
     die "terraform init failed for $1. Run it again without '>/dev/null' to see why: ./serena aws init"
@@ -283,7 +297,7 @@ approve() { [ "${SERENA_AWS_YES:-}" = 1 ] && echo "-auto-approve" || true; }
 
 applied() {  # applied OUTPUT: a value the app was last applied with; empty if never applied or not an output then
   local v
-  v="$(tf app output -raw "$1" 2>/dev/null || true)"
+  v="$(tf personal output -raw "$1" 2>/dev/null || true)"
   case "$v" in *"No outputs"*|*Warning*|*"not found"*|*Error*) v="" ;; esac
   echo "$v"
 }
@@ -428,7 +442,7 @@ sim_secrets() {
   done
 }
 
-# ---- image delivery: the CloudFront signing key (D200; deploy/terraform/app/delivery.tf, secrets.tf) ---------------
+# ---- image delivery: the CloudFront signing key (D200; terraform/modules/files/delivery.tf, core/secrets.tf) ------
 # The private key goes from openssl straight into the secret, first as its AWSPENDING version; the public keys (the
 # current one and the one before it) go into an SSM parameter that Terraform reads, so CloudFront's key group trusts
 # both. Once Terraform has applied, the pending key becomes the secret's current value with the key ID CloudFront gave
@@ -461,7 +475,7 @@ print(next((v for v, s in stages.items() if "AWSPENDING" in s), ""))'
 apply_again() {  # apply with the running images and settings (no prompt for a change cdn-key or deploy started)
   app_vars "$(applied image_uri)" "$(was_running)" "$(applied devtools_image_uri)"
   # shellcheck disable=SC2046
-  tf app apply -input=false $(approve) "${TF_VARS[@]}"
+  tf personal apply -input=false $(approve) "${TF_VARS[@]}"
 }
 
 cdn_key() {  # a new signing key: made, trusted by CloudFront (Terraform), then used
@@ -505,7 +519,7 @@ finish_cdn_key() {  # the pending key becomes the one the app signs with, once C
   [ -n "$version" ] || return 0
   name="$(aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
     python3 -c 'import json, sys; print(json.load(sys.stdin).get("name", ""))')"
-  key_id="$(tf app output -json cdn_key_ids 2>/dev/null |
+  key_id="$(tf personal output -json cdn_key_ids 2>/dev/null |
     KEY_NAME="$name" python3 -c 'import json, os, sys; print(json.load(sys.stdin).get(os.environ["KEY_NAME"], ""))' 2>/dev/null || true)"
   if [ -z "$key_id" ]; then
     echo "The new signing key $name isn't trusted by CloudFront yet: run ./serena aws deploy (or cdn-key) again to finish."
@@ -520,7 +534,7 @@ finish_cdn_key() {  # the pending key becomes the one the app signs with, once C
   echo "Serena signs the museums' files with $name within 5 minutes. The key before it stays trusted until the next ./serena aws cdn-key."
 }
 
-# ---- alert email (D201; deploy/terraform/app/alerts.tf) --------------------------------------------------------------
+# ---- alert email (D201; deploy/terraform/modules/core/alerts.tf) -----------------------------------------------------
 # AWS emails ALERT_EMAIL a link. Confirming it here, instead of by a click, makes unsubscribing need an AWS sign-in, so
 # no one on a mailing list can unsubscribe everyone by accident.
 confirm_alerts() {
@@ -564,7 +578,7 @@ prepare() { load_env; check_account; need_terraform; ensure_state_bucket; }
 look() {
   load_env; check_account; need_terraform
   aws_ s3api head-bucket --bucket "$STATE_BUCKET" >/dev/null 2>&1 || { echo "'$ENV' isn't deployed (./serena aws deploy)."; exit 0; }
-  tf_init app
+  tf_init personal
 }
 
 app_url() { applied url; }  # empty while a first deploy hasn't finished
@@ -574,7 +588,7 @@ deploy() {
   command -v docker >/dev/null || die "Docker isn't installed or isn't on the PATH."
   docker info >/dev/null 2>&1 || die "Docker isn't running. Start Docker Desktop and try again."
   ensure_state_bucket
-  tf_init app; check_museums ask   # before building anything
+  tf_init personal; check_museums ask   # before building anything
   local tag repo registry image devtools_image="" base url code museum _try
   tag="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
   [ -z "$(git status --porcelain 2>/dev/null)" ] || tag="$tag-dirty"
@@ -614,7 +628,7 @@ deploy() {
   echo "   If a task can't start, ./serena aws logs web (or worker) shows why."
   app_vars "$image" true "$devtools_image"
   # shellcheck disable=SC2046
-  tf app apply -input=false $(approve) "${TF_VARS[@]}"
+  tf personal apply -input=false $(approve) "${TF_VARS[@]}"
   [ "$SIMULATED_CSPACE" = false ] || sim_secrets
   finish_cdn_key   # a rotation an earlier cdn-key didn't finish
   if [ "$(cdn_keys_exist)" = false ]; then
@@ -657,15 +671,15 @@ was_running() {  # true unless the environment is paused
 plan() {
   look; need_deployed; check_museums look
   app_vars "$IMAGE" "$(was_running)" "$(applied devtools_image_uri)"
-  tf app plan -input=false "${TF_VARS[@]}"
+  tf personal plan -input=false "${TF_VARS[@]}"
 }
 
 # Apply again with the running images: for a changed setting (pause, resume, the allowlist).
 reapply() {  # reapply RUNNING
-  prepare; tf_init app; need_deployed; check_museums ask
+  prepare; tf_init personal; need_deployed; check_museums ask
   app_vars "$IMAGE" "$1" "$(applied devtools_image_uri)"
   # shellcheck disable=SC2046
-  tf app apply -input=false $(approve) "${TF_VARS[@]}"
+  tf personal apply -input=false $(approve) "${TF_VARS[@]}"
 }
 
 secret_line() {  # secret_line LABEL ID FIX
@@ -726,22 +740,22 @@ status() {
     echo "The settings list other museums or servers: ./serena aws plan shows the change."
 }
 
-# The fake ETL, once, inside the VPC (devtools.tf): it reaches the simulator and the internal load balancer directly,
-# and reads the museum's ETL token itself. Its output is the task's log, printed when it ends.
+# The fake ETL, once, inside the VPC (modules/simulator): it reaches the simulator and the internal load balancer
+# directly, and reads the museum's ETL token itself. Its output is the task's log, printed when it ends.
 etl() {  # etl MUSEUM [fake_etl options]
   local museum="${1:-}"; shift || true
   load_env
   [ "$SIMULATED_CSPACE" = true ] ||
     die "'$ENV' uses a real CollectionSpace: its servable lists come from the real ETL (Jira CSW-1027), not the fake one."
   need_museum "$museum" etl
-  check_account; need_terraform; tf_init app; need_deployed
+  check_account; need_terraform; tf_init personal; need_deployed
   local family subnets sg lb url task id overrides code log out quiet=false arg
   for arg in "$@"; do [ "$arg" != --json ] || quiet=true; done
   # With --json only the summary goes to standard output (./serena aws test reads it); the rest goes to errors.
   if [ "$quiet" = true ]; then exec 3>&2; else exec 3>&1; fi
-  family="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_definition"])')"
-  subnets="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["subnets"])')"
-  sg="$(tf app output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["security_group"])')"
+  family="$(tf personal output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_definition"])')"
+  subnets="$(tf personal output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["subnets"])')"
+  sg="$(tf personal output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["security_group"])')"
   lb="$(applied load_balancer_url)" url="$(app_url)"
   overrides="$(python3 - "$museum" "$lb" "$(sim_url)" "$url" "$@" <<'PY'
 import json, sys
@@ -785,7 +799,7 @@ list_servable() {  # list_servable MUSEUM [--limit N] [--kind KIND]
     esac
   done
   case "$limit" in ''|*[!0-9]*) die "--limit needs a whole number (0 for all)" ;; esac
-  load_env; need_museum "$museum" list; check_account; need_terraform; tf_init app; need_deployed
+  load_env; need_museum "$museum" list; check_account; need_terraform; tf_init personal; need_deployed
   url="$(app_url)"
   [ "$limit" = 0 ] || max=(--max-items "$limit")
   local filter=()
@@ -819,7 +833,7 @@ print(f"{len(rows)} shown.{more}")'
 # signed in, after ./serena aws deploy or resume; never in CI (D229). They make read-only AWS calls with this
 # environment's profile, and change only what they undo (a fake ETL refresh, a recall they cancel).
 run_tests() {  # run_tests [pytest options]
-  load_env; check_account; need_terraform; tf_init app; need_deployed
+  load_env; check_account; need_terraform; tf_init personal; need_deployed
   [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
   local url saved deployed museum py
   url="$(app_url)"
@@ -874,7 +888,7 @@ replay_logs() {  # replay_logs [serenade/load/replay.py options]
     serenade/.venv/bin/python -m serenade.load.replay --museum "$museum" --env "$ENV" "$@"
     return
   fi
-  check_account; need_terraform; tf_init app; need_deployed
+  check_account; need_terraform; tf_init personal; need_deployed
   [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
   url="$(app_url)"
   case "$url" in https://*) ;; *) die "'$ENV' has no address yet: run ./serena aws deploy again." ;; esac
@@ -932,7 +946,7 @@ destroy() {
   echo "Nothing in CollectionSpace changes. The KMS key is deleted after a waiting period."
   read -r -p "Type the environment's name ($ENV) to go ahead: " ok
   [ "$ok" = "$ENV" ] || die "Stopped; nothing was deleted."
-  tf_init app
+  tf_init personal
   IMAGE="$(applied image_uri)"; [ -n "$IMAGE" ] || IMAGE=none
   [ -n "$ALLOWED_CIDRS" ] || ALLOWED_CIDRS="127.0.0.1/32"   # the variable must be set, even to destroy
   devtools_image="$(applied devtools_image_uri)"; [ -n "$devtools_image" ] || devtools_image=none
@@ -940,7 +954,7 @@ destroy() {
   app_vars "$IMAGE" false "$devtools_image"
   echo "Destroying Serena (about 15-20 minutes: CloudFront is disabled first) ..."
   # CloudFront removes its VPC origin's network interfaces in the background, which can briefly hold the VPC.
-  tf app destroy -input=false -auto-approve "${TF_VARS[@]}" ||
+  tf personal destroy -input=false -auto-approve "${TF_VARS[@]}" ||
     die "The destroy didn't finish. Wait a few minutes and run ./serena aws destroy again; Terraform continues where it stopped."
   aws_ ssm delete-parameter --name "$(cdn_param)" >/dev/null 2>&1 || true   # the public keys (made by cdn-key)
   tf_init registry
@@ -970,7 +984,7 @@ case "$CMD" in
     new="${ALLOWED_CIDRS:+$ALLOWED_CIDRS,}$ip"
     save_local ALLOWED_CIDRS "$new"; ALLOWED_CIDRS="$new"
     echo "Allowed: $new"
-    prepare; tf_init app
+    prepare; tf_init personal
     if [ -z "$(applied image_uri)" ]; then echo "Saved; it applies at the first deploy."; else reapply "$(was_running)"; fi ;;
   etl) etl "$@" ;;
   list) list_servable "$@" ;;
@@ -979,11 +993,11 @@ case "$CMD" in
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
   etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;
-  cdn-key) prepare; tf_init app; need_deployed; check_museums ask; cdn_key ;;
+  cdn-key) prepare; tf_init personal; need_deployed; check_museums ask; cdn_key ;;
   confirm-alerts) confirm_alerts ;;
   init) prepare
         backend_config registry; tf registry init -reconfigure "${BACKEND[@]}"
-        backend_config app; tf app init -reconfigure "${BACKEND[@]}" ;;
+        backend_config personal; tf personal init -reconfigure "${BACKEND[@]}" ;;
   destroy) destroy ;;
   help|-h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" ;;
   *) die "Unknown command '$CMD'. ./serena aws help lists them." ;;

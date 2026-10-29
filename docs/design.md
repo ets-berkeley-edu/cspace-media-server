@@ -1676,10 +1676,20 @@ their hashed names, with no CDN (D296).
   personal account (D182); QA and production follow in the UC Berkeley account. `deploy/README.md` has the commands.
   - **Two roots (decided October 28, 2026, D302).** `deploy/terraform/personal` for personal environments and stage 1
     (CloudFront in front of everything) and `deploy/terraform/shared` for QA and production (the split), built from
-    shared modules. A files module (the distribution's file and SVG paths, origin access control, key group, response
-    headers policies, the static bucket) is used by both. The shared root adds a function that only rewrites file
-    paths; the personal root adds the VPC origin, the app's paths on CloudFront and its address-rule function, which
-    also rewrites file paths. The move keeps personal-dev's resources in place (`moved` blocks).
+    three modules in `deploy/terraform/modules/`:
+    - `core`: Serena's own resources, the same everywhere: the tables, the museums' buckets, the KMS key, the secrets,
+      the app's and the worker's roles, tasks and services, and the alert topic and alarms. The root gives it the
+      subnets, security groups and the load balancer's target group.
+    - `files`: the distribution, origin access control, the signing keys' key group, the response headers policies and
+      the static bucket. A root may give it the app as a second origin (the personal root does, D183); without one,
+      the distribution serves only the files and the unavailable images. The root gives it the function run on every
+      request: the personal root's applies the address rules and removes `/<museum>` from a file's path; the shared
+      root's only removes `/<museum>` (D307).
+    - `simulator`: the simulated CollectionSpace and the fake ETL, where `SIMULATED_CSPACE` is on (D189).
+
+    Each root keeps its own network, load balancer, security groups and WAF. Each root's state is
+    `serena/<env>/<root>.tfstate`; the personal environments were destroyed before the move, so it needed no `moved`
+    blocks.
   - **CI.** `terraform test` against the mock provider runs for each root. The shared root's asserts the
     internet-facing load balancer, its HTTPS listener and per-path listener rules, the certificate, the regional web
     ACL, and a CloudFront distribution with only the file paths: no VPC origin, a function that only rewrites the

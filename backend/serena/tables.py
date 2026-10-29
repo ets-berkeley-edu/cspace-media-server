@@ -71,8 +71,9 @@ def create_all(dynamodb: Any, prefix: str) -> list[str]:
 
 
 def as_json() -> str:
-    """The tables as deploy/terraform/app/tables.json, which Terraform creates them from (dynamodb.tf); a test keeps
-    the two in step. After changing a table: python -m serena.tables > ../deploy/terraform/app/tables.json"""
+    """The tables as deploy/terraform/modules/core/tables.json, which Terraform creates them from (dynamodb.tf); a test
+    keeps the two in step. After changing a table:
+    python -m serena.tables > ../deploy/terraform/modules/core/tables.json"""
     described = {
         table.name: {"sort_key": table.sort_key, "indexes": dict(table.indexes), "ttl_attribute": table.ttl_attribute}
         for table in ALL

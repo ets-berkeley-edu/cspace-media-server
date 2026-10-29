@@ -4,8 +4,8 @@
 # origin access control. The unavailable images and the generic placeholder are served without a signature from a
 # small static bucket.
 #
-# The signing key (D200): ./serena aws makes the key pair; the private key goes straight into its secret (secrets.tf)
-# and the public keys, the current one and the one before it, into the SSM parameter /serena-<env>/cloudfront-public-keys
+# The signing key (D200): ./serena aws makes the key pair; the private key goes straight into its secret
+# (../core/secrets.tf) and the public keys, the current one and the one before it, into the SSM parameter /serena-<env>/cloudfront-public-keys
 # (a JSON list of {"name", "public_key"}), which Terraform reads here. Until the first key exists (cdn_keys = false),
 # nothing is delivered: the app has no signer and answers with the unavailable image ("delivery not set up").
 
@@ -186,7 +186,7 @@ resource "aws_s3_object" "static" {
   for_each     = local.static_files
   bucket       = aws_s3_bucket.static.id
   key          = each.key
-  source       = "${path.module}/../../../backend/serena/static/${each.value}"
-  etag         = filemd5("${path.module}/../../../backend/serena/static/${each.value}")
+  source       = "${path.module}/../../../../backend/serena/static/${each.value}"
+  etag         = filemd5("${path.module}/../../../../backend/serena/static/${each.value}")
   content_type = "image/svg+xml"
 }

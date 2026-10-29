@@ -223,33 +223,3 @@ resource "aws_iam_role_policy" "worker" {
   role   = aws_iam_role.worker.id
   policy = data.aws_iam_policy_document.worker.json
 }
-
-# The fake ETL (devtools.tf) reads the museums' ETL tokens, as the real ETL reads its own from its secret store.
-data "aws_iam_policy_document" "fake_etl" {
-  count = local.simulated
-
-  statement {
-    sid       = "EtlTokens"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [for s in aws_secretsmanager_secret.etl_tokens : s.arn]
-  }
-
-  statement {
-    sid       = "Key"
-    actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.main.arn]
-  }
-}
-
-resource "aws_iam_role" "fake_etl" {
-  count              = local.simulated
-  name               = "${local.name}-fake-etl"
-  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
-}
-
-resource "aws_iam_role_policy" "fake_etl" {
-  count  = local.simulated
-  name   = "serena-fake-etl"
-  role   = aws_iam_role.fake_etl[0].id
-  policy = data.aws_iam_policy_document.fake_etl[0].json
-}

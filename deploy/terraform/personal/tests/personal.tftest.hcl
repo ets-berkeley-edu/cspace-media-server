@@ -1,5 +1,6 @@
-# terraform test (run from deploy/terraform/app after terraform init -backend=false). Plans against a simulated AWS
-# provider: nothing is created and no sign-in is needed.
+# terraform test (run from deploy/terraform/personal after terraform init -backend=false). Plans against a simulated
+# AWS provider: nothing is created and no sign-in is needed. Resources inside a module are read through its test
+# output (terraform test can't address them directly).
 
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
@@ -50,32 +51,32 @@ run "names_and_sizes" {
   command = plan
 
   assert {
-    condition     = aws_ecs_cluster.main.name == "serena-dev"
+    condition     = output.cluster_name == "serena-dev"
     error_message = "The cluster is named serena-<env>; ./serena aws status and logs rely on it."
   }
 
   assert {
-    condition     = length(aws_dynamodb_table.main) == 9 && aws_dynamodb_table.main["servability"].name == "serena-dev-servability"
+    condition     = length(module.core.test.tables) == 9 && module.core.test.tables["servability"].name == "serena-dev-servability"
     error_message = "The nine tables from tables.json, named <SERENA_TABLE_PREFIX>-<table>."
   }
 
   assert {
-    condition     = aws_s3_bucket.museum["pahma"].bucket == "serena-dev-pahma-123456789012-us-west-2"
+    condition     = output.buckets["pahma"] == "serena-dev-pahma-123456789012-us-west-2"
     error_message = "One bucket per museum, its name including the account and region, so it is unique."
   }
 
   assert {
-    condition     = aws_ecs_service.web.desired_count == 1 && aws_ecs_service.worker.desired_count == 1
+    condition     = module.core.test.web_desired_count == 1 && module.core.test.worker_desired_count == 1
     error_message = "One web task and one worker run by default."
   }
 
   assert {
-    condition     = aws_ecs_task_definition.web.cpu == "1024" && aws_ecs_task_definition.web.memory == "2048"
+    condition     = module.core.test.web_cpu == "1024" && module.core.test.web_memory == "2048"
     error_message = "The web task has 1 vCPU and 2 GB by default."
   }
 
   assert {
-    condition     = length(aws_ecs_service.fakecspace) == 0 && length(aws_ecs_task_definition.fake_etl) == 0
+    condition     = length(module.simulator) == 0 && output.fake_etl == null
     error_message = "Without simulated_cspace there is no simulator and no fake ETL."
   }
 
@@ -85,27 +86,27 @@ run "names_and_sizes" {
   }
 
   assert {
-    condition     = length(aws_secretsmanager_secret.portal_key) == 0
+    condition     = length(module.core.test.portal_key_museums) == 0
     error_message = "PAHMA has no signed access, so no portal signing key."
   }
 
   assert {
-    condition     = !output.delivery && length(aws_cloudfront_key_group.cdn) == 0 && length(aws_cloudfront_distribution.main.ordered_cache_behavior) == 3
+    condition     = !output.delivery && module.files.test.key_groups == 0 && length(module.files.test.behavior_paths) == 3 && module.files.test.default_origin == "app"
     error_message = "Without a signing key (cdn_keys = false) nothing is delivered: no key group, and only the admin app's files and the two unavailable-image behaviors."
   }
 
   assert {
-    condition     = length(aws_s3_object.static) == 3 && contains(keys(aws_s3_object.static), "pahma/unavailable.svg") && contains(keys(aws_s3_object.static), "default/placeholder.svg")
+    condition     = length(module.files.test.static_files) == 3 && contains(module.files.test.static_files, "pahma/unavailable.svg") && contains(module.files.test.static_files, "default/placeholder.svg")
     error_message = "The static bucket holds each museum's and the default unavailable image, and the generic placeholder (D199)."
   }
 
   assert {
-    condition     = length(aws_sns_topic_subscription.email) == 0 && aws_cloudwatch_metric_alarm.web_down.actions_enabled
+    condition     = length(module.core.test.email_protocols) == 0 && module.core.test.alarms_enabled["web-down"]
     error_message = "No email subscription without alert_email; the alarms act while the environment runs."
   }
 
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.unserved) == 3 && aws_cloudwatch_log_metric_filter.unserved["cspace-refused"].pattern == "{ $.message = \"unserved\" && $.reason = \"cspace_refused\" }"
+    condition     = length(module.core.test.unserved_patterns) == 3 && module.core.test.unserved_patterns["cspace-refused"] == "{ $.message = \"unserved\" && $.reason = \"cspace_refused\" }"
     error_message = "Three alarms on unserved requests, from metric filters on the app's log lines (D202, D203)."
   }
 }
@@ -123,29 +124,29 @@ run "delivery" {
   }
 
   override_data {
-    target = data.aws_ssm_parameter.cdn_keys
+    target = module.files.data.aws_ssm_parameter.cdn_keys
     values = {
       insecure_value = "[{\"name\": \"serena-dev-20261020000000\", \"public_key\": \"-----BEGIN PUBLIC KEY-----\\nMOCK\\n-----END PUBLIC KEY-----\\n\"}, {\"name\": \"serena-dev-20261021000000\", \"public_key\": \"-----BEGIN PUBLIC KEY-----\\nMOCK2\\n-----END PUBLIC KEY-----\\n\"}]"
     }
   }
 
   assert {
-    condition     = output.delivery && length(aws_cloudfront_public_key.cdn) == 2 && contains(keys(aws_cloudfront_public_key.cdn), "serena-dev-20261021000000")
+    condition     = output.delivery && length(output.cdn_key_ids) == 2 && contains(keys(output.cdn_key_ids), "serena-dev-20261021000000")
     error_message = "Both public keys in the SSM parameter, current and previous, are trusted (D200)."
   }
 
   assert {
-    condition     = length(aws_cloudfront_distribution.main.ordered_cache_behavior) == 5 && contains([for b in aws_cloudfront_distribution.main.ordered_cache_behavior : b.path_pattern], "/cinefiles/objects/*")
+    condition     = length(module.files.test.behavior_paths) == 5 && contains(module.files.test.behavior_paths, "/cinefiles/objects/*")
     error_message = "With a signing key, each museum's files get a behavior of their own (D195)."
   }
 
   assert {
-    condition     = alltrue([for b in aws_cloudfront_distribution.main.ordered_cache_behavior : length(b.trusted_key_groups) == 1 if endswith(b.path_pattern, "/objects/*")])
+    condition     = sort(module.files.test.signed_paths) == sort([for p in module.files.test.behavior_paths : p if endswith(p, "/objects/*")]) && length(module.files.test.signed_paths) == 2
     error_message = "A museum's files are delivered only with a signed URL."
   }
 
   assert {
-    condition     = length(aws_sns_topic_subscription.email) == 1 && aws_sns_topic_subscription.email[0].protocol == "email"
+    condition     = module.core.test.email_protocols == ["email"]
     error_message = "alert_email subscribes one address to the alert topic (D201)."
   }
 }
@@ -158,7 +159,7 @@ run "paused_alarms_are_silent" {
   }
 
   assert {
-    condition     = !aws_cloudwatch_metric_alarm.web_down.actions_enabled && !aws_cloudwatch_metric_alarm.worker_down.actions_enabled && alltrue([for a in aws_cloudwatch_metric_alarm.unserved : !a.actions_enabled])
+    condition     = length(module.core.test.alarms_enabled) == 5 && alltrue([for enabled in values(module.core.test.alarms_enabled) : !enabled])
     error_message = "A paused environment sends no alarm (D204)."
   }
 }
@@ -171,7 +172,7 @@ run "paused" {
   }
 
   assert {
-    condition     = aws_ecs_service.web.desired_count == 0 && aws_ecs_service.worker.desired_count == 0
+    condition     = module.core.test.web_desired_count == 0 && module.core.test.worker_desired_count == 0
     error_message = "./serena aws pause (running = false) stops both services."
   }
 }
@@ -189,12 +190,12 @@ run "simulated" {
   }
 
   assert {
-    condition     = length(aws_ecs_service.fakecspace) == 1 && length(aws_ecs_task_definition.fake_etl) == 1
+    condition     = length(module.simulator) == 1 && output.fake_etl.task_definition == "serena-dev-fake-etl"
     error_message = "With simulated_cspace, the simulator runs and the fake ETL's task definition exists."
   }
 
   assert {
-    condition     = length(aws_secretsmanager_secret.portal_key) == 1 && contains(keys(aws_secretsmanager_secret.portal_key), "cinefiles")
+    condition     = module.core.test.portal_key_museums == ["cinefiles"]
     error_message = "Cinefiles has signed access, so it gets a portal signing key."
   }
 }
@@ -218,7 +219,7 @@ run "protected" {
   }
 
   assert {
-    condition     = aws_dynamodb_table.main["servability"].deletion_protection_enabled && !aws_s3_bucket.museum["pahma"].force_destroy
+    condition     = module.core.test.tables["servability"].deletion_protection && !module.core.test.bucket_force_destroy["pahma"]
     error_message = "protect_data turns on deletion protection and keeps the buckets from being emptied."
   }
 }

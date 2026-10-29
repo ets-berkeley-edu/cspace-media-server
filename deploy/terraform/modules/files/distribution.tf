@@ -1,7 +1,7 @@
-# CloudFront: HTTPS at a *.cloudfront.net address (D183), in front of the internal load balancer, with the path and
-# address rules (D185) and, where it's on, WAF (D186). A domain later is an alternate name and an ACM certificate on
-# this distribution. It also delivers the museums' files from their buckets with signed URLs, and the unavailable
-# images from the static bucket (delivery.tf, D195 to D199).
+# The distribution, at its own *.cloudfront.net address. With an app origin (the personal root) it is the app's front
+# door too, as D183 describes: everything else goes to the app, uncached, and the admin app's built files are cached.
+# Without one (the shared root), the default behavior reads the static bucket, which answers anything that isn't one
+# of its files with 403.
 
 locals {
   # AWS-managed CloudFront policies (the same IDs in every account).
@@ -14,38 +14,8 @@ locals {
 
   # Never keep an error answer: one viewer's 403 or 404 must not be served to another.
   uncached_error_codes = [400, 403, 404, 405, 500, 502, 503, 504]
-}
 
-resource "aws_cloudfront_vpc_origin" "alb" {
-  vpc_origin_endpoint_config {
-    name                   = local.name
-    arn                    = aws_lb.main.arn
-    http_port              = 80
-    https_port             = 443
-    origin_protocol_policy = "http-only"
-
-    origin_ssl_protocols {
-      items    = ["TLSv1.2"]
-      quantity = 1
-    }
-  }
-
-  # A VPC origin needs the VPC's internet gateway attached.
-  depends_on = [aws_internet_gateway.main]
-}
-
-resource "aws_cloudfront_function" "allowlist" {
-  name    = "${local.name}-allowlist"
-  comment = "Who may reach which of Serena's paths"
-  runtime = "cloudfront-js-2.0"
-  publish = true
-  code = templatefile("${path.module}/allowlist.js.tftpl", {
-    allowed = join(",", var.allowed_cidrs)
-    etl     = join(",", var.etl_cidrs)
-    admin   = join(",", var.admin_cidrs)
-    open    = var.open_images ? "true" : "false"
-    museums = join("|", local.museums)
-  })
+  app = var.app_origin != null
 }
 
 resource "aws_cloudfront_distribution" "main" {
@@ -54,16 +24,20 @@ resource "aws_cloudfront_distribution" "main" {
   http_version    = "http2and3"
   is_ipv6_enabled = false
   price_class     = "PriceClass_100"
-  web_acl_id      = var.waf ? aws_wafv2_web_acl.main[0].arn : null
+  web_acl_id      = var.web_acl_arn
 
-  origin {
-    origin_id   = "app"
-    domain_name = aws_lb.main.dns_name
+  dynamic "origin" {
+    for_each = local.app ? [var.app_origin] : []
 
-    vpc_origin_config {
-      vpc_origin_id            = aws_cloudfront_vpc_origin.alb.id
-      origin_read_timeout      = var.origin_read_timeout
-      origin_keepalive_timeout = 5
+    content {
+      origin_id   = "app"
+      domain_name = origin.value.domain_name
+
+      vpc_origin_config {
+        vpc_origin_id            = origin.value.vpc_origin_id
+        origin_read_timeout      = origin.value.origin_read_timeout
+        origin_keepalive_timeout = 5
+      }
     }
   }
 
@@ -73,7 +47,7 @@ resource "aws_cloudfront_distribution" "main" {
 
     content {
       origin_id                = "museum-${origin.value}"
-      domain_name              = aws_s3_bucket.museum[origin.value].bucket_regional_domain_name
+      domain_name              = var.bucket_domains[origin.value]
       origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
     }
   }
@@ -84,37 +58,42 @@ resource "aws_cloudfront_distribution" "main" {
     origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
   }
 
-  # Everything goes to the app, uncached: its answers (redirects to signed URLs, the admin API) are per request.
+  # With the app: everything goes to it, uncached, since its answers (redirects to signed URLs, the admin API) are per
+  # request. Without it: the static bucket.
   default_cache_behavior {
-    target_origin_id           = "app"
+    target_origin_id           = local.app ? "app" : "static"
     viewer_protocol_policy     = "redirect-to-https"
-    allowed_methods            = ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"]
+    allowed_methods            = local.app ? ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"] : ["GET", "HEAD"]
     cached_methods             = ["GET", "HEAD"]
     compress                   = true
-    cache_policy_id            = local.cloudfront_policy.caching_disabled
-    origin_request_policy_id   = local.cloudfront_policy.all_viewer_except_host_header
-    response_headers_policy_id = local.cloudfront_policy.security_headers
+    cache_policy_id            = local.app ? local.cloudfront_policy.caching_disabled : local.cloudfront_policy.caching_optimized
+    origin_request_policy_id   = local.app ? local.cloudfront_policy.all_viewer_except_host_header : null
+    response_headers_policy_id = local.app ? local.cloudfront_policy.security_headers : aws_cloudfront_response_headers_policy.static.id
 
     function_association {
       event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.allowlist.arn
+      function_arn = var.viewer_request_function_arn
     }
   }
 
   # The built admin app's files have content hashes in their names.
-  ordered_cache_behavior {
-    path_pattern               = "/admin/assets/*"
-    target_origin_id           = "app"
-    viewer_protocol_policy     = "redirect-to-https"
-    allowed_methods            = ["GET", "HEAD"]
-    cached_methods             = ["GET", "HEAD"]
-    compress                   = true
-    cache_policy_id            = local.cloudfront_policy.caching_optimized
-    response_headers_policy_id = local.cloudfront_policy.security_headers
+  dynamic "ordered_cache_behavior" {
+    for_each = local.app ? ["/admin/assets/*"] : []
 
-    function_association {
-      event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.allowlist.arn
+    content {
+      path_pattern               = ordered_cache_behavior.value
+      target_origin_id           = "app"
+      viewer_protocol_policy     = "redirect-to-https"
+      allowed_methods            = ["GET", "HEAD"]
+      cached_methods             = ["GET", "HEAD"]
+      compress                   = true
+      cache_policy_id            = local.cloudfront_policy.caching_optimized
+      response_headers_policy_id = local.cloudfront_policy.security_headers
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = var.viewer_request_function_arn
+      }
     }
   }
 
@@ -136,7 +115,7 @@ resource "aws_cloudfront_distribution" "main" {
 
       function_association {
         event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.allowlist.arn
+        function_arn = var.viewer_request_function_arn
       }
     }
   }
@@ -157,7 +136,7 @@ resource "aws_cloudfront_distribution" "main" {
 
       function_association {
         event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.allowlist.arn
+        function_arn = var.viewer_request_function_arn
       }
     }
   }

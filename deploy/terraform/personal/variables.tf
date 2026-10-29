@@ -61,7 +61,7 @@ variable "tenants" {
 
   validation {
     condition     = !var.simulated_cspace || alltrue([for m, url in var.tenants : url == "http://fakecspace.serena-${var.env_name}.internal:8180/${m}"])
-    error_message = "With simulated_cspace, each museum's server must be the simulator under its name: http://fakecspace.serena-<env_name>.internal:8180/<museum> (devtools.tf)."
+    error_message = "With simulated_cspace, each museum's server must be the simulator under its name: http://fakecspace.serena-<env_name>.internal:8180/<museum> (../modules/simulator)."
   }
 }
 
@@ -138,7 +138,7 @@ variable "vpc_cidr" {
 }
 
 variable "cdn_keys" {
-  description = "true once ./serena aws has made the CloudFront signing key: Terraform reads the public keys from the SSM parameter /serena-<env>/cloudfront-public-keys, and the museums' files are delivered (delivery.tf, D200). false: nothing is delivered yet."
+  description = "true once ./serena aws has made the CloudFront signing key: Terraform reads the public keys from the SSM parameter /serena-<env>/cloudfront-public-keys, and the museums' files are delivered (../modules/files, D200). false: nothing is delivered yet."
   type        = bool
   default     = false
 }

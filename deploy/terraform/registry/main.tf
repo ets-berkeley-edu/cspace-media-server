@@ -54,7 +54,7 @@ variable "env_name" {
 }
 
 variable "simulated_cspace" {
-  description = "true also creates the repository of the image that runs the simulated CollectionSpace and the fake ETL (../app/devtools.tf)."
+  description = "true also creates the repository of the image that runs the simulated CollectionSpace and the fake ETL (../modules/simulator/devtools.tf)."
   type        = bool
   default     = false
 }

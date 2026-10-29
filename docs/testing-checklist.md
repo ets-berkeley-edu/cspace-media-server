@@ -1589,3 +1589,22 @@ this page. With `./serena up`, run `./serena etl pahma` twice (two ETL lists to 
   confirmation; the summary says it replaced the failed refresh, whose page says "replaced by the manual refresh
   <id>". A refresh waiting for the ETL job (the warning "is still under way … Applying your ETL list stops it", then
   a confirmation) and a busy one ("wait for it to finish") are covered by the app's and the backend's tests.
+
+## 47. The personal root and its modules from scratch, personal-dev with the simulator (about 1 hour, mostly waiting; before merging the pull request that adds them)
+
+What it checks: D302. The Terraform is now `deploy/terraform/personal` built from `deploy/terraform/modules/` (core,
+files, simulator), with its state in `personal.tfstate`. personal-dev and personal-prod were destroyed before the
+move, so personal-dev is deployed new: everything is created, nothing is moved. From this pull request's branch on the
+Mac (`git switch <the branch> && git pull`), signed in (`aws sso login --profile bmu-personal`), with Chrome
+installed. Every command takes `--env personal-dev` (the default).
+
+- [ ] **1. Deploy.** `./serena aws deploy`. Expect a plan that only creates: nothing changed or destroyed. Type
+  `yes`. It takes about 15 to 25 minutes (CloudFront) and ends with the address and the simulator's
+  admin sign-in.
+- [ ] **2. Status.** `./serena aws status`: the state path ends in `serena/dev/`; web, worker and fakecspace
+  `running 1 of 1`; "Image delivery: on" with one signing key; the alert email as before.
+- [ ] **3. Nothing left to do.** `./serena aws plan`: "No changes."
+- [ ] **4. The AWS tests.** `./serena aws test`: `16 passed`. If T90 fails with "firing: serena-dev-web-down" just
+  after the deploy, wait 10 minutes and run it again.
+- [ ] **5. Afterwards.** `./serena aws pause` to keep it, or `./serena aws destroy` (type `personal-dev`), then
+  `./serena aws status`: "Not deployed".

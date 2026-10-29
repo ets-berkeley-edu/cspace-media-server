@@ -40,10 +40,10 @@ locals {
   web_environment = merge(local.app_environment,
     {
       SERENA_LOG_GROUP            = aws_cloudwatch_log_group.web.name
-      SERENA_UNAVAILABLE_BASE_URL = "https://${aws_cloudfront_distribution.main.domain_name}"
+      SERENA_UNAVAILABLE_BASE_URL = var.cdn_base_url
     },
-    local.delivery ? {
-      SERENA_CDN_BASE_URL             = "https://${aws_cloudfront_distribution.main.domain_name}"
+    var.delivery ? {
+      SERENA_CDN_BASE_URL             = var.cdn_base_url
       SERENA_CLOUDFRONT_KEY_SECRET_ID = aws_secretsmanager_secret.cdn_key.name
   } : {})
   # The worker counts each day's requests from the app's log group (issue #96), so it needs the log's retention.
@@ -154,18 +154,18 @@ resource "aws_ecs_service" "web" {
   }
 
   network_configuration {
-    assign_public_ip = true
-    subnets          = aws_subnet.public[*].id
-    security_groups  = [aws_security_group.web.id]
+    assign_public_ip = var.assign_public_ip
+    subnets          = var.subnet_ids
+    security_groups  = [var.web_security_group_id]
   }
 
   load_balancer {
     container_name   = "web"
     container_port   = 8000
-    target_group_arn = aws_lb_target_group.web.arn
+    target_group_arn = var.target_group_arn
   }
 
-  depends_on = [aws_lb_listener.http, aws_iam_role_policy.web, aws_route_table_association.public]
+  depends_on = [aws_iam_role_policy.web]
 }
 
 resource "aws_ecs_service" "worker" {
@@ -189,10 +189,10 @@ resource "aws_ecs_service" "worker" {
   }
 
   network_configuration {
-    assign_public_ip = true
-    subnets          = aws_subnet.public[*].id
-    security_groups  = [aws_security_group.worker.id]
+    assign_public_ip = var.assign_public_ip
+    subnets          = var.subnet_ids
+    security_groups  = [var.worker_security_group_id]
   }
 
-  depends_on = [aws_iam_role_policy.worker, aws_route_table_association.public]
+  depends_on = [aws_iam_role_policy.worker]
 }
