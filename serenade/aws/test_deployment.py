@@ -125,15 +125,25 @@ def test_t95_a_file_request_redirects_to_a_signed_address(target: Target, sample
 
 
 def test_t96_the_signed_address_delivers_the_file(target: Target, sample: str) -> None:
-    """Checklist section 25, steps 5 and 6.3: the image itself, twice; the second time from CloudFront's cache (the
-    signature isn't part of the cache key, D197). Its file was fetched and stored in the museum's bucket."""
+    """Checklist section 25, steps 5 and 6.3: the image itself, then again from CloudFront's cache (the signature
+    isn't part of the cache key, D197). Its file was fetched and stored in the museum's bucket. A distribution created
+    minutes ago may miss more than once before it hits (seen October 29, 2026), so the repeat is tried for a minute."""
     signed = signed_address(get(sample), target)
-    first, second = get(signed), get(signed)
-    for answer in (first, second):
+
+    def delivered() -> Answer:
+        answer = get(signed)
         assert answer.status == 200, answer.status
         assert answer.header("Content-Type").startswith("image/"), answer.header("Content-Type")
         assert answer.header("Cache-Control") == "private, max-age=900"
-    assert second.header("X-Cache") == "Hit from cloudfront", second.header("X-Cache")
+        return answer
+
+    delivered()
+
+    def from_the_cache() -> None:
+        cache = delivered().header("X-Cache")
+        assert cache == "Hit from cloudfront", cache
+
+    eventually(from_the_cache, seconds=60, every=5)
 
 
 def test_t97_a_bad_or_missing_signature_is_refused(target: Target, sample: str) -> None:

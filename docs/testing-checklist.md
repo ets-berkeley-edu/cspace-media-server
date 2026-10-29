@@ -1598,13 +1598,19 @@ move, so personal-dev is deployed new: everything is created, nothing is moved. 
 Mac (`git switch <the branch> && git pull`), signed in (`aws sso login --profile bmu-personal`), with Chrome
 installed. Every command takes `--env personal-dev` (the default).
 
-- [ ] **1. Deploy.** `./serena aws deploy`. Expect a plan that only creates: nothing changed or destroyed. Type
+Checked by Richard on October 29, 2026, at commit `ee4e81a` (after the merge): steps 1 to 4. In the first run of step
+4, T96 failed ("Miss from cloudfront" on the repeat, minutes after the distribution was made; the code before the move
+did the same); it passed alone a few minutes later, and a second full run gave `16 passed`. T96 now tries the repeat
+for a minute.
+
+- [x] **1. Deploy.** `./serena aws deploy`. Expect a plan that only creates: nothing changed or destroyed. Type
   `yes`. It takes about 15 to 25 minutes (CloudFront) and ends with the address and the simulator's
   admin sign-in.
-- [ ] **2. Status.** `./serena aws status`: the state path ends in `serena/dev/`; web, worker and fakecspace
+- [x] **2. Status.** `./serena aws status`: the state path ends in `serena/dev/`; web, worker and fakecspace
   `running 1 of 1`; "Image delivery: on" with one signing key; the alert email as before.
-- [ ] **3. Nothing left to do.** `./serena aws plan`: "No changes."
-- [ ] **4. The AWS tests.** `./serena aws test`: `16 passed`. If T90 fails with "firing: serena-dev-web-down" just
-  after the deploy, wait 10 minutes and run it again.
+- [x] **3. Nothing left to do.** `./serena aws plan`: "No changes."
+- [x] **4. The AWS tests.** `./serena aws test`: `16 passed`. If T90 fails with "firing: serena-dev-web-down" just
+  after the deploy, wait 10 minutes and run it again; if it fails with "no confirmed alert email", run
+  `./serena aws confirm-alerts` first.
 - [ ] **5. Afterwards.** `./serena aws pause` to keep it, or `./serena aws destroy` (type `personal-dev`), then
   `./serena aws status`: "Not deployed".
