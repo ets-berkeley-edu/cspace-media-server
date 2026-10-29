@@ -1724,7 +1724,14 @@ their hashed names, with no CDN (D296).
     pipeline is built before stage 2, the first environment with real data, and proven there, so production's first
     deploy isn't the pipeline's first run (D269).
   - **personal-dev** and each developer's own account are unchanged: `./serena aws` from the developer's own
-    machine, the simulator and the fake ETL only (D182, D193, D277).
+    machine, the simulator and the fake ETL only (D182, D193, D277). A developer may deploy their own environments in
+    any AWS account they can sign in to: a UC Berkeley sandbox account for Serena development or their own (decided
+    October 29, 2026, EN2).
+  - **UC Berkeley data only in UC Berkeley accounts (decided October 29, 2026).** An environment with a real
+    CollectionSpace, production or QA (Lyrasis's QA tenants hold a copy of production's database), copies the
+    museums' files into its account, so it may run only in a UC Berkeley AWS account, never a personal one. Every
+    `./serena aws deploy` of such an environment says so and waits for the person deploying to type the account's
+    number; with the simulator it asks nothing.
   - **The deployer's permissions** (`deploy/iam/`). Stage 1 keeps its own policy. QA and production's allows only what
     the shared root builds: the internet-facing load balancer and its listeners, rules and target groups; ACM
     certificates; a regional web ACL and its logging; for the files, CloudFront distributions, origin access control,

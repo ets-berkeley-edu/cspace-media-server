@@ -44,7 +44,9 @@
 # ALERT_EMAIL (in NAME.local.conf, never committed) is where alerts and alarms are emailed (D201).
 # Terraform (deploy/terraform) creates everything; its state is in an S3 bucket in the same account, which the first
 # deploy creates. SERENA_AWS_YES=1 skips Terraform's "yes" prompt. Works with the macOS bash (3.2) and needs python3.
-# A deployed museum's CollectionSpace server never changes (check_museums). Modeled on the BMU's deploy/aws.sh.
+# A deployed museum's CollectionSpace server never changes (check_museums). Deploying one with a real CollectionSpace
+# asks the person deploying to confirm the account is UC Berkeley's (acknowledge_real_data). Modeled on the BMU's
+# deploy/aws.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -583,8 +585,24 @@ look() {
 
 app_url() { applied url; }  # empty while a first deploy hasn't finished
 
+# UC Berkeley's data stays in UC Berkeley's AWS accounts (decided October 29, 2026). An environment with a real
+# CollectionSpace (production or QA: Lyrasis's QA tenants hold a copy of production's database) copies the museums'
+# files into its account, so every deploy of one shows the rule and waits for the person deploying to type the
+# account's number. With the simulator, nothing is asked.
+acknowledge_real_data() {
+  [ "$SIMULATED_CSPACE" != true ] || return 0
+  local typed
+  echo
+  echo "WARNING: '$ENV' uses a real CollectionSpace: $(museum_names | tr '\n' ' ')"
+  echo "Serena copies UC Berkeley museum data (images, documents and their identifiers) into AWS account $ACCOUNT_ID."
+  echo "UC Berkeley data, from production or QA, is allowed only in a UC Berkeley AWS account, never in a personal one."
+  read -r -p "If $ACCOUNT_ID is a UC Berkeley account, type its number to go ahead: " typed
+  [ "$typed" = "$ACCOUNT_ID" ] || die "Stopped; nothing was deployed."
+  echo
+}
+
 deploy() {
-  load_env; check_account; ensure_allowlist; need_terraform
+  load_env; check_account; acknowledge_real_data; ensure_allowlist; need_terraform
   command -v docker >/dev/null || die "Docker isn't installed or isn't on the PATH."
   docker info >/dev/null 2>&1 || die "Docker isn't running. Start Docker Desktop and try again."
   ensure_state_bucket
