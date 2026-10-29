@@ -141,7 +141,8 @@ the next rotation, so the ETL or the portal can switch at its own pace.
 
 ## Diagrams
 
-The same Terraform (`deploy/terraform/app/`) builds every environment; the settings file decides which parts exist
+The same Terraform (`deploy/terraform/personal/`, with the shared modules in `deploy/terraform/modules/`; D302)
+builds every personal environment and stage 1; the settings file decides which parts exist
 and who can reach them. These two diagrams show the two kinds of environment, read from that Terraform. The table
 after them lists every difference.
 
@@ -315,7 +316,7 @@ The same Terraform builds every environment; only its settings differ.
 - **ECS (D188).** The app (1 vCPU, 2 GB, 50 GB of ephemeral storage for fetches) and the worker (0.5 vCPU, 1 GB),
   on ARM, from one image. A deploy replaces the app's tasks one by one, stops the old worker before the new one
   starts, and rolls back if they don't start.
-- **Data.** The nine tables (from `deploy/terraform/app/tables.json`, which `backend/serena/tables.py` generates),
+- **Data.** The nine tables (from `deploy/terraform/modules/core/tables.json`, which `backend/serena/tables.py` generates),
   one bucket per museum (versioned, encrypted with the KMS key, Intelligent-Tiering, no rule that deletes), one KMS
   key with yearly rotation, and the secrets: per museum, its CollectionSpace account, its ETL tokens and, with
   signed access, its portal signing key.
@@ -358,27 +359,28 @@ provides (service-linked roles, CloudFront verification on a new account). perso
   the images pushed in between.
 - **Versions.** Terraform 1.10 or later (CI uses 1.16.5) and the AWS provider 6.x, pinned by `.terraform.lock.hcl`
   in each folder for Macs and Linux.
-- **State** in `s3://serena-tfstate-<account>-<region>/serena/<env>/registry.tfstate` and `app.tfstate`, versioned
+- **State** in `s3://serena-tfstate-<account>-<region>/serena/<env>/registry.tfstate` and `personal.tfstate`, versioned
   and private, with a lock file beside it.
 - **One account only.** Each configuration refuses any account but the environment's. `./serena aws` ignores
   access keys left in the shell.
 - **Running Terraform yourself.** `./serena aws init`, then read-only commands such as
-  `AWS_PROFILE=bmu-personal terraform -chdir=deploy/terraform/app state list`. Use `./serena aws deploy` for changes.
+  `AWS_PROFILE=bmu-personal terraform -chdir=deploy/terraform/personal state list`. Use `./serena aws deploy` for changes.
 
 ## Checking the Terraform code
 
 CI's `terraform` job runs `terraform fmt -check`, `validate` for both configurations and `terraform test` (a
-simulated AWS provider: `deploy/terraform/app/tests/app.tftest.hcl`), with no AWS sign-in.
+simulated AWS provider: `deploy/terraform/personal/tests/personal.tftest.hcl`, which reads the modules' resources
+through their `test` outputs), with no AWS sign-in.
 `backend/tests/test_deploy.py` checks that the tables and the settings Terraform gives the app match the code. On
 your computer, use an empty Terraform folder, since one `./serena aws` initialized points at the state in S3:
 
 ```bash
-(cd deploy/terraform/app && export TF_DATA_DIR="$(mktemp -d)" &&
+(cd deploy/terraform/personal && export TF_DATA_DIR="$(mktemp -d)" &&
   terraform init -backend=false -lockfile=readonly && terraform validate && terraform test)
 ```
 
 After changing a `.tf` file: `terraform fmt -recursive deploy/terraform`. After changing a table:
-`cd backend && python -m serena.tables > ../deploy/terraform/app/tables.json`.
+`cd backend && python -m serena.tables > ../deploy/terraform/modules/core/tables.json`.
 
 ## Cost (personal-dev, rough us-west-2 prices)
 
@@ -421,4 +423,4 @@ WAF adds about $15 a month plus Bot Control's fee when it's on. Pause or destroy
 - **`destroy` stops at the VPC.** CloudFront removes its VPC origin's network interfaces in the background: run
   `./serena aws destroy` again a few minutes later.
 - **"Error acquiring the state lock".** An earlier run was interrupted. Check nothing else is running, then
-  `./serena aws init` and `AWS_PROFILE=<profile> terraform -chdir=deploy/terraform/app force-unlock <lock ID>`.
+  `./serena aws init` and `AWS_PROFILE=<profile> terraform -chdir=deploy/terraform/personal force-unlock <lock ID>`.

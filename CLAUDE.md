@@ -81,7 +81,7 @@ AWS (`deploy/README.md`): `./serena aws deploy | plan | status | logs | etl <mus
 cdn-key | confirm-alerts | destroy`
 (`deploy/aws.sh`, Terraform in `deploy/terraform/`, the production image `deploy/Dockerfile`). Richard runs every one.
 After changing a `.tf` file, `terraform fmt -recursive deploy/terraform`; after changing a table,
-`python -m serena.tables > ../deploy/terraform/app/tables.json` in `backend/` (`tests/test_deploy.py` checks both
+`python -m serena.tables > ../deploy/terraform/modules/core/tables.json` in `backend/` (`tests/test_deploy.py` checks both
 the tables and that every `SERENA_` setting Terraform gives the app is one it reads). CI's `terraform` job runs
 `fmt -check`, `validate` and `terraform test` with no AWS sign-in.
 

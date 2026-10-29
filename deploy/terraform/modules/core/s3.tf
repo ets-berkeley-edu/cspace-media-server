@@ -111,7 +111,7 @@ data "aws_iam_policy_document" "museum_bucket" {
     condition {
       test     = "StringEquals"
       variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.main.arn]
+      values   = [var.distribution_arn]
     }
   }
 }

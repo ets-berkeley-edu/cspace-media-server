@@ -1,11 +1,11 @@
 output "url" {
   description = "Serena's address."
-  value       = "https://${aws_cloudfront_distribution.main.domain_name}"
+  value       = "https://${module.files.domain_name}"
 }
 
 output "cluster_name" {
   description = "The ECS cluster; its services are web and worker (and fakecspace, with the simulator)."
-  value       = aws_ecs_cluster.main.name
+  value       = module.core.cluster_name
 }
 
 output "image_uri" {
@@ -29,13 +29,13 @@ output "museums" {
 }
 
 output "simulated_cspace" {
-  description = "Whether the environment runs the simulated CollectionSpace (devtools.tf)."
+  description = "Whether the environment runs the simulated CollectionSpace (../modules/simulator)."
   value       = var.simulated_cspace
 }
 
 output "simulator_url" {
   description = "The simulator's address inside the VPC; empty without it."
-  value       = var.simulated_cspace ? local.simulator_url : ""
+  value       = var.simulated_cspace ? module.simulator[0].url : ""
 }
 
 output "load_balancer_url" {
@@ -49,40 +49,32 @@ output "allowed_cidrs" {
 }
 
 output "buckets" {
-  value = local.buckets
+  value = module.core.buckets
 }
 
 output "secrets" {
   description = "The secrets ./serena aws sets: each museum's CollectionSpace account, ETL tokens and (where it has signed access) portal signing key."
-  value = {
-    cspace     = { for m, s in aws_secretsmanager_secret.cspace : m => s.name }
-    etl_tokens = { for m, s in aws_secretsmanager_secret.etl_tokens : m => s.name }
-    portal_key = { for m, s in aws_secretsmanager_secret.portal_key : m => s.name }
-  }
+  value       = module.core.secrets
 }
 
 output "fake_etl" {
   description = "What ./serena aws etl needs to run the fake ETL once: its task definition, subnets and security group."
-  value = var.simulated_cspace ? {
-    task_definition = aws_ecs_task_definition.fake_etl[0].family
-    subnets         = join(",", aws_subnet.public[*].id)
-    security_group  = aws_security_group.devtools[0].id
-  } : null
+  value       = var.simulated_cspace ? module.simulator[0].fake_etl : null
 }
 
 output "delivery" {
   description = "Whether the museums' files are delivered (a signing key exists, D200); false: requests get the unavailable image."
-  value       = local.delivery
+  value       = module.files.delivery
 }
 
 output "cdn_key_ids" {
   description = "The trusted CloudFront public keys, name => key ID (the secret's key_pair_id); ./serena aws cdn-key reads it."
-  value       = { for name, k in aws_cloudfront_public_key.cdn : name => k.id }
+  value       = module.files.cdn_key_ids
 }
 
 output "alert_topic_arn" {
   description = "The SNS topic for alerts and alarms (D201)."
-  value       = aws_sns_topic.alerts.arn
+  value       = module.core.alert_topic_arn
 }
 
 output "alert_email" {

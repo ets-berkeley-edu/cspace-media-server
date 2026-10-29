@@ -58,7 +58,7 @@ Written October 25, 2026. Schemes 1 to 6 exist; 7 and 8 are planned and not yet 
 | --- | --- |
 | `backend` | `ruff check`, `mypy`, `pytest` (the backend's unit and integration tests: the CollectionSpace simulator and moto in place of AWS) |
 | `admin` | Lint, type check and unit tests; the build includes Vuetify's styles |
-| `terraform` | `terraform fmt`; `validate` of the image repositories' and the app's configuration; `terraform test` with a mock provider (`deploy/terraform/app/tests/app.tftest.hcl`) |
+| `terraform` | `terraform fmt`; `validate` of the image repositories' configuration and the personal root; `terraform test` with a mock provider (`deploy/terraform/personal/tests/personal.tftest.hcl`) |
 | `stack` | Starts the Docker stack (`./serena up`), runs the smoke test, prints the logs if it failed |
 | `dependencies` | The requirements files match `pyproject.toml`; `pip-audit` finds no known vulnerability in the pinned packages |
 

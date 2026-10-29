@@ -1,8 +1,8 @@
-# Serena in AWS, one environment per state (D181-D194; docs/design.md, Infrastructure and operations): the app and the
-# worker on ECS Fargate, CloudFront (HTTPS, the path and address rules, and WAF where it's on) in front of an internal
-# load balancer, DynamoDB, an S3 bucket per museum, a KMS key and Secrets Manager; image delivery from the museums'
-# buckets with signed URLs (delivery.tf), and the alert topic and alarms (alerts.tf). Applied by ./serena aws deploy;
-# the images come from ../registry.
+# The personal root (D302): Serena in a developer's own account and in stage 1, one environment per state (D181-D194;
+# docs/design.md, Infrastructure and operations). CloudFront (HTTPS, the path and address rules, and WAF where it's on)
+# in front of an internal load balancer, in Serena's own VPC. Serena's own resources are in ../modules/core, the files
+# distribution (which here is the app's front door too) in ../modules/files, and the simulated CollectionSpace in
+# ../modules/simulator (main.tf). Applied by ./serena aws deploy; the images come from ../registry.
 #
 # Layout (D187): tasks run in public subnets with public IPs (no NAT gateway); nothing can reach them from outside,
 # because their security groups take traffic only from the load balancer. The load balancer is internal (private
@@ -63,9 +63,4 @@ locals {
   partition  = data.aws_partition.current.partition
   azs        = slice(data.aws_availability_zones.available.names, 0, 2)
   museums    = sort(keys(var.tenants))
-
-  # Each museum's configuration (backend/serena/museums/<museum>.yaml): which kinds it serves with a portal's
-  # signed link, so which museums get a portal signing key's secret (secrets.tf).
-  museum_config  = { for m in local.museums : m => yamldecode(file("${path.module}/../../../backend/serena/museums/${m}.yaml")) }
-  signed_museums = [for m in local.museums : m if length(try(local.museum_config[m].signed_access_kinds, [])) > 0]
 }

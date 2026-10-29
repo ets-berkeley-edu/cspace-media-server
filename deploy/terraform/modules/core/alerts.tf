@@ -85,7 +85,7 @@ resource "aws_cloudwatch_metric_alarm" "web_down" {
   alarm_description   = "No healthy Serena app task for 5 minutes: ./serena aws status and ./serena aws logs web."
   namespace           = "AWS/ApplicationELB"
   metric_name         = "HealthyHostCount"
-  dimensions          = { LoadBalancer = aws_lb.main.arn_suffix, TargetGroup = aws_lb_target_group.web.arn_suffix }
+  dimensions          = { LoadBalancer = var.load_balancer_arn_suffix, TargetGroup = var.target_group_arn_suffix }
   statistic           = "Minimum"
   period              = 60
   evaluation_periods  = 5
@@ -122,7 +122,7 @@ resource "aws_cloudwatch_metric_alarm" "web_errors" {
   alarm_description   = "Serena's app answered 5 or more requests with a 5xx in 5 minutes: ./serena aws logs web."
   namespace           = "AWS/ApplicationELB"
   metric_name         = "HTTPCode_Target_5XX_Count"
-  dimensions          = { LoadBalancer = aws_lb.main.arn_suffix, TargetGroup = aws_lb_target_group.web.arn_suffix }
+  dimensions          = { LoadBalancer = var.load_balancer_arn_suffix, TargetGroup = var.target_group_arn_suffix }
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 1
