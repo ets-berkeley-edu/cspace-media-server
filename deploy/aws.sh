@@ -491,7 +491,7 @@ cspace_secret() {  # cspace_secret MUSEUM
 }
 
 # With the simulator, deploy sets each museum's secrets once: the simulator's account (serena/serena, synthetic, in
-# backend/fakecspace/app.py), a random ETL token (the fake ETL reads it itself) and, for a museum with signed access,
+# the fakecspace package), a random ETL token (the fake ETL reads it itself) and, for a museum with signed access,
 # a random portal key. Nothing is shown.
 sim_secrets() {
   local museum

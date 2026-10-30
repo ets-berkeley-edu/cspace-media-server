@@ -16,8 +16,8 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError, EndpointConnectionError
+from fakecspace.accounts import USERS
 
-from fakecspace.app import USERS
 from serena.config import Settings, get_settings
 from serena.museum import load_all
 
@@ -45,7 +45,7 @@ def seed(settings: Settings, s3: Any, secretsmanager: Any) -> dict[str, list[str
         except ClientError as error:
             if error.response.get("Error", {}).get("Code") not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
                 raise
-    login = next(iter(USERS.items()))  # the simulator's synthetic account
+    login = ("serena", USERS["serena"])  # the simulator's synthetic read-only account for Serena
     for tenant in sorted(museums):
         if tenant in settings.etl_token_secret_ids and _create_secret(
                 secretsmanager, settings.etl_token_secret_ids[tenant],

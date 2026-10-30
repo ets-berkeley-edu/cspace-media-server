@@ -85,7 +85,7 @@ door until the shared root's test is added (D298).
 ## 2. The local stack
 
 **What:** everything on a Mac in Docker: Serena's web and worker, the admin app, the CollectionSpace simulator
-(`backend/fakecspace`, synthetic records for every museum) and moto in place of AWS. No accounts, keys or network
+(the `fakecspace` package, synthetic records for each museum in its own store) and moto in place of AWS. No accounts, keys or network
 access to AWS or CollectionSpace.
 
 **Setup, once:** Docker Desktop and `git`; for the browser tests, also Python 3.11 and Chrome.

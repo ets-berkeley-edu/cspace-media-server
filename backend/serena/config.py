@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     cspace_connect_timeout_seconds: float = 5.0
     cspace_read_timeout_seconds: float = 60.0  # between bytes, not for a whole file
     cspace_retries: int = 2  # for transient failures only: no answer, 429, 502, 503, 504
-    # Every museum's CollectionSpace is the simulator (backend/fakecspace): the local stack, or an AWS environment
+    # Every museum's CollectionSpace is the simulator (the fakecspace package): the local stack, or an AWS environment
     # with simulated_cspace. The admin app's Manual refresh then offers an ETL list made from the simulator's records.
     # Allowed only when every museum's server is a simulator's address (a host name with the label fakecspace, or one
     # under the reserved .test domain the tests use), so never with a real CollectionSpace.

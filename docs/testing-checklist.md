@@ -1709,3 +1709,15 @@ With `./serena up` (rebuilt: `SERENA_SIMULATED_CSPACE` is new) and `./serena etl
 - [ ] **5. Not elsewhere.** In personal-dev without the simulator, or in stage 2, the choice isn't there (the app's and
   backend's tests cover the 404 and the refused setting).
 
+
+## 52. The simulator from the fakecspace package, on the local stack (10 minutes; before merging the pull request that adds it)
+
+What it checks: the local stack runs the shared simulator (fakecspace 0.2.0 from PyPI, F15 step 2) in place of
+`backend/fakecspace`, with one store per museum. Rebuild first: `./serena down`, then `./serena up`.
+
+- [ ] **1. It starts.** `./serena logs fakecspace` shows Uvicorn on port 8180; Overview loads for PAHMA.
+- [ ] **2. Each museum's records.** `./serena etl pahma` and `./serena etl cinefiles`: both refreshes are Updated, and
+  a PAHMA image and a CineFiles PDF from Media look up open.
+- [ ] **3. Make one from the simulator** (section 51) for CineFiles: its rows are CineFiles' records only (the
+  restricted PDFs listed as restricted), none of PAHMA's.
+- [ ] **4. Sign in** as `admin`, `pahma-admin` and `viewer` as before (the simulator's accounts are the package's).

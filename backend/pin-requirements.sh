@@ -23,6 +23,8 @@ fi
 options=(--quiet --generate-hashes --allow-unsafe --strip-extras)
 # The app and the worker, with setuptools to build Serena itself (so nothing unpinned is installed).
 pip-compile "${options[@]}" "$@" -o requirements.txt requirements.in
+# The simulator (fakecspace) for the local stack's image and the tests: constrained to the app's pins.
+pip-compile "${options[@]}" "$@" -o requirements-sim.txt requirements-sim.in
 # The tests and checks: the app's pins (requirements-dev.in constrains to requirements.txt) plus pytest, moto, ruff, mypy.
 pip-compile "${options[@]}" "$@" -o requirements-dev.txt requirements-dev.in
 # pip-tools and pip-audit, in their own file so they never change the app's or the tests' versions.

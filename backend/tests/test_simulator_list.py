@@ -6,12 +6,12 @@ from typing import Any, cast
 import pytest
 from conftest import TENANTS
 from etl_helpers import OLD_PAHMA, TOKENS
+from fakecspace.app import ADMINS
+from fakecspace.app import app as fake_app
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from test_admin_refreshes import CHANGES, refresh_of
 
-from fakecspace.app import ADMINS
-from fakecspace.app import app as fake_app
 from serena import museum
 from serena.app import create_app
 from serena.config import Settings, simulator_url
@@ -78,13 +78,13 @@ def test_simulated_cspace_is_refused_with_a_real_collectionspace() -> None:
 def test_the_simulator_keeps_each_records_museum_and_access() -> None:
     pdf = add("cinefiles", kind="pdf", access="restricted")
     named = add("pahma", museum="ucjeps")  # the body's museum wins over the host name
-    listed = TestClient(fake_app, base_url=TENANTS["cinefiles"]).get("/_fake/records").json()
+    listed = TestClient(fake_app, base_url=TENANTS["cinefiles"]).get("/_fake/media").json()
     mine = next(r for r in listed if r["csid"] == pdf["csid"])
-    assert (mine["kind"], mine["access"], mine["has_file"]) == ("pdf", "restricted", True)
+    assert (mine["kind"], mine["access"], "content" in mine["files"]) == ("pdf", "restricted", True)
     assert named["csid"] in {r["csid"] for r in TestClient(fake_app, base_url=TENANTS["ucjeps"]).get(
-        "/_fake/records").json()}
+        "/_fake/media").json()}
     assert named["csid"] not in {r["csid"] for r in TestClient(fake_app, base_url=TENANTS["pahma"]).get(
-        "/_fake/records").json()}
+        "/_fake/media").json()}
     bad = TestClient(fake_app).post("/_fake/media", json={"csid": csid(), "access": "secret"})
     assert bad.status_code == 400
 

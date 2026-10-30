@@ -15,7 +15,7 @@ import httpx
 from .museum import Museum
 from .servable_list import ACCESS, HEADER, KINDS
 
-RECORDS_PATH = "/_fake/records"
+RECORDS_PATH = "/_fake/media"  # the simulator's list of a museum's Media records (fakecspace 0.2.0)
 
 
 class SimulatorUnavailable(Exception):
@@ -34,9 +34,9 @@ def listed(record: dict[str, Any]) -> str | None:
     Blob, not soft-deleted, approved for web (PAHMA's), of a kind and access the servable list takes."""
     if record.get("state") == "deleted":
         return "soft-deleted"
-    if not record.get("blob") or not record.get("has_file"):
+    if not record.get("blobCsid") or "content" not in record.get("files", []):
         return "no file"
-    if not record.get("approved_for_web", True):
+    if not record.get("approvedForWeb", True):
         return "not approved for web"
     if record.get("kind") not in KINDS or record.get("access") not in ACCESS:
         return "a kind or access the ETL list doesn't take"
@@ -51,14 +51,14 @@ def make_list(records: list[dict[str, Any]], museum: Museum) -> SimulatorList:
     left_out: dict[str, int] = {}
     for record in records:
         why = listed(record)
-        if why is None and record["blob"] in seen:
+        if why is None and record["blobCsid"] in seen:
             why = "a Blob listed already"
         if why is not None:
             left_out[why] = left_out.get(why, 0) + 1
             continue
-        seen.add(record["blob"])
-        media = "" if record["blob"] == museum.placeholder_blob_csid else record["csid"]
-        rows.append("\t".join((record["blob"], media, record["kind"], record["access"])))
+        seen.add(record["blobCsid"])
+        media = "" if record["blobCsid"] == museum.placeholder_blob_csid else record["csid"]
+        rows.append("\t".join((record["blobCsid"], media, record["kind"], record["access"])))
     return SimulatorList(HEADER + "\n" + "".join(row + "\n" for row in rows), len(rows), left_out)
 
 

@@ -4,7 +4,7 @@
 #
 # The simulator: one task with its data in memory (a pause, deploy or restart starts it empty, while Serena's tables
 # keep theirs). Serena finds it by name through a private DNS namespace (Cloud Map), each museum under its own path
-# (http://fakecspace.serena-<env>.internal:8180/<museum>; backend/fakecspace/app.py, MuseumPrefix). Only the app, the
+# (http://fakecspace.serena-<env>.internal:8180/<museum>; the fakecspace package, MuseumPrefix). Only the app, the
 # worker and the fake ETL can connect to it.
 #
 # The fake ETL: a task definition with no service. ./serena aws etl <museum> runs it once, inside the VPC: it adds the

@@ -31,7 +31,7 @@ COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY backend/pyproject.toml ./
 COPY backend/serena ./serena
-# Not backend/fakecspace or backend/devtools: the simulator and the local tools never go in this image.
+# Not the simulator (requirements-sim.txt) or backend/devtools: the simulator and the local tools never go in this image.
 # Serena itself downloads nothing: its dependencies and setuptools came from requirements.txt.
 RUN pip install --no-cache-dir --no-deps --no-build-isolation . && useradd -r -u 10001 serena
 COPY --from=admin /src/dist ./admin

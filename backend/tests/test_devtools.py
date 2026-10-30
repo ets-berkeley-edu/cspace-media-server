@@ -3,13 +3,13 @@ from typing import Any
 
 import pytest
 from conftest import TENANTS
+from fakecspace import bands
+from fakecspace.app import app as fake_app
+from fakecspace.app import stores
 from fastapi.testclient import TestClient
 
 from devtools import fake_etl
 from devtools.seed import seed
-from fakecspace import bands
-from fakecspace.app import app as fake_app
-from fakecspace.app import store as fake
 from serena import museum
 from serena.app import create_app
 from serena.config import Settings
@@ -21,9 +21,9 @@ from serena.worker import Worker, WorkerServices
 
 @pytest.fixture(autouse=True)
 def reset_fake() -> Any:
-    fake.reset()
+    stores.reset()
     yield
-    fake.reset()
+    stores.reset()
 
 
 def local_settings() -> Settings:
@@ -157,7 +157,7 @@ def test_file_only_prints_the_days_file_for_the_upload_page(monkeypatch: pytest.
     fake_etl.main()
     assert capsysbinary.readouterr().out == fake_etl.tsv(fake_etl.rows("bampfa", 3))
     media = fake_etl.rows("bampfa", 3)[0][1]
-    assert media in fake.media  # added to the simulator, so its files can be fetched
+    assert media in stores["bampfa"].media  # added to the museum's simulator, so its files can be fetched
 
 
 # --- an AWS environment with the simulated CollectionSpace (deploy/README.md) -------------------------------------
@@ -190,7 +190,7 @@ def test_the_simulator_tells_museums_apart_by_path_prefix() -> None:
     roles = client.get("/ucjeps/cspace-services/accounts/0/accountroles", auth=("pahma-admin", "pahma-admin")).text
     assert "<tenantId>15</tenantId>" in roles and "SERENA_ADMIN" not in roles
     # The development hooks and the Media service work under a museum's prefix too.
-    assert client.post("/_fake/media", json={"csid": "m-1", "blob": "b-1"}).status_code == 200
+    assert client.post("/bampfa/_fake/media", json={"csid": "m-1", "blob": "b-1"}).status_code == 200
     assert client.get("/bampfa/cspace-services/media/m-1", auth=("serena", "serena")).status_code == 200
 
 

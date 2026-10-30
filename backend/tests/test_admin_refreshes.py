@@ -7,11 +7,11 @@ import pytest
 from botocore.exceptions import ClientError
 from conftest import TENANTS
 from etl_helpers import OLD_PAHMA, TOKENS, auth, start
+from fakecspace.app import ADMINS
+from fakecspace.app import app as fake_app
 from fastapi.testclient import TestClient
 from test_worker import file_of, upload
 
-from fakecspace.app import ADMINS
-from fakecspace.app import app as fake_app
 from serena import museum, tables
 from serena import servability_update as updating
 from serena.alerts import Alert, Alerts, Kind

@@ -43,7 +43,7 @@ from pathlib import Path
 # The fake ETL's synthetic CSIDs (backend/devtools/fake_etl.py: NAMESPACE and csid). backend/tests/test_replay.py
 # checks they stay the same.
 NAMESPACE = uuid.UUID("3f6b0c55-2c4e-4f6e-9d4b-6a1c0b6e5a10")
-# The simulator's size bands, smallest first (backend/fakecspace/bands.py: ORIGINALS).
+# The simulator's size bands, smallest first (the fakecspace package: fakecspace.bands.ORIGINALS).
 BANDS = (("100KB", 100_000), ("1MB", 1_000_000), ("5MB", 5_000_000), ("20MB", 20_000_000), ("100MB", 100_000_000))
 MAX_RECORDS = 50_000  # the most records the fake ETL is asked for (D281)
 # Requests for the file itself: their size decides a record's band. The other derivatives have fixed sizes.
