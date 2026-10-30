@@ -1,6 +1,6 @@
 # CloudFront in front of the internal load balancer (D183): the files distribution (../modules/files) takes the app
-# through this VPC origin, and runs this function, the path and address rules (D185), on every request. WAF is in
-# waf.tf (D186). A domain later is an alternate name and an ACM certificate on the distribution.
+# through this VPC origin, and runs this function, the path and address rules (D185), on every request. WAF is the
+# waf module (main.tf, D186). A domain later is an alternate name and an ACM certificate on the distribution.
 
 resource "aws_cloudfront_vpc_origin" "alb" {
   vpc_origin_endpoint_config {

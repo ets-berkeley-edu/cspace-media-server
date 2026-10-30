@@ -124,6 +124,12 @@ jobs:
           terraform init -backend=false -lockfile=readonly
           terraform validate
           terraform test
+      - name: Validate and test the shared root (QA and production, the split; D298)
+        working-directory: deploy/terraform/shared
+        run: |
+          terraform init -backend=false -lockfile=readonly
+          terraform validate
+          terraform test
   stack:
     # The local stack (docker-compose.yml, ./serena): builds the image, starts the stack, runs a whole daily refresh for PAHMA
     # through the fake ETL, then fetches, stores and serves one of its images. Not a required check.

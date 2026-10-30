@@ -85,8 +85,8 @@ resource "aws_vpc_security_group_ingress_rule" "alb_from_fake_etl" {
   description                  = "The fake ETL, inside the VPC"
   referenced_security_group_id = aws_security_group.devtools.id
   ip_protocol                  = "tcp"
-  from_port                    = 80
-  to_port                      = 80
+  from_port                    = var.alb_port
+  to_port                      = var.alb_port
 }
 
 resource "aws_cloudwatch_log_group" "devtools" {

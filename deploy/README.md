@@ -144,9 +144,25 @@ the next rotation, so the ETL or the portal can switch at its own pace.
   real data.
 - Never with `PROTECT_DATA=true`.
 
+## A shared environment (stage 2, QA, production)
+
+`TERRAFORM_ROOT=shared` in the environment's settings (`deploy/environments/ucb-stage2.conf`). Its `.local.conf` holds
+what Ops and DevOps provide: `VPC_ID`, `APP_SUBNET_IDS` (private, behind the NAT gateway), `LB_SUBNET_IDS` (public),
+`CREATE_GATEWAY_ENDPOINTS`, `DOMAIN_NAME`, `APACHE_CIDRS`, `ETL_CIDRS` and `ADMIN_CIDRS` (D303, D293, D290, D291).
+
+1. `./serena aws deploy` makes the image repositories and the certificate for `DOMAIN_NAME`, prints the certificate's
+   DNS validation record and stops (TQ4). DevOps adds the record in campus DNS once; ACM renews the certificate after.
+2. Once the certificate is issued, `./serena aws deploy` builds the rest and prints the load balancer's own name:
+   DevOps points `DOMAIN_NAME` at it.
+3. With the simulator, the fake ETL calls the campus name from the private subnets, so its calls come from the NAT
+   gateway's outbound address: list it in `ETL_CIDRS`.
+
+`./serena aws deploy` refuses a shared environment with a real CollectionSpace: the pipeline deploys it (D268). As a
+break-glass deploy (D276) it goes ahead once you type "break glass" and then the account's number.
+
 ## Diagrams
 
-The same Terraform (`deploy/terraform/personal/`, with the shared modules in `deploy/terraform/modules/`; D302)
+The personal root (`deploy/terraform/personal/`, with the shared modules in `deploy/terraform/modules/`; D302)
 builds every personal environment and stage 1; the settings file decides which parts exist
 and who can reach them. These two diagrams show the two kinds of environment, read from that Terraform. The table
 after them lists every difference.
@@ -290,20 +306,23 @@ reads the museum's bucket directly, and the worker never calls CollectionSpace. 
 
 ### What differs between environments
 
-The same Terraform builds every environment; only its settings differ.
+personal-dev and stage 1 are built by the personal root, stage 2 (the first build of the shared QA environment, EN1)
+and production by the shared root (D302); within a root, only the settings differ.
 
-| | personal-dev | UC Berkeley, stage 1 (CS-9523) | UC Berkeley, stage 2: pre-production |
+| | personal-dev | UC Berkeley, stage 1 (CS-9523) | UC Berkeley, stage 2: shared QA |
 | --- | --- | --- | --- |
-| AWS account | Richard's personal account, beside the BMU's personal-dev | UC Berkeley test account | To decide: production, or another account not shared with test workloads |
-| CollectionSpace | The simulator (`SIMULATED_CSPACE=true`) | The simulator | PAHMA's production tenant, read-only account (`SIMULATED_CSPACE=false`) |
-| ETL | Fake ETL (`./serena aws etl`) | Fake ETL | The production ETL (Jira CSW-1027); no fake ETL |
-| WAF (`WAF`) | Off | Off | On |
-| Data protection (`PROTECT_DATA`) | Off: throwaway | Off: destroyed when stage 1 passes | On |
+| Terraform (`TERRAFORM_ROOT`) | personal | personal | shared |
+| AWS account | Richard's personal account, beside the BMU's personal-dev | UC Berkeley test account | UC Berkeley account, in Ops's VPC (D303) |
+| Front door | CloudFront in front of an internal load balancer | The same | A public load balancer on a campus name (D293, HTTPS only); CloudFront for the files only |
+| CollectionSpace | The simulator (`SIMULATED_CSPACE=true`) | The simulator | First the simulator museum only (D300); then PAHMA's QA records |
+| ETL | Fake ETL (`./serena aws etl`) | Fake ETL | Fake ETL for the simulator museum; then the ETL (Jira CSW-1027) |
+| WAF (`WAF`) | Off | Off | On, on the load balancer (D292, D306) |
+| Data protection (`PROTECT_DATA`) | Off: throwaway | Off: destroyed when stage 1 passes | Off with the simulator only; on with real data |
 | App tasks (`WEB_COUNT`) | 1 | 2 | 2 (D188) |
-| Who can reach it | Richard's addresses (`ALLOWED_CIDRS`) | Campus networks and the VPN | Campus networks and the VPN, and the ETL server for `/etl/` (`ETL_CIDRS`); everyone for files once a museum's paths are routed to it (`OPEN_IMAGES=true`) |
+| Who can reach it | Richard's addresses (`ALLOWED_CIDRS`) | Campus networks and the VPN | The Apache hosts (`APACHE_CIDRS`), the ETL servers for `/etl/` (`ETL_CIDRS`), campus and VPN for `/admin` (`ADMIN_CIDRS`); all of them for the image paths (TQ6) |
 | Alerts (`ALERT_EMAIL`) | Richard | Richard | The team's mailing list |
-| Settings | `deploy/environments/personal-dev.conf` and `.local.conf` | `deploy/environments/ucb-stage1.conf` and `.local.conf` (`--env ucb-stage1`) | SSM Parameter Store in the account (D273) |
-| Deployed by | `./serena aws` from Richard's Mac | `./serena aws`, no pipeline (D269) | The deploy pipeline, after a reviewer approves the plan (D268 to D272); secrets set by an admin with `./serena aws` (D274) |
+| Settings | `deploy/environments/personal-dev.conf` and `.local.conf` | `deploy/environments/ucb-stage1.conf` and `.local.conf` (`--env ucb-stage1`) | `deploy/environments/ucb-stage2.conf` and `.local.conf` (`--env ucb-stage2`); SSM Parameter Store with the pipeline (D273) |
+| Deployed by | `./serena aws` from Richard's Mac | `./serena aws`, no pipeline (D269) | `./serena aws` while it uses only the simulator; then the deploy pipeline (D268 to D272), or a break-glass deploy (D276) |
 
 ## What it creates
 

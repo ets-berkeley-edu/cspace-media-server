@@ -55,7 +55,46 @@ module "files" {
     vpc_origin_id       = aws_cloudfront_vpc_origin.alb.id
     origin_read_timeout = var.origin_read_timeout
   }
-  web_acl_arn = var.waf ? aws_wafv2_web_acl.main[0].arn : null
+  web_acl_arn = var.waf ? module.waf[0].web_acl_arn : null
+}
+
+# WAF on the distribution, where it's switched on (D186): CLOUDFRONT scope, so in us-east-1.
+module "waf" {
+  source = "../modules/waf"
+  count  = var.waf ? 1 : 0
+
+  providers = {
+    aws = aws.us_east_1
+  }
+
+  name               = local.name
+  account_id         = local.account_id
+  partition          = local.partition
+  scope              = "CLOUDFRONT"
+  rate_limit         = var.waf_rate_limit
+  log_retention_days = var.log_retention_days
+}
+
+# The WAF resources were in this root (waf.tf) until the shared root needed them too. personal-dev has WAF off, so
+# these move nothing there.
+moved {
+  from = aws_wafv2_web_acl.main[0]
+  to   = module.waf[0].aws_wafv2_web_acl.main
+}
+
+moved {
+  from = aws_cloudwatch_log_group.waf[0]
+  to   = module.waf[0].aws_cloudwatch_log_group.waf
+}
+
+moved {
+  from = aws_cloudwatch_log_resource_policy.waf[0]
+  to   = module.waf[0].aws_cloudwatch_log_resource_policy.waf
+}
+
+moved {
+  from = aws_wafv2_web_acl_logging_configuration.main[0]
+  to   = module.waf[0].aws_wafv2_web_acl_logging_configuration.main
 }
 
 module "simulator" {

@@ -1,5 +1,6 @@
-# Serena's container image repositories (D190). Their own configuration (and state), so an image can be pushed before
-# the app configuration (../app) starts tasks that run it. Applied by ./serena aws deploy.
+# Serena's container image repositories (D190), and for an environment on the shared root its load balancer's
+# certificate (D294). Their own configuration (and state), applied first by ./serena aws deploy, so an image can be
+# pushed, and the certificate validated, before the root (../personal or ../shared) starts tasks that use them.
 
 terraform {
   required_version = ">= 1.10"
@@ -115,6 +116,30 @@ resource "aws_ecr_lifecycle_policy" "devtools" {
       action       = { type = "expire" }
     }]
   })
+}
+
+variable "domain_name" {
+  description = "The campus name of an environment on the shared root (D293), for its ACM certificate; empty: none."
+  type        = string
+  default     = ""
+}
+
+# DNS-validated (D294): DevOps adds the validation record in campus DNS once, and ACM renews the certificate itself.
+# ./serena aws deploy prints the record and stops before the shared root while the certificate isn't issued, so a
+# deploy never waits on someone else's step (TQ4). The private key never leaves AWS.
+resource "aws_acm_certificate" "app" {
+  count             = var.domain_name == "" ? 0 : 1
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+output "certificate_arn" {
+  description = "The load balancer's certificate; empty without a domain."
+  value       = var.domain_name == "" ? "" : aws_acm_certificate.app[0].arn
 }
 
 output "repository_url" {

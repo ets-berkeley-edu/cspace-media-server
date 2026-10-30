@@ -81,7 +81,7 @@ run "names_and_sizes" {
   }
 
   assert {
-    condition     = length(aws_wafv2_web_acl.main) == 0
+    condition     = length(module.waf) == 0
     error_message = "WAF is off by default."
   }
 
@@ -221,5 +221,18 @@ run "protected" {
   assert {
     condition     = module.core.test.tables["servability"].deletion_protection && !module.core.test.bucket_force_destroy["pahma"]
     error_message = "protect_data turns on deletion protection and keeps the buckets from being emptied."
+  }
+}
+
+run "waf" {
+  command = plan
+
+  variables {
+    waf = true
+  }
+
+  assert {
+    condition     = module.waf[0].test.scope == "CLOUDFRONT" && contains(module.waf[0].test.rule_names, "rate-limit-per-address") && !contains(module.waf[0].test.rule_names, "rate-limit-per-visitor-through-apache")
+    error_message = "WAF on the distribution (D186), one rate rule by source address."
   }
 }

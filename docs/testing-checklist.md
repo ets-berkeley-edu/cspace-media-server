@@ -1629,3 +1629,18 @@ the Mac, signed in (`aws sso login --profile bmu-personal`).
   "Stopped". (Typing the right number would deploy, which must not happen in a personal account.)
 - [ ] **3. The simulator asks nothing.** `./serena aws plan --env personal-dev` and, if you're deploying anyway,
   `./serena aws deploy --env personal-dev`: no warning.
+
+## 49. The shared root, before stage 2 (10 minutes; before merging the pull request that adds it)
+
+What it checks: the shared root for QA and production (D302, decisions TQ1 to TQ9) leaves the personal root as it
+was, and `./serena aws` knows a shared environment. Stage 2 itself is checked in its own section, once Ops and DevOps
+have given its VPC, subnets, domain and addresses (pull request 2b). From this pull request's branch on the Mac,
+signed in (`aws sso login --profile bmu-personal`).
+
+- [ ] **1. personal-dev unchanged.** `./serena aws plan --env personal-dev` (deployed or paused): "No changes." (The
+  WAF moved into a module, with `moved` blocks; personal-dev has WAF off.)
+- [ ] **2. A shared environment needs its settings.** `./serena aws status --env ucb-stage2`, with no
+  `ucb-stage2.local.conf`: "'ucb-stage2' is on the shared root: set VPC_ID in deploy/environments/ucb-stage2.local.conf".
+- [ ] **3. allow-my-ip is for the personal root.** With dummy values in `ucb-stage2.local.conf` (`VPC_ID=vpc-0`,
+  `APP_SUBNET_IDS=a,b`, `LB_SUBNET_IDS=c,d`, `DOMAIN_NAME=example.edu`), `./serena aws allow-my-ip --env ucb-stage2`:
+  "'ucb-stage2' is on the shared root: its addresses are ADMIN_CIDRS …". Then delete `ucb-stage2.local.conf`.
