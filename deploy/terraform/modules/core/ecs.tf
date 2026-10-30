@@ -34,6 +34,8 @@ locals {
     SERENA_ETL_TOKEN_SECRET_IDS   = jsonencode({ for m, s in aws_secretsmanager_secret.etl_tokens : m => s.name })
     SERENA_CSPACE_SECRET_IDS      = jsonencode({ for m, s in aws_secretsmanager_secret.cspace : m => s.name })
     SERENA_SIGNING_KEY_SECRET_IDS = jsonencode({ for m, s in aws_secretsmanager_secret.portal_key : m => s.name })
+    # Every museum's server is the simulator: the admin app's Manual refresh offers an ETL list made from it.
+    SERENA_SIMULATED_CSPACE = tostring(var.simulated_cspace)
   }
   # The Past requests page queries the app's own log group (D110). The unavailable images are always CloudFront's
   # (D199); the museums' files once there is a signing key (D200). The worker emails the alerts (D201).

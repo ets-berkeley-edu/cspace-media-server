@@ -29,7 +29,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from . import servable_list_check as checking
-from . import uploads
+from . import simulator, uploads
 from .admin_api import SignedIn, changes, services
 from .alerts import Alert, Alerts, Kind
 from .audit import Action
@@ -378,6 +378,26 @@ def create_router() -> APIRouter:
                            "uploaded_at": refresh.upload.uploaded_at}
                           for refresh in r.refreshes.etl_lists(session.tenant) if refresh.upload is not None]}
 
+    @router.get("/simulator/servable-list")
+    def simulator_list(session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
+        """Manual refresh's "Make one from the simulator" (serena-fakecspace-questions F12): an ETL list of the
+        simulator's records for the museum, as the ETL would list them. Only where every museum's server is the
+        simulator. Nothing is stored: the page sends it back as an uploaded list for its dry run and Apply."""
+        admin = services(request)
+        if not admin.settings.simulated_cspace:
+            raise HTTPException(404, "Not found")
+        museum = admin.museums[session.tenant]
+        try:
+            found = simulator.records(admin.http(session.tenant), admin.settings.tenants[session.tenant])
+        except simulator.SimulatorUnavailable as error:
+            log.warning("simulator list: simulator unavailable", extra={"museum": session.tenant, "error": str(error)})
+            raise HTTPException(503, "The CollectionSpace simulator didn't answer. Is it running?") from None
+        made = simulator.make_list(found, museum)
+        now = r.refreshes.now()
+        stamp = re.sub(r"[^0-9T]", "", now)[:15]
+        return {"file_name": f"simulator-{session.tenant}-{stamp}.tsv", "rows": made.rows, "records": len(found),
+                "left_out": made.left_out, "made_at": now, "tsv": made.tsv}
+
     @router.post("/servable-lists/{refresh_id}/dry-run", dependencies=[Depends(changes)])
     def dry_run_of_list(refresh_id: str, session: SignedIn, r: Refreshes_, request: Request) -> dict[str, Any]:
         """Manual refresh's dry run of one of the ETL's recent lists (mockup version 55): nothing is stored, nothing
@@ -461,7 +481,10 @@ def create_router() -> APIRouter:
         one the admin was shown), starts a manual refresh with the list, and the worker checks and, on a pass,
         applies it. With X-Override-Kind, the delta threshold is overridden for it."""
         admin = services(request)
-        if x_live_core_confirmed != "yes":
+        # A list made from the simulator stands in for the live public core where every museum's server is the
+        # simulator ("Make one from the simulator").
+        from_simulator = x_live_core_confirmed == "simulator" and admin.settings.simulated_cspace
+        if x_live_core_confirmed != "yes" and not from_simulator:
             raise HTTPException(422, "Confirm that the ETL list was made from the live public core.")
         reason = _clean(unquote(x_reason))  # sent URL-encoded: a header carries only ASCII
         if not reason or len(reason) > 500:
@@ -490,7 +513,7 @@ def create_router() -> APIRouter:
             key = f"servable-list/{refresh.refresh_id}/{refresh.file_name}.gz"
             await asyncio.to_thread(uploads.store, r.s3, bucket, key, received)
             name = FILE_NAME.sub("", os.path.basename(unquote(x_file_name)))[:120] or "the ETL list"
-            note = (f"manual refresh with the ETL list {name}"
+            note = (f"manual refresh with the ETL list {name}" + (" made from the simulator" if from_simulator else "")
                     + (f", for the refresh date {refresh_date}" if refresh_date else "") + f": {reason}")
             try:
                 refresh = r.refreshes.transition(refresh, State.RECEIVED, reason=note, reason_kind=ReasonKind.ADMIN,

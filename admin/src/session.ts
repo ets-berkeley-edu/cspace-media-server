@@ -8,6 +8,7 @@ import {api} from '@/api'
 export const session = reactive({
   environment: '',
   build: '',
+  simulated: false, // every museum's server is the CollectionSpace simulator
   signedIn: [] as SignedIn[],
   loaded: false
 })
@@ -16,6 +17,7 @@ export async function refresh(): Promise<void> {
   const me = await api.me()
   session.environment = me.environment
   session.build = me.build || ''
+  session.simulated = !!me.simulated_cspace
   session.signedIn = me.sessions
   session.loaded = true
 }

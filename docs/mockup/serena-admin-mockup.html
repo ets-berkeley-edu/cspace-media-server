@@ -397,6 +397,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 57 (October 29, 2026; in the app's pull request; serena-fakecspace-questions F12):</strong> <strong>Make one from the simulator.</strong> Where every museum's CollectionSpace is the simulator (the local stack, or an AWS environment with the simulator; Serena's setting <code>SERENA_SIMULATED_CSPACE</code>, refused with a real CollectionSpace), Manual refresh's <strong>Replace with:</strong> has a third choice, <strong>Make one from the simulator</strong>. There's no ETL job there, so the bottom card, <strong>Make an ETL list from the simulator</strong>, has a <strong>Make the ETL list</strong> button: Serena lists the museum's Media records in the simulator as the ETL would (each with a file that isn't soft-deleted and, for PAHMA, is approved for web, including records the BMU added), and says how many rows came from how many records and why the rest weren't listed. Then it's checked and applied as any other ETL list: the dry run, then Apply refresh. It has no live public core checkbox and no refresh date; the refresh's reasons and the summary say it was made from the simulator. What's applied is the list the dry run checked; <strong>Make it again</strong> makes a new one (and drops the dry run). Elsewhere the choice doesn't appear. <strong>Mockup only:</strong> the dashed bar's <strong>Simulated CollectionSpace</strong> turns the choice on.</li>
       <li><strong>Version 56 (October 28, 2026; for review):</strong> <strong>Mockup settings</strong>' "Today's refresh" has <strong>ETL list update failed: partly replaced</strong>: tonight's refresh failed its ETL list update, and the mockup opens <strong>Overview</strong>, where the current refresh is flagged partly replaced beside the pending refresh that needs an admin. It's the same pending refresh as "update failed" in Manual refresh's dashed bar, and the two stay in step. <strong>A failed update's page has "Retry the ETL list update"</strong>, as the app has (there "Retry the servability update"): a reason, then Serena runs the update again at once, doing only what's left (here, Applying the ETL list for 4 seconds, then Updated, and the current refresh is no longer partly replaced). Audited as "update retry". The words above the steps say "below" on the refresh's own page, and "on its page" on Overview. <strong>When someone else got there first</strong> (Richard, October 28, 2026): a dashed bar under the button chooses what happens when you retry: it works, another admin retried it first, or another admin applied an ETL list first. In the last two, Serena changes nothing (its 409) and records nothing of yours; the page says what happened in red above the steps ("Not retried: pahma-admin retried it first, and Serena is applying the ETL list now.", or "…applied an ETL list first, and their manual refresh pahma-2026-10-13-2 replaced this one.") and shows the refresh as it now is, with no Retry button. <strong>For the app:</strong> after a 409 the page reloads the refresh (today it keeps the old one, button and all), and the admin API's 409 says who or what got there first.</li>
       <li><strong>Version 55 (October 28, 2026; for review; Richard, after trying version 54):</strong> <strong>Manual refresh, simplified.</strong> An admin replaces the current ETL list with one from a previous refresh or one they upload, checks it with a dry run, and applies it; Serena does the rest as an ordinary refresh. <strong>The current refresh and the pending one</strong> (Richard, October 28, 2026). The <strong>current refresh</strong> is the newest Updated one, the ETL list Serena serves from; the <strong>pending refresh</strong> is the museum's newest while it's under way or failed (at most one). Pending covers six states: four <strong>on their way</strong> (blue: "Waiting for the ETL list" and "ETL list received" with a clock, since Serena waits for the ETL job's next call; "Checking the ETL list" and "Applying the ETL list" with a spinner) and two that <strong>need an admin</strong> (red: "ETL list check failed", "ETL list update failed", with what to do). <strong>Overview</strong> shows them side by side, "Current refresh (Serena serves from it)" and "Pending refresh" (or "None"), in place of "Last refresh"; the pending one links to its page. After a failed update the current refresh is flagged <strong>partly replaced</strong>: an update that stops partway leaves Serena serving some of each ETL list. Decided October 28, 2026 (Richard), for Serena: the update <strong>tightens first and publishes last</strong> (drops and every change that makes a file less available, then new files and loosening), so a partial update never serves a file it shouldn't; and the worker <strong>retries a failed update by itself</strong>, every 10 minutes for up to 6 hours, which the alert, the card and the refresh's page say ("Serena tries the update again every 10 minutes, until 22:41 UTC"). No revert: the last updated ETL list is older than what the portals show. <strong>A pending refresh's page</strong> shows its four steps (Started, ETL list received, ETL list checked, ETL list applied): done ones ticked in green, the current one in blue with its clock or spinner (or, failed, in red with what to do), the rest to come. Try each in Manual refresh's dashed bar, "Pending refresh:". <strong>Manual refresh's card</strong> starts with the same two, the current refresh and the pending one (linked; a failed one says "its page has the details and other ways to fix it"), then <strong>Replace with:</strong> and two choices, <strong>Choose from previous</strong> and <strong>Upload one</strong>. The <strong>bottom card</strong> appears once one is chosen: <strong>Previous ETL lists</strong> (the last 10) or <strong>Upload an ETL list file</strong> (the file and its refresh date); it folds away. <strong>Check the ETL list</strong> shows once an ETL list is chosen (hidden until then, not disabled, as no button is). <strong>The check is a dry run:</strong> Serena answers within the request, against the last servability update, and keeps nothing: no refresh is made, so it can't conflict with one. Its result says when it was checked and against which update, then the counts and the delta; a far-past note; or the first 20 problems, which can't be overridden. Choosing another ETL list drops the result. <strong>Apply it</strong>, under a result that can be applied: the <strong>reason</strong> (why now), the older-list warning, the upload's live public core checkbox, and <strong>Apply refresh</strong> with an outlined <strong>Cancel</strong>, which backs out to "Replace with:" with nothing chosen (nothing was made, so there's nothing to close). A dry run that failed only on the delta threshold offers <strong>Apply with override</strong> instead: "Why is the change expected?" and a reason of at least 20 characters, and the team is emailed when it's applied. <strong>A pending refresh in the way</strong> (decided October 28, 2026): one on its way that's waiting (for its ETL list, or for the ETL job to ask for the check) is stopped by Apply, which says so ("Tonight's refresh … is still under way. Applying your ETL list stops it: the ETL job's list won't be applied, and its run ends with an error.") and asks to confirm; one checking or applying its ETL list means waiting a few minutes, and Apply says so; one that failed needs no warning or confirmation, since applying another ETL list is one of its fixes. The pages never say "close". An older ETL list is confirmed too. <strong>After Apply</strong>, the card shows a summary: the refresh it started, with which ETL list, the reason (and override), any refresh it closed, and that Serena checks the ETL list again and updates by itself; it points to <strong>Past refreshes</strong> and <strong>Overview</strong> to follow it, and <strong>Replace with another ETL list</strong> starts over. The page doesn't follow the refresh (in the mockup, which redraws everything, the current refresh line does). <strong>"ETL list" replaces "servable list" everywhere</strong> (Richard, October 28, 2026): the states ("Checking the ETL list", "ETL list check failed"), a refresh's page ("The ETL list", "ETL list check"), Settings' "ETL list check", the alerts ("An ETL list check failed") and every page's words. The names follow: the file is <code>etl-list.pahma.2026-10-12.tsv</code> (was <code>servable-list.…</code>), the Audit log's action is "etl list upload" (was "etl servable list upload"), and the script on the ETL server is the ETL list script (was the servable list script). Likewise <strong>"ETL list update" replaces "servability update"</strong> ("checked against the last ETL list update", a refresh's "The ETL list update", Media look up's "last ETL list update", the alert "Serena hasn't had an ETL list update in 24 hours"), the state "Updating servability" is <strong>"Applying the ETL list"</strong>, and "sets servability back" reads "sets what Serena serves back". The earlier versions' notes are left as written. <strong>A refresh under way says whether Serena is waiting or working</strong> (Richard, October 28, 2026), everywhere its state pill is (Past refreshes, Overview, a refresh's page, Manual refresh): <strong>waiting</strong>, with a clock, is "Waiting for the ETL list" (the state Started: the ETL job hasn't uploaded it yet) and "ETL list received" (uploaded; the ETL job asks Serena to check it next), states in which Serena does nothing until the ETL job's next call; <strong>working</strong>, with a spinner (still for those who ask for reduced motion), is "Checking the ETL list" and "Applying the ETL list". Where there's room (Manual refresh's current refresh and a refresh's page), a line says how long and what's normal ("Checking since 16:57 UTC (3 min): usually a few minutes."; "Waiting since 10:01 UTC (6 h 59 min): the ETL job uploads it."), and, for an ETL refresh past the watchdog's 08:00 Pacific deadline, says so in the warning colour, adding, while it still waits for its ETL list, that the ETL job may have failed. Try "tonight's, waiting for its ETL list" and "tonight's, being checked" in the dashed bar. <strong>Mockup only:</strong> the dashed bar chooses what the dry run finds and the pending refresh (none, waiting for its ETL list, being checked, check failed, update failed), and <strong>Reset</strong> goes back to Serena with no pending refreshes. <strong>For the app</strong> (reverses parts of MR9 to MR13): a dry-run endpoint that checks a previous ETL list or an uploaded file and returns the result without storing anything (within the request if it's fast enough for some 187,000 rows; to measure first); starting a manual refresh takes the reason (and, for an override, its kind) and checks and updates by itself, as an ETL refresh does; no "Waiting for the servability update" state, no "Run the servability update", no Cancel in Serena; an upload is sent again on Apply. The rename reaches past the app: Serena's alert titles (emailed), its state words in the ETL API's description, and the design document's glossary, where "Servable list" and "Servability update" are defined terms (the servability table and Serena's code keep their names). The file's name and the script's are the ETL's (<code>cspace-deployment/cspace-solr-ucb</code>), so renaming them is a change there too, on the ETL's own timeline; the stored audit action name would need the Audit log to read both names, old entries keeping theirs.</li>
       <li><strong>Version 54 (October 27, 2026, issue #120; in the app's pull request):</strong> version 47's second idea, <strong>Reasons in two lists</strong>, is in the app as shown here: a refresh's page has What went wrong and What admins did, each "None." when empty. Serena records which list each reason goes in; a reason recorded before has none and goes under What went wrong. In the app, an abandoned refresh closed by a manual refresh lists "closed by the manual refresh …" under What admins did, and one closed by the ETL's next refresh lists it under What went wrong. With this, all four of version 47's ideas are in the app.</li>
@@ -460,7 +461,7 @@
   const S = {retryMock: "works", retryErr: null, open: {}, layout: "C", pages: {}, signedIn: false, museum: "pahma", user: "admin", page: "lookup", lookup: null, blobIndex: 0, menu: false, alerts: true, alertsShow: "all", refreshesShow: "all", cspaceDown: false, sort: {}, range: "24h", outcome: "", reason: "", countsBy: "day", countsOpen: false};
   // The Manual refresh page (version 49, issue #118): where the list comes from, the list picked, what's typed, and the
   // refresh it started. Mockup only: what the check finds, and whether the museum has an open refresh.
-  S.mr = {source: null, pick: null, fileName: "", uploadDate: "", dry: null, applyReason: "", kind: "", live: false, applied: null, outcome: "passes", open: "none", pickerOpen: true};
+  S.mr = {source: null, pick: null, fileName: "", uploadDate: "", dry: null, applyReason: "", kind: "", live: false, applied: null, outcome: "passes", open: "none", pickerOpen: true, sim: "off", made: null};
   const $ = s => document.querySelector(s);
   const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
   // Text read back from the page (typed text, choices, data attributes) never carries markup: the page shows it in
@@ -1276,7 +1277,7 @@
   const MR_PROBLEMS = [{line: "1042", field: "blob_csid", problem: "not a CSID: 9f9f-0000"},
     {line: "20581", field: "kind", problem: "\"thumbnail\" isn't a kind Serena serves"},
     {line: "88310", field: "blob_csid", problem: "the same Blob CSID as line 88309"}];
-  const sourceText = r => r.source === "etl" ? `the ETL list for ${r.listDate} (from ${S.museum}-${r.fromId})` : `an uploaded ETL list for ${r.listDate}`;
+  const sourceText = r => r.source === "etl" ? `the ETL list for ${r.listDate} (from ${S.museum}-${r.fromId})` : r.source === "simulator" ? `the ETL list ${r.simFile}, made from the simulator` : `an uploaded ETL list for ${r.listDate}`;
   // Past refreshes' Refresh date: a manual refresh's tag says so, where its list came from and, when it isn't the
   // refresh's own day, the list's date, in words, not colour alone (issue #116, folded into #118).
   const manualTag = r => `<span class="pill t-info">manual refresh · ${r.source === "etl" ? "ETL list" : "uploaded list"}${r.listDate && r.listDate !== r.date ? ` for ${esc(r.listDate)}` : ""}</span>`;
@@ -1312,11 +1313,11 @@
     if (which === "checking" && !openRefresh()) REFRESHES.unshift({id: nextId(), date: "2026-10-13", state: "Checking the ETL list", tone: "info", rows: 187410, at: "2026-10-13T16:57:10Z", uploaded: "2026-10-13T16:57:04Z", openEtl: true, scenario: true, reasons: []});
   }
   // The choice made so far, so a dry run is of what's chosen: changing the choice drops the dry run's result.
-  const mrChoice = () => S.mr.source === "recent" ? `etl:${S.mr.pick || ""}` : `upload:${S.mr.fileName || ""}`;
+  const mrChoice = () => S.mr.source === "recent" ? `etl:${S.mr.pick || ""}` : S.mr.source === "simulator" ? `sim:${(S.mr.made || {}).file || ""}` : `upload:${S.mr.fileName || ""}`;
   // Back to "Replace with:" and nothing chosen: Cancel, and "Replace with another ETL list" after an Apply.
   function mrStartOver() {
     clearTimeout(mrTimer);
-    Object.assign(S.mr, {source: null, pick: null, fileName: "", uploadDate: "", dry: null, applyReason: "", kind: "", live: false, applied: null, pickerOpen: true});
+    Object.assign(S.mr, {source: null, pick: null, fileName: "", uploadDate: "", dry: null, applyReason: "", kind: "", live: false, applied: null, pickerOpen: true, made: null});
   }
   // The dry run: Serena answers at once (in the request, not the worker), with nothing stored and nothing changed.
   function mrDryRun() {
@@ -1327,7 +1328,7 @@
     mrTimer = setTimeout(() => {
       if (!S.mr.dry || S.mr.dry.choice !== choice) return;
       const last = REFRESHES.find(x => x.tone === "success" && x.rows);
-      S.mr.dry = {choice, at: NOW, against: last ? `${S.museum}-${last.id}` : null, outcome: S.mr.outcome, check: mrCheck(from ? from.rows : 187410, S.mr.outcome)};
+      S.mr.dry = {choice, at: NOW, against: last ? `${S.museum}-${last.id}` : null, outcome: S.mr.outcome, check: mrCheck(from ? from.rows : S.mr.source === "simulator" ? S.mr.made.rows : 187410, S.mr.outcome)};
       render(); $("#mr-dry-head")?.focus();
     }, 1500);
   }
@@ -1342,13 +1343,14 @@
       Object.assign(open, {state: "Abandoned", tone: "neutral", at: NOW, actions: [], reasons: [...(open.reasons || []), {admin: true, text: `replaced by the manual refresh ${full}`}]});
       AUDIT.unshift({at: NOW, admin: "Serena", action: "refresh outcome", target: `${S.museum}-${open.id}`, details: "State: abandoned", scenario: true});
     }
-    const r = {id, date: "2026-10-13", rows: dry.check.rows, admin: true, mr: true, scenario: true, source: etl ? "etl" : "upload",
-      listDate: etl ? from.date : S.mr.uploadDate || "2026-10-13", fromId: etl ? from.id : null, uploaded: NOW, actions: [],
+    const sim = S.mr.source === "simulator";
+    const r = {id, date: "2026-10-13", rows: dry.check.rows, admin: true, mr: true, scenario: true, source: etl ? "etl" : sim ? "simulator" : "upload",
+      listDate: etl ? from.date : sim ? "2026-10-13" : S.mr.uploadDate || "2026-10-13", simFile: sim ? S.mr.made.file : null, fromId: etl ? from.id : null, uploaded: NOW, actions: [],
       state: "Checking the ETL list", tone: "info", at: NOW, check: dry.check};
     r.reasons = [{admin: true, text: `started by ${S.user} as a manual refresh, with ${sourceText(r)}: ${kind ? `${KINDS[kind]}: ` : ""}${why}`}];
     REFRESHES.unshift(r);
     AUDIT.unshift({at: NOW, admin: S.user, action: "refresh start", target: full, scenario: true,
-      details: `Manual refresh · ${etl ? `ETL list for ${r.listDate}, from ${S.museum}-${r.fromId}` : `Uploaded list for ${r.listDate}`} · SHA-256: ${fakeSha(etl ? from.id : full)}${open ? ` · Closed ${S.museum}-${open.id}` : ""} · Reason: ${why}`});
+      details: `Manual refresh · ${etl ? `ETL list for ${r.listDate}, from ${S.museum}-${r.fromId}` : sim ? `ETL list ${r.simFile}, made from the simulator` : `Uploaded list for ${r.listDate}`} · SHA-256: ${fakeSha(etl ? from.id : full)}${open ? ` · Closed ${S.museum}-${open.id}` : ""} · Reason: ${why}`});
     if (kind) {
       // Applied with the delta threshold overridden: recorded and emailed now, as every override is.
       r.override = {by: S.user, at: NOW, kind, reason: why};
@@ -1415,6 +1417,7 @@
     const sw = (key, choices) => choices.map(([k, v]) => `<button type="button" data-mr-mock="${key}:${k}" aria-pressed="${S.mr[key] === k}">${v}</button>`).join("");
     const mock = `<div class="layout-switch" role="group" aria-label="Mockup only">Mockup only. The dry run: ${sw("outcome", [["passes", "passes"], ["delta", "fails on the delta threshold"], ["other", "fails on other problems"]])}
       · Pending refresh: ${sw("open", [["none", "none"], ["started", "waiting for its ETL list"], ["checking", "being checked"], ["checkfail", "check failed"], ["updatefail", "update failed"]])}
+      · Simulated CollectionSpace: ${sw("sim", [["off", "off"], ["on", "on"]])}
       · <button type="button" id="mrReset" title="Remove the refreshes this page and Mockup settings made, with their alerts and audit entries">Reset</button></div>`;
     const days = Math.round((ms(newest ? newest.date : NOW) - ms(pick ? pick.date : NOW)) / DAY);
     const recent = `<p class="secondary" style="margin:0 0 8px">The last 10 ETL lists for ${esc(name())}, one per refresh, newest first, whatever the refresh's outcome. ETL lists an admin uploaded aren't here.</p>
@@ -1427,6 +1430,11 @@
         <p><strong>Better:</strong> run the ETL list script on the ETL server (or ask whoever runs it) to make an ETL list from today's public core, then pick it here or upload it. Serena can't start the ETL itself. You'll be asked to confirm.</p></div></div>`;
     const upload = `<label class="field">The ETL list file (.tsv or .tsv.gz) <input type="file" id="mrFile" accept=".tsv,.gz,.txt"></label><div class="err-text" id="mrFileMsg" role="alert"></div>
       <label class="field" style="max-width:260px">The refresh date the ETL list is for <input type="date" id="mrDate" value="${esc(S.mr.uploadDate || "2026-10-13")}" max="2026-10-13"></label><div class="err-text" id="mrDateMsg" role="alert"></div>`;
+    // Version 57: an ETL list made from the simulator's records, where every museum's server is the simulator.
+    const made = S.mr.made;
+    const simulator = `<div id="mr-simulator" style="max-width:100ch"><p class="secondary" style="margin:0 0 8px">Every museum's CollectionSpace here is the simulator, so there's no ETL job. Serena lists ${esc(name())}'s Media records in the simulator as the ETL would: each one with a file that isn't soft-deleted${S.museum === "pahma" ? " and is approved for web" : ""}, including records the BMU added. Check and apply it as any other ETL list.</p>
+      <button type="button" id="mrMake">${made ? "Make it again" : "Make the ETL list"}</button>
+      ${made ? `<p id="mr-made" style="margin:8px 0 0">${made.rows.toLocaleString("en-US")} rows from ${made.records.toLocaleString("en-US")} records; not listed: ${esc(made.leftOut)}.</p>` : ""}</div>`;
     // The museum's current refresh, for context: its newest.
     // The current refresh (the ETL list Serena serves from) and any pending one, linked to its page.
     const current = currentRefresh(), pend = pendingRefresh();
@@ -1437,13 +1445,13 @@
         : `<strong>Pending refresh:</strong> ${refreshLink(`${S.museum}-${pend.id}`)} ${statePill(pend)}${stateDetail(pend)}`}</p></div>`;
     // "Check the ETL list" shows once an ETL list is chosen and until its dry run: hidden, not disabled, since no
     // button is ever disabled (Richard, October 14 and 28, 2026).
-    const listChosen = S.mr.source === "recent" ? !!pick : S.mr.source === "upload" && !!S.mr.fileName;
+    const listChosen = S.mr.source === "recent" ? !!pick : S.mr.source === "simulator" ? !!S.mr.made : S.mr.source === "upload" && !!S.mr.fileName;
     const dryHere = !!S.mr.dry && S.mr.dry.choice === mrChoice();
     const card = S.mr.applied ? `<section class="mr-card" id="mr-card">${currentHtml}${mrAppliedHtml(S.mr.applied)}</section>`
       : `<section class="mr-card" id="mr-card" aria-labelledby="mr-card-head">
       ${currentHtml}
       <h3 id="mr-card-head">Replace with:</h3>
-      <fieldset class="source" aria-labelledby="mr-card-head" aria-describedby="mrSourceMsg">${[["recent", "Choose from previous"], ["upload", "Upload one"]].map(([k, v]) => `<label><input type="radio" name="mrSource" value="${k}" ${S.mr.source === k ? "checked" : ""}> ${v}</label>`).join("")}</fieldset>
+      <fieldset class="source" aria-labelledby="mr-card-head" aria-describedby="mrSourceMsg">${[["recent", "Choose from previous"], ["upload", "Upload one"], ...(S.mr.sim === "on" ? [["simulator", "Make one from the simulator"]] : [])].map(([k, v]) => `<label><input type="radio" name="mrSource" value="${k}" ${S.mr.source === k ? "checked" : ""}> ${v}</label>`).join("")}</fieldset>
       <div class="err-text" id="mrSourceMsg" role="alert"></div>
       ${S.mr.source ? `<p class="mr-chosen" id="mr-chosen">${chosenHtml(pick, newest)}</p>` : ""}
       <div class="err-text" id="mrPickMsg" role="alert"></div>
@@ -1452,8 +1460,8 @@
       <button class="primary" type="submit">Check the ETL list</button></div>
       ${dryHere ? mrDryHtml(older, olderWarn, open) : ""}</section>`;
     // The bottom card: the previous ETL lists or the upload fields, once one is chosen above; none before or after Apply.
-    const picker = !S.mr.source || S.mr.applied ? "" : `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>${S.mr.source === "recent" ? "Previous ETL lists" : "Upload an ETL list file"}</summary>
-      ${S.mr.source === "recent" ? recent : `<div style="max-width:640px">${upload}</div>`}</details>`;
+    const picker = !S.mr.source || S.mr.applied ? "" : `<details class="mr-picker" id="mrPicker" ${S.mr.pickerOpen ? "open" : ""}><summary>${S.mr.source === "recent" ? "Previous ETL lists" : S.mr.source === "simulator" ? "Make an ETL list from the simulator" : "Upload an ETL list file"}</summary>
+      ${S.mr.source === "recent" ? recent : S.mr.source === "simulator" ? simulator : `<div style="max-width:640px">${upload}</div>`}</details>`;
     return `${title(`${esc(name())} Manual refresh`)}<p class="lead">Replace the current ETL list with one from a previous refresh or one you upload, when a refresh failed or its ETL list didn't reach Serena. Check it first: a dry run shows what would change, and changes nothing. Then apply it: Serena starts a manual refresh, checks the ETL list again and updates what it serves by itself. Follow it on Past refreshes or Overview.</p>
       ${mock}
       <form id="mrForm" novalidate>${card}${picker}</form>`;
@@ -1463,6 +1471,10 @@
     if (S.mr.source === "recent") {
       return pick ? `<strong>The ETL list:</strong> the one for ${esc(pick.date)}${pick === newest ? " (the newest)" : ""}, ${pick.rows.toLocaleString("en-US")} rows, from ${refreshLink(`${S.museum}-${pick.id}`)}.`
         : `<strong>The ETL list:</strong> <span class="muted">none yet. Choose one of the previous ETL lists below.</span>`;
+    }
+    if (S.mr.source === "simulator") {
+      return S.mr.made ? `<strong>The ETL list:</strong> made from the simulator ${when(S.mr.made.at)}, ${S.mr.made.rows.toLocaleString("en-US")} rows, <span class="mono">${esc(S.mr.made.file)}</span>.`
+        : `<strong>The ETL list:</strong> <span class="muted">none yet. Make it below.</span>`;
     }
     return S.mr.fileName ? `<strong>The ETL list:</strong> an uploaded file, <span class="mono">${esc(S.mr.fileName)}</span>.`
       : `<strong>The ETL list:</strong> <span class="muted">none yet. Choose the ETL list file below.</span>`;
@@ -1871,6 +1883,7 @@
     document.querySelectorAll("[data-mr-mock]").forEach(b => b.onclick = () => {
       const [k, v] = clean(b.dataset.mrMock).split(":"); S.mr[k] = v;
       if (k === "open") mrOpenEtl(v);
+      if (k === "sim" && v === "off" && S.mr.source === "simulator") mrStartOver();
       if (k === "open") $("#mockRefresh").value = v === "updatefail" ? "updatefail" : $("#mockRefresh").value === "updatefail" ? "sample" : $("#mockRefresh").value;
       render(); const again = document.querySelector(`[data-mr-mock="${k}:${v}"]`); if (again) again.focus();
     });
@@ -1884,6 +1897,12 @@
       $("#mr-check").hidden = !S.mr.fileName;
       $("#mr-dry")?.remove();
       if (S.mr.fileName) $("#mrFileMsg").textContent = "";
+    };
+    // Version 57: Serena makes the ETL list from the simulator's records at once; making it again drops the dry run.
+    const mmake = $("#mrMake"); if (mmake) mmake.onclick = () => {
+      const n = S.mr.made ? S.mr.made.n + 1 : 1;
+      S.mr.made = {n, file: `simulator-${S.museum}-20261013T17${String(n).padStart(2, "0")}00.tsv`, rows: 1240 + n, records: 1243 + n, leftOut: "2 soft-deleted, 1 no file", at: NOW};
+      S.mr.dry = null; render(); $("#mrMake")?.focus();
     };
     const mdate = $("#mrDate"); if (mdate) mdate.onchange = () => { S.mr.uploadDate = clean(mdate.value); };
     document.querySelectorAll('input[name="mrPick"]').forEach(b => b.onchange = () => { S.mr.pick = clean(b.value); render(); const again = document.querySelector(`input[name="mrPick"][value="${S.mr.pick}"]`); if (again) again.focus(); });
@@ -1903,13 +1922,14 @@
       say("mrSource", !!S.mr.source, "Choose from previous or upload one first.");
       if (!S.mr.source) { document.querySelector('input[name="mrSource"]').focus(); return; }
       if (S.mr.source === "recent") say("mrPick", !!S.mr.pick, "Choose an ETL list first.");
+      else if (S.mr.source === "simulator") say("mrPick", !!S.mr.made, "Make the ETL list first.");
       else {
         say("mrFile", $("#mrFile").files.length > 0 || !!S.mr.fileName, "Choose the ETL list file first.");
         say("mrDate", /^\d{4}-\d{2}-\d{2}$/.test($("#mrDate").value) && $("#mrDate").value <= "2026-10-13", "Give a refresh date of today (2026-10-13) or earlier.");
       }
       // A list or file still to choose is in the bottom card: open it, keeping what's typed, and go there.
       if (missing.length && $("#mrPicker") && !$("#mrPicker").open) { $("#mrPicker").open = true; S.mr.pickerOpen = true; }
-      if (missing.length) { (missing[0] === "mrPick" ? document.querySelector('input[name="mrPick"]') : $("#" + missing[0])).focus(); return; }
+      if (missing.length) { (missing[0] === "mrPick" ? document.querySelector('input[name="mrPick"]') || $("#mrMake") : $("#" + missing[0])).focus(); return; }
       if (S.mr.source === "upload") S.mr.uploadDate = clean($("#mrDate").value);
       mrDryRun();
     };

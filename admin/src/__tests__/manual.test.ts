@@ -5,6 +5,7 @@ import {fakeApi} from './fake'
 import {routes} from '@/router'
 import ManualRefresh from '@/views/ManualRefresh.vue'
 import Refreshes from '@/views/Refreshes.vue'
+import {session} from '@/session'
 import {pacificDate} from '@/words'
 
 // Manual refresh (reworked October 28, 2026, mockup version 55): "Replace with:", a dry run that changes nothing, then
@@ -260,6 +261,56 @@ describe('Manual refresh', () => {
     expect(posts(calls).at(-1)?.path).toBe('/museums/pahma/refreshes/from-list')
     expect(wrapper.find('#manual-replaced').text()).toContain('pahma-2026-10-12-1')
     wrapper.unmount()
+  })
+
+  it('makes an ETL list from the simulator, checks it and applies it, only where the simulator is every museum\'s', async () => {
+    const made = {file_name: 'simulator-pahma-20261029T221005.tsv', rows: 2, records: 4, made_at: '2026-10-29T22:10:05+00:00',
+      left_out: {'soft-deleted': 1, 'no file': 1}, tsv: 'blob_csid\tmedia_csid\tkind\taccess\n'}
+    const answers: Answers = {...choices(),
+      'GET /museums/pahma/simulator/servable-list': {body: made},
+      'POST /museums/pahma/servable-lists/dry-run': {body: PASSED},
+      'POST /museums/pahma/refreshes': {status: 201, body: STARTED}}
+    const calls: {method: string, path: string, headers: Record<string, string>, body: unknown}[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      const method = init.method || 'GET', path = url.replace('/admin/v1', '')
+      calls.push({method, path, headers: (init.headers || {}) as Record<string, string>, body: init.body})
+      const answer = answers[`${method} ${path}`] || {status: 404, body: {detail: 'Not Found'}}
+      return new Response(JSON.stringify(answer.body), {status: answer.status || 200})
+    }))
+    session.simulated = false
+    const hidden = await at('/pahma/manual-refresh', ManualRefresh)
+    expect(hidden.find('#source-simulator').exists()).toBe(false)
+    hidden.unmount()
+    session.simulated = true
+    const wrapper = await at('/pahma/manual-refresh', ManualRefresh)
+    expect(wrapper.find('#source-simulator').exists()).toBe(true)
+    const state = setup(wrapper)
+    state.source = 'simulator'
+    await flushPromises()
+    expect(wrapper.find('#manual-check-step').exists()).toBe(false) // nothing made yet
+    await wrapper.find('#simulator-make').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('#simulator-made').text()).toContain('2 rows from 4 records; not listed: 1 soft-deleted, 1 no file')
+    expect(wrapper.find('#manual-chosen').text()).toContain('simulator-pahma-20261029T221005.tsv')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    const dryRun = posts(calls)[0]
+    expect(dryRun.path).toBe('/museums/pahma/servable-lists/dry-run')
+    expect((dryRun.body as File).name).toBe(made.file_name)
+    expect(wrapper.find('#confirm-live-core').exists()).toBe(false) // the simulator stands in for the live core
+    state.reason = 'Testing a BMU upload'
+    await flushPromises()
+    await wrapper.find('#manual-apply').trigger('click')
+    await flushPromises()
+    const post = posts(calls)[1]
+    expect(post.path).toBe('/museums/pahma/refreshes')
+    expect((post.body as File).name).toBe(made.file_name)
+    expect(post.headers).toMatchObject({'X-Live-Core-Confirmed': 'simulator', 'X-Refresh-Date': '',
+      'X-File-Name': made.file_name})
+    expect(wrapper.find('#manual-applied').text()).toContain(`the ETL list ${made.file_name}, made from the simulator`)
+    wrapper.unmount()
+    session.simulated = false
+    vi.unstubAllGlobals()
   })
 })
 

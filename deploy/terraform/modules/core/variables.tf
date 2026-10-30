@@ -30,6 +30,12 @@ variable "tenants" {
   type        = map(string)
 }
 
+variable "simulated_cspace" {
+  description = "Every museum's server is the CollectionSpace simulator (SERENA_SIMULATED_CSPACE)."
+  type        = bool
+  default     = false
+}
+
 variable "env_label" {
   description = "Which environment this is, shown in the admin app (SERENA_ENV_LABEL)."
   type        = string

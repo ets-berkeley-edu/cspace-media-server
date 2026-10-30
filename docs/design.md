@@ -956,6 +956,18 @@ The actions:
     on its way "stops", and a busy one "wait". A refresh left `waiting` from before is still read (its page says
     so) and closed by the next refresh that starts; old `update_run` entries stay in the Audit log. The refresh a
     manual refresh replaces says "replaced by the manual refresh <refresh ID>" (it said "closed by" before).
+  - **Make one from the simulator** (October 29, 2026; serena-fakecspace-questions F12; mockup version 57). Where
+    every museum's server is the CollectionSpace simulator (`SERENA_SIMULATED_CSPACE`: the local stack, and the
+    personal root with `simulated_cspace`; refused at start-up unless every museum's address is the simulator's, a
+    host name with the label `fakecspace` or one under `.test`), "Replace with:" has a third choice. There's no ETL job
+    there, so **Make the ETL list** asks Serena for one: `GET …/simulator/servable-list` reads the museum's records
+    from the simulator's development hook (`GET /_fake/records`) and lists them as the ETL would, each with a file and
+    a Blob that isn't soft-deleted and is approved for web (PAHMA's), the placeholder image's Blob without a Media
+    CSID, and says why the rest weren't listed. Nothing is stored: the page checks and applies the list as an upload
+    (the same dry run and Apply), so what's applied is what was checked, including records the BMU added to a shared
+    simulator. Apply sends `X-Live-Core-Confirmed: simulator` in place of the live public core checkbox, accepted only
+    with `SERENA_SIMULATED_CSPACE`; the refresh's reason says the list was made from the simulator. Elsewhere the
+    choice doesn't appear and the endpoint answers `404`, so production never calls the simulator's hooks.
 
 ### Watchdog and alerts
 

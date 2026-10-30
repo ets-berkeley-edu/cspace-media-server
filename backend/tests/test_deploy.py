@@ -10,8 +10,8 @@ from serena.config import Settings
 
 DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 
-# Read from the environment by the fake ETL itself, not a setting (backend/devtools/fake_etl.py).
-NOT_SETTINGS = {"SERENA_SIMULATED_CSPACE"}
+# Names in the deployment that aren't Serena's settings (none now: SERENA_SIMULATED_CSPACE became one).
+NOT_SETTINGS: set[str] = set()
 
 
 def test_terraform_creates_the_tables_the_code_defines() -> None:

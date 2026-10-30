@@ -1690,3 +1690,22 @@ passes (D300, TQ8). Every `./serena aws` command here takes `--env ucb-stage2`. 
 - [ ] **8. A slow first fetch is answered** (D295): `./serena aws etl pahma --sizes 100MB:1`, then request that record's
   original through the campus name. The 302 comes after the fetch (tens of seconds), not a 504.
 - [ ] **9. Leave it running** for stage 2's next phase (PAHMA's QA records, with the pipeline, D268).
+
+## 51. Make an ETL list from the simulator, on the local stack (10 minutes; before merging the pull request that adds it)
+
+What it checks: Manual refresh's "Make one from the simulator" (serena-fakecspace-questions F12, mockup version 57).
+With `./serena up` (rebuilt: `SERENA_SIMULATED_CSPACE` is new) and `./serena etl pahma`, sign in to PAHMA:
+
+- [ ] **1. The choice.** Manual refresh's "Replace with:" has a third choice, "Make one from the simulator". Choose it:
+  the bottom card "Make an ETL list from the simulator" has "Make the ETL list"; there's no check button yet.
+- [ ] **2. Make it.** Press it: "N rows from M records", and the top card names the list
+  (`simulator-pahma-<time>.tsv`). The rows are the 20 records `./serena etl` added and the placeholder image.
+- [ ] **3. What's left out.** Soft-delete one of the records (`curl -s -X POST
+  http://localhost:8380/_fake/delete/<Media CSID>`, a CSID from Media look up) and press "Make it again": one row fewer,
+  and "not listed: 1 soft-deleted". The dry run's result, if there was one, is gone.
+- [ ] **4. Check and apply.** Check it: "The dry run passed" (or failed only on the delta threshold, with a small
+  list). There's no live public core checkbox. Give a reason and apply: the summary says "made from the simulator";
+  on Past refreshes the refresh is Updated by itself and its page's reasons say "… made from the simulator: <reason>".
+- [ ] **5. Not elsewhere.** In personal-dev without the simulator, or in stage 2, the choice isn't there (the app's and
+  backend's tests cover the 404 and the refused setting).
+
