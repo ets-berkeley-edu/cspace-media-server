@@ -35,6 +35,10 @@
 #
 # Which environment: --env NAME or SERENA_AWS_ENV (default personal-dev). Its settings are in
 # deploy/environments/NAME.conf; NAME.local.conf (not committed) holds the account number and allowed addresses.
+# TERRAFORM_ROOT says which Terraform builds it (D302): personal (the default: personal environments and stage 1,
+# CloudFront in front of everything) or shared (QA and production, the split). A shared environment also needs
+# VPC_ID, APP_SUBNET_IDS, LB_SUBNET_IDS, DOMAIN_NAME, ETL_CIDRS, ADMIN_CIDRS and APACHE_CIDRS, and is deployed here
+# only while it uses only the simulator; otherwise by the pipeline, or as a break-glass deploy (D276, TQ8).
 # CSPACE_TENANTS lists the museums the environment serves, each with its CollectionSpace server
 # ("pahma=https://... cinefiles=https://..."). With SIMULATED_CSPACE=true the environment runs the simulated
 # CollectionSpace instead, for the museums in SIMULATED_MUSEUMS, and ./serena aws etl runs the fake ETL; deploy then
@@ -76,14 +80,26 @@ load_env() {
   [ -f "$CONF" ] || die "No settings for environment '$ENV' ($CONF). Environments: $(ls "$ENV_DIR" | sed -n 's/\.conf$//p' | grep -v '\.local$' | tr '\n' ' ')"
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
+  TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
   [ -f "$LOCAL" ] && . "$LOCAL"
   : "${AWS_PROFILE:?set AWS_PROFILE in $CONF}" "${AWS_REGION:?set AWS_REGION in $CONF}" "${SERENA_ENV_NAME:?set SERENA_ENV_NAME in $CONF}"
   NAME="serena-$SERENA_ENV_NAME"   # the cluster's name and the prefix of every resource
+  ROOT="${TERRAFORM_ROOT:-personal}"
+  case "$ROOT" in
+    personal) ;;
+    shared)
+      local need
+      for need in VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS DOMAIN_NAME; do
+        [ -n "$(eval echo "\$$need")" ] || die "'$ENV' is on the shared root: set $need in $LOCAL (D303, D293)."
+      done ;;
+    *) die "TERRAFORM_ROOT must be personal or shared ($CONF)." ;;
+  esac
+  [ "$ROOT" = shared ] && : "${WAF:=true}"
   local flag
-  for flag in SIMULATED_CSPACE OPEN_IMAGES WAF PROTECT_DATA; do
+  for flag in SIMULATED_CSPACE OPEN_IMAGES WAF PROTECT_DATA CREATE_GATEWAY_ENDPOINTS; do
     eval ": \"\${$flag:=false}\""
     case "$(eval echo "\$$flag")" in true|false) ;; *) die "$flag must be true or false ($CONF, $LOCAL)." ;; esac
   done
@@ -177,7 +193,7 @@ save_local() {  # save_local KEY VALUE: set one setting in the environment's .lo
 # name, it was deployed from somewhere else (another computer or clone, or someone sharing the account).
 check_not_someone_elses() {  # check_not_someone_elses ACCOUNT
   local key ok found=""
-  for key in personal registry; do
+  for key in personal shared registry; do
     aws_ s3api head-object --bucket "serena-tfstate-$1-$AWS_REGION" --key "serena/$SERENA_ENV_NAME/$key.tfstate" >/dev/null 2>&1 &&
       found="s3://serena-tfstate-$1-$AWS_REGION/serena/$SERENA_ENV_NAME/" && break
   done
@@ -244,12 +260,12 @@ ensure_state_bucket() {
   aws_ s3api put-bucket-tagging --bucket "$STATE_BUCKET" --tagging 'TagSet=[{Key=project,Value=serena}]'
 }
 
-tf() {  # tf registry|personal <terraform arguments> (deploy/terraform/<part>; D302)
+tf() {  # tf registry|personal|shared <terraform arguments> (deploy/terraform/<part>; D302)
   local part="$1"; shift
   terraform -chdir="$TF_DIR/$part" "$@"
 }
 
-backend_config() {  # backend_config registry|personal
+backend_config() {  # backend_config registry|personal|shared
   BACKEND=(-backend-config="bucket=$STATE_BUCKET" -backend-config="key=serena/$SERENA_ENV_NAME/$1.tfstate"
            -backend-config="region=$AWS_REGION" -backend-config="use_lockfile=true")
 }
@@ -267,7 +283,7 @@ check_no_old_state() {
 the code from before the move (git switch --detach f4cad43 && ./serena aws destroy --env $ENV), then come back."
 }
 
-tf_init() {  # tf_init registry|personal: point Terraform at this environment's state (the lock is a file beside it)
+tf_init() {  # tf_init registry|personal|shared: point Terraform at this environment's state (the lock is a file beside it)
   [ "$1" != personal ] || check_no_old_state
   backend_config "$1"
   tf "$1" init -input=false -reconfigure "${BACKEND[@]}" >/dev/null ||
@@ -283,23 +299,67 @@ cidr_list() {  # cidr_list "a/32,b/24" -> ["a/32","b/24"]; "" -> []
 app_vars() {
   TF_VARS=(
     -var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "env_name=$SERENA_ENV_NAME" -var "image_uri=$1" -var "running=$2"
-    -var "allowed_cidrs=$(cidr_list "$ALLOWED_CIDRS")" -var "etl_cidrs=$(cidr_list "$ETL_CIDRS")"
-    -var "admin_cidrs=$(cidr_list "$ADMIN_CIDRS")" -var "open_images=$OPEN_IMAGES" -var "waf=$WAF"
+    -var "etl_cidrs=$(cidr_list "$ETL_CIDRS")" -var "admin_cidrs=$(cidr_list "$ADMIN_CIDRS")" -var "waf=$WAF"
     -var "tenants=$(tenants_var)" -var "env_label=$ENV_LABEL" -var "protect_data=$PROTECT_DATA"
     -var "simulated_cspace=$SIMULATED_CSPACE" -var "devtools_image_uri=${3:-}" -var "web_count=$WEB_COUNT"
     -var "cdn_keys=$(cdn_keys_exist)" -var "alert_email=$ALERT_EMAIL"
   )
+  if [ "$ROOT" = shared ]; then
+    TF_VARS+=(
+      -var "apache_cidrs=$(cidr_list "$APACHE_CIDRS")" -var "vpc_id=$VPC_ID"
+      -var "app_subnet_ids=$(cidr_list "$APP_SUBNET_IDS")" -var "lb_subnet_ids=$(cidr_list "$LB_SUBNET_IDS")"
+      -var "create_gateway_endpoints=$CREATE_GATEWAY_ENDPOINTS" -var "domain_name=$DOMAIN_NAME"
+      -var "certificate_arn=$(certificate_arn)"
+    )
+  else
+    TF_VARS+=(-var "allowed_cidrs=$(cidr_list "$ALLOWED_CIDRS")" -var "open_images=$OPEN_IMAGES")
+  fi
+}
+
+# The shared root's certificate (D294) is made by ../registry; its ARN, or empty.
+certificate_arn() {
+  tf_init registry
+  tf registry output -raw certificate_arn 2>/dev/null || true
+}
+
+# A shared environment's certificate is issued only once DevOps has added its validation record (D294, TQ4). Until
+# then, say which record, and stop before the shared root.
+need_certificate() {
+  local arn status
+  arn="$(tf registry output -raw certificate_arn 2>/dev/null || true)"
+  [ -n "$arn" ] || die "No certificate for $DOMAIN_NAME in ../registry's state. Run ./serena aws deploy again."
+  status="$(aws_ acm describe-certificate --certificate-arn "$arn" --query Certificate.Status --output text)"
+  [ "$status" = ISSUED ] && return 0
+  echo
+  echo "The certificate for $DOMAIN_NAME is $status. DevOps adds this record in campus DNS, once (ACM renews it after):"
+  aws_ acm describe-certificate --certificate-arn "$arn" \
+    --query 'Certificate.DomainValidationOptions[0].ResourceRecord.[Type,Name,Value]' --output text
+  die "Run ./serena aws deploy again once the record is in DNS and the certificate is ISSUED. Nothing else was changed."
+}
+
+# TQ8: ./serena aws deploys a shared environment only while it uses only the simulator (stage 2's first phase, D300).
+# With a real CollectionSpace the pipeline deploys it (D268); by hand only as a break-glass deploy (D276).
+need_break_glass() {
+  [ "$ROOT" = shared ] && [ "$SIMULATED_CSPACE" != true ] || return 0
+  local typed
+  echo
+  echo "'$ENV' is a shared environment with real data: the pipeline deploys it (D268)."
+  echo "Deploy it from here only if the pipeline can't, as a break-glass deploy (D276), signed in with the break-glass"
+  echo "permission set and following the recovery runbook; CloudTrail records it."
+  read -r -p "Type 'break glass' to go ahead: " typed
+  [ "$typed" = "break glass" ] || die "Stopped; nothing was deployed."
 }
 
 registry_vars() {
   REGISTRY_VARS=(-var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "env_name=$SERENA_ENV_NAME" -var "simulated_cspace=$SIMULATED_CSPACE")
+  [ "$ROOT" != shared ] || REGISTRY_VARS+=(-var "domain_name=$DOMAIN_NAME")
 }
 
 approve() { [ "${SERENA_AWS_YES:-}" = 1 ] && echo "-auto-approve" || true; }
 
 applied() {  # applied OUTPUT: a value the app was last applied with; empty if never applied or not an output then
   local v
-  v="$(tf personal output -raw "$1" 2>/dev/null || true)"
+  v="$(tf "$ROOT" output -raw "$1" 2>/dev/null || true)"
   case "$v" in *"No outputs"*|*Warning*|*"not found"*|*Error*) v="" ;; esac
   echo "$v"
 }
@@ -477,7 +537,7 @@ print(next((v for v, s in stages.items() if "AWSPENDING" in s), ""))'
 apply_again() {  # apply with the running images and settings (no prompt for a change cdn-key or deploy started)
   app_vars "$(applied image_uri)" "$(was_running)" "$(applied devtools_image_uri)"
   # shellcheck disable=SC2046
-  tf personal apply -input=false $(approve) "${TF_VARS[@]}"
+  tf "$ROOT" apply -input=false $(approve) "${TF_VARS[@]}"
 }
 
 cdn_key() {  # a new signing key: made, trusted by CloudFront (Terraform), then used
@@ -521,7 +581,7 @@ finish_cdn_key() {  # the pending key becomes the one the app signs with, once C
   [ -n "$version" ] || return 0
   name="$(aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
     python3 -c 'import json, sys; print(json.load(sys.stdin).get("name", ""))')"
-  key_id="$(tf personal output -json cdn_key_ids 2>/dev/null |
+  key_id="$(tf "$ROOT" output -json cdn_key_ids 2>/dev/null |
     KEY_NAME="$name" python3 -c 'import json, os, sys; print(json.load(sys.stdin).get(os.environ["KEY_NAME"], ""))' 2>/dev/null || true)"
   if [ -z "$key_id" ]; then
     echo "The new signing key $name isn't trusted by CloudFront yet: run ./serena aws deploy (or cdn-key) again to finish."
@@ -580,7 +640,7 @@ prepare() { load_env; check_account; need_terraform; ensure_state_bucket; }
 look() {
   load_env; check_account; need_terraform
   aws_ s3api head-bucket --bucket "$STATE_BUCKET" >/dev/null 2>&1 || { echo "'$ENV' isn't deployed (./serena aws deploy)."; exit 0; }
-  tf_init personal
+  tf_init "$ROOT"
 }
 
 app_url() { applied url; }  # empty while a first deploy hasn't finished
@@ -602,11 +662,13 @@ acknowledge_real_data() {
 }
 
 deploy() {
-  load_env; check_account; acknowledge_real_data; ensure_allowlist; need_terraform
+  load_env; check_account; need_break_glass; acknowledge_real_data
+  [ "$ROOT" = shared ] || ensure_allowlist
+  need_terraform
   command -v docker >/dev/null || die "Docker isn't installed or isn't on the PATH."
   docker info >/dev/null 2>&1 || die "Docker isn't running. Start Docker Desktop and try again."
   ensure_state_bucket
-  tf_init personal; check_museums ask   # before building anything
+  tf_init "$ROOT"; check_museums ask   # before building anything
   local tag repo registry image devtools_image="" base url code museum _try
   tag="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
   [ -z "$(git status --porcelain 2>/dev/null)" ] || tag="$tag-dirty"
@@ -617,6 +679,7 @@ deploy() {
   tf_init registry
   tf registry apply -input=false -auto-approve "${REGISTRY_VARS[@]}"
   repo="$(tf registry output -raw repository_url)"
+  [ "$ROOT" != shared ] || need_certificate
   registry="${repo%%/*}"
   image="$repo:$tag"
 
@@ -646,7 +709,7 @@ deploy() {
   echo "   If a task can't start, ./serena aws logs web (or worker) shows why."
   app_vars "$image" true "$devtools_image"
   # shellcheck disable=SC2046
-  tf personal apply -input=false $(approve) "${TF_VARS[@]}"
+  tf "$ROOT" apply -input=false $(approve) "${TF_VARS[@]}"
   [ "$SIMULATED_CSPACE" = false ] || sim_secrets
   finish_cdn_key   # a rotation an earlier cdn-key didn't finish
   if [ "$(cdn_keys_exist)" = false ]; then
@@ -665,7 +728,12 @@ deploy() {
   done
   echo
   echo "$ENV_LABEL is up: $url   (the admin app: $url/admin/)"
-  [ "$code" = 200 ] || echo "Note: $url/health still answers $code after 2 minutes. If it's 403, your address may have changed: ./serena aws allow-my-ip"
+  if [ "$code" != 200 ] && [ "$ROOT" = shared ]; then
+    echo "Note: $url/health answers $code. DevOps's DNS record must point $DOMAIN_NAME at $(applied load_balancer_dns_name),"
+    echo "and this computer's address must be in ADMIN_CIDRS (or another list the load balancer admits)."
+  elif [ "$code" != 200 ]; then
+    echo "Note: $url/health still answers $code after 2 minutes. If it's 403, your address may have changed: ./serena aws allow-my-ip"
+  fi
   [ -z "$ALERT_EMAIL" ] || [ "$(alert_subscription)" != pending ] ||
     echo "Next: ./serena aws confirm-alerts   (AWS emailed $ALERT_EMAIL a link; paste it there, don't click it)"
   if [ "$SIMULATED_CSPACE" = true ]; then
@@ -689,15 +757,15 @@ was_running() {  # true unless the environment is paused
 plan() {
   look; need_deployed; check_museums look
   app_vars "$IMAGE" "$(was_running)" "$(applied devtools_image_uri)"
-  tf personal plan -input=false "${TF_VARS[@]}"
+  tf "$ROOT" plan -input=false "${TF_VARS[@]}"
 }
 
 # Apply again with the running images: for a changed setting (pause, resume, the allowlist).
 reapply() {  # reapply RUNNING
-  prepare; tf_init personal; need_deployed; check_museums ask
+  prepare; tf_init "$ROOT"; need_deployed; check_museums ask
   app_vars "$IMAGE" "$1" "$(applied devtools_image_uri)"
   # shellcheck disable=SC2046
-  tf personal apply -input=false $(approve) "${TF_VARS[@]}"
+  tf "$ROOT" apply -input=false $(approve) "${TF_VARS[@]}"
 }
 
 secret_line() {  # secret_line LABEL ID FIX
@@ -730,7 +798,11 @@ status() {
   { aws_ ecs describe-services --cluster "$NAME" --services $services \
       --query "services[].[serviceName, join('', ['running ', to_string(runningCount), ' of ', to_string(desiredCount)])]" --output text 2>/dev/null || true; } |
   while IFS="$(printf '\t')" read -r name counts; do echo "  $name: $counts"; done
-  echo "Allowed addresses: $ALLOWED_CIDRS"
+  if [ "$ROOT" = shared ]; then
+    echo "Admitted addresses: Apache $APACHE_CIDRS; ETL $ETL_CIDRS; admin $ADMIN_CIDRS"
+  else
+    echo "Allowed addresses: $ALLOWED_CIDRS"
+  fi
   if [ "$(applied delivery)" = true ]; then
     echo "Image delivery: on; signing keys trusted: $(cdn_key_names | tr '\n' ' ')(the newest signs)"
   else
@@ -766,14 +838,14 @@ etl() {  # etl MUSEUM [fake_etl options]
   [ "$SIMULATED_CSPACE" = true ] ||
     die "'$ENV' uses a real CollectionSpace: its servable lists come from the real ETL (Jira CSW-1027), not the fake one."
   need_museum "$museum" etl
-  check_account; need_terraform; tf_init personal; need_deployed
+  check_account; need_terraform; tf_init "$ROOT"; need_deployed
   local family subnets sg lb url task id overrides code log out quiet=false arg
   for arg in "$@"; do [ "$arg" != --json ] || quiet=true; done
   # With --json only the summary goes to standard output (./serena aws test reads it); the rest goes to errors.
   if [ "$quiet" = true ]; then exec 3>&2; else exec 3>&1; fi
-  family="$(tf personal output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_definition"])')"
-  subnets="$(tf personal output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["subnets"])')"
-  sg="$(tf personal output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["security_group"])')"
+  family="$(tf "$ROOT" output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_definition"])')"
+  subnets="$(tf "$ROOT" output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["subnets"])')"
+  sg="$(tf "$ROOT" output -json fake_etl | python3 -c 'import json,sys; print(json.load(sys.stdin)["security_group"])')"
   lb="$(applied load_balancer_url)" url="$(app_url)"
   overrides="$(python3 - "$museum" "$lb" "$(sim_url)" "$url" "$@" <<'PY'
 import json, sys
@@ -817,7 +889,7 @@ list_servable() {  # list_servable MUSEUM [--limit N] [--kind KIND]
     esac
   done
   case "$limit" in ''|*[!0-9]*) die "--limit needs a whole number (0 for all)" ;; esac
-  load_env; need_museum "$museum" list; check_account; need_terraform; tf_init personal; need_deployed
+  load_env; need_museum "$museum" list; check_account; need_terraform; tf_init "$ROOT"; need_deployed
   url="$(app_url)"
   [ "$limit" = 0 ] || max=(--max-items "$limit")
   local filter=()
@@ -851,7 +923,7 @@ print(f"{len(rows)} shown.{more}")'
 # signed in, after ./serena aws deploy or resume; never in CI (D229). They make read-only AWS calls with this
 # environment's profile, and change only what they undo (a fake ETL refresh, a recall they cancel).
 run_tests() {  # run_tests [pytest options]
-  load_env; check_account; need_terraform; tf_init personal; need_deployed
+  load_env; check_account; need_terraform; tf_init "$ROOT"; need_deployed
   [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
   local url saved deployed museum py
   url="$(app_url)"
@@ -906,7 +978,7 @@ replay_logs() {  # replay_logs [serenade/load/replay.py options]
     serenade/.venv/bin/python -m serenade.load.replay --museum "$museum" --env "$ENV" "$@"
     return
   fi
-  check_account; need_terraform; tf_init personal; need_deployed
+  check_account; need_terraform; tf_init "$ROOT"; need_deployed
   [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
   url="$(app_url)"
   case "$url" in https://*) ;; *) die "'$ENV' has no address yet: run ./serena aws deploy again." ;; esac
@@ -964,7 +1036,7 @@ destroy() {
   echo "Nothing in CollectionSpace changes. The KMS key is deleted after a waiting period."
   read -r -p "Type the environment's name ($ENV) to go ahead: " ok
   [ "$ok" = "$ENV" ] || die "Stopped; nothing was deleted."
-  tf_init personal
+  tf_init "$ROOT"
   IMAGE="$(applied image_uri)"; [ -n "$IMAGE" ] || IMAGE=none
   [ -n "$ALLOWED_CIDRS" ] || ALLOWED_CIDRS="127.0.0.1/32"   # the variable must be set, even to destroy
   devtools_image="$(applied devtools_image_uri)"; [ -n "$devtools_image" ] || devtools_image=none
@@ -972,7 +1044,7 @@ destroy() {
   app_vars "$IMAGE" false "$devtools_image"
   echo "Destroying Serena (about 15-20 minutes: CloudFront is disabled first) ..."
   # CloudFront removes its VPC origin's network interfaces in the background, which can briefly hold the VPC.
-  tf personal destroy -input=false -auto-approve "${TF_VARS[@]}" ||
+  tf "$ROOT" destroy -input=false -auto-approve "${TF_VARS[@]}" ||
     die "The destroy didn't finish. Wait a few minutes and run ./serena aws destroy again; Terraform continues where it stopped."
   aws_ ssm delete-parameter --name "$(cdn_param)" >/dev/null 2>&1 || true   # the public keys (made by cdn-key)
   tf_init registry
@@ -997,12 +1069,13 @@ case "$CMD" in
   resume) reapply true; echo "Running: $(app_url)" ;;
   allow-my-ip)
     load_env
+    [ "$ROOT" = personal ] || die "'$ENV' is on the shared root: its addresses are ADMIN_CIDRS and the others in $LOCAL."
     ip="$(my_ip)/32"
     case ",$ALLOWED_CIDRS," in *",$ip,"*) echo "$ip is already allowed." ; exit 0 ;; esac
     new="${ALLOWED_CIDRS:+$ALLOWED_CIDRS,}$ip"
     save_local ALLOWED_CIDRS "$new"; ALLOWED_CIDRS="$new"
     echo "Allowed: $new"
-    prepare; tf_init personal
+    prepare; tf_init "$ROOT"
     if [ -z "$(applied image_uri)" ]; then echo "Saved; it applies at the first deploy."; else reapply "$(was_running)"; fi ;;
   etl) etl "$@" ;;
   list) list_servable "$@" ;;
@@ -1011,11 +1084,11 @@ case "$CMD" in
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
   etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;
-  cdn-key) prepare; tf_init personal; need_deployed; check_museums ask; cdn_key ;;
+  cdn-key) prepare; tf_init "$ROOT"; need_deployed; check_museums ask; cdn_key ;;
   confirm-alerts) confirm_alerts ;;
   init) prepare
         backend_config registry; tf registry init -reconfigure "${BACKEND[@]}"
-        backend_config personal; tf personal init -reconfigure "${BACKEND[@]}" ;;
+        backend_config "$ROOT"; tf "$ROOT" init -reconfigure "${BACKEND[@]}" ;;
   destroy) destroy ;;
   help|-h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" ;;
   *) die "Unknown command '$CMD'. ./serena aws help lists them." ;;

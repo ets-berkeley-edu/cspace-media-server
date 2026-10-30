@@ -1639,6 +1639,10 @@ their hashed names, with no CDN (D296).
   - **AWS WAF** is a regional web ACL on the load balancer, with the same rules as on CloudFront (below), and none on
     CloudFront (D292). Since most image requests come from the Apache hosts, the rate limit has two rules: requests
     from the Apache hosts' addresses are limited by `X-Forwarded-For`, everything else by source address (D306).
+  - **The certificate** is requested by `deploy/terraform/registry` (applied first by `./serena aws deploy`), which
+    prints its DNS validation record and stops while it isn't issued; once DevOps has added the record, the next deploy
+    goes on (TQ4). The load balancer takes HTTPS only (TQ5). Anyone its security group admits (the Apache hosts,
+    `APACHE_CIDRS`; the ETL servers; campus and VPN) reaches the image paths and `/health` (TQ6).
   - **The files and the unavailable images** stay on CloudFront: a distribution with only the file and SVG paths,
     signed URLs, origin access control and the static bucket, at its own `*.cloudfront.net` address (D293). It has no
     address rule and no web ACL; a file needs a fresh signature from Serena, which is issued only through the load
@@ -1686,8 +1690,11 @@ their hashed names, with no CDN (D296).
       request: the personal root's applies the address rules and removes `/<museum>` from a file's path; the shared
       root's only removes `/<museum>` (D307).
     - `simulator`: the simulated CollectionSpace and the fake ETL, where `SIMULATED_CSPACE` is on (D189).
+    - `waf`: the web ACL and its logs, for CloudFront (the personal root, where it's switched on) or for the load
+      balancer (the shared root); with the Apache hosts' addresses, its rate limit counts their requests by
+      `X-Forwarded-For` (D306).
 
-    Each root keeps its own network, load balancer, security groups and WAF. Each root's state is
+    Each root keeps its own network, load balancer and security groups. Each root's state is
     `serena/<env>/<root>.tfstate`; the personal environments were destroyed before the move, so it needed no `moved`
     blocks.
   - **CI.** `terraform test` against the mock provider runs for each root. The shared root's asserts the
@@ -1720,9 +1727,11 @@ their hashed names, with no CDN (D296).
   - **Break-glass.** If the pipeline is broken when a deploy is urgent, a named admin runs `./serena aws`, signed in
     through a separate, time-limited break-glass permission set (audited in CloudTrail) and following the recovery
     runbook (F2); the next pipeline run confirms the environment matches `main` (D276).
-  - **When.** Stage 1 (Jira CS-9523: the simulator, throwaway) is deployed with `./serena aws`, with no pipeline. The
-    pipeline is built before stage 2, the first environment with real data, and proven there, so production's first
-    deploy isn't the pipeline's first run (D269).
+  - **When.** Stage 1 (Jira CS-9523: the simulator, throwaway) is deployed with `./serena aws`, with no pipeline.
+    The pipeline is built before stage 2 holds real data, and proven there, so production's first deploy isn't the
+    pipeline's first run (D269, amended October 29, 2026, TQ8): `./serena aws` deploys a shared environment only while
+    it uses only the simulator (stage 2's first phase, D300). With real data it refuses, unless the deploy is a
+    break-glass one (D276): the person deploying types "break glass", then confirms the account is UC Berkeley's.
   - **personal-dev** and each developer's own account are unchanged: `./serena aws` from the developer's own
     machine, the simulator and the fake ETL only (D182, D193, D277). A developer may deploy their own environments in
     any AWS account they can sign in to: a UC Berkeley sandbox account for Serena development or their own (decided

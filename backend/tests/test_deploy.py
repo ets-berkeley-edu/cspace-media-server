@@ -22,7 +22,8 @@ def test_terraform_creates_the_tables_the_code_defines() -> None:
 def test_every_setting_the_deployment_gives_is_one_serena_reads() -> None:
     """A misspelt SERENA_ name in the task definitions or the image would be ignored silently."""
     terraform = DEPLOY / "terraform"
-    tf_files = sorted([*terraform.glob("personal/*.tf"), *terraform.glob("modules/*/*.tf")])
+    roots_and_modules = ("personal/*.tf", "shared/*.tf", "modules/*/*.tf")
+    tf_files = sorted(f for pattern in roots_and_modules for f in terraform.glob(pattern))
     sources = [*tf_files, DEPLOY / "Dockerfile"]
     names = {name for source in sources for name in re.findall(r"\bSERENA_[A-Z0-9_]+\b", source.read_text())}
     assert names, "no settings found: has the deployment moved?"

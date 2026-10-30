@@ -36,7 +36,7 @@ provider "aws" {
   }
 }
 
-# A web ACL for a CloudFront distribution, and its log group, live in us-east-1 (waf.tf).
+# A web ACL for a CloudFront distribution, and its log group, live in us-east-1 (main.tf, module "waf").
 provider "aws" {
   alias               = "us_east_1"
   region              = "us-east-1"

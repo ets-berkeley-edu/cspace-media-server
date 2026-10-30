@@ -68,6 +68,12 @@ variable "alb_security_group_id" {
   type        = string
 }
 
+variable "alb_port" {
+  description = "The load balancer's port the fake ETL calls: 80 for the personal root's internal one. (The shared root's is internet-facing, so the fake ETL's calls arrive from the NAT gateway's address, which ETL_CIDRS must list.)"
+  type        = number
+  default     = 80
+}
+
 variable "cluster_id" {
   description = "The ECS cluster (modules/core)."
   type        = string
