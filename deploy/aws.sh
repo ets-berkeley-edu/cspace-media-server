@@ -925,7 +925,7 @@ print(f"{len(rows)} shown.{more}")'
 run_tests() {  # run_tests [pytest options]
   load_env; check_account; need_terraform; tf_init "$ROOT"; need_deployed
   [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
-  local url saved deployed museum py
+  local url saved deployed museum py files_url me
   url="$(app_url)"
   case "$url" in https://*) ;; *) die "'$ENV' has no address yet: run ./serena aws deploy again." ;; esac
   saved="$(cat "$URL_FILE" 2>/dev/null || true)"
@@ -947,6 +947,12 @@ run_tests() {  # run_tests [pytest options]
   echo "The AWS tests against $ENV_LABEL: $url (image ${IMAGE##*:}, museum $museum)"
   [ "$SIMULATED_CSPACE" = true ] || echo "A real CollectionSpace: only the tests that look run."
   rm -rf serenade/.run/failures
+  files_url="$(applied files_url)"; [ -n "$files_url" ] || files_url="$url"
+  # The address-rule tests (T106 to T108, D299) need this computer's address and the lists the load balancer uses.
+  me="$(my_ip)"
+  SERENADE_AWS_ROOT="$ROOT" SERENADE_AWS_FILES_URL="$files_url" SERENADE_AWS_MY_ADDRESS="$me" \
+    SERENADE_AWS_ETL_CIDRS="$ETL_CIDRS" SERENADE_AWS_ADMIN_CIDRS="$ADMIN_CIDRS" \
+    SERENADE_AWS_ADMITTED_CIDRS="$APACHE_CIDRS,$ETL_CIDRS,$ADMIN_CIDRS" \
   SERENADE_AWS_ENV="$ENV" SERENADE_AWS_URL="$url" SERENADE_AWS_MUSEUM="$museum" SERENADE_AWS_LABEL="$ENV_LABEL" \
     SERENADE_AWS_IMAGE_TAG="${IMAGE##*:}" SERENADE_AWS_SIMULATED="$SIMULATED_CSPACE" \
     SERENADE_AWS_LOG_PREFIX="/serena/$SERENA_ENV_NAME" SERENADE_AWS_BUCKET="$NAME-$museum-$ACCOUNT_ID-$AWS_REGION" \

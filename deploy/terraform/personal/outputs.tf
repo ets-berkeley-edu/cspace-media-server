@@ -3,6 +3,11 @@ output "url" {
   value       = "https://${module.files.domain_name}"
 }
 
+output "files_url" {
+  description = "The files' address: here the same distribution as the app's."
+  value       = "https://${module.files.domain_name}"
+}
+
 output "cluster_name" {
   description = "The ECS cluster; its services are web and worker (and fakecspace, with the simulator)."
   value       = module.core.cluster_name

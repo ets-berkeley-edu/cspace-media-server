@@ -2,7 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "OnlyTheTwoRegions",
+      "Sid": "OnlyItsRegion",
       "Effect": "Deny",
       "NotAction": [
         "iam:*",
@@ -15,8 +15,7 @@
       "Condition": {
         "StringNotEquals": {
           "aws:RequestedRegion": [
-            "us-west-2",
-            "us-east-1"
+            "us-west-2"
           ]
         }
       }
@@ -25,6 +24,10 @@
       "Sid": "ReadMetadata",
       "Effect": "Allow",
       "Action": [
+        "acm:DescribeCertificate",
+        "acm:GetCertificate",
+        "acm:ListCertificates",
+        "acm:ListTagsForCertificate",
         "cloudfront:DescribeFunction",
         "cloudfront:DescribeKeyValueStore",
         "cloudfront:Get*",
@@ -76,68 +79,249 @@
       "Resource": "*"
     },
     {
-      "Sid": "Network",
+      "Sid": "SecurityGroupsCreate",
       "Effect": "Allow",
       "Action": [
-        "ec2:AssociateRouteTable",
-        "ec2:AttachInternetGateway",
+        "ec2:CreateSecurityGroup"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:vpc/*"
+      ]
+    },
+    {
+      "Sid": "SecurityGroupsCreateTagged",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateSecurityGroup"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:security-group/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "SecurityGroupsTagged",
+      "Effect": "Allow",
+      "Action": [
         "ec2:AuthorizeSecurityGroupEgress",
         "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:CreateInternetGateway",
-        "ec2:CreateRoute",
-        "ec2:CreateRouteTable",
-        "ec2:CreateSecurityGroup",
-        "ec2:CreateSubnet",
-        "ec2:CreateTags",
-        "ec2:CreateVpc",
-        "ec2:CreateVpcEndpoint",
-        "ec2:DeleteInternetGateway",
-        "ec2:DeleteRoute",
-        "ec2:DeleteRouteTable",
         "ec2:DeleteSecurityGroup",
-        "ec2:DeleteSubnet",
-        "ec2:DeleteTags",
-        "ec2:DeleteVpc",
-        "ec2:DeleteVpcEndpoints",
-        "ec2:DetachInternetGateway",
-        "ec2:DisassociateRouteTable",
         "ec2:ModifySecurityGroupRules",
-        "ec2:ModifySubnetAttribute",
-        "ec2:ModifyVpcAttribute",
-        "ec2:ModifyVpcEndpoint",
-        "ec2:ReplaceRoute",
         "ec2:RevokeSecurityGroupEgress",
         "ec2:RevokeSecurityGroupIngress",
         "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
         "ec2:UpdateSecurityGroupRuleDescriptionsIngress"
       ],
-      "Resource": "*"
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:security-group/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "serena"
+        }
+      }
     },
     {
-      "Sid": "LoadBalancer",
+      "Sid": "SecurityGroupRulesTagged",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:ModifySecurityGroupRules"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:security-group-rule/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "GatewayEndpointsCreate",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpcEndpoint"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:vpc/*",
+        "arn:aws:ec2:us-west-2:*:route-table/*"
+      ]
+    },
+    {
+      "Sid": "GatewayEndpointsCreateTagged",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpcEndpoint"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:vpc-endpoint/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "GatewayEndpointsTagged",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DeleteVpcEndpoints",
+        "ec2:ModifyVpcEndpoint"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:vpc-endpoint/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "GatewayEndpointsRoutes",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:ModifyVpcEndpoint"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:route-table/*"
+      ]
+    },
+    {
+      "Sid": "NetworkTagsOnCreate",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateTags"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:security-group/*",
+        "arn:aws:ec2:us-west-2:*:security-group-rule/*",
+        "arn:aws:ec2:us-west-2:*:vpc-endpoint/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "ec2:CreateAction": [
+            "CreateSecurityGroup",
+            "AuthorizeSecurityGroupIngress",
+            "AuthorizeSecurityGroupEgress",
+            "CreateVpcEndpoint"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "NetworkTags",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateTags",
+        "ec2:DeleteTags"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-west-2:*:security-group/*",
+        "arn:aws:ec2:us-west-2:*:security-group-rule/*",
+        "arn:aws:ec2:us-west-2:*:vpc-endpoint/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "LoadBalancerCreateTagged",
       "Effect": "Allow",
       "Action": [
         "elasticloadbalancing:AddTags",
         "elasticloadbalancing:CreateListener",
         "elasticloadbalancing:CreateLoadBalancer",
-        "elasticloadbalancing:CreateTargetGroup",
-        "elasticloadbalancing:DeleteListener",
-        "elasticloadbalancing:DeleteLoadBalancer",
-        "elasticloadbalancing:DeleteTargetGroup",
-        "elasticloadbalancing:ModifyListener",
-        "elasticloadbalancing:ModifyListenerAttributes",
-        "elasticloadbalancing:ModifyLoadBalancerAttributes",
-        "elasticloadbalancing:ModifyTargetGroup",
-        "elasticloadbalancing:ModifyTargetGroupAttributes",
-        "elasticloadbalancing:RemoveTags",
-        "elasticloadbalancing:SetSecurityGroups",
-        "elasticloadbalancing:SetSubnets"
+        "elasticloadbalancing:CreateRule",
+        "elasticloadbalancing:CreateTargetGroup"
       ],
       "Resource": [
         "arn:aws:elasticloadbalancing:us-west-2:*:loadbalancer/app/serena-*/*",
         "arn:aws:elasticloadbalancing:us-west-2:*:targetgroup/serena-*/*",
-        "arn:aws:elasticloadbalancing:us-west-2:*:listener/app/serena-*/*/*"
-      ]
+        "arn:aws:elasticloadbalancing:us-west-2:*:listener/app/serena-*/*/*",
+        "arn:aws:elasticloadbalancing:us-west-2:*:listener-rule/app/serena-*/*/*/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "LoadBalancerTagged",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:AddListenerCertificates",
+        "elasticloadbalancing:DeleteListener",
+        "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DeleteRule",
+        "elasticloadbalancing:DeleteTargetGroup",
+        "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:ModifyListenerAttributes",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:ModifyRule",
+        "elasticloadbalancing:ModifyTargetGroup",
+        "elasticloadbalancing:ModifyTargetGroupAttributes",
+        "elasticloadbalancing:RemoveListenerCertificates",
+        "elasticloadbalancing:RemoveTags",
+        "elasticloadbalancing:SetRulePriorities",
+        "elasticloadbalancing:SetSecurityGroups",
+        "elasticloadbalancing:SetSubnets",
+        "elasticloadbalancing:SetWebAcl"
+      ],
+      "Resource": [
+        "arn:aws:elasticloadbalancing:us-west-2:*:loadbalancer/app/serena-*/*",
+        "arn:aws:elasticloadbalancing:us-west-2:*:targetgroup/serena-*/*",
+        "arn:aws:elasticloadbalancing:us-west-2:*:listener/app/serena-*/*/*",
+        "arn:aws:elasticloadbalancing:us-west-2:*:listener-rule/app/serena-*/*/*/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "CertificateCreateTagged",
+      "Effect": "Allow",
+      "Action": [
+        "acm:AddTagsToCertificate",
+        "acm:RequestCertificate"
+      ],
+      "Resource": [
+        "arn:aws:acm:us-west-2:*:certificate/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "CertificateTagged",
+      "Effect": "Allow",
+      "Action": [
+        "acm:DeleteCertificate",
+        "acm:RemoveTagsFromCertificate",
+        "acm:UpdateCertificateOptions"
+      ],
+      "Resource": [
+        "arn:aws:acm:us-west-2:*:certificate/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "serena"
+        }
+      }
     },
     {
       "Sid": "ContainersRegister",
@@ -203,52 +387,80 @@
       ]
     },
     {
-      "Sid": "CloudFront",
+      "Sid": "CloudFrontFiles",
       "Effect": "Allow",
       "Action": [
-        "cloudfront:CreateDistribution",
-        "cloudfront:CreateDistributionWithTags",
         "cloudfront:CreateFunction",
         "cloudfront:CreateKeyGroup",
         "cloudfront:CreateOriginAccessControl",
         "cloudfront:CreatePublicKey",
         "cloudfront:CreateResponseHeadersPolicy",
-        "cloudfront:CreateVpcOrigin",
-        "cloudfront:DeleteDistribution",
         "cloudfront:DeleteFunction",
         "cloudfront:DeleteKeyGroup",
         "cloudfront:DeleteOriginAccessControl",
         "cloudfront:DeletePublicKey",
         "cloudfront:DeleteResponseHeadersPolicy",
-        "cloudfront:DeleteVpcOrigin",
         "cloudfront:PublishFunction",
-        "cloudfront:TagResource",
-        "cloudfront:UntagResource",
-        "cloudfront:UpdateDistribution",
         "cloudfront:UpdateFunction",
         "cloudfront:UpdateKeyGroup",
         "cloudfront:UpdateOriginAccessControl",
         "cloudfront:UpdatePublicKey",
-        "cloudfront:UpdateResponseHeadersPolicy",
-        "cloudfront:UpdateVpcOrigin"
+        "cloudfront:UpdateResponseHeadersPolicy"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "CloudFrontDistributionCreateTagged",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateDistribution",
+        "cloudfront:CreateDistributionWithTags",
+        "cloudfront:TagResource"
+      ],
+      "Resource": "arn:aws:cloudfront::*:distribution/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/project": "serena"
+        }
+      }
+    },
+    {
+      "Sid": "CloudFrontDistributionTagged",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:DeleteDistribution",
+        "cloudfront:UntagResource",
+        "cloudfront:UpdateDistribution"
+      ],
+      "Resource": "arn:aws:cloudfront::*:distribution/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "serena"
+        }
+      }
     },
     {
       "Sid": "Waf",
       "Effect": "Allow",
       "Action": [
+        "wafv2:AssociateWebACL",
+        "wafv2:CreateIPSet",
         "wafv2:CreateWebACL",
+        "wafv2:DeleteIPSet",
         "wafv2:DeleteLoggingConfiguration",
         "wafv2:DeleteWebACL",
+        "wafv2:DisassociateWebACL",
         "wafv2:PutLoggingConfiguration",
         "wafv2:TagResource",
         "wafv2:UntagResource",
+        "wafv2:UpdateIPSet",
         "wafv2:UpdateWebACL"
       ],
       "Resource": [
-        "arn:aws:wafv2:us-east-1:*:global/webacl/serena-*/*",
-        "arn:aws:wafv2:us-east-1:*:global/managedruleset/*/*"
+        "arn:aws:wafv2:us-west-2:*:regional/webacl/serena-*/*",
+        "arn:aws:wafv2:us-west-2:*:regional/ipset/serena-*/*",
+        "arn:aws:wafv2:us-west-2:*:regional/managedruleset/*/*",
+        "arn:aws:elasticloadbalancing:us-west-2:*:loadbalancer/app/serena-*/*"
       ]
     },
     {
@@ -555,8 +767,7 @@
         "StringEquals": {
           "iam:AWSServiceName": [
             "ecs.amazonaws.com",
-            "elasticloadbalancing.amazonaws.com",
-            "vpcorigin.cloudfront.amazonaws.com"
+            "elasticloadbalancing.amazonaws.com"
           ]
         }
       }

@@ -5,9 +5,11 @@ you're signed in and the environment is running. It never runs on its own: the t
 the environment's last deploy saved in deploy/environments/<env>.url (D225)."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
+import socket
 import subprocess
 import time
 import urllib.error
@@ -25,7 +27,13 @@ T = TypeVar("T")
 @dataclass(frozen=True)
 class Target:
     env: str            # personal-dev
-    url: str            # https://<distribution>.cloudfront.net
+    url: str            # the app: https://<distribution>.cloudfront.net, or the campus name on the shared root (D293)
+    files_url: str      # the files and the unavailable images: the same distribution, or the shared root's own (D299)
+    root: str           # personal or shared (D302)
+    my_address: str     # the address this computer's requests come from, for the address-rule tests
+    etl_cidrs: tuple[str, ...]       # who may reach /etl/ (ETL_CIDRS)
+    admin_cidrs: tuple[str, ...]     # who may reach /admin (ADMIN_CIDRS)
+    admitted_cidrs: tuple[str, ...]  # whom the shared root's load balancer admits at all (Apache, ETL, admin; D291)
     museum: str         # the museum the tests use: the environment's first
     label: str          # the admin app's header: "AWS · personal dev · simulator"
     image_tag: str      # the running image's tag: <commit>[-dirty]-<time>
@@ -43,7 +51,13 @@ def from_environment() -> Target:
     try:
         env = os.environ["SERENADE_AWS_ENV"]
         url = os.environ["SERENADE_AWS_URL"].rstrip("/")
-        target = Target(env=env, url=url, museum=os.environ["SERENADE_AWS_MUSEUM"],
+        files_url = os.environ["SERENADE_AWS_FILES_URL"].rstrip("/")
+        target = Target(env=env, url=url, files_url=files_url, root=os.environ["SERENADE_AWS_ROOT"],
+                        my_address=os.environ["SERENADE_AWS_MY_ADDRESS"],
+                        etl_cidrs=_cidrs(os.environ["SERENADE_AWS_ETL_CIDRS"]),
+                        admin_cidrs=_cidrs(os.environ["SERENADE_AWS_ADMIN_CIDRS"]),
+                        admitted_cidrs=_cidrs(os.environ["SERENADE_AWS_ADMITTED_CIDRS"]),
+                        museum=os.environ["SERENADE_AWS_MUSEUM"],
                         label=os.environ["SERENADE_AWS_LABEL"], image_tag=os.environ["SERENADE_AWS_IMAGE_TAG"],
                         simulated=os.environ["SERENADE_AWS_SIMULATED"] == "true",
                         log_prefix=os.environ["SERENADE_AWS_LOG_PREFIX"], bucket=os.environ["SERENADE_AWS_BUCKET"])
@@ -52,9 +66,34 @@ def from_environment() -> Target:
     saved = REPO / "deploy" / "environments" / f"{env}.url"
     if not saved.is_file() or saved.read_text().strip().rstrip("/") != url:
         raise SystemExit(f"{url} isn't the address of '{env}' ({saved}): the AWS tests run nowhere else.")
-    if not re.fullmatch(r"https://[a-z0-9]+\.cloudfront\.net", url):
-        raise SystemExit(f"{url} isn't a CloudFront address.")
+    if not re.fullmatch(r"https://[a-z0-9]+\.cloudfront\.net", files_url):
+        raise SystemExit(f"{files_url} isn't a CloudFront address.")
+    if target.root == "personal" and url != files_url:
+        raise SystemExit(f"On the personal root the app and the files share one address, not {url} and {files_url}.")
+    if target.root == "shared" and not re.fullmatch(r"https://[a-z0-9.-]+", url):
+        raise SystemExit(f"{url} isn't a host name.")
     return target
+
+
+def _cidrs(value: str) -> tuple[str, ...]:
+    return tuple(c.strip() for c in value.split(",") if c.strip())
+
+
+def connects(url: str, port: int, seconds: float = 10) -> bool:
+    """Whether a TCP connection to the address's host and port opens within the time (a security group that doesn't
+    admit this computer drops it: no answer at all)."""
+    host = url.split("://", 1)[1].split("/", 1)[0]
+    try:
+        with socket.create_connection((host, port), timeout=seconds):
+            return True
+    except OSError:
+        return False
+
+
+def listed(address: str, cidrs: tuple[str, ...]) -> bool:
+    """Whether an address is in one of the ranges."""
+    ip = ipaddress.ip_address(address)
+    return any(ip in ipaddress.ip_network(c, strict=False) for c in cidrs)
 
 
 # ---- HTTP -----------------------------------------------------------------------------------------------------------
