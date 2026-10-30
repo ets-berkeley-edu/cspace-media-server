@@ -1,0 +1,19 @@
+# Shared mode (./serena up shared; serena-fakecspace-questions F6, F7): Serena without its own simulator, using the one
+# the BMU can use too (cspace-fakecspace's compose.shared.yml, which ./serena up shared starts first). The app and the
+# worker join that simulator's network, fakecspace-shared, where each museum's host name (pahma.fakecspace) is the
+# shared simulator's, so SERENA_TENANTS doesn't change. Local only (F17).
+services:
+  fakecspace:
+    profiles: [own-simulator]   # not started: the shared one stands in
+
+  web:
+    depends_on: !override
+      seed: { condition: service_completed_successfully }
+    networks: [default, fakecspace-shared]
+
+  worker:
+    networks: [default, fakecspace-shared]
+
+networks:
+  fakecspace-shared:
+    external: true

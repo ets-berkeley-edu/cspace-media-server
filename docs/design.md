@@ -1826,7 +1826,12 @@ their hashed names, with no CDN (D296).
   refresh through the ETL API, after adding the refresh's synthetic Media records to the simulator (the stand-in for
   the Solr refresh), and prints its counts; `--failed` makes the ETL list but never calls Serena (D85).
   `./serena smoke` runs a daily refresh and fetches, stores and serves one of its images; CI runs it on every code
-  change. `./serena up` prints the clone's branch and commit, and the admin app shows them beside the environment
+  change. **Shared mode** (serena-fakecspace-questions F6, F7, F17; October 30, 2026): `./serena up shared` runs the
+  stack without its own simulator (`docker-compose.shared.yml`): the app and the worker join the Docker network
+  `fakecspace-shared` of the one simulator Serena and the BMU share, cspace-fakecspace's `compose.shared.yml`, started
+  from a clone beside this one if it isn't running. Each museum's host name there is the same (`pahma.fakecspace`),
+  so `SERENA_TENANTS` doesn't change. Records the BMU makes in PAHMA's store then reach Serena through "Make one from
+  the simulator". Local only: each AWS environment keeps its own simulator. `./serena up` prints the clone's branch and commit, and the admin app shows them beside the environment
   (`SERENA_BUILD`), so a tester sees at once which code the stack runs. The app also writes its log lines to a file
   inside its container (`SERENA_LOG_FILE`), which the Past requests page reads in place of CloudWatch (D109). The stack talks only to the simulator: there is no local mode against a real
   CollectionSpace, which would need a museum's service-account password on a laptop; real-tenant checks happen in

@@ -80,6 +80,11 @@ cd cspace-media-server
   In the admin app, the bell at the top right opens the alerts and the gear opens the museum's settings.
 - `./serena down` stops it and forgets everything (moto keeps nothing). `./serena down && ./serena up` starts afresh.
 - `./serena help` lists the other commands (`logs`, `status`, `smoke`, `urls`, `ui`).
+- `./serena up shared` uses the simulator the BMU can use too (`./bmu up shared`), so a file uploaded with the BMU can
+  come out of Serena: after a BMU job, Manual refresh's "Make one from the simulator" for PAHMA lists it. It needs a
+  clone of [cspace-fakecspace](https://github.com/ets-berkeley-edu/cspace-fakecspace) beside this one (or
+  `FAKECSPACE_DIR`), starts its shared simulator if it isn't running (http://localhost:8680), and leaves it running
+  at `./serena down`. Switching between `./serena up` and `./serena up shared` needs `./serena down` first.
 
 **If something's in the way.**
 - *A port is taken.* The stack uses ports 8300 (Serena), 5373 (the admin app), 8380 (the simulator) and 9300 (moto).
