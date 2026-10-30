@@ -17,7 +17,7 @@ import pytest
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from serenade.aws.target import Answer, Target, aws_cli, eventually, fake_etl, get, serena_aws
+from serenade.aws.target import Answer, Target, aws_cli, connects, eventually, fake_etl, get, listed, serena_aws
 from serenade.pages.audit_log_page import AuditLogPage
 from serenade.pages.lookup_page import LookUpPage
 from serenade.pages.page import Page, by_id
@@ -42,14 +42,14 @@ def signed_address(answer: Answer, target: Target) -> str:
     """The signed address Serena redirects a file request to; fails if it isn't one."""
     assert answer.status == 302, f"{answer.status}, not 302"
     location = answer.header("Location")
-    assert location.startswith(f"{target.url}/{target.museum}/objects/"), location
+    assert location.startswith(f"{target.files_url}/{target.museum}/objects/"), location
     assert SIGNED.search(location), f"not a signed address: {location}"
     return location
 
 
 def unavailable(answer: Answer, target: Target) -> None:
     assert answer.status == 302, f"{answer.status}, not 302"
-    assert answer.header("Location") == f"{target.url}/{target.museum}/unavailable.svg", answer.header("Location")
+    assert answer.header("Location") == f"{target.files_url}/{target.museum}/unavailable.svg", answer.header("Location")
 
 
 def max_age(answer: Answer) -> int:
@@ -180,11 +180,49 @@ def test_t99_the_unavailable_images(target: Target, sample: str) -> None:
     unknown = csid[:-1] + ("0" if csid[-1] != "0" else "1")
     unavailable(get(sample.replace(csid, unknown)), target)
     for path in (f"/{target.museum}/unavailable.svg", "/default/placeholder.svg"):
-        answer = get(target.url + path)
+        answer = get(target.files_url + path)
         assert answer.status == 200, f"{path}: {answer.status}"
         assert answer.header("Content-Type") == "image/svg+xml", f"{path}: {answer.header('Content-Type')}"
         csp = answer.header("Content-Security-Policy")
         assert csp == SVG_CSP, f"{path}: {csp}"
+
+
+# ---- the shared root's front door (D299; the split, D289 to D294) --------------------------------------------------
+# Read-only, so safe where the data is real. Each checks only what it can from where it runs: this computer's address
+# decides which (see the testing checklist's stage 2 section for the rest, from the Apache hosts and off campus).
+
+def shared_root(target: Target) -> None:
+    if target.root != "shared":
+        pytest.skip("the personal root: CloudFront and its allowlist in front of everything")
+
+
+def test_t106_https_on_the_campus_name_only(target: Target) -> None:
+    """The app on its campus name over HTTPS with a valid certificate (D293, D294); nothing listens on port 80 (TQ5)."""
+    shared_root(target)
+    if not listed(target.my_address, target.admitted_cidrs):
+        pytest.skip(f"{target.my_address} isn't one the load balancer admits (T108 checks that)")
+    health = get(f"{target.url}/health")  # urllib checks the certificate against the name
+    assert health.status == 200 and health.body == b"ok", health.status
+    assert not connects(target.url, 80, seconds=5), "something answers on port 80"
+
+
+def test_t107_etl_api_only_from_the_etl_servers(target: Target) -> None:
+    """/etl/ from an address the load balancer admits but ETL_CIDRS doesn't list: the listener's 403 (D291)."""
+    shared_root(target)
+    if listed(target.my_address, target.etl_cidrs) or not listed(target.my_address, target.admitted_cidrs):
+        pytest.skip(f"{target.my_address} is in ETL_CIDRS, or not admitted at all")
+    answer = get(f"{target.url}/etl/v1/refreshes")
+    assert answer.status == 403, answer.status
+    assert answer.body == b"Not from this address.\n", answer.body[:100]
+
+
+def test_t108_nothing_from_an_address_not_admitted(target: Target) -> None:
+    """From an address none of the lists has (off campus, off the VPN): no connection at all (the security group,
+    D291). Run once off the VPN; elsewhere it skips."""
+    shared_root(target)
+    if listed(target.my_address, target.admitted_cidrs):
+        pytest.skip(f"{target.my_address} is admitted: run the tests once off campus and off the VPN for this one")
+    assert not connects(target.url, 443), f"{target.url} answered {target.my_address}"
 
 
 # ---- the admin app (Selenium) ---------------------------------------------------------------------------------------

@@ -1644,3 +1644,49 @@ signed in (`aws sso login --profile bmu-personal`).
 - [ ] **3. allow-my-ip is for the personal root.** With dummy values in `ucb-stage2.local.conf` (`VPC_ID=vpc-0`,
   `APP_SUBNET_IDS=a,b`, `LB_SUBNET_IDS=c,d`, `DOMAIN_NAME=example.edu`), `./serena aws allow-my-ip --env ucb-stage2`:
   "'ucb-stage2' is on the shared root: its addresses are ADMIN_CIDRS …". Then delete `ucb-stage2.local.conf`.
+
+## 50. Stage 2, the shared QA environment, with the simulator museum (about half a day; before stage 2 is given real records)
+
+What it checks: the split in a UC Berkeley account, deployed from the shared root (D302) under the stage 2 deployer
+policy (`deploy/iam/serena-deployer-policy.json`, D297, D305), with only the simulator museum until every AWS test
+passes (D300, TQ8). Every `./serena aws` command here takes `--env ucb-stage2`. The settings are in
+`deploy/environments/ucb-stage2.conf`.
+
+**Before you start** (once):
+
+1. From Ops: the account, the stage 2 deployer role or permission set with the policy above (Ops can check it first
+   with `aws iam simulate-principal-policy`), the VPC and its subnets (private ones for the tasks, behind the NAT
+   gateway, and public ones for the load balancer, two zones each), whether the VPC already has S3 and DynamoDB
+   gateway endpoints, and the NAT gateway's outbound address (D303). From DevOps: the campus name for stage 2 (D293)
+   and webapps-qa's Apache hosts' outbound addresses (D290).
+2. Add the profile to `~/.aws/config` as `serena-stage2-deploy` and check it with
+   `aws sts get-caller-identity --profile serena-stage2-deploy`.
+3. Create `deploy/environments/ucb-stage2.local.conf` (not committed) as `ucb-stage2.conf`'s comments list: the
+   account, `VPC_ID`, `APP_SUBNET_IDS`, `LB_SUBNET_IDS`, `CREATE_GATEWAY_ENDPOINTS`, `DOMAIN_NAME`, `APACHE_CIDRS`,
+   `ETL_CIDRS` (with the NAT gateway's address, for the fake ETL), `ADMIN_CIDRS` (campus and VPN) and `ALERT_EMAIL`.
+
+**The steps:**
+
+- [ ] **1. The certificate.** `./serena aws deploy`: the image repositories and the certificate are made, then it
+  prints the certificate's DNS record and "Run ./serena aws deploy again once the record is in DNS". Give DevOps the
+  record. Note any `AccessDenied` (action and resource): each changes the policy.
+- [ ] **2. The deploy.** Once ACM shows the certificate as issued, `./serena aws deploy` again. Expect a plan that only
+  creates, then the load balancer's own name; give it to DevOps for the campus name's DNS record. Note any
+  `AccessDenied`.
+- [ ] **3. Status and plan.** `./serena aws status`: web (2), worker and fakecspace running, image delivery on, the
+  admitted address lists. `./serena aws confirm-alerts`. `./serena aws plan`: "No changes."
+- [ ] **4. The AWS tests, on campus or the VPN.** `./serena aws etl pahma`, then `./serena aws test`. Expect every
+  test to pass but T108, which skips (your address is admitted). T106 checks HTTPS on the campus name and nothing on
+  port 80; T107 that `/etl/` is refused from campus with the listener's 403.
+- [ ] **5. Off campus and off the VPN** (a phone's hotspot): `./serena aws test -k t108`: `1 passed` (no connection at
+  all). `curl -sS --max-time 10 https://<campus name>/health` times out.
+- [ ] **6. From webapps-qa's Apache host** (with DevOps): its proxy to Serena's image paths returns the 302 to the
+  files' CloudFront address; `curl -sS -o /dev/null -w '%{http_code}\n' https://<campus name>/admin/` from that host
+  answers 403 ("Not from this address."), unless its address is also in `ADMIN_CIDRS`.
+- [ ] **7. WAF limits each visitor, not the Apache host.** In the AWS console, WAF › Web ACLs (us-west-2) ›
+  `serena-stage2` › Rules: `rate-limit-per-visitor-through-apache` aggregates on the forwarded IP. With DevOps, a
+  burst of requests through Apache from one browser (above the rate limit within 5 minutes) is blocked for that
+  visitor only; another visitor through the same Apache host still gets images.
+- [ ] **8. A slow first fetch is answered** (D295): `./serena aws etl pahma --sizes 100MB:1`, then request that record's
+  original through the campus name. The 302 comes after the fetch (tens of seconds), not a 504.
+- [ ] **9. Leave it running** for stage 2's next phase (PAHMA's QA records, with the pipeline, D268).

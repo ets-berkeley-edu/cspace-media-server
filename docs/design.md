@@ -1973,9 +1973,11 @@ The split (QA and production) is tested as follows (decided October 28, 2026):
 
 - **The AWS tests** (`serenade/aws`) take a file URL (the CloudFront address) beside the app URL, so the tests of the
   302 and the unavailable image work whether the files are on the app's host or not; new read-only tests check the
-  address rules (`/etl/` and `/admin` refused from an unlisted address, `/health` over HTTPS on the campus domain).
-  Tests that change data run only against a simulator museum (D299). Where the address-rule tests run from (a laptop
-  off the VPN, a CI runner) is settled when they're written.
+  address rules (T106 to T108: HTTPS on the campus name and nothing on port 80; `/etl/` refused with a 403 from an
+  address the load balancer admits but `ETL_CIDRS` doesn't list; no connection at all from an address it doesn't
+  admit). Tests that change data run only against a simulator museum (D299). The address-rule tests run from the
+  developer's computer and check only what its address allows: on campus or the VPN, T106 and T107; once off both,
+  T108 (decided October 29, 2026); the checks from the Apache hosts are in the stage 2 checklist section.
 - **End to end in stage 2 itself:** deployed from the shared root with only the simulator museum until every AWS test
   passes, then given PAHMA's QA records; later changes to the load balancer, WAF or files distribution are tested on
   its simulator museum (D300). A stage 2 section of the testing checklist covers what the tests can't check from one
