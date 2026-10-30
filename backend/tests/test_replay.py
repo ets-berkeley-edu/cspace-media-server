@@ -1,5 +1,5 @@
 """The access-log replay (serenade/load/replay.py, ./serena aws replay; D278-D288) and the simulator's files of about a
-real file's size (fakecspace/bands.py, D283). The replay lives in serenade, which has no CI job of its own, so it's
+real file's size (fakecspace.bands, D283). The replay lives in serenade, which has no CI job of its own, so it's
 tested here. Every log below is made up in the test: no line of a real access log is in the repository."""
 from __future__ import annotations
 
@@ -18,12 +18,13 @@ from typing import Any
 
 import pytest
 import pyvips
-from fastapi.testclient import TestClient
-
-from devtools import fake_etl
 from fakecspace import bands
 from fakecspace.app import app as fake_app
 from fakecspace.app import store as fake
+from fakecspace.app import stores
+from fastapi.testclient import TestClient
+
+from devtools import fake_etl
 
 SERENADE = Path(__file__).resolve().parents[2] / "serenade" / "load"
 COLUMNS = ["ts", "museum", "form", "csid", "size", "method", "status", "bytes", "protocol", "query_names",
@@ -61,10 +62,10 @@ def write_log(path: Path, rows: list[dict[str, str]]) -> Path:
 
 @pytest.fixture(autouse=True)
 def fresh() -> Iterator[None]:
-    fake.reset()
+    stores.reset()
     bands.reset()
     yield
-    fake.reset()
+    stores.reset()
     bands.reset()
 
 

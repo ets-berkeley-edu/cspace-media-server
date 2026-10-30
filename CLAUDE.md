@@ -87,8 +87,10 @@ After changing a `.tf` file, `terraform fmt -recursive deploy/terraform`; after 
 the tables and that every `SERENA_` setting Terraform gives the app is one it reads). CI's `terraform` job runs
 `fmt -check`, `validate` and `terraform test` with no AWS sign-in.
 
-Local-only code (the seed step and the fake ETL) is in `backend/devtools/`, and the simulator in
-`backend/fakecspace/`; neither goes in the production image (an AWS environment with the simulator runs them from
+Local-only code (the seed step and the fake ETL) is in `backend/devtools/`. The simulator is the `fakecspace` package
+(github.com/ets-berkeley-edu/cspace-fakecspace, shared with the BMU), pinned with its hash in
+`backend/requirements-sim.in`; a change to it is a release of that package, then a new pin here. One store per
+museum: in tests, `fakecspace.app.stores[<museum>]` (`store` is PAHMA's). Neither goes in the production image (an AWS environment with the simulator runs them from
 the local stack's image). Serena refuses to create tables, or to serve files itself in place of CloudFront, without a
 local DynamoDB endpoint.
 

@@ -8,11 +8,11 @@ from typing import Any
 
 import pytest
 from conftest import TENANTS, add_blob
+from fakecspace.app import USERS, stores
+from fakecspace.app import store as fake
 from fastapi.testclient import TestClient
 from test_admin import CHANGES, Clock, make_app, sign_in
 
-from fakecspace.app import USERS
-from fakecspace.app import store as fake
 from serena import cache_index
 from serena.audit import Action, Audit
 from serena.lookup import explain
@@ -31,9 +31,9 @@ SIZES: list[str | None] = [None, *PAHMA.derivatives]
 
 @pytest.fixture(autouse=True)
 def reset_fake() -> Iterator[None]:
-    fake.reset()
+    stores.reset()
     yield
-    fake.reset()
+    stores.reset()
 
 
 @pytest.fixture
@@ -76,13 +76,13 @@ def test_naming_the_record(client: TestClient, store: Store) -> None:
     assert "no Media record" in put(client, RECORD).json()["detail"]
     fake.add(RECORD, state="deleted", blob=PLACEHOLDER)
     assert "soft-deleted" in put(client, RECORD).json()["detail"]
-    fake.reset()
+    stores.reset()
     fake.add(RECORD, kind="pdf", blob=PLACEHOLDER)
     refused = put(client, RECORD)
     assert refused.status_code == 422 and "original file can't be served" in refused.json()["detail"]
     assert all(cache_index.lookup(store, "pahma", PLACEHOLDER, size) is None for size in SIZES)  # all or none
     assert put(client, "not a csid").status_code == 422
-    fake.reset()
+    stores.reset()
     fake.add(RECORD, blob=PLACEHOLDER, identification_number="P-1")
     answer = put(client, RECORD)
     assert answer.status_code == 200, answer.text
@@ -92,7 +92,7 @@ def test_naming_the_record(client: TestClient, store: Store) -> None:
     # Kept with the setting: the Settings page shows it without asking CollectionSpace.
     fake.fail("/cspace-services/media/", 503, times=10)
     assert client.get("/admin/v1/museums/pahma/settings").json()["placeholder"]["identification_number"] == "P-1"
-    fake.reset()
+    stores.reset()
     fake.add(RECORD, blob=PLACEHOLDER, identification_number="P-1")
     setting = next(s for s in body["settings"] if s["name"] == "placeholder_media_csid")
     assert (setting["value"], setting["default"], setting["changed"]) == (RECORD, None, True)
@@ -139,7 +139,7 @@ def test_when_collectionspace_cant_be_reached(client: TestClient) -> None:
 def test_a_museum_whose_etl_lists_no_placeholder(client: TestClient, store: Store, museum: str) -> None:
     """Ready for any ETL later (D167): the record is checked and named, with nothing to fetch yet."""
     sign_in(client, museum)
-    fake.add(RECORD, blob=OTHER_BLOB)
+    stores[museum].add(RECORD, blob=OTHER_BLOB)  # the museum's own CollectionSpace
     answer = client.put(f"/admin/v1/museums/{museum}/settings/placeholder_media_csid", headers=CHANGES,
                         json={"value": RECORD, "reason": "ready for later"})
     assert answer.status_code == 200

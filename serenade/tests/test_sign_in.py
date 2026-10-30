@@ -14,7 +14,7 @@ from serenade.pages.overview_page import OverviewPage
 from serenade.pages.page import Page
 from serenade.pages.sign_in_page import SignInPage
 
-# The simulator's synthetic accounts: each password is its username (backend/fakecspace/app.py, ADMINS). "admin" has
+# The simulator's synthetic accounts: each password is its username (the fakecspace package: fakecspace.accounts). "admin" has
 # every museum's Serena admin role, "pahma-admin" only PAHMA's, "viewer" none.
 ADMIN = ("admin", "admin")
 PAHMA_ADMIN = ("pahma-admin", "pahma-admin")

@@ -34,7 +34,7 @@ import httpx
 from serena.config import get_settings
 from serena.museum import load
 
-BANDS = ("100KB", "1MB", "5MB", "20MB", "100MB")  # the simulator's size bands (fakecspace/bands.py)
+BANDS = ("100KB", "1MB", "5MB", "20MB", "100MB")  # the simulator's size bands (fakecspace.bands)
 NAMESPACE = uuid.UUID("3f6b0c55-2c4e-4f6e-9d4b-6a1c0b6e5a10")  # for the synthetic CSIDs; not a secret
 DONE = {"check_failed", "updated", "update_failed", "abandoned"}
 

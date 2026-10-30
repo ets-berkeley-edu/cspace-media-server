@@ -961,7 +961,7 @@ The actions:
     personal root with `simulated_cspace`; refused at start-up unless every museum's address is the simulator's, a
     host name with the label `fakecspace` or one under `.test`), "Replace with:" has a third choice. There's no ETL job
     there, so **Make the ETL list** asks Serena for one: `GET …/simulator/servable-list` reads the museum's records
-    from the simulator's development hook (`GET /_fake/records`) and lists them as the ETL would, each with a file and
+    from the simulator's development hook (`GET /_fake/media`) and lists them as the ETL would, each with a file and
     a Blob that isn't soft-deleted and is approved for web (PAHMA's), the placeholder image's Blob without a Media
     CSID, and says why the rest weren't listed. Nothing is stored: the page checks and applies the list as an upload
     (the same dry run and Apply), so what's applied is what was checked, including records the BMU added to a shared
@@ -1831,7 +1831,8 @@ their hashed names, with no CDN (D296).
   inside its container (`SERENA_LOG_FILE`), which the Past requests page reads in place of CloudWatch (D109). The stack talks only to the simulator: there is no local mode against a real
   CollectionSpace, which would need a museum's service-account password on a laptop; real-tenant checks happen in
   the AWS QA environment (decided October 10, 2026). The admin app runs on Vite's development server
-  (http://localhost:5373/admin/), forwarding `/admin/v1` to the app. The simulator (`backend/fakecspace`) answers the three
+  (http://localhost:5373/admin/), forwarding `/admin/v1` to the app. The simulator (the `fakecspace` package, shared with the BMU since October 30, 2026; pinned in
+  `backend/requirements-sim.in`, one store per museum) answers the three
   Media-service calls above with synthetic files (PNG images, a PDF and an X3D model, made in code) and HTTP Basic auth
   with a synthetic account, and the recall form's two lookups: `blobs/<csid>` and the search for the Media record
   whose `blobCsid` is a given Blob CSID (D130). Tests and developers drive it through `/_fake/` routes: add, soft-delete or replace a

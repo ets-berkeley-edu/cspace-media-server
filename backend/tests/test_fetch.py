@@ -9,12 +9,12 @@ from typing import Any
 
 import pytest
 from conftest import TENANTS, add_blob, recall
-from fastapi.testclient import TestClient
-
 from fakecspace import samples
-from fakecspace.app import USERS
+from fakecspace.app import USERS, stores
 from fakecspace.app import app as fake_app
 from fakecspace.app import store as fake
+from fastapi.testclient import TestClient
+
 from serena import cache_index, fetch
 from serena.app import create_app
 from serena.config import Settings
@@ -41,9 +41,9 @@ class Clock:
 
 @pytest.fixture(autouse=True)
 def reset_fake() -> Iterator[None]:
-    fake.reset()
+    stores.reset()  # every museum's (fake is PAHMA's)
     yield
-    fake.reset()
+    stores.reset()
 
 
 @pytest.fixture
@@ -106,7 +106,7 @@ def unavailable(client: TestClient, recorder: MemoryRecorder, url: str, tenant: 
 def test_a_miss_is_fetched_stored_and_served(client: TestClient, store: Store, s3: Any, tenant: str, kind: str,
                                              size: str | None, content_type: str) -> None:
     add_blob(store, tenant, BLOB, MEDIA, kind=kind)
-    media = fake.add(MEDIA, kind=kind)
+    media = stores[tenant].add(MEDIA, kind=kind)  # each museum has its own records
     content = media.files[size or "content"][0]
     assert content is not None
     response = client.get(path(tenant, size))
@@ -240,7 +240,7 @@ def test_a_content_type_the_kind_doesnt_allow(client: TestClient, store: Store, 
                                               kind: str, content_type: str) -> None:
     tenant, size = ("pahma", "Medium") if kind == "image" else ("cinefiles" if kind == "pdf" else "bampfa", None)
     add_blob(store, tenant, BLOB, MEDIA, kind=kind)
-    media = fake.add(MEDIA, kind=kind)
+    media = stores[tenant].add(MEDIA, kind=kind)
     name = size or "content"
     media.files[name] = (media.files[name][0], content_type)
     assert unavailable(client, recorder, path(tenant, size), tenant) == Reason.WRONG_CONTENT_TYPE
@@ -249,7 +249,7 @@ def test_a_content_type_the_kind_doesnt_allow(client: TestClient, store: Store, 
 
 def test_a_content_type_with_parameters(client: TestClient, store: Store) -> None:
     add_blob(store, "bampfa", BLOB, MEDIA, kind="3D")
-    media = fake.add(MEDIA, kind="3D")
+    media = stores["bampfa"].add(MEDIA, kind="3D")
     media.files["content"] = (media.files["content"][0], "model/x3d+xml; charset=utf-8")
     assert client.get(path("bampfa", None)).headers["location"].startswith("/local-cdn/")
 
@@ -277,7 +277,7 @@ def test_a_truncated_image(client: TestClient, store: Store, recorder: MemoryRec
 def test_the_pdf_marker(client: TestClient, store: Store, recorder: MemoryRecorder, content: bytes,
                         served: bool) -> None:
     add_blob(store, "cinefiles", BLOB, MEDIA, kind="pdf")
-    fake.add(MEDIA, kind="pdf").files["content"] = (content, "application/pdf")
+    stores["cinefiles"].add(MEDIA, kind="pdf").files["content"] = (content, "application/pdf")
     if served:
         assert client.get(path("cinefiles", None)).headers["location"].startswith("/local-cdn/")
     else:
@@ -300,7 +300,7 @@ def test_too_large_by_its_content_length(app: Any, client: TestClient, store: St
                                          recorder: MemoryRecorder) -> None:
     app.state.fetcher.museum_settings = TinyLimits(app.state.fetcher.museum_settings)
     add_blob(store, "cinefiles", BLOB, MEDIA, kind="pdf")
-    fake.add(MEDIA, kind="pdf").files["content"] = (b"%PDF-1.4\n" + b"0" * fetch.MB, "application/pdf")
+    stores["cinefiles"].add(MEDIA, kind="pdf").files["content"] = (b"%PDF-1.4\n" + b"0" * fetch.MB, "application/pdf")
     assert unavailable(client, recorder, path("cinefiles", None), "cinefiles") == Reason.TOO_LARGE
 
 

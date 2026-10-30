@@ -7,12 +7,12 @@ from typing import Any
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
-
 from fakecspace import samples
-from fakecspace.app import USERS
+from fakecspace.app import USERS, stores
 from fakecspace.app import app as fake_app
 from fakecspace.app import store as fake
+from fastapi.testclient import TestClient
+
 from serena.config import Settings
 from serena.cspace.client import CSpaceClient, CSpaceError, CSpaceUnavailable, MediaState
 from serena.cspace.clients import CSpaceClients
@@ -23,9 +23,9 @@ MEDIA = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"  # synthetic
 
 @pytest.fixture(autouse=True)
 def reset() -> Iterator[None]:
-    fake.reset()
+    stores.reset()
     yield
-    fake.reset()
+    stores.reset()
 
 
 FAKE_LOGIN = next(iter(USERS.items()))  # the simulator's synthetic account

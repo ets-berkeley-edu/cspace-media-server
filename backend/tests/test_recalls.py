@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 from conftest import TENANTS, add_blob
+from fakecspace.app import USERS, stores
+from fakecspace.app import app as fake_app
+from fakecspace.app import store as fake
 from fastapi.testclient import TestClient
 from test_admin import CHANGES, Clock, make_app, sign_in
 
-from fakecspace.app import USERS
-from fakecspace.app import app as fake_app
-from fakecspace.app import store as fake
 from serena import cache_index, recalls, tables
 from serena.audit import Audit
 from serena.museum import load
@@ -30,9 +30,9 @@ URL = "/admin/v1/museums/pahma/recalls"
 
 @pytest.fixture(autouse=True)
 def reset_fake() -> Iterator[None]:
-    fake.reset()
+    stores.reset()
     yield
-    fake.reset()
+    stores.reset()
 
 
 @pytest.fixture

@@ -39,7 +39,6 @@ placeholder image's Media record among them. Watermarking (the Botanical Garden)
 | `docs/api/etl-v1.json` | The ETL API's OpenAPI description, generated from the code |
 | `backend/` | The Python 3.11 app (`serena/`), its tests and its pinned requirements |
 | `backend/serena/static/` | The unavailable image (`unavailable.svg`, the legacy imageserver's `404.svg`) |
-| `backend/fakecspace/` | A CollectionSpace simulator for tests and local development, with synthetic files |
 | `backend/serena/museums/` | Each museum's configuration: derivatives served, placeholder image, kinds with signed access, starting settings |
 | `admin/` | The admin web app: Vue, TypeScript and Vuetify, served under `/admin`, its API under `/admin/v1` |
 | `serenade/` | The admin app's Selenium tests (`./serena ui`), the AWS tests (`./serena aws test`) and the access-log replay (`./serena aws replay`) |
