@@ -10,6 +10,7 @@ module "core" {
   partition          = local.partition
   tenants            = var.tenants
   env_label          = var.env_label
+  simulated_cspace   = var.simulated_cspace
   image_uri          = var.image_uri
   running            = var.running
   protect_data       = var.protect_data

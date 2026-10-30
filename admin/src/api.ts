@@ -26,6 +26,7 @@ export interface Me {
   environment: string
   build: string // which code this is, for example "feature/x @ 1a2b3c4"; empty: not shown
   sessions: SignedIn[]
+  simulated_cspace?: boolean // every museum's server is the CollectionSpace simulator: Manual refresh can use it
 }
 
 export interface AuditEntry {
@@ -42,6 +43,16 @@ export interface Problem {
   line: number
   field: string
   problem: string
+}
+
+/** Manual refresh's "Make one from the simulator": an ETL list of the simulator's records, sent back as an upload. */
+export interface SimulatorList {
+  file_name: string
+  rows: number
+  records: number // the museum's records in the simulator
+  left_out: Record<string, number> // why records weren't listed: reason -> how many
+  made_at: string
+  tsv: string
 }
 
 /** Manual refresh's dry run (mockup version 55): the check's result, when, and against which update; nothing kept. */
@@ -447,11 +458,13 @@ export const api = {
     call<DryRun>('POST', `/museums/${museum}/servable-lists/dry-run`, undefined, {file, headers: {}}),
   dryRunList: (museum: string, refreshId: string) =>
     call<DryRun>('POST', `/museums/${museum}/servable-lists/${refreshId}/dry-run`),
-  startRefresh: (museum: string, file: File, refreshDate: string, reason: string, openRefresh = '', kind = '') =>
+  // confirmed: 'yes' (the admin confirmed the live public core) or 'simulator' (a list made from the simulator)
+  startRefresh: (museum: string, file: File, refreshDate: string, reason: string, openRefresh = '', kind = '',
+    confirmed: 'yes' | 'simulator' = 'yes') =>
     call<Refresh>('POST', `/museums/${museum}/refreshes`, undefined, {
       file,
       headers: {
-        'X-Live-Core-Confirmed': 'yes',
+        'X-Live-Core-Confirmed': confirmed,
         'X-File-Name': encodeURIComponent(file.name),
         'X-Refresh-Date': refreshDate,
         'X-Reason': encodeURIComponent(reason),
@@ -462,6 +475,7 @@ export const api = {
   startFromList: (museum: string, refreshId: string, reason: string, openRefresh = '', kind = '') =>
     call<Refresh>('POST', `/museums/${museum}/refreshes/from-list`,
       {refresh_id: refreshId, reason, open_refresh: openRefresh, kind}),
+  simulatorList: (museum: string) => call<SimulatorList>('GET', `/museums/${museum}/simulator/servable-list`),
   servableLists: (museum: string) => call<{lists: ServableList[]}>('GET', `/museums/${museum}/servable-lists`),
   // background: the banner's own checks, which don't count as activity (the session still signs out when idle)
   alerts: (museum: string, background = false) => call<{alerts: AlertItem[]}>('GET', `/museums/${museum}/alerts`,

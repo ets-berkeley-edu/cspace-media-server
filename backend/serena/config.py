@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -103,6 +104,11 @@ class Settings(BaseSettings):
     cspace_connect_timeout_seconds: float = 5.0
     cspace_read_timeout_seconds: float = 60.0  # between bytes, not for a whole file
     cspace_retries: int = 2  # for transient failures only: no answer, 429, 502, 503, 504
+    # Every museum's CollectionSpace is the simulator (backend/fakecspace): the local stack, or an AWS environment
+    # with simulated_cspace. The admin app's Manual refresh then offers an ETL list made from the simulator's records.
+    # Allowed only when every museum's server is a simulator's address (a host name with the label fakecspace, or one
+    # under the reserved .test domain the tests use), so never with a real CollectionSpace.
+    simulated_cspace: bool = False
 
     @field_validator("tenants")
     @classmethod
@@ -134,7 +140,19 @@ class Settings(BaseSettings):
             raise ValueError("local_cdn is for local development: set dynamodb_endpoint (a local stand-in) too")
         if self.cdn_base_url and not self.cdn_base_url.startswith("https://"):
             raise ValueError("cdn_base_url must be an https URL")
+        if self.simulated_cspace:
+            real = sorted(tenant for tenant, url in self.tenants.items() if not simulator_url(url))
+            if real or not self.tenants:
+                raise ValueError("simulated_cspace needs every museum's CollectionSpace to be the simulator: "
+                                 + ("no museum is set" if not self.tenants else "not " + ", ".join(real)))
         return self
+
+
+def simulator_url(url: str) -> bool:
+    """Whether a CollectionSpace server's URL is the simulator's: a host name with the label fakecspace
+    (pahma.fakecspace locally, fakecspace.serena-<env>.internal in AWS) or under .test (the tests)."""
+    labels = (urlparse(url).hostname or "").lower().split(".")
+    return "fakecspace" in labels or labels[-1] == "test"
 
 
 @lru_cache

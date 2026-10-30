@@ -129,7 +129,8 @@ def create_router() -> APIRouter:
             session = s.sessions.get(tenant, token) if token else None
             if session is not None:
                 signed.append({"museum": tenant, "name": museum.name, "user": session.user})
-        return {"environment": s.settings.env_label, "build": s.settings.build, "sessions": signed}
+        return {"environment": s.settings.env_label, "build": s.settings.build, "sessions": signed,
+                "simulated_cspace": s.settings.simulated_cspace}
 
     @router.post("/sessions", dependencies=[Depends(changes)])
     def sign_in(body: SignIn, s: Services, response: Response) -> dict[str, str]:

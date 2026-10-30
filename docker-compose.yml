@@ -19,6 +19,7 @@ x-serena-env: &serena-env
   SERENA_ETL_TOKEN_SECRET_IDS: '{"bampfa": "serena/local/bampfa/etl-tokens", "botgarden": "serena/local/botgarden/etl-tokens", "cinefiles": "serena/local/cinefiles/etl-tokens", "pahma": "serena/local/pahma/etl-tokens", "ucjeps": "serena/local/ucjeps/etl-tokens"}'
   SERENA_CSPACE_SECRET_IDS: '{"bampfa": "serena/local/bampfa/cspace", "botgarden": "serena/local/botgarden/cspace", "cinefiles": "serena/local/cinefiles/cspace", "pahma": "serena/local/pahma/cspace", "ucjeps": "serena/local/ucjeps/cspace"}'
   SERENA_SIGNING_KEY_SECRET_IDS: '{"cinefiles": "serena/local/cinefiles/pdf-signing-key"}'
+  SERENA_SIMULATED_CSPACE: "true"   # every museum's server is the simulator: Manual refresh can make an ETL list from it
   SERENA_LOCAL_CDN: "true"          # Serena signs and serves files itself at /local-cdn/, in place of CloudFront
   SERENA_WORKER_POLL_SECONDS: "2"
   SERENA_ADMIN_COOKIE_SECURE: "false"   # the local stack is plain http

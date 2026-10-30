@@ -12,8 +12,10 @@ Each museum is told apart by the host name it's called by (pahma.fakecspace) or 
 User: serena, password serena (synthetic; Serena's read-only service account in development).
 Development hooks:
   POST /_fake/reset                 empty
-  POST /_fake/media                 {"csid", "kind": image|pdf|3D, "state"?, "blob"?, "identification"?, "band"?}:
-                                    a Media record with sample files, its Blob's CSID and identification number
+  POST /_fake/media                 {"csid", "kind": image|card|pdf|3D, "state"?, "blob"?, "identification"?,
+                                    "band"?, "access"?, "museum"?}: a Media record with sample files, its Blob's CSID
+                                    and identification number, in a museum (the body's, or else the request's), with
+                                    the access the ETL lists it with (public unless restricted is given)
                                     (2026.1.<n> unless given). With a band (an image's only: 100KB, 1MB, 5MB, 20MB or
                                     100MB), its files are JPEGs of about a real file's size instead of 8x8 PNGs, for
                                     ./serena aws replay (D283): the original and OriginalJpeg about the band's size,
@@ -36,6 +38,8 @@ Development hooks:
                                     records are kept (an unknown CSID in these hooks gets a 404 that says why)
   POST /_fake/fail                  {"match", "status", "times"}: answer requests whose path contains match with status
   GET  /_fake/calls                 the paths called, in order
+  GET  /_fake/records               the museum's Media records (the museum as for any request: host name or path
+                                    prefix), for the admin app's "Make one from the simulator" (Manual refresh)
 """
 from __future__ import annotations
 
@@ -78,6 +82,9 @@ class Media:
     # Its file and Blob CSID before its first replace, for /_fake/restore; None if never replaced.
     before_replace: tuple[dict[str, tuple[bytes | None, str]], str | None] | None = None
     band: str | None = None  # the size band of its files (D283), or None for the 8x8 samples
+    museum: str = "pahma"  # the museum it was added in (one store for all museums: serena-fakecspace-questions F8)
+    kind: str = "image"  # image, card, pdf or 3D, as the ETL lists it
+    access: str = "public"  # public or restricted, as the ETL lists it (CineFiles' restricted PDFs)
 
 
 def _now() -> str:
@@ -104,7 +111,8 @@ class Store:
             self.unreachable = False  # an outage: every CollectionSpace call answers 503, the records kept
 
     def add(self, csid: str, kind: str = "image", state: str = "project", shade: int = 128,
-            blob: str | None = None, identification_number: str | None = None, band: str | None = None) -> Media:
+            blob: str | None = None, identification_number: str | None = None, band: str | None = None,
+            museum: str = "pahma", access: str = "public") -> Media:
         files: dict[str, tuple[bytes | None, str]]
         if band is not None and kind not in ("image", "card"):
             raise ValueError(f"a size band is for images only, not {kind}")
@@ -120,10 +128,13 @@ class Store:
             files = {"content": (samples.x3d(), "model/x3d+xml")}
         else:
             raise ValueError(f"unknown kind {kind}")
+        if access not in ("public", "restricted"):
+            raise ValueError(f"unknown access {access}: public or restricted")
         with self.lock:
             # A synthetic identification number unless one is given: 2026.1.1, 2026.1.2, ... (D153)
             number = identification_number if identification_number is not None else f"2026.1.{len(self.media) + 1}"
-            media = Media(csid, state, files, blob, identification_number=number, band=band)
+            media = Media(csid, state, files, blob, identification_number=number, band=band, museum=museum,
+                          kind=kind, access=access)
             self.media[csid] = media
         return media
 
@@ -327,9 +338,13 @@ async def add_media(request: Request) -> JSONResponse:
     band = body.get("band")
     if band is not None and band not in bands.ORIGINALS:
         raise HTTPException(400, f"unknown band {band}: one of {', '.join(bands.ORIGINALS)}")
+    museum = body.get("museum") or museum_of(request)
+    if museum not in TENANT_IDS:
+        raise HTTPException(400, f"unknown museum {museum}: one of {', '.join(TENANT_IDS)}")
     try:
         media = store.add(body["csid"], body.get("kind", "image"), body.get("state", "project"),
-                          blob=body.get("blob"), identification_number=body.get("identification"), band=band)
+                          blob=body.get("blob"), identification_number=body.get("identification"), band=band,
+                          museum=museum, access=body.get("access", "public"))
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
     return JSONResponse({"csid": media.csid, "files": sorted(media.files)})
@@ -421,3 +436,15 @@ async def fail(request: Request) -> dict[str, str]:
 @app.get("/_fake/calls")
 def calls() -> list[str]:
     return list(store.calls)
+
+
+@app.get("/_fake/records")
+def records(request: Request) -> list[dict[str, Any]]:
+    """The museum's Media records, in the order they were added, with what the admin app's simulator ETL list reads:
+    a stand-in for the Solr refresh's public core (Manual refresh, "Make one from the simulator")."""
+    museum = museum_of(request)
+    with store.lock:
+        found = [m for m in store.media.values() if m.museum == museum]
+    return [{"csid": m.csid, "blob": m.blob, "kind": m.kind, "access": m.access, "state": m.state,
+             "approved_for_web": m.approved_for_web, "has_file": "content" in m.files,
+             "identification": m.identification_number} for m in found]

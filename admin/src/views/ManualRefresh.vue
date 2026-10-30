@@ -93,6 +93,12 @@
           >
             <v-radio id="source-etl" label="Choose from previous" value="etl" />
             <v-radio id="source-upload" label="Upload one" value="upload" />
+            <v-radio
+              v-if="session.simulated"
+              id="source-simulator"
+              label="Make one from the simulator"
+              value="simulator"
+            />
           </v-radio-group>
           <p v-if="source" id="manual-chosen" class="mb-2">
             <strong>The ETL list:</strong>
@@ -103,9 +109,16 @@
               </template>
               <span v-else class="text-medium-emphasis">none yet. Choose one of the previous ETL lists below.</span>
             </template>
-            <template v-else>
+            <template v-else-if="source === 'upload'">
               <template v-if="chosen">an uploaded file, <span class="sha">{{ chosen.name }}</span>.</template>
               <span v-else class="text-medium-emphasis">none yet. Choose the ETL list file below.</span>
+            </template>
+            <template v-else>
+              <template v-if="made">
+                made from the simulator {{ when(made.made_at) }}, {{ made.rows.toLocaleString('en-US') }} rows,
+                <span class="sha">{{ made.file_name }}</span>.
+              </template>
+              <span v-else class="text-medium-emphasis">none yet. Make it below.</span>
             </template>
           </p>
           <div id="pick-error" class="text-error text-caption mb-2" role="alert">{{ problems.pick }}</div>
@@ -281,7 +294,7 @@
         style="max-width: 1000px"
       >
         <v-expansion-panel value="picker">
-          <v-expansion-panel-title>{{ source === 'etl' ? 'Previous ETL lists' : 'Upload an ETL list file' }}</v-expansion-panel-title>
+          <v-expansion-panel-title>{{ PICKER_TITLES[source] }}</v-expansion-panel-title>
           <v-expansion-panel-text>
             <template v-if="source === 'etl'">
               <p class="mb-2 text-medium-emphasis">
@@ -332,6 +345,26 @@
                 </tbody>
               </v-table>
             </template>
+            <div v-else-if="source === 'simulator'" id="manual-simulator" style="max-width: 100ch">
+              <p class="mb-2 text-medium-emphasis">
+                Every museum's CollectionSpace here is the simulator, so there's no ETL job. Serena lists
+                {{ museumName(museum) }}'s Media records in the simulator as the ETL would: each one with a file that
+                isn't soft-deleted{{ museum === 'pahma' ? ' and is approved for web' : '' }}, including records the BMU
+                added. Check and apply it as any other ETL list.
+              </p>
+              <v-btn
+                id="simulator-make"
+                variant="outlined"
+                :loading="making"
+                @click="makeList"
+              >
+                {{ made ? 'Make it again' : 'Make the ETL list' }}
+              </v-btn>
+              <p v-if="made" id="simulator-made" class="mt-2 mb-0">
+                {{ made.rows.toLocaleString('en-US') }} rows from {{ made.records.toLocaleString('en-US') }}
+                record{{ made.records === 1 ? '' : 's' }}<template v-if="leftOut">; not listed: {{ leftOut }}</template>.
+              </p>
+            </div>
             <div v-else style="max-width: 640px">
               <v-file-input
                 id="file"
@@ -392,7 +425,7 @@
 <script setup lang="ts">
 import {computed, nextTick, onActivated, reactive, ref, watch} from 'vue'
 import {useRoute} from 'vue-router'
-import type {DryRun, Refresh, ServableList} from '@/api'
+import type {DryRun, Refresh, ServableList, SimulatorList} from '@/api'
 import {ApiError, api, problem} from '@/api'
 import CheckCounts from '@/components/CheckCounts.vue'
 import CopyButton from '@/components/CopyButton.vue'
@@ -403,7 +436,7 @@ import RefreshLink from '@/components/RefreshLink.vue'
 import RefreshState from '@/components/RefreshState.vue'
 import StateSince from '@/components/StateSince.vue'
 import WhenText from '@/components/WhenText.vue'
-import {alertsChanged, museumName} from '@/session'
+import {alertsChanged, museumName, session} from '@/session'
 import {FAILED_STATES, OVERRIDE_KINDS, STATES, pacificDate, when} from '@/words'
 
 // Manual refresh (issue #118; reworked October 28, 2026, mockup version 55): "Replace with:" a previous ETL list or an
@@ -413,7 +446,16 @@ import {FAILED_STATES, OVERRIDE_KINDS, STATES, pacificDate, when} from '@/words'
 const route = useRoute()
 const ownMuseum = String(route.params.museum)
 const museum = computed(() => ownMuseum)
-const source = ref<'' | 'etl' | 'upload'>('')
+const source = ref<'' | 'etl' | 'upload' | 'simulator'>('')
+const PICKER_TITLES: Record<string, string> = {
+  etl: 'Previous ETL lists',
+  upload: 'Upload an ETL list file',
+  simulator: 'Make an ETL list from the simulator'
+}
+// "Make one from the simulator" (only where every museum's server is the simulator): the list Serena made, which is
+// checked and applied as an upload, so what's applied is exactly what the dry run checked.
+const made = ref<SimulatorList | null>(null)
+const making = ref(false)
 const lists = ref<ServableList[]>([])
 const loadedLists = ref(false)
 const picked = ref('')
@@ -434,11 +476,15 @@ const confirming = ref(false)
 const pickerOpen = ref<string | undefined>('picker')
 
 const chosen = computed(() => (Array.isArray(file.value) ? file.value[0] : file.value) || null)
+const madeFile = computed(() => made.value
+  ? new File([made.value.tsv], made.value.file_name, {type: 'text/tab-separated-values'}) : null)
+const leftOut = computed(() => Object.entries(made.value?.left_out || {}).map(([why, n]) => `${n} ${why}`).join(', '))
 const pickedList = computed(() => lists.value.find(list => list.refresh_id === picked.value) || null)
 const older = computed(() => source.value === 'etl' && !!pickedList.value && pickedList.value !== lists.value[0])
 const olderDays = computed(() => pickedList.value && lists.value[0]
   ? Math.round((Date.parse(lists.value[0].refresh_date) - Date.parse(pickedList.value.refresh_date)) / 864e5) : 0)
-const listChosen = computed(() => source.value === 'etl' ? !!pickedList.value : source.value === 'upload' && !!chosen.value)
+const listChosen = computed(() => source.value === 'etl' ? !!pickedList.value
+  : source.value === 'upload' ? !!chosen.value : source.value === 'simulator' && !!made.value)
 const partly = computed(() => pending.value?.state === 'update_failed')
 const pendingBusy = computed(() => !!pending.value && ['checking', 'updating'].includes(pending.value.state))
 // A pending refresh waiting for the ETL job (or a manual one left waiting) is stopped by Apply, once confirmed.
@@ -465,7 +511,7 @@ watch(chosen, () => { problems.file = '' })
 watch(refreshDate, () => { problems.date = '' })
 watch(confirmed, () => { problems.confirmed = '' })
 // Choosing another ETL list drops the dry run's result.
-watch([source, picked, chosen], () => { dry.value = null })
+watch([source, picked, chosen, made], () => { dry.value = null })
 
 /** The ETL's lists and the current and pending refreshes, read again whenever the page is shown or after Apply. */
 async function loadChoices() {
@@ -497,6 +543,7 @@ function startOver() {
   source.value = ''
   picked.value = ''
   file.value = null
+  made.value = null
   refreshDate.value = today
   dry.value = null
   confirmed.value = false
@@ -508,19 +555,33 @@ function startOver() {
   Object.assign(problems, {pick: '', file: '', date: '', confirmed: ''})
 }
 
+/** "Make one from the simulator": Serena lists the simulator's records; nothing is stored until Apply. */
+async function makeList() {
+  error.value = ''
+  making.value = true
+  try {
+    made.value = await api.simulatorList(ownMuseum)
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'The ETL list wasn\'t made.'
+  } finally {
+    making.value = false
+  }
+}
+
 /** The dry run: Serena answers within the request, with nothing stored and nothing changed. */
 async function checkList() {
   error.value = ''
   if (!listChosen.value) {
     problems.pick = source.value === 'etl' ? 'Choose one of the previous ETL lists first.' : ''
     problems.file = source.value === 'upload' ? 'Choose the ETL list file first.' : ''
+    problems.pick = source.value === 'simulator' ? 'Make the ETL list first.' : problems.pick
     return
   }
   checking.value = true
   try {
     dry.value = source.value === 'etl'
       ? await api.dryRunList(ownMuseum, picked.value)
-      : await api.dryRunUpload(ownMuseum, chosen.value as File)
+      : await api.dryRunUpload(ownMuseum, (source.value === 'simulator' ? madeFile.value : chosen.value) as File)
     pickerOpen.value = undefined // it folds away once checked
     await nextTick()
     document.getElementById('manual-dry-head')?.focus()
@@ -576,11 +637,14 @@ async function start() {
   try {
     const refresh = source.value === 'etl'
       ? await api.startFromList(ownMuseum, picked.value, why, replaced, kind)
-      : await api.startRefresh(ownMuseum, chosen.value as File, refreshDate.value, why, replaced, kind)
+      : source.value === 'simulator'
+        ? await api.startRefresh(ownMuseum, madeFile.value as File, '', why, replaced, kind, 'simulator')
+        : await api.startRefresh(ownMuseum, chosen.value as File, refreshDate.value, why, replaced, kind)
     const listed = pickedList.value
     const what = source.value === 'etl' && listed
       ? `the ETL list for ${listed.refresh_date}, from ${listed.refresh_id}`
-      : `the uploaded file ${chosen.value?.name || ''}`
+      : source.value === 'simulator' ? `the ETL list ${made.value?.file_name || ''}, made from the simulator`
+        : `the uploaded file ${chosen.value?.name || ''}`
     startOver()
     applied.value = {refresh, with: what, reason: why, kind, replaced}
     if (kind) {

@@ -86,11 +86,13 @@ def parse_sizes(spec: str) -> list[str]:
 
 
 def add_to_simulator(cspace: httpx.Client, listed: list[tuple[str, str, str, str]],
-                     bands: list[str] | None = None) -> None:
-    """Adds the listed records to the simulator; with bands, row n's image gets band n's files (D283)."""
-    for n, (blob, media, kind, _) in enumerate(listed):
+                     bands: list[str] | None = None, museum: str = "") -> None:
+    """Adds the listed records to the simulator, in the museum; with bands, row n's image gets band n's files (D283)."""
+    for n, (blob, media, kind, access) in enumerate(listed):
         # The placeholder image is listed without a Media CSID; its picture comes from the record an admin names.
-        record = {"csid": media or PLACEHOLDER_MEDIA, "kind": kind, "blob": blob}
+        record: dict[str, str] = {"csid": media or PLACEHOLDER_MEDIA, "kind": kind, "blob": blob, "access": access}
+        if museum:
+            record["museum"] = museum
         if not media:
             record["identification"] = "Placeholder"
         elif bands and n < len(bands) and kind in ("image", "card"):
@@ -123,7 +125,7 @@ def daily_refresh(serena: httpx.Client, cspace: httpx.Client, tenant: str, token
     """Runs the ETL job in the order of the daily sequence (design: The daily sequence; D70, D81) and returns a
     summary: the refresh's final state (None when Serena wasn't called), its counts, and sample paths to request."""
     listed = rows(tenant, count, first)
-    add_to_simulator(cspace, listed, bands)  # the Solr refresh's stand-in; `listed` is the ETL list script's
+    add_to_simulator(cspace, listed, bands, tenant)  # the Solr refresh's stand-in; `listed` is the ETL list script's
     refresh: dict[str, Any] = {"refresh_id": None, "state": None}
     if not failed:
         headers = {"Authorization": f"Bearer {token}"}
@@ -265,7 +267,7 @@ def main() -> None:
     if args.file_only:
         listed = rows(args.museum, args.rows, args.first_row)
         with httpx.Client(base_url=args.cspace, timeout=60) as cspace:
-            add_to_simulator(cspace, listed, bands)
+            add_to_simulator(cspace, listed, bands, args.museum)
         sys.stdout.buffer.write(tsv(listed))
         return
     with httpx.Client(base_url=args.serena, timeout=60) as serena, \
