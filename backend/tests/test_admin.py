@@ -5,10 +5,10 @@ from typing import Any
 import httpx
 import pytest
 from conftest import TENANTS
-from fastapi.testclient import TestClient
-
 from fakecspace.app import ADMINS
 from fakecspace.app import app as fake_app
+from fastapi.testclient import TestClient
+
 from serena import tables
 from serena.admin_sessions import Sessions, token_hash
 from serena.app import create_app
