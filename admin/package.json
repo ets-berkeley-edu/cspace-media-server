@@ -9,7 +9,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "vue-tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "audit-check": "node scripts/audit.js"
   },
   "dependencies": {
     "@mdi/js": "7.4.47",
