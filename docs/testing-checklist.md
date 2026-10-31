@@ -1186,6 +1186,9 @@ on October 21, 2026, since stage 1 holds only synthetic data. Don't put anything
 - [ ] **10. Cost.** After about a week, in the AWS console, Billing and Cost Management → Cost Explorer, filtered by
   the tag `project = serena` (or ask Ops if the role can't see it): note the daily cost here. It helps
   size stage 2 (WAF on, two web tasks, all day).
+  Noted October 31, 2026: the `project` tag wasn't active for cost allocation, so Cost Explorer couldn't filter by
+  it. Compared service by service with the week before, ECS cost about $2.50 a day; with the load balancer and public
+  addresses at list price, stage 1 cost about $3.60 a day (`deploy/README.md`, Cost). Ops is asked to activate the tag.
 - [ ] **11. Take stage 1 down**, when every step above is ticked and its notes are committed:
   1. Stage 1 was deployed before the Terraform split (D302), so its state is still the old `app.tfstate`, which
      `main`'s `./serena aws` refuses (it names the commit to use). Destroy it from that commit, in a worktree so your

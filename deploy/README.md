@@ -436,6 +436,11 @@ After changing a `.tf` file: `terraform fmt -recursive deploy/terraform`. After 
 
 WAF adds about $15 a month plus Bot Control's fee when it's on. Pause or destroy the environment between test sessions.
 
+Measured in stage 1 (UC Berkeley test account, two web tasks, October 27–30, 2026): ECS about $2.50 a day, about 10%
+below the estimate above. The account's other workloads hid the rest, so stage 1's total, about $3.60 a day, adds the
+load balancer and public addresses at list price. With the `project` tag active, Cost Explorer can measure this
+directly.
+
 ## Not yet
 
 - **CORS (D205).** Delivered files carry no `Access-Control-Allow-Origin`. If a portal's JavaScript viewer (3D, PDF)
