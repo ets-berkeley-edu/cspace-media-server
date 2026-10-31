@@ -1738,3 +1738,23 @@ What it checks: the local stack runs the shared simulator (fakecspace 0.2.0 from
 - [ ] **3. Make one from the simulator** (section 51) for CineFiles: its rows are CineFiles' records only (the
   restricted PDFs listed as restricted), none of PAHMA's.
 - [ ] **4. Sign in** as `admin`, `pahma-admin` and `viewer` as before (the simulator's accounts are the package's).
+
+
+## 53. Shared mode, on the local stack (15 minutes; before merging the pull request that adds it)
+
+What it checks: `./serena up shared` (serena-fakecspace-questions F15 step 4) uses the simulator shared with the BMU.
+It needs a clone of cspace-fakecspace beside this one, with `compose.shared.yml` (its `feature/shared-mode` branch
+until that merges). Start from `./serena down`.
+
+- [ ] **1. It starts the shared simulator.** `./serena up shared` says "Starting the shared simulator from
+  ../cspace-fakecspace", then Serena is up. `docker compose -p fakecspace-shared ps` shows it healthy; `./serena
+  status` has no `fakecspace` service.
+- [ ] **2. Records go there.** `./serena etl pahma` is Updated, and `curl -s http://localhost:8680/_fake/media` lists
+  its 20 records; `http://localhost:8380` doesn't answer.
+- [ ] **3. Switching is refused.** `./serena up` says Serena is running with the shared simulator; `./serena down`
+  says the shared simulator is still running.
+- [ ] **4. Already running.** `./serena up shared` again says "The shared simulator is already running", and the
+  records are still there.
+- [ ] **5. With the BMU** (once the BMU has `./bmu up shared`): a BMU job for PAHMA with an image; then Manual refresh,
+  "Make one from the simulator" for PAHMA lists that record, and after Apply its image comes out of Serena.
+- [ ] **6. Back to its own.** `./serena down && ./serena up`: the stack has its own simulator again (port 8380).

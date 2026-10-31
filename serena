@@ -2,6 +2,7 @@
 # ./serena — Serena's local stack (design: Local development).
 #
 #   ./serena up                    build and start it: http://localhost:8300, the admin app http://localhost:5373/admin/
+#   ./serena up shared             the same, with the simulator the BMU can use too (../cspace-fakecspace; README)
 #   ./serena down                  stop it; moto forgets everything
 #   ./serena status                what's running
 #   ./serena logs [service]        follow the logs (services: web, worker, admin, fakecspace, moto, seed)
@@ -25,15 +26,44 @@ cd "$(dirname "$0")"
 PORT="${SERENA_PORT:-8300}"
 compose() { docker compose -p serena "$@"; }
 
+# Shared mode (serena-fakecspace-questions F6, F7): one simulator for Serena and the BMU, from a clone of
+# cspace-fakecspace beside this one (or FAKECSPACE_DIR), on the Docker network fakecspace-shared.
+FAKECSPACE_DIR="${FAKECSPACE_DIR:-../cspace-fakecspace}"
+SHARED_SIM_PORT="${FAKECSPACE_SHARED_PORT:-8680}"
+shared_compose() { docker compose -f "$FAKECSPACE_DIR/compose.shared.yml" -p fakecspace-shared "$@"; }
+shared_sim_running() { [ -n "$(docker compose -p fakecspace-shared ps -q --status running fakecspace 2>/dev/null)" ]; }
+start_shared_sim() {
+  if shared_sim_running; then echo "The shared simulator is already running: http://localhost:$SHARED_SIM_PORT"; return; fi
+  [ -f "$FAKECSPACE_DIR/compose.shared.yml" ] || {
+    echo "Shared mode needs a clone of cspace-fakecspace with compose.shared.yml at $FAKECSPACE_DIR:" >&2
+    echo "  git clone https://github.com/ets-berkeley-edu/cspace-fakecspace.git $FAKECSPACE_DIR   (or set FAKECSPACE_DIR)" >&2
+    exit 1; }
+  echo "Starting the shared simulator from $FAKECSPACE_DIR ($(git -C "$FAKECSPACE_DIR" describe --tags --always 2>/dev/null || echo unknown))"
+  shared_compose up -d --build --wait
+}
+
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   up)
+    mode="${1:-own}"
+    case "$mode" in own|shared) ;; *) echo "Usage: ./serena up [shared]" >&2; exit 2 ;; esac
+    # Switching between the two needs ./serena down first: the stack's containers are on one network or the other.
+    if [ -n "$(compose ps -q 2>/dev/null)" ]; then
+      own_sim="$(compose ps -q fakecspace 2>/dev/null)"
+      if [ "$mode" = shared ] && [ -n "$own_sim" ]; then
+        echo "Serena is running with its own simulator. ./serena down first (moto forgets everything), then ./serena up shared." >&2; exit 1
+      elif [ "$mode" = own ] && [ -z "$own_sim" ]; then
+        echo "Serena is running with the shared simulator. ./serena down first, then ./serena up (or ./serena up shared)." >&2; exit 1
+      fi
+    fi
+    files=(-f docker-compose.yml)
+    if [ "$mode" = shared ]; then start_shared_sim; files+=(-f docker-compose.shared.yml); fi
     # Which code this stack runs, shown in the admin app's header and below: the clone's branch and commit.
     SERENA_BUILD="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown) @ $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
     [ -z "$(git status --porcelain 2>/dev/null)" ] || SERENA_BUILD="$SERENA_BUILD + local changes"
     export SERENA_BUILD
     echo "Building from $SERENA_BUILD"
-    compose up -d --build
+    compose "${files[@]}" up -d --build
     printf 'Waiting for http://localhost:%s/health ' "$PORT"
     for _ in $(seq 1 90); do
       if curl -fs -o /dev/null "http://localhost:$PORT/health"; then echo; break; fi
@@ -44,9 +74,13 @@ case "$cmd" in
     for _ in $(seq 1 30); do [ -n "$(compose ps -q --status running worker)" ] && break; sleep 1; done
     echo "Serena (Local · simulator, $SERENA_BUILD) is up: http://localhost:$PORT/health"
     echo "The admin app: http://localhost:${SERENA_ADMIN_PORT:-5373}/admin/   (it can take a minute more, for npm ci)"
-    echo "A daily refresh: ./serena etl pahma" ;;
+    echo "A daily refresh: ./serena etl pahma"
+    [ "$mode" = own ] || echo "With the shared simulator (http://localhost:$SHARED_SIM_PORT): the BMU's uploads are there too (./bmu up shared)." ;;
   down)
-    compose down ;;
+    compose down
+    if shared_sim_running; then
+      echo "The shared simulator is still running, for the BMU. To stop it: docker compose -p fakecspace-shared down"
+    fi ;;
   status)
     compose ps ;;
   logs)
@@ -134,10 +168,11 @@ case "$cmd" in
     echo "Serena:      http://localhost:$PORT   (health: /health; files: /<museum>/imageserver/blobs/...)"
     echo "Admin app:   http://localhost:${SERENA_ADMIN_PORT:-5373}/admin/   (admin/admin, pahma-admin/pahma-admin, viewer/viewer)"
     echo "Simulator:   http://localhost:${SERENA_SIM_PORT:-8380}   (calls it received: /_fake/calls)"
+    echo "Shared simulator:  http://localhost:$SHARED_SIM_PORT   (./serena up shared)"
     echo "moto:        http://localhost:${SERENA_MOTO_PORT:-9300}/moto-api/" ;;
   aws)
     exec deploy/aws.sh "$@" ;;
   help|-h|--help)
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' ;;
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) echo "Unknown command '$cmd'. ./serena help lists them." >&2; exit 2 ;;
 esac
