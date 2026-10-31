@@ -1743,8 +1743,8 @@ What it checks: the local stack runs the shared simulator (fakecspace 0.2.0 from
 ## 53. Shared mode, on the local stack (15 minutes; before merging the pull request that adds it)
 
 What it checks: `./serena up shared` (serena-fakecspace-questions F15 step 4) uses the simulator shared with the BMU.
-It needs a clone of cspace-fakecspace beside this one, with `compose.shared.yml` (its `feature/shared-mode` branch
-until that merges). Start from `./serena down`.
+It needs a clone of cspace-fakecspace's `main` beside this one, with `compose.shared.yml` (merged in its PR #6; `git
+pull` first). Start from `./serena down`.
 
 - [ ] **1. It starts the shared simulator.** `./serena up shared` says "Starting the shared simulator from
   ../cspace-fakecspace", then Serena is up. `docker compose -p fakecspace-shared ps` shows it healthy; `./serena
