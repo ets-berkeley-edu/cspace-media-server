@@ -1187,7 +1187,12 @@ on October 21, 2026, since stage 1 holds only synthetic data. Don't put anything
   the tag `project = serena` (or ask Ops if the role can't see it): note the daily cost here. It helps
   size stage 2 (WAF on, two web tasks, all day).
 - [ ] **11. Take stage 1 down**, when every step above is ticked and its notes are committed:
-  1. Run `./serena aws destroy --env ucb-stage1`. When it asks, type `ucb-stage1`.
+  1. Stage 1 was deployed before the Terraform split (D302), so its state is still the old `app.tfstate`, which
+     `main`'s `./serena aws` refuses (it names the commit to use). Destroy it from that commit, in a worktree so your
+     clone's branch stays as it is: `git worktree add ../serena-stage1-destroy f4cad43`, copy
+     `deploy/environments/ucb-stage1.local.conf` into the worktree's `deploy/environments/`, and in the worktree run
+     `./serena aws destroy --env ucb-stage1`. When it asks, type `ucb-stage1`. Afterwards,
+     `git worktree remove --force ../serena-stage1-destroy`.
   2. Expect it to finish with everything destroyed. If it stops with an error about the VPC, run it again.
   3. Tell Ops on CS-9523 that stage 1 is done, and ask for stage 2.
 
