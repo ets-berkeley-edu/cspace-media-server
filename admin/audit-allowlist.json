@@ -1,0 +1,14 @@
+[
+  {
+    "id": "GHSA-g3hv-75wg-m249",
+    "packages": ["minimatch"],
+    "reason": "Fixed only in minimatch 11 (October 27, 2026), which no tool here accepts yet (eslint, @eslint/config-array, @eslint/eslintrc, eslint-plugin-import, typescript-eslint, editorconfig). Forcing it breaks eslint-plugin-import (minimatch 11 has no callable default export). Development tools only: not in the built admin app or its production dependencies, and the patterns come only from this repository's own config.",
+    "review_by": "2026-11-30"
+  },
+  {
+    "id": "GHSA-3g3m-2fjr-6pw4",
+    "packages": ["glob"],
+    "reason": "Fixed only in glob 14 (October 27, 2026); js-beautify (through @vue/test-utils) still asks for glob 13. Test tooling only: not in the built admin app or its production dependencies.",
+    "review_by": "2026-11-30"
+  }
+]

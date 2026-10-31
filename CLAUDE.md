@@ -107,8 +107,11 @@ a UI review, change only the mockup until Richard says to carry the changes into
 The admin web app (Vue, TypeScript, Vuetify) is in `admin/` (the BMU's `frontend/` is the model), with npm
 dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `npm run lint`, `npm run typecheck`,
 `npm test`, `npm run build`; CI's `admin` job runs all four, and `npm audit` runs on every pull request
-(security.yml) and weekly. Its API is `backend/serena/admin_api.py` (sign-in, the audit log and its export),
-`backend/serena/admin_settings.py` (settings), `backend/serena/admin_refreshes.py` (refreshes, overrides, admin
+(security.yml) and weekly, through `admin/scripts/audit.js`: it fails on any advisory not in
+`admin/audit-allowlist.json`, on an entry past its review date, and on an entry no longer reported. Add an entry only
+for an advisory with no usable fix, with the reason it can't reach production and a review date a month or so out.
+Its API is `backend/serena/admin_api.py` (sign-in, the audit log and its export), `backend/serena/admin_settings.py`
+(settings), `backend/serena/admin_refreshes.py` (refreshes, overrides, admin
 refreshes, alerts), `backend/serena/admin_recalls.py` (recalls, their thumbnails, and Media look up, with
 `recalls.py` and `lookup.py`; Media look up reads the Media record from CollectionSpace beside Serena's answer, which never
 depends on it) and `backend/serena/admin_requests.py` (the Past requests page, which reads the log through
