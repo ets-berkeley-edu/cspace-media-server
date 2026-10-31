@@ -1847,8 +1847,9 @@ their hashed names, with no CDN (D296).
 
 1. Build Serena and deploy it beside the legacy imageserver.
 2. Get the ETL change (CSW-1027) in for every museum, calling Serena's ETL API.
-3. Route one low-traffic museum's `imageserver` paths to Serena; compare with the legacy imageserver. (Open: the rollout
-   plan proposes PAHMA first, since its QA tenant is where Serena is tested.)
+3. Route PAHMA's `imageserver` paths to Serena first, and compare with the legacy imageserver (decided October 24,
+   2026, D255): PAHMA's QA records are the only ones Serena will have been tested against before production, and
+   going back is one Apache change. The order of the other museums is decided later.
 4. Move the other museums one at a time. Cinefiles moves once Glimmer signs its PDF links in production (see
    Restricted files) and its staff have confirmed the rest of F8; the Botanical Garden once watermarking is built.
 5. Decommission the legacy imageserver and remove it from cspace-webapps-common.

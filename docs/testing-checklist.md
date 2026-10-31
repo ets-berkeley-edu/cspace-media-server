@@ -1117,6 +1117,10 @@ campus VPN reach it, and how big its tasks need to be (design.md, Compute). Stag
 ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are in
 `deploy/environments/ucb-stage1.conf`. Every `./serena aws` command here takes `--env ucb-stage1`.
 
+**Public test sign-ins.** The simulator's admin sign-ins (`admin` / `admin` and the others) are in this public
+repository, and stage 1 is open to all of campus and the VPN, so anyone there can sign in to its admin app. Accepted
+on October 21, 2026, since stage 1 holds only synthetic data. Don't put anything but synthetic data in it.
+
 **Before you start** (once):
 
 1. From Ops (CS-9523): the account number and the deployer role (`SerenaStage1Deployer`, with
@@ -1163,9 +1167,10 @@ ticked; then it's destroyed (step 11) and stage 2 is asked for. The settings are
 - [ ] **8. Two web tasks.** Run `./serena aws logs web --env ucb-stage1` while opening a few sample addresses. Expect
   requests answered by both tasks (two different task IDs in the log stream names), and no errors.
 - [ ] **9. Task sizes.** Replay the busiest hour and a typical hour of the cleaned access logs (`./serena aws replay`,
-  section 32 and `serenade/README.md`; `LOG=~/dev/src/rtl/serena/tools/access-logs/out/clean/2026-09.tsv.gz`, or a
-  later month). Each run ends with the web and worker services' CPU and memory; note them here, with the run's
-  `sent`, `late` and `statuses`. Expect no 5xx answers other than a 504 on a first request whose fetch takes over 60
+  section 32 and `serenade/README.md`;
+  `LOG=~/dev/src/rtl/rtl-team-notes/monsoon-imageserver/tools/access-logs/out/clean/2026-09.tsv.gz`, or a later
+  month). Each run ends with the web and worker services' CPU and memory; note them here, with the run's `sent`,
+  `late` and `statuses`. Expect no 5xx answers other than a 504 on a first request whose fetch takes over 60
   seconds (D184), and few or no `late` requests (many means the Mac or the VPN couldn't keep up: note it).
   1. The busiest hour, cold: `./serena aws replay --env ucb-stage1 --log $LOG --busiest hour --dry-run`, then the
      `./serena aws etl …` command it prints (override the delta threshold on that refresh if its check fails, as in
@@ -1651,6 +1656,10 @@ What it checks: the split in a UC Berkeley account, deployed from the shared roo
 policy (`deploy/iam/serena-deployer-policy.json`, D297, D305), with only the simulator museum until every AWS test
 passes (D300, TQ8). Every `./serena aws` command here takes `--env ucb-stage2`. The settings are in
 `deploy/environments/ucb-stage2.conf`.
+
+**Public test sign-ins.** While stage 2 runs only the simulator museum, its admin app takes the simulator's sign-ins,
+which are public in this repository, from anyone in `ADMIN_CIDRS` (campus and the VPN). Accepted as for stage 1
+(section 31), since it holds only synthetic data until then.
 
 **Before you start** (once):
 
