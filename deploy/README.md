@@ -3,9 +3,10 @@
 `./serena aws` deploys Serena to an AWS account and looks after it (decisions D181 to D206, October 2026). It is
 modeled on the BMU's `./bmu aws`, and the commands are the same where they can be.
 
-- **One environment per settings file** in `deploy/environments/`. `personal-dev.conf` is Richard's personal
-  account (us-west-2) and the default. Stage 1 in the UC Berkeley account (CS-9523) has a file too; stage 2 and production keep their settings in
-  SSM Parameter Store in their account instead (D273).
+- **One environment per settings file** in `deploy/environments/`. `personal-dev.conf`, the default, is a
+  developer's own account (us-west-2), with the simulator only: its committed profile is Richard's, and anyone else
+  sets their own (see "Your own AWS account"). Stage 1 in the UC Berkeley account (CS-9523) has a file too; stage 2
+  and production keep their settings in SSM Parameter Store in their account instead (D273).
 - **Infrastructure as code.** Terraform (`deploy/terraform/`) creates everything, so nothing is clicked together in
   the console, and the whole environment can be deleted and created again.
 - **No keys or passwords in files.** You sign in with IAM Identity Center (`aws sso login`). Terraform creates
@@ -51,9 +52,9 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 
 | Setting | What it is |
 | --- | --- |
-| `AWS_PROFILE`, `AWS_REGION` | The AWS CLI profile (IAM Identity Center) and region. personal-dev uses the BMU's profile: the same account, side by side with the BMU. |
+| `AWS_PROFILE`, `AWS_REGION` | The AWS CLI profile (IAM Identity Center) and region. personal-dev uses the BMU's profile (Richard's): the same account, side by side with the BMU. Anyone else sets their own in `personal-dev.local.conf` (see "Your own AWS account"). |
 | `SERENA_ENV_NAME` | Resource names (`serena-<name>-…`) and the Terraform state's key. |
-| `CSPACE_TENANTS` | The museums and their CollectionSpace servers: `"pahma=https://pahma.qa.collectionspace.org"`. Each needs `backend/serena/museums/<museum>.yaml`. |
+| `CSPACE_TENANTS` | The museums and their CollectionSpace servers: `"pahma=https://<PAHMA's CollectionSpace server>"`. Each needs `backend/serena/museums/<museum>.yaml`. |
 | `SIMULATED_CSPACE`, `SIMULATED_MUSEUMS` | `true` runs the simulated CollectionSpace for the museums listed (default `pahma`) instead of `CSPACE_TENANTS`. |
 | `ALLOWED_CIDRS` | Addresses that may reach everything. The first deploy adds this computer's; `allow-my-ip` adds more. |
 | `ETL_CIDRS`, `ADMIN_CIDRS` | Addresses that may also reach `/etl/` (the ETL servers) and `/admin` (campus networks), D185. |
@@ -74,7 +75,8 @@ data is protected.
 ## First deploy (personal-dev, with the simulator)
 
 **What you need on the Mac:** Docker Desktop, running; AWS CLI v2; Terraform 1.10 or later
-(`brew tap hashicorp/tap && brew install hashicorp/tap/terraform`); python3.
+(`brew tap hashicorp/tap && brew install hashicorp/tap/terraform`); python3. In another developer's account, first set
+your own profile (see "Your own AWS account" below) and use it in place of `bmu-personal`.
 
 ```bash
 aws sso login --profile bmu-personal
@@ -114,6 +116,24 @@ compares with the last one).
 
 **Later deploys.** The same command. Terraform shows only what changed (about 3–5 minutes). Each deploy pushes a new
 image tag (commit and time, `-dirty` for uncommitted changes), so `status` shows which code runs.
+
+## Your own AWS account
+
+Any developer can deploy Serena with the simulator to an AWS account they can sign in to: a UC Berkeley sandbox account
+or their own (EN2). Your own environment runs only the simulator and the fake ETL (D277), and UC Berkeley data never
+goes into a personal account (see the next section). The steps are those of the first deploy above, with your own
+profile:
+
+1. Make an IAM Identity Center profile for the account: `aws configure sso` (give it any name, for example
+   `serena-mine`), then `aws sso login --profile serena-mine`. The profile needs administrator access in that account,
+   as personal-dev's does.
+2. Create `deploy/environments/personal-dev.local.conf` (not committed) with the line `AWS_PROFILE=serena-mine`. It
+   overrides the committed `bmu-personal`, which is Richard's. Add `ALERT_EMAIL=<your address>` there too if you
+   want the alarms' emails.
+3. `./serena aws deploy`, then `./serena aws etl pahma`. The first deploy asks you to confirm the account and saves its
+   number in the same `.local.conf`; from then on it refuses any other account.
+
+Everything else in `personal-dev.conf` stays as it is. Pause or destroy the environment between sessions (see Cost).
 
 ## Against a real CollectionSpace (QA, then production)
 
@@ -415,6 +435,11 @@ After changing a `.tf` file: `terraform fmt -recursive deploy/terraform`. After 
 | Destroyed | Nothing | — |
 
 WAF adds about $15 a month plus Bot Control's fee when it's on. Pause or destroy the environment between test sessions.
+
+Measured in stage 1 (UC Berkeley test account, two web tasks, October 27–30, 2026): ECS about $2.50 a day, about 10%
+below the estimate above. The account's other workloads hid the rest, so stage 1's total, about $3.60 a day, adds the
+load balancer and public addresses at list price. With the `project` tag active, Cost Explorer can measure this
+directly.
 
 ## Not yet
 

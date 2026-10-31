@@ -81,7 +81,9 @@ The local stack, from the repository's root (Docker only; never AWS or a real Co
 
 AWS (`deploy/README.md`): `./serena aws deploy | plan | status | logs | etl <museum> | replay | pause | resume |
 cdn-key | confirm-alerts | destroy`
-(`deploy/aws.sh`, Terraform in `deploy/terraform/`, the production image `deploy/Dockerfile`). Richard runs every one.
+(`deploy/aws.sh`, Terraform in `deploy/terraform/`, the production image `deploy/Dockerfile`).
+The person deploying runs them in their own AWS account (D277). In the UC Berkeley environments, only Richard runs
+them; once an environment holds real data, the deploy pipeline deploys it (D268 to D276).
 After changing a `.tf` file, `terraform fmt -recursive deploy/terraform`; after changing a table,
 `python -m serena.tables > ../deploy/terraform/modules/core/tables.json` in `backend/` (`tests/test_deploy.py` checks both
 the tables and that every `SERENA_` setting Terraform gives the app is one it reads). CI's `terraform` job runs
@@ -110,7 +112,7 @@ dependencies pinned by its lockfile and installed with `npm ci`. In `admin/`: `n
 refreshes, alerts), `backend/serena/admin_recalls.py` (recalls, their thumbnails, and Media look up, with
 `recalls.py` and `lookup.py`; Media look up reads the Media record from CollectionSpace beside Serena's answer, which never
 depends on it) and `backend/serena/admin_requests.py` (the Past requests page, which reads the log through
-`backend/serena/requests_log.py`: CloudWatch Logs Insights in AWS, a local log file otherwise). The Selenium tests are in `serenade/`: `tests/` against the local stack only (`./serena test`, `./serena ui`), and `aws/` against a deployed environment (`./serena aws test`, which Richard runs, signed in; never Claude or CI).
+`backend/serena/requests_log.py`: CloudWatch Logs Insights in AWS, a local log file otherwise). The Selenium tests are in `serenade/`: `tests/` against the local stack only (`./serena test`, `./serena ui`), and `aws/` against a deployed environment (`./serena aws test`, which the person deploying runs, signed in, and in the UC Berkeley environments only Richard; never Claude or CI).
 
 CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`
 job), and a `dependencies` job: the requirements files are in step and `pip-audit` finds no known vulnerabilities.
