@@ -238,8 +238,9 @@ account, and Terraform runs only there, so its plans and logs never reach the pu
 3. **The pipeline**, as the account's administrator: `./serena aws pipeline --env <env>`. It applies
    `terraform/pipeline` (state `serena/<SERENA_ENV_NAME>/pipeline.tfstate`): GitHub's OIDC provider, if the account
    has none; the roles `pipeline-<env>-plan` and `-apply`, which only the GitHub environments `<env>-plan` and `<env>`
-   may assume, and which may only start their own build and read its status; the CodeBuild projects
-   `pipeline-<env>-plan` and `-apply`; the build's role `pipeline-<env>-build`, with the stage 2 deployer policy
+   may assume (the command reads from GitHub's API how its OIDC tokens name the repository), and which may only start
+   their own build and read its status; the CodeBuild projects `pipeline-<env>-plan` and `-apply`; the build's role
+   `pipeline-<env>-build`, with the stage 2 deployer policy
    (`iam/`) and a deny of secret values and of SSM changes; the log group `/pipeline/<env>`; and the bucket of saved
    plans. Then each GitHub environment needs the secret `AWS_ROLE_ARN` (its role's ARN) and the variable `AWS_REGION`;
    the command offers to set them with `gh`, or prints the commands.

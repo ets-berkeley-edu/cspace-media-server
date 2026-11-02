@@ -37,7 +37,7 @@ resource "aws_iam_role" "github" {
         StringEquals = {
           "${local.github_oidc}:aud" = "sts.amazonaws.com"
           # Only a job in this GitHub environment, which takes only main (DP9); never a pull request's.
-          "${local.github_oidc}:sub" = "repo:${var.repository}:environment:${each.value}"
+          "${local.github_oidc}:sub" = "${var.github_subject}:environment:${each.value}"
         }
       }
     }]

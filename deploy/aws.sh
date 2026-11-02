@@ -1591,6 +1591,28 @@ print("; ".join(problems))' <<<"$json")"
 Set them up first: the pipeline's roles trust them. Nothing was changed."
 }
 
+# The roles trust only tokens whose sub claim is "<this>:environment:<name>" (DP3). GitHub's settings for the
+# repository decide how it begins: repo:<owner>/<name>, or, with immutable subjects, the owner's and repository's IDs
+# too (repo:<owner>@<id>/<name>@<id>), which a repository made again under the same name doesn't have.
+github_subject() {
+  local subject
+  subject="$(gh_get "repos/$PIPELINE_REPO/actions/oidc/customization/sub" | REPO="$PIPELINE_REPO" python3 -c '
+import json, os, sys
+try:
+    sub = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+if sub.get("use_default", True):
+    print(sub.get("sub_claim_prefix") or "repo:" + os.environ["REPO"])' 2>/dev/null || true)"
+  case "$subject" in
+    repo:*) echo "$subject" ;;
+    *) die "Couldn't read how GitHub's OIDC tokens name $PIPELINE_REPO
+(repos/$PIPELINE_REPO/actions/oidc/customization/sub): gh must be signed in as an admin of the repository.
+If the repository uses its own claim keys (use_default false), the pipeline's roles don't support it.
+Nothing was changed." ;;
+  esac
+}
+
 confirm_real_data_account() {  # for an environment with real data: the account typed, and saved for the build
   [ "$SIMULATED_CSPACE" != true ] || return 0
   acknowledge_real_data
@@ -1627,15 +1649,17 @@ pipeline_root() {  # pipeline_root [destroy]
   [ "$ROOT" = shared ] || die "The pipeline is for environments on the shared root: stage 2, QA, production (DP1)."
   check_account; need_terraform; ensure_state_bucket
   tf_init pipeline
-  local create vars
+  local create vars subject
   # GitHub's OIDC provider can exist only once in an account (DP2): made here only where there is none.
   if tf pipeline state list 2>/dev/null | grep -q '^aws_iam_openid_connect_provider\.github'; then create=true
   elif aws_ iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text |
     grep -q 'oidc-provider/token\.actions\.githubusercontent\.com'; then create=false
   else create=true
   fi
+  # Deleting needs no answer from GitHub: any subject will do.
+  if [ "${1:-}" = destroy ]; then subject="repo:$PIPELINE_REPO"; else subject="$(github_subject)" || exit 1; fi
   vars=(-var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "environment=$ENV" -var "env_name=$SERENA_ENV_NAME"
-        -var "create_oidc_provider=$create")
+        -var "create_oidc_provider=$create" -var "github_subject=$subject")
   case "${1:-}" in
     "") ;;
     destroy)
@@ -1651,6 +1675,7 @@ pipeline_root() {  # pipeline_root [destroy]
   esac
   check_github_environments
   confirm_real_data_account
+  echo "The roles trust GitHub's tokens for $subject:environment:$ENV-plan and :$ENV."
   if [ "$create" = true ]; then echo "GitHub's OIDC provider: this pipeline makes (or keeps) it."
   else echo "GitHub's OIDC provider: the account's own (this pipeline doesn't make another)."
   fi

@@ -2042,10 +2042,13 @@ sittings and finish with step 14.
   Expect, in order:
   - `note: self-review is allowed (only for an environment with the simulator, DP13)`: its check of the GitHub
     environments passed (if one isn't set up as in step 3, it stops and says what's missing);
+  - `The roles trust GitHub's tokens for repo:ets-berkeley-edu@283538/cspace-media-server@1410958489:environment:…`,
+    ending `personal-stage2-plan and :personal-stage2.`: the start of the tokens' subject, read from GitHub (the
+    repository uses GitHub's immutable subjects, with the owner's and the repository's IDs);
   - `GitHub's OIDC provider: this pipeline makes (or keeps) it.` (or "the account's own", if your account already has
     one from something else: then this pipeline won't make or delete it);
   - Terraform's plan, which only creates: the OIDC provider (if made here), the roles `pipeline-personal-stage2-plan`,
-    `-apply` and `-build` with their policies (three `pipeline-personal-stage2-build-1` to `-3`, two attachments and
+    `-apply` and `-build` with their policies (three `pipeline-personal-stage2-build-1` to `-3`, three attachments and
     three inline policies), the CodeBuild projects `pipeline-personal-stage2-plan` and `-apply`, the log group
     `/pipeline/personal-stage2` and the bucket `pipeline-personal-stage2-plans-…` with its five settings. Nothing is
     named `serena-…`. Type `yes`;
@@ -2083,7 +2086,8 @@ sittings and finish with step 14.
   ets-berkeley-edu/cspace-media-server --ref main -f environment=personal-stage2`).
 
   The plan job takes a few minutes. Its summary (the run's page, below the jobs) shows a table: "Image repositories
-  and certificate: 3 to add …" and "Serena: not planned this run", and says only they change this time. Follow the
+  and certificate: 5 to add, 0 to change, 0 to destroy" (two repositories, their lifecycle policies and the
+  certificate) and "Serena: not planned this run", and says only they change this time. Follow the
   summary's link to the build in the AWS console (signed in to the personal account): its log shows Terraform's plan
   for the two image repositories, their lifecycle policies and the certificate. The link itself has no 12-digit
   number in it.
