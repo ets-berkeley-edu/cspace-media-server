@@ -1759,9 +1759,12 @@ their hashed names, with no CDN (D296).
     `ADMIN_CIDRS`, `ALERT_EMAIL`, `WEB_COUNT` …) are in SSM Parameter Store in its account, not in the public
     repository; changing one is an admin action that the next deploy picks up (D273). One parameter per setting,
     under `/serena-<env>/settings/` (DP10): `./serena aws settings push` writes them from the `.conf` and `.local.conf`
-    on the admin's computer, showing what changes, and `settings show` lists them. A pipeline environment's `.conf`
-    keeps only its profile, region and name, and says `SETTINGS=ssm`: then `./serena aws` reads the rest from SSM,
-    in the build, a break-glass deploy and `status` alike. The values are private but not secret (addresses, the
+    on the admin's computer, showing what changes and asking first, `settings show` lists them and marks those the
+    files there disagree with, and `settings delete` removes them once the environment is destroyed. An environment
+    with `SETTINGS=ssm` (every pipeline environment says so in its `.conf`) has `./serena aws` read every setting
+    from SSM but the profile, a rehearsal's administrator profile, the region and the name, in the build, a
+    break-glass deploy and `status` alike; its files then matter only to `settings push`. Reading them needs only
+    the deployer's existing SSM permissions. The values are private but not secret (addresses, the
     team's list, Ops's VPC). For an environment with real data, `./serena aws pipeline` asks the administrator to type
     the account's number and records it, and the build refuses real data without it (UC Berkeley data only in UC
     Berkeley accounts, below). Secret values never pass through the pipeline: Terraform creates each secret empty, and

@@ -1809,3 +1809,135 @@ through Route 53 does), Docker running, and `aws sso login --profile bmu-persona
   `./serena aws rehearsal-vpc --env personal-stage2 destroy`. `aws ec2 describe-nat-gateways --profile bmu-personal
   --region us-west-2 --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'`: `[]`. The hosted zone
   and the domain stay (about $0.50 a month and $3 a year).
+
+## 55. Settings in SSM Parameter Store, on personal-stage2 (30 minutes; before merging the pull request that adds it)
+
+**What this is about.** Until now, `./serena aws` has read an environment's settings from two files on the computer
+you run it on: `deploy/environments/<env>.conf` (committed) and `<env>.local.conf` (not committed: the account number,
+addresses, the alert email). The deploy pipeline won't have those files: it runs in AWS. So an environment can now keep
+its settings in SSM Parameter Store, AWS's store for configuration values, in its own account (D273, DP10). Each
+setting is one parameter, named `/serena-<SERENA_ENV_NAME>/settings/<SETTING>`: for personal-stage2,
+`/serena-stage2r/settings/VPC_ID` and so on.
+
+- `SETTINGS=ssm` in the environment's files switches it on. Then every `./serena aws` command reads the settings
+  from SSM, not from the files. Only four stay in the files, since they say how to reach the account at all:
+  `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and `REHEARSAL_ADMIN_PROFILE`.
+- `./serena aws settings push` copies the files' settings into SSM. It lists what it would change and asks first.
+  `settings show` lists what's in SSM. `settings delete` removes them all once the environment is gone.
+- To change a setting: edit the file, then `settings push`.
+
+This section tries all of it on personal-stage2, the stage 2 rehearsal's environment, in your personal account.
+Nothing is deployed. Steps 3 to 5 make the rehearsal's VPC for a few minutes, which costs a few cents (its NAT gateway
+bills by the hour).
+
+**Before you start:**
+
+- Sign in: `aws sso login --profile bmu-personal`.
+- Run every command from the clone or worktree that has this pull request's branch: only it has
+  `./serena aws settings`.
+- That folder needs `deploy/environments/personal-stage2.local.conf`, the rehearsal's settings that aren't committed
+  (the account number, `ADMIN_CIDRS`, `DOMAIN_NAME`, `ALERT_EMAIL`). Git ignores it, so a new clone or worktree doesn't
+  have it: copy it from the folder section 54 ran in, for example
+  `cp <that folder>/deploy/environments/personal-stage2.local.conf deploy/environments/`. Edit it with any editor; a
+  Claude session never prints it (it holds the account number and an email address).
+
+Two profiles take part. The `settings` and `rehearsal-vpc` commands run as `bmu-personal`, the account's
+administrator (`REHEARSAL_ADMIN_PROFILE` in `personal-stage2.conf`), since they come before the deployer exists. Every
+other command runs as `serena-rehearsal-deploy`, the deployer role with only the stage 2 policy, which `rehearsal-vpc`
+makes.
+
+**The steps:**
+
+- [ ] **1. Switch personal-stage2 to SSM; nothing is there yet.** Open `deploy/environments/personal-stage2.local.conf`
+  in an editor and add a line `SETTINGS=ssm`. Then:
+
+  ```
+  ./serena aws settings show --env personal-stage2
+  ```
+
+  Expect `'personal-stage2' in SSM, account <your account>, /serena-stage2r/settings/:` and then `none yet`.
+
+- [ ] **2. Copy the settings into SSM.**
+
+  ```
+  ./serena aws settings push --env personal-stage2
+  ```
+
+  It lists every setting from the two files with a `+` (new in SSM): among them `TERRAFORM_ROOT=shared`, `WAF=true`,
+  `WEB_COUNT=2`, your `DOMAIN_NAME` and `ALERT_EMAIL`. Then it asks `Write these to SSM? … [y/N]`. Answer `n`: it says
+  `Stopped; nothing was changed.` Run it again and answer `y`: `Done.`
+
+  Then `./serena aws settings show --env personal-stage2`: the same settings, one per line, with nothing after them in
+  brackets (the files and SSM agree). Run `settings push` once more: `SSM already has these settings …`, and no
+  question, since nothing would change.
+
+- [ ] **3. A command saves a setting in SSM.** `rehearsal-vpc` makes the VPC Ops would provide, and saves its IDs as
+  settings. Now that personal-stage2 uses SSM, they should go to SSM (and to the `.local.conf`, so the files stay a
+  whole copy).
+
+  ```
+  ./serena aws rehearsal-vpc --env personal-stage2
+  ```
+
+  Terraform shows a plan that only creates (the VPC, four subnets, the internet and NAT gateways, two route tables, the
+  deployer role and three policies); type `yes`. It takes a few minutes and ends with
+  `Saved in SSM (/serena-stage2r/settings/, …): VPC_ID, APP_SUBNET_IDS, LB_SUBNET_IDS, ETL_CIDRS …`.
+
+  Then `settings show`: the list now has `VPC_ID`, `APP_SUBNET_IDS`, `LB_SUBNET_IDS` and `ETL_CIDRS`, again with
+  nothing in brackets. `settings push`: `SSM already has these settings`.
+
+- [ ] **4. Other commands read SSM, as the deployer.** To see that the files no longer count, make them disagree with
+  SSM: add a line `WEB_COUNT=3` to the `.local.conf` (SSM still has 2). Then:
+
+  ```
+  ./serena aws status --env personal-stage2
+  ```
+
+  This runs as the deployer role, so it also shows that the stage 2 policy is enough to read the settings. Expect:
+  - first, `Note: the files on this computer differ from SSM in WEB_COUNT; SSM's are used …`;
+  - then the `Environment:` line and `Settings: SSM, /serena-stage2r/settings/`;
+  - then `Not deployed`;
+  - and no `AccessDenied` anywhere.
+
+  `settings show` marks the difference: `WEB_COUNT=2   (the files here: 3)`.
+
+  Now push the change: `settings push` shows `~ WEB_COUNT=3 (was 2)` (`~`: changed); answer `y`. Then put it back:
+  remove the `WEB_COUNT=3` line, `settings push` again, which shows `~ WEB_COUNT=2 (was 3)`; answer `y`.
+
+- [ ] **5. A command removes a setting from SSM.** Delete the rehearsal's VPC:
+
+  ```
+  ./serena aws rehearsal-vpc --env personal-stage2 destroy
+  ```
+
+  Type `yes` when Terraform asks. Then `settings show`: `VPC_ID`, the two subnet lists and `ETL_CIDRS` are gone. Check
+  no NAT gateway is left (it would keep billing):
+
+  ```
+  aws ec2 describe-nat-gateways --profile bmu-personal --region us-west-2 --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'
+  ```
+
+  Expect `[]`.
+
+- [ ] **6. Delete the settings from SSM.**
+
+  ```
+  ./serena aws settings delete --env personal-stage2
+  ```
+
+  It says how many settings it would delete and asks you to type the environment's name. Type something else first:
+  `Stopped; nothing was deleted.` Run it again and type `personal-stage2`: `Done.` Then `settings show`: `none yet`.
+
+  Finally, remove the `SETTINGS=ssm` line from the `.local.conf`, so personal-stage2 reads its files again, as before
+  this section.
+
+- [ ] **7. An environment without `SETTINGS=ssm` is unchanged.**
+
+  ```
+  ./serena aws status --env personal-dev
+  ```
+
+  This folder may have no `personal-dev.local.conf`, so it may first ask whether the account is the right one, and
+  whether the environment already in it is yours; answer `y` to both (it saves the account in a new
+  `personal-dev.local.conf` here). Then it answers as it did before this change: no `Settings:` line and no note
+  about SSM.

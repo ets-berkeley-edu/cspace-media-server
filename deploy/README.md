@@ -47,11 +47,23 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 | `./serena aws destroy` | Deletes everything in AWS for the environment, data included. It asks for the environment's name first. |
 | `./serena aws init` | Points Terraform at the environment's state, to run `terraform` commands yourself. |
 | `./serena aws rehearsal-vpc [destroy]` | For a stage 2 rehearsal in your own account only (`REHEARSAL=true`): makes, as the account's administrator, what Ops provides for stage 2 (a VPC and a deployer role with only the stage 2 policy), or deletes it once the environment is destroyed. See "Rehearsing stage 2 in your own account". |
+| `./serena aws settings push` / `show` / `delete` | For an environment with `SETTINGS=ssm` (D273): puts its settings in SSM Parameter Store from its files, showing what changes and asking first (always, even with `SERENA_AWS_YES=1`); lists them, marking any the files on this computer disagree with; or, once the environment is destroyed, deletes them (it asks for the environment's name). See "Settings in SSM Parameter Store". |
 
 **Picking the environment.** Add `--env NAME`, or set `SERENA_AWS_ENV`. The default is `personal-dev`.
 `SERENA_AWS_YES=1` applies without Terraform's `yes` prompt.
 
-**Settings** (in `<env>.conf`, or in the uncommitted `<env>.local.conf`, which wins):
+**Settings in SSM Parameter Store (D273, DP10).** With `SETTINGS=ssm` in the environment's `.conf` or `.local.conf`,
+`./serena aws` reads every setting below from SSM in the environment's account, one String parameter each under
+`/serena-<SERENA_ENV_NAME>/settings/`, except `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and
+`REHEARSAL_ADMIN_PROFILE`, which say how to reach the account. The files then matter only to `./serena aws settings
+push`, which puts them there; a command whose files disagree with SSM says so and uses SSM's. Changing a setting is:
+edit the file, `settings push`, then deploy (or, with the pipeline, run it). Commands that save a setting
+(`rehearsal-vpc`, `allow-my-ip`) save it in SSM and in the `.local.conf`, so the files stay a whole copy and a later
+push doesn't undo it. A rehearsal's `settings` commands run as
+`REHEARSAL_ADMIN_PROFILE`, since they come before the deployer role exists. The deploy pipeline's environments keep
+their settings this way (it reads them in the build); personal-dev keeps its files (D277).
+
+**Settings** (in `<env>.conf`, or in the uncommitted `<env>.local.conf`, which wins; with `SETTINGS=ssm`, in SSM):
 
 | Setting | What it is |
 | --- | --- |
