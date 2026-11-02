@@ -685,7 +685,8 @@ So on a failed refresh the public core and Serena can differ for up to a day. Ve
 neither is for later (D77; see Open questions and findings).
 
 The principle (decided October 9, 2026): if the ETL job succeeded (a working public core and a valid servable
-list), an admin can always bring Serena up to date. The steps go in a runbook, reviewed with the DevOps team.
+list), an admin can always bring Serena up to date. The steps are in the recovery runbook, `docs/runbook.md` (a draft,
+to review with the DevOps team; F2).
 
 ### The ETL API
 
@@ -1738,7 +1739,7 @@ their hashed names, with no CDN (D296).
     token file stays the fallback (D275). The ETL's side is decided in the CSpace ETL Process project (Jira CSW-1027).
   - **Break-glass.** If the pipeline is broken when a deploy is urgent, a named admin runs `./serena aws`, signed in
     through a separate, time-limited break-glass permission set (audited in CloudTrail) and following the recovery
-    runbook (F2); the next pipeline run confirms the environment matches `main` (D276).
+    runbook (`docs/runbook.md`, Break-glass deploy); the next pipeline run confirms the environment matches `main` (D276).
   - **When.** Stage 1 (Jira CS-9523: the simulator, throwaway) is deployed with `./serena aws`, with no pipeline.
     The pipeline is built before stage 2 holds real data, and proven there, so production's first deploy isn't the
     pipeline's first run (D269, amended October 29, 2026, TQ8): `./serena aws` deploys a shared environment only while
@@ -1898,8 +1899,9 @@ The F numbers follow the team's list of follow-ups.
 - **F1. Watermarked copies.** How watermarked copies are keyed in the cache index (a version number or a hash of the
   settings), and whether the unwatermarked copy of a watermarked size should be stored at all. To settle before
   watermarking is built.
-- **F2. Recovery runbook.** What an admin does for each failure (each alert, a failed refresh, a failed ETL list update), who is
-  told, and where the runbook lives; built on the principle in The daily sequence.
+- **F2. Recovery runbook.** Drafted in `docs/runbook.md` (November 1, 2026): what an admin does for each alert, each
+  alarm, a failed refresh and the break-glass deploy. Still open: its review with the DevOps team (F7), who is told
+  (Notifications list), and links to it from the admin app's alerts.
 - **F3. "Fetch again now".** Whether the admin app could pick up a Media record's current image at once, and whether
   the rules deciding what is restricted could live in one place shared by Serena and the ETL. Possibly a dead end.
 - **F6. API documentation.** Whether the admin API is documented the same way as the ETL API.
