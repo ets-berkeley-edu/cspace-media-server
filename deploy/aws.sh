@@ -35,9 +35,14 @@
 #   ./serena aws rehearsal-vpc [destroy]   for a stage 2 rehearsal in your own account (REHEARSAL=true): make (or,
 #                              once the environment is destroyed, delete) what Ops provides for stage 2, a VPC and a
 #                              deployer role with only the stage 2 policy, as REHEARSAL_ADMIN_PROFILE
+#   ./serena aws settings push|show|delete   for an environment with SETTINGS=ssm (D273): put its settings in SSM
+#                              Parameter Store from its files (shows what changes and asks), list them, or delete them
 #
 # Which environment: --env NAME or SERENA_AWS_ENV (default personal-dev). Its settings are in
 # deploy/environments/NAME.conf; NAME.local.conf (not committed) holds the account number and allowed addresses.
+# With SETTINGS=ssm (D273, DP10), every setting but AWS_PROFILE, AWS_REGION, SERENA_ENV_NAME and
+# REHEARSAL_ADMIN_PROFILE is read from SSM Parameter Store in the account instead (/serena-<name>/settings/<SETTING>),
+# where ./serena aws settings push puts them from the files; the files then matter only to settings push.
 # TERRAFORM_ROOT says which Terraform builds it (D302): personal (the default: personal environments and stage 1,
 # CloudFront in front of everything) or shared (QA and production, the split). A shared environment also needs
 # VPC_ID, APP_SUBNET_IDS, LB_SUBNET_IDS, DOMAIN_NAME, ETL_CIDRS, ADMIN_CIDRS and APACHE_CIDRS, and is deployed here
@@ -84,21 +89,28 @@ load_env() {
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
-  REHEARSAL="" REHEARSAL_ADMIN_PROFILE=""
+  REHEARSAL="" REHEARSAL_ADMIN_PROFILE="" SETTINGS=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
   [ -f "$LOCAL" ] && . "$LOCAL"
   : "${AWS_PROFILE:?set AWS_PROFILE in $CONF}" "${AWS_REGION:?set AWS_REGION in $CONF}" "${SERENA_ENV_NAME:?set SERENA_ENV_NAME in $CONF}"
   NAME="serena-$SERENA_ENV_NAME"   # the cluster's name and the prefix of every resource
+  # A rehearsal's settings and VPC are the account administrator's to make (rehearsal-vpc runs before the deployer
+  # role exists).
+  DEPLOYER_PROFILE="$AWS_PROFILE"
+  case "$CMD" in settings|rehearsal-vpc) [ -z "$REHEARSAL_ADMIN_PROFILE" ] || AWS_PROFILE="$REHEARSAL_ADMIN_PROFILE" ;; esac
+  case "${SETTINGS:=files}" in files|ssm) ;; *) die "SETTINGS must be files or ssm ($CONF, $LOCAL)." ;; esac
+  [ "$SETTINGS" = files ] || [ "$CMD" = settings ] || from_ssm   # settings push reads the files
   ROOT="${TERRAFORM_ROOT:-personal}"
   case "$ROOT" in
     personal) ;;
     shared)
       local need needs="VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS DOMAIN_NAME"
-      [ "$CMD" != rehearsal-vpc ] || needs=""   # it makes the VPC and the subnets, and saves them in $LOCAL
+      # rehearsal-vpc makes the VPC and the subnets, and saves them; settings push may come before it
+      [ "$CMD" != rehearsal-vpc ] && [ "$CMD" != settings ] || needs=""
       for need in $needs; do
-        [ -n "$(eval echo "\$$need")" ] || die "'$ENV' is on the shared root: set $need in $LOCAL (D303, D293)."
+        [ -n "$(eval echo "\$$need")" ] || die "'$ENV' is on the shared root: set $need in $(settings_home) (D303, D293)."
       done ;;
     *) die "TERRAFORM_ROOT must be personal or shared ($CONF)." ;;
   esac
@@ -186,20 +198,184 @@ signed_museum() {  # signed_museum MUSEUM: whether its configuration allows sign
   grep -Eq '^signed_access_kinds: *\[ *[A-Za-z0-9]' "backend/serena/museums/$1.yaml"
 }
 
-save_local() {  # save_local KEY VALUE: set one setting in the environment's .local.conf
+# With SETTINGS=ssm, a setting saved (or removed) by a command goes to SSM, which the commands read, and to the
+# .local.conf as well, so that the files stay a whole copy and a later settings push doesn't undo it.
+save_local() {  # save_local KEY VALUE: set one setting in the environment's .local.conf (and SSM, SETTINGS=ssm)
   local key="$1" value="$2" tmp
+  if [ "$SETTINGS" = ssm ] && [ "$CMD" != settings ] && is_ssm_setting "$key"; then put_setting "$key" "$value"; fi
   tmp="$(mktemp)"
   { [ -f "$LOCAL" ] && grep -v "^$key=" "$LOCAL" || echo "# ./serena aws settings for '$ENV' on this computer only (not committed)."; } > "$tmp"
   echo "$key=\"$value\"" >> "$tmp"
   mv "$tmp" "$LOCAL"
 }
 
-remove_local() {  # remove_local KEY: remove one setting from the environment's .local.conf
+remove_local() {  # remove_local KEY: remove one setting from the environment's .local.conf (and SSM, SETTINGS=ssm)
+  if [ "$SETTINGS" = ssm ] && [ "$CMD" != settings ] && is_ssm_setting "$1"; then put_setting "$1" ""; fi
   [ -f "$LOCAL" ] || return 0
   local tmp
   tmp="$(mktemp)"
   grep -v "^$1=" "$LOCAL" > "$tmp" || true
   mv "$tmp" "$LOCAL"
+}
+
+# ---- settings in SSM Parameter Store (SETTINGS=ssm; D273, DP10) ------------------------------------------------------
+# One String parameter per setting, /serena-<name>/settings/<SETTING>, in the environment's account, so that the
+# pipeline's build and an admin's ./serena aws read the same values. They are private (addresses, the team's list,
+# Ops's VPC) but not secret. ./serena aws settings push puts them there from the files; reading them needs only
+# ssm:DescribeParameters and ssm:GetParameters, which the deployer policies have.
+SSM_SETTINGS="ACCOUNT_ID ALLOWED_CIDRS ETL_CIDRS ADMIN_CIDRS SIMULATED_CSPACE SIMULATED_MUSEUMS ENV_LABEL CSPACE_TENANTS
+  OPEN_IMAGES WAF PROTECT_DATA WEB_COUNT ALERT_EMAIL TERRAFORM_ROOT APACHE_CIDRS VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS
+  CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME REHEARSAL"
+# Always from the files: what says how to reach the account, and SETTINGS itself.
+FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME REHEARSAL_ADMIN_PROFILE SETTINGS"
+
+is_ssm_setting() { case " $(echo $SSM_SETTINGS) " in *" $1 "*) true ;; *) false ;; esac; }
+settings_path() { echo "/$NAME/settings"; }
+settings_home() { [ "$SETTINGS" = ssm ] && echo "SSM ($(settings_path)/, ./serena aws settings push)" || echo "$LOCAL"; }
+
+ssm_settings() {  # the environment's settings in SSM, one "SETTING<tab>VALUE" line each, sorted; nothing if none
+  local names
+  names="$(aws_ ssm describe-parameters --parameter-filters "Key=Path,Option=OneLevel,Values=$(settings_path)" \
+    --query 'Parameters[].Name' --output text)" || die "Couldn't list $(settings_path)/ in SSM (see above)."
+  [ -n "$names" ] && [ "$names" != None ] || return 0
+  # shellcheck disable=SC2086
+  set -- $names
+  while [ $# -gt 0 ]; do   # GetParameters takes at most 10 names
+    aws_ ssm get-parameters --names "${@:1:10}" --query 'Parameters[].[Name,Value]' --output text ||
+      die "Couldn't read $(settings_path)/ in SSM (see above)."
+    shift $(( $# < 10 ? $# : 10 ))
+  done | sed "s|^$(settings_path)/||" | sort
+}
+
+setting_in() {  # setting_in SETTING LINES: its value in ssm_settings' LINES; empty if it isn't there
+  printf '%s\n' "$2" | awk -F'\t' -v k="$1" '$1 == k { print substr($0, length(k) + 2); exit }'
+}
+
+put_setting() {  # put_setting SETTING VALUE: in SSM; an empty VALUE deletes it (SSM has no empty values)
+  local name; name="$(settings_path)/$1"
+  if [ -z "$2" ]; then
+    aws_ ssm delete-parameter --name "$name" >/dev/null 2>&1 || true
+    return 0
+  fi
+  aws_ ssm put-parameter --name "$name" --type String --value "$2" --overwrite >/dev/null
+  aws_ ssm add-tags-to-resource --resource-type Parameter --resource-id "$name" --tags Key=project,Value=serena
+}
+
+# The settings from SSM in place of the files' (load_env). The account is checked first, against this computer's
+# ACCOUNT_ID if it has one; then SSM's ACCOUNT_ID must be the account it was read from.
+from_ssm() {
+  local who lines key value file_values="" differ=""
+  export AWS_PAGER=""
+  who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" ||
+    die "Not signed in to AWS for '$ENV'. Run: aws sso login --profile $AWS_PROFILE"
+  [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "$who" ] ||
+    die "Profile $AWS_PROFILE is signed in to account $who, but '$ENV' is account $ACCOUNT_ID ($LOCAL). Stopped."
+  lines="$(ssm_settings)"
+  [ -n "$lines" ] || die "'$ENV' keeps its settings in SSM (SETTINGS=ssm), and account $who has none under $(settings_path)/.
+Put them there from $CONF and $LOCAL: ./serena aws settings push --env $ENV"
+  for key in $SSM_SETTINGS; do
+    file_values="$file_values$key	${!key}
+"
+    printf -v "$key" '%s' "$(setting_in "$key" "$lines")"
+  done
+  [ "$ACCOUNT_ID" = "$who" ] ||
+    die "SSM's ACCOUNT_ID for '$ENV' (${ACCOUNT_ID:-none}) isn't the account it is in ($who): ./serena aws settings push --env $ENV"
+  while IFS='	' read -r key value; do
+    [ -n "$key" ] || continue
+    is_ssm_setting "$key" || { echo "Note: $(settings_path)/$key in SSM isn't a setting ./serena aws reads; ignored." >&2; continue; }
+  done <<EOF
+$lines
+EOF
+  for key in $SSM_SETTINGS; do
+    value="$(setting_in "$key" "$file_values")"
+    [ -z "$value" ] || [ "$value" = "${!key}" ] || differ="$differ $key"
+  done
+  [ -z "$differ" ] ||
+    echo "Note: the files on this computer differ from SSM in$differ; SSM's are used (./serena aws settings show)." >&2
+}
+
+# ./serena aws settings push|show|delete (SETTINGS=ssm). The account is this computer's ACCOUNT_ID, asked the first
+# time as for a deploy; a rehearsal's run as its REHEARSAL_ADMIN_PROFILE (load_env).
+settings() {
+  load_env
+  [ "$SETTINGS" = ssm ] || die "'$ENV' keeps its settings in $CONF and $LOCAL. To keep them in SSM Parameter Store instead
+(D273), add SETTINGS=ssm to $LOCAL, then: ./serena aws settings push --env $ENV"
+  check_account
+  case "${1:-}" in
+    push) settings_push ;;
+    show) settings_show ;;
+    delete) settings_delete ;;
+    *) die "./serena aws settings push|show|delete" ;;
+  esac
+}
+
+# The files' settings (after load_env's defaults), compared with SSM's; asks, then writes the changes. Always asks,
+# even with SERENA_AWS_YES=1: another computer's files may be out of date, and a missing setting is deleted.
+settings_push() {
+  local lines key value old changes="" ok
+  lines="$(ssm_settings)"
+  for key in $SSM_SETTINGS; do
+    value="${!key}"; old="$(setting_in "$key" "$lines")"
+    [ "$value" != "$old" ] || continue
+    if [ -z "$old" ]; then changes="$changes  + $key=$value
+"
+    elif [ -z "$value" ]; then changes="$changes  - $key (was $old)
+"
+    else changes="$changes  ~ $key=$value (was $old)
+"
+    fi
+  done
+  if [ -z "$changes" ]; then
+    echo "SSM already has these settings for '$ENV' (account $ACCOUNT_ID, $(settings_path)/)."
+    return 0
+  fi
+  echo "From $CONF and $LOCAL to SSM, account $ACCOUNT_ID, $(settings_path)/:"
+  printf '%s' "$changes"
+  read -r -p "Write these to SSM? The next deploy uses them. [y/N] " ok
+  case "$ok" in y|Y|yes) ;; *) die "Stopped; nothing was changed." ;; esac
+  for key in $SSM_SETTINGS; do
+    value="${!key}"
+    [ "$value" = "$(setting_in "$key" "$lines")" ] || put_setting "$key" "$value"
+  done
+  echo "Done. ./serena aws plan --env $ENV shows what they change."
+}
+
+settings_show() {
+  local lines key value
+  lines="$(ssm_settings)"
+  echo "'$ENV' in SSM, account $ACCOUNT_ID, $(settings_path)/:"
+  [ -n "$lines" ] || { echo "  none yet (./serena aws settings push --env $ENV)"; return 0; }
+  while IFS='	' read -r key value; do
+    if ! is_ssm_setting "$key"; then echo "  $key=$value   (not a setting ./serena aws reads; ignored)"
+    elif [ "${!key}" != "$value" ]; then echo "  $key=$value   (the files here: ${!key:-not set})"
+    else echo "  $key=$value"
+    fi
+  done <<EOF
+$lines
+EOF
+  for key in $SSM_SETTINGS; do
+    [ -z "${!key}" ] || [ -n "$(setting_in "$key" "$lines")" ] || echo "  ($key isn't in SSM; the files here: ${!key})"
+  done
+}
+
+settings_delete() {  # only once the environment is destroyed: a deploy, plan or destroy needs them
+  local lines key value ok
+  for key in shared personal registry; do
+    ! state_has_resources "$key" ||
+      die "'$ENV' is still deployed (serena/$SERENA_ENV_NAME/$key.tfstate): ./serena aws destroy --env $ENV first."
+  done
+  lines="$(ssm_settings)"
+  [ -n "$lines" ] || { echo "'$ENV' has no settings in SSM (account $ACCOUNT_ID, $(settings_path)/)."; return 0; }
+  echo "This deletes $(printf '%s\n' "$lines" | grep -c .) settings of '$ENV' in SSM, account $ACCOUNT_ID, $(settings_path)/."
+  echo "The files on this computer stay."
+  read -r -p "Type the environment's name ($ENV) to go ahead: " ok
+  [ "$ok" = "$ENV" ] || die "Stopped; nothing was deleted."
+  while IFS='	' read -r key value; do
+    [ -z "$key" ] || aws_ ssm delete-parameter --name "$(settings_path)/$key" >/dev/null
+  done <<EOF
+$lines
+EOF
+  echo "Done."
 }
 
 # First use of an environment on this computer: if the account already holds Terraform state for this environment's
@@ -801,6 +977,7 @@ status() {
   look
   local url deployed museum services="web worker"
   echo "Environment: $ENV (account $ACCOUNT_ID, $AWS_REGION); Terraform state in s3://$STATE_BUCKET/serena/$SERENA_ENV_NAME/"
+  [ "$SETTINGS" != ssm ] || echo "Settings: SSM, $(settings_path)/ (./serena aws settings show)"
   IMAGE="$(applied image_uri)"
   [ -n "$IMAGE" ] || { echo "Not deployed (./serena aws deploy)."; return 0; }
   url="$(app_url)"
@@ -825,7 +1002,7 @@ status() {
   case "$(alert_subscription)" in
     confirmed) echo "Alert email: $(applied alert_email)" ;;
     pending) echo "Alert email: $(applied alert_email), NOT CONFIRMED (./serena aws confirm-alerts)" ;;
-    *) echo "Alert email: none (set ALERT_EMAIL in $LOCAL and deploy)" ;;
+    *) echo "Alert email: none (set ALERT_EMAIL in $(settings_home) and deploy)" ;;
   esac
   local firing
   firing="$(aws_ cloudwatch describe-alarms --alarm-name-prefix "$NAME-" --state-value ALARM --query 'MetricAlarms[].AlarmName' --output text 2>/dev/null || true)"
@@ -1072,6 +1249,8 @@ destroy() {
   rm -f "$URL_FILE"
   echo "Done. '$ENV' is gone from AWS (./serena aws deploy creates it again)."
   echo "The Terraform state bucket s3://$STATE_BUCKET is kept; it holds the (now empty) state and its history."
+  [ "$SETTINGS" != ssm ] ||
+    echo "Its settings stay in SSM, $(settings_path)/: ./serena aws settings delete --env $ENV removes them."
 }
 
 # ---- the stage 2 rehearsal ------------------------------------------------------------------------------------------
@@ -1089,8 +1268,7 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
   [ "$ROOT" = shared ] && [ "$SIMULATED_CSPACE" = true ] && [ "$PROTECT_DATA" = false ] ||
     die "A rehearsal is on the shared root, with the simulator only and PROTECT_DATA=false ($CONF)."
   [ -n "$REHEARSAL_ADMIN_PROFILE" ] || die "Set REHEARSAL_ADMIN_PROFILE in $CONF: the account's administrator profile."
-  local deployer_profile="$AWS_PROFILE" key role
-  AWS_PROFILE="$REHEARSAL_ADMIN_PROFILE"; export AWS_PROFILE
+  local deployer_profile="$DEPLOYER_PROFILE" key role   # load_env signed in as REHEARSAL_ADMIN_PROFILE
   check_account; need_terraform; ensure_state_bucket
   tf_init rehearsal
   local vars=(-var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "env_name=$SERENA_ENV_NAME")
@@ -1117,7 +1295,7 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
   save_local LB_SUBNET_IDS "$(tf rehearsal output -raw lb_subnet_ids)"
   save_local ETL_CIDRS "$(tf rehearsal output -raw nat_address)/32"   # the fake ETL's calls come from the NAT gateway
   [ -n "$ADMIN_CIDRS" ] || { ADMIN_CIDRS="$(my_ip)/32"; save_local ADMIN_CIDRS "$ADMIN_CIDRS"; }
-  echo "Saved in $LOCAL: VPC_ID, APP_SUBNET_IDS, LB_SUBNET_IDS, ETL_CIDRS (the NAT gateway's address); ADMIN_CIDRS is $ADMIN_CIDRS."
+  echo "Saved in $(settings_home): VPC_ID, APP_SUBNET_IDS, LB_SUBNET_IDS, ETL_CIDRS (the NAT gateway's address); ADMIN_CIDRS is $ADMIN_CIDRS."
   role="$(tf rehearsal output -raw deployer_role_arn)"
   if [ "$(aws configure get role_arn --profile "$deployer_profile" 2>/dev/null || true)" = "$role" ]; then
     echo "The deployer's profile $deployer_profile is in ~/.aws/config."
@@ -1128,7 +1306,7 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
     printf '[profile %s]\nrole_arn = %s\nsource_profile = %s\nregion = %s\n' "$deployer_profile" "$role" "$REHEARSAL_ADMIN_PROFILE" "$AWS_REGION"
     echo
   fi
-  [ -n "$DOMAIN_NAME" ] || echo "Then set DOMAIN_NAME in $LOCAL: a name in a DNS zone you control, for the certificate."
+  [ -n "$DOMAIN_NAME" ] || echo "Then set DOMAIN_NAME in $(settings_home): a name in a DNS zone you control, for the certificate."
   echo "Next: ./serena aws deploy --env $ENV   (as the deployer: note every AccessDenied, checklist section 54)"
 }
 
@@ -1168,6 +1346,7 @@ case "$CMD" in
         backend_config "$ROOT"; tf "$ROOT" init -reconfigure "${BACKEND[@]}" ;;
   destroy) destroy ;;
   rehearsal-vpc) rehearsal_vpc "$@" ;;
+  settings) settings "$@" ;;
   help|-h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" ;;
   *) die "Unknown command '$CMD'. ./serena aws help lists them." ;;
 esac

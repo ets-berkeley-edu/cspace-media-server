@@ -1809,3 +1809,35 @@ through Route 53 does), Docker running, and `aws sso login --profile bmu-persona
   `./serena aws rehearsal-vpc --env personal-stage2 destroy`. `aws ec2 describe-nat-gateways --profile bmu-personal
   --region us-west-2 --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'`: `[]`. The hosted zone
   and the domain stay (about $0.50 a month and $3 a year).
+
+## 55. Settings in SSM Parameter Store, on personal-stage2 (30 minutes; before merging the pull request that adds it)
+
+What it checks: `SETTINGS=ssm` (D273, DP10) on the stage 2 rehearsal's environment, in a personal account:
+`./serena aws settings push`, `show` and `delete`; that the other commands read SSM and not the files; that
+`rehearsal-vpc` saves its settings in SSM; and that the deployer, with only the stage 2 policy, can read them.
+Nothing is deployed: steps 3 to 5 make the rehearsal's VPC for a few minutes (its NAT gateway bills by the hour).
+
+**Before you start:** `aws sso login --profile bmu-personal`, and `deploy/environments/personal-stage2.local.conf` in
+this clone (copy it from the rehearsal's worktree; don't print it).
+
+- [ ] **1. Nothing in SSM yet.** Add `SETTINGS=ssm` to `personal-stage2.local.conf`. `./serena aws settings show --env
+  personal-stage2` (as `bmu-personal`, the rehearsal's administrator): "none yet".
+- [ ] **2. Push.** `./serena aws settings push --env personal-stage2`: every setting with a `+`, then a question; answer
+  `n`: "Stopped; nothing was changed." Again, and `y`. `settings show`: the same settings, none marked. `settings push`
+  again: "SSM already has these settings".
+- [ ] **3. Saved in SSM.** `./serena aws rehearsal-vpc --env personal-stage2`, `yes`: it ends "Saved in SSM
+  (/serena-stage2r/settings/, …)". `settings show`: `VPC_ID`, `APP_SUBNET_IDS`, `LB_SUBNET_IDS` and `ETL_CIDRS`, none
+  marked (they are in the `.local.conf` too). `settings push`: "SSM already has these settings".
+- [ ] **4. Read from SSM, by the deployer.** Add `WEB_COUNT=3` to the `.local.conf`. `./serena aws status --env
+  personal-stage2`, which runs as the deployer role (only the stage 2 policy): a note that the files differ from SSM
+  in `WEB_COUNT`, then "Settings: SSM, /serena-stage2r/settings/" and "Not deployed", with no `AccessDenied`.
+  `settings show` marks it (`the files here: 3`). `settings push`: `~ WEB_COUNT=3 (was 2)`; `y`. Remove the line,
+  push again: `~ WEB_COUNT=2 (was 3)`; `y`.
+- [ ] **5. Removed from SSM.** `./serena aws rehearsal-vpc --env personal-stage2 destroy`, `yes`. `settings show`: no
+  `VPC_ID`, subnets or `ETL_CIDRS`. `aws ec2 describe-nat-gateways --profile bmu-personal --region us-west-2 --filter
+  Name=state,Values=available --query 'NatGateways[].NatGatewayId'`: `[]`.
+- [ ] **6. Delete.** `./serena aws settings delete --env personal-stage2`; type something else: "Stopped; nothing was
+  deleted." Again, typing `personal-stage2`: "Done." `settings show`: "none yet". Remove `SETTINGS=ssm` from the
+  `.local.conf`.
+- [ ] **7. Files as before.** `./serena aws status --env personal-dev` answers as before this change, with no
+  "Settings:" line and no note about SSM.
