@@ -1,7 +1,7 @@
 # Weekly update pull requests (Mondays), grouped so there are few of them. Each one runs CI like any other PR.
 #
 # Docker: the local stack's image (backend/Dockerfile), the production image (deploy/Dockerfile) and the images
-# docker-compose.yml names. Terraform: the AWS provider in both configurations (deploy/terraform), within ~> 6.0.
+# docker-compose.yml names. Terraform: the AWS provider in every root (deploy/terraform), within ~> 6.0.
 #
 # Python: the requirements files are pip-compile output of the .in files beside them (backend/pin-requirements.sh, as
 # in the BMU); Dependabot reruns pip-compile with the options in each file's header. The dependencies are in the .in
@@ -77,7 +77,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: terraform
-    directories: [/deploy/terraform/personal, /deploy/terraform/shared, /deploy/terraform/registry]
+    directories: [/deploy/terraform/personal, /deploy/terraform/shared, /deploy/terraform/registry, /deploy/terraform/rehearsal]
     schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Los_Angeles }
     groups:
       terraform:
