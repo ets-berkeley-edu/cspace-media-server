@@ -1717,25 +1717,72 @@ their hashed names, with no CDN (D296).
     tag and alerting the alert address. Which tag key it uses waits on Operations' tagging conventions (D304).
 - **Deploys (decided October 22, 2026, D268 to D277).** An environment with real data (stage 2, pre-production, then
   production) is deployed only by a pipeline, never from someone's laptop (D268; D193 now covers only personal-dev).
-  - **How it runs.** After the approval, a GitHub Actions job signs in to AWS through OIDC with a role per environment
-    whose trust policy accepts only `repo:ets-berkeley-edu/cspace-media-server:environment:<env>` (never
-    `pull_request_target`, so fork pull requests can't assume it); that role can only start the environment's AWS
-    CodeBuild project and read its logs (D271). Terraform's plan and apply run in CodeBuild, under a role with the
-    scoped deployer policy, so the plan, which shows the account ID, ARNs and allowed addresses, stays in CloudWatch
-    in that account and never reaches the public repository's Actions logs (D270).
-  - **Approval.** GitHub environments with protection rules: deploys only from `main`; the plan runs first and the
-    apply waits for a reviewer (Richard or one other person, never whoever merged), who reads the plan; production
-    takes only a commit already deployed to pre-production (D272).
+  - **How it runs.** Someone starts the deploy workflow by hand from `main`, choosing the environment (decided
+    November 2, 2026, DP8). Its plan job signs in to AWS through OIDC as `pipeline-<env>-plan`, whose trust policy
+    accepts only `repo:ets-berkeley-edu/cspace-media-server:environment:<env>-plan` (never `pull_request_target`, so
+    fork pull requests can't assume it), and starts the environment's plan build in AWS CodeBuild. After the approval,
+    the apply job signs in as `pipeline-<env>-apply`, which accepts only `…:environment:<env>`, and starts the apply
+    build. Each role can only start its own CodeBuild project and read its builds' status, not their logs (D271,
+    amended November 2, 2026, DP3): with one role, the job that runs before the approval could start an apply.
+    Terraform's plan and apply run in CodeBuild, so the plan, which shows the account ID, ARNs and allowed addresses,
+    stays in CloudWatch in that account and never reaches the public repository's Actions logs (D270).
+  - **What the pipeline is (DP1, DP2, DP4, DP5).** A Terraform root of its own, `deploy/terraform/pipeline` (state
+    `serena/<env>/pipeline.tfstate`), applied once per environment by the account's administrator with
+    `./serena aws pipeline`, never by the deployer, since it makes the deployer's role. It holds the GitHub OIDC
+    provider (made only where the account has none: there can be one per account), the two OIDC roles, the plan and
+    apply CodeBuild projects, the build's role, its log group and a private, encrypted bucket for saved plans. The
+    builds run on ARM Linux, with Docker, outside any VPC; each checks out the public repository at the commit being
+    deployed, with no connection or token, and refuses a commit that isn't on `main`. The build's role
+    (`pipeline-<env>-build`) has the stage 2 deployer policy, split into managed policies as for the rehearsal, plus
+    reading the environment's settings, the plan bucket and its own logs, and an explicit deny of reading or setting
+    a secret's value. None of the pipeline's roles is named `serena-…`, since the deployer policy may change
+    `serena-*` roles.
+  - **The builds (DP6, DP7, DP11, DP17).** Both run `deploy/aws.sh` (`pipeline-plan`, `pipeline-apply`: no prompts, the
+    build's own credentials, the settings from SSM), so the pipeline and a break-glass deploy do the same steps. The
+    plan build builds and pushes the images, tagged with the commit (skipped if already pushed; nothing runs them
+    yet), plans the registry root and then the environment's root, writes the plans' text to its log and saves the
+    plan files. The apply build applies exactly those files: the same commit, at most 24 hours old, and Terraform
+    refuses one made against a state that has changed since. If the registry's plan has changes, the apply applies
+    only the registry and asks for the deploy to be run again, since the root's plan was made before them. The
+    buildspecs install Terraform at CI's version, checked against its SHA256; one deploy at a time per environment.
+  - **Approval.** GitHub environments with protection rules, two per AWS environment (D272, amended November 2, 2026,
+    DP9): `<env>-plan`, deployments from `main` only, no reviewer; and `<env>`, from `main` only, with required
+    reviewers (Richard and one other person) and "prevent self-review", so whoever started the deploy can't approve
+    it. The plan job's summary in Actions shows only the counts (to add, change and destroy) and a link to the build
+    in the AWS console, which has no account number in it; the reviewer signs in to AWS and reads the plan there before
+    approving (DP6). The roles' ARNs are environment secrets, so the account number is masked in the logs. Production
+    takes only a commit already deployed to pre-production: its workflow checks GitHub's deployments first. GitHub
+    makes an environment without rules the first time a job names it, so an environment's rules are set before the
+    administrator applies its pipeline root, whose roles are what let a job into AWS.
   - **Settings and secrets.** An environment's non-secret settings (the museums, `ALLOWED_CIDRS`, `ETL_CIDRS`,
     `ADMIN_CIDRS`, `ALERT_EMAIL`, `WEB_COUNT` …) are in SSM Parameter Store in its account, not in the public
-    repository; changing one is an admin action that the next deploy picks up (D273). Secret values never pass
-    through the pipeline: Terraform creates each secret empty, and an admin sets it with `./serena aws cspace-secret`,
-    `etl-token`, `portal-key` or `cdn-key`, signed in with their own SSO, from any machine; CloudTrail records it
-    (D274).
+    repository; changing one is an admin action that the next deploy picks up (D273). One parameter per setting,
+    under `/serena-<env>/settings/` (DP10): `./serena aws settings push` writes them from the `.conf` and `.local.conf`
+    on the admin's computer, showing what changes, and `settings show` lists them. A pipeline environment's `.conf`
+    keeps only its profile, region and name, and says `SETTINGS=ssm`: then `./serena aws` reads the rest from SSM,
+    in the build, a break-glass deploy and `status` alike. The values are private but not secret (addresses, the
+    team's list, Ops's VPC). For an environment with real data, `./serena aws pipeline` asks the administrator to type
+    the account's number and records it, and the build refuses real data without it (UC Berkeley data only in UC
+    Berkeley accounts, below). Secret values never pass through the pipeline: Terraform creates each secret empty, and
+    an admin sets it with `./serena aws cspace-secret`, `etl-token`, `portal-key` or `cdn-key`, signed in with their
+    own SSO, from any machine; CloudTrail records it (D274). So in a pipeline environment two steps that make secret
+    values stay with an admin (DP12): `./serena aws sim-secrets` after the first deploy with the simulator, and the
+    CloudFront signing key, which `cdn-key` makes and stops; the next pipeline run trusts it, and `cdn-key` again
+    finishes the rotation.
   - **The ETL's token.** Where the ETL server has an EC2 instance role, the ETL reads its museum's token from Serena's
     Secrets Manager on each run (cross-account through the secret's resource policy and the KMS key's policy,
     read-only, that one secret), so no person sees or copies it and a rotation needs no change on the ETL server; a
     token file stays the fallback (D275). The ETL's side is decided in the CSpace ETL Process project (Jira CSW-1027).
+    Serena's side (DP15): a setting `ETL_READER_ROLE_ARNS` names each museum's ETL role; for each, the museum's
+    `etl-tokens` secret gets a resource policy allowing that role to read it, and the KMS key's policy lets the role
+    decrypt only through Secrets Manager and only for that secret. Built after the pipeline, in its own pull request.
+  - **Proving it (DP13, DP14).** GitHub runs a workflow started by hand only once it's on `main`, so the pipeline's
+    pull request merges first, inert: no job can reach AWS until an administrator applies a pipeline root. It is then
+    proven in a personal account on `personal-stage2` (the shared root, the rehearsal's VPC, the simulator only), with
+    GitHub environments `personal-stage2-plan` and `personal-stage2` and Richard the only reviewer, self-review
+    allowed: the one difference from the UC Berkeley environments. The build's role, with only the stage 2 policy,
+    takes the rehearsal deployer's place. Afterwards the environment and its pipeline root are destroyed and the two
+    GitHub environments deleted. Then stage 2.
   - **Break-glass.** If the pipeline is broken when a deploy is urgent, a named admin runs `./serena aws`, signed in
     through a separate, time-limited break-glass permission set (audited in CloudTrail) and following the recovery
     runbook (F2); the next pipeline run confirms the environment matches `main` (D276).
@@ -1971,8 +2018,10 @@ The F numbers follow the team's list of follow-ups.
   start after midnight Pacific, which gives it the next refresh date. The ETL list's name and the watchdog
   deadline (08:00 Pacific) follow from the refresh date.
 - **Deploy pipeline prerequisites (D268 to D277).** From Ops: whether the production ETL server (cspace-prod-01)
-  has an EC2 instance profile, and in which AWS account (D275); the break-glass permission set (D276). For the
-  repository: a second person with reviewer rights on its GitHub environments (D272).
+  has an EC2 instance profile, and in which AWS account (D275); the break-glass permission set (D276); whether the
+  account already has GitHub's OIDC provider (DP2); and a read-only permission set with which the second reviewer
+  reads the plan's build log (DP6). For the repository: a second person with reviewer rights on its GitHub
+  environments (D272).
 - **Audit retention policy (D99).** Before production, ask the campus information security office (and records
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
   lowest choice to match.
