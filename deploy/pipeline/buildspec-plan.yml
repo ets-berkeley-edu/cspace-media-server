@@ -1,0 +1,30 @@
+# The deploy pipeline's plan build (deploy/terraform/pipeline, DP4, DP6, DP7, DP11): started by the deploy workflow's
+# plan job (.github/workflows/deploy.yml) at the commit being deployed. Builds and pushes the images, then plans the
+# registry and the environment's root with ./serena aws pipeline-plan. The plans' text is in this build's log, in the
+# account, never in GitHub; the plan files go to the bucket of saved plans. The workflow reads only the variables
+# exported below (the counts), through BatchGetBuilds.
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    # Terraform at CI's version (.github/workflows/ci.yml; backend/tests/test_deploy.py checks they agree), checked
+    # against HashiCorp's SHA256SUMS for linux_arm64. Change both together.
+    TERRAFORM_VERSION: "1.16.5"
+    TERRAFORM_SHA256: "61a50b00485ee4810cf20581ef080fc54d34d666e175c58d9a10501c65c1ccde"
+    PIPELINE_RESULT: "/tmp/pipeline-result"
+  exported-variables:
+    - PLAN_ID
+    - PLAN_STATUS
+    - REGISTRY_CHANGES
+    - ROOT_CHANGES
+    - REMOVED_MUSEUMS
+
+phases:
+  install:
+    commands:
+      - deploy/pipeline/prepare.sh
+  build:
+    commands:
+      - deploy/aws.sh pipeline-plan
+      - set -a; . "$PIPELINE_RESULT"; set +a

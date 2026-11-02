@@ -25,5 +25,5 @@ output "deployer_role_arn" {
 
 output "deployer_policy_parts" {
   description = "How many managed policies the deployer policy was split into, and each one's length."
-  value       = { for k, p in local.policy_parts : k => length(p) }
+  value       = module.deployer_policy.parts
 }

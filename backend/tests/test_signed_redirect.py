@@ -170,3 +170,22 @@ def test_cloudfront_signed_url(secretsmanager: Any) -> None:
                         separators=(",", ":")).encode()
     raw = base64.b64decode(query["Signature"][0].replace("-", "+").replace("_", "=").replace("~", "/"))
     key.public_key().verify(raw, policy, padding.PKCS1v15(), hashes.SHA1())  # noqa: S303
+
+
+def test_a_first_key_not_finished_isnt_used(store: Store, s3: Any, secretsmanager: Any,
+                                            recorder: MemoryRecorder) -> None:
+    """A pipeline environment's first signing key (DP12): ./serena aws cdn-key makes it, the next pipeline run has
+    CloudFront trust it, and cdn-key again gives it its key ID. Until then nothing is signed: delivery isn't set up."""
+    arn = secretsmanager.create_secret(Name="cloudfront-first", SecretString=json.dumps(
+        {"name": "serena-test-20261102000000", "private_key": "not read"}))["ARN"]
+    signer = signing.CloudFrontURLSigner("https://cdn.test", SecretCache(secretsmanager, 300), arn)
+    with pytest.raises(signing.KeyNotReady):
+        signer.url("pahma", f"objects/{SHA}", 1791591000)
+    settings = Settings(tenants=TENANTS, table_prefix="t", _env_file=None)
+    app = create_app(settings, store, recorder, s3=s3)
+    app.state.signer = signer
+    add_blob(store, "pahma", BLOB, MEDIA)
+    cache(store, "pahma", "Medium")
+    response = TestClient(app, follow_redirects=False).get(path())
+    assert response.headers["location"] == "/unavailable/pahma.svg"
+    assert recorder.recent[-1].reason == Reason.DELIVERY_NOT_SET_UP

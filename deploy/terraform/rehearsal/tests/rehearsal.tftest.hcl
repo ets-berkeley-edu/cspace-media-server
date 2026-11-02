@@ -72,17 +72,17 @@ run "a_deployer_with_only_the_stage_2_policy" {
   }
 
   assert {
-    condition     = length(aws_iam_policy.deployer) == 3
+    condition     = length(module.deployer_policy.test) == 3
     error_message = "the deployer policy goes in as three managed policies (deploy/iam/README.md)"
   }
 
   assert {
-    condition     = alltrue([for p in aws_iam_policy.deployer : length(p.policy) <= 6144])
+    condition     = alltrue([for p in module.deployer_policy.test : length(p.policy) <= 6144])
     error_message = "each part is within IAM's 6,144 characters"
   }
 
   assert {
-    condition     = flatten([for k in sort(keys(aws_iam_policy.deployer)) : jsondecode(aws_iam_policy.deployer[k].policy).Statement]) == jsondecode(file("../../iam/serena-deployer-policy.json")).Statement
+    condition     = flatten([for k in sort(keys(module.deployer_policy.test)) : jsondecode(module.deployer_policy.test[k].policy).Statement]) == jsondecode(file("../../iam/serena-deployer-policy.json")).Statement
     error_message = "the parts hold every statement of the policy, in order, and nothing else"
   }
 }

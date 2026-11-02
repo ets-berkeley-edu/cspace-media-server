@@ -13,8 +13,10 @@ limited to resources named `serena-*` (or tagged `project=serena`, for the KMS k
 deploy, Operations can check it with `aws iam simulate-principal-policy` (or the IAM policy simulator) against the
 actions in a `terraform plan` of stage 2: the tag conditions (`aws:RequestTag/project` when creating,
 `aws:ResourceTag/project` afterwards) are the part most worth checking, since a few services name their tag condition
-keys differently. It changes again for the deploy pipeline (D268–D277: GitHub OIDC and CodeBuild). Stage 1 keeps
-CloudFront in front, so its policy is unaffected.
+keys differently. The deploy pipeline's build role (`../terraform/pipeline`, DP5) has this policy too, as the
+same managed policies (`../terraform/modules/deployer_policy`), plus its own small policy: its log, the bucket of saved
+plans, reading its settings, and explicit denies of reading or setting a secret's value and of changing SSM
+parameters. Stage 1 keeps CloudFront in front, so its policy is unaffected.
 
 ## Where the policies can't be narrower
 

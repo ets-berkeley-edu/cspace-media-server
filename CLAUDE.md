@@ -80,7 +80,7 @@ The local stack, from the repository's root (Docker only; never AWS or a real Co
 ```
 
 AWS (`deploy/README.md`): `./serena aws deploy | plan | status | logs | etl <museum> | replay | pause | resume |
-cdn-key | confirm-alerts | destroy | rehearsal-vpc | settings push|show|delete`
+cdn-key | confirm-alerts | destroy | rehearsal-vpc | settings push|show|delete | pipeline | sim-secrets`
 (`deploy/aws.sh`, Terraform in `deploy/terraform/`, the production image `deploy/Dockerfile`).
 The person deploying runs them in their own AWS account (D277). In the UC Berkeley environments, only Richard runs
 them; once an environment holds real data, the deploy pipeline deploys it (D268 to D276).
@@ -119,7 +119,9 @@ depends on it) and `backend/serena/admin_requests.py` (the Past requests page, w
 
 CI (`.github/workflows/ci.yml`) runs, in `backend/`, `ruff check .`, `mypy` and `pytest -q` (the `backend`
 job), and a `dependencies` job: the requirements files are in step and `pip-audit` finds no known vulnerabilities.
-`.github/workflows/audit.yml` repeats the audit every Monday.
+`.github/workflows/audit.yml` repeats the audit every Monday. `.github/workflows/deploy.yml` is the deploy pipeline
+(`deploy/README.md`, The deploy pipeline): started by hand, approved by a reviewer; never started or approved by
+Claude.
 
 A pull request that changes only documentation (`docs/`, `*.md`, `LICENSE`, issue/PR templates) skips `backend`;
 the `changes` job decides, and a skipped job counts as passing. `dependencies` and

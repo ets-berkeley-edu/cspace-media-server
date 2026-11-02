@@ -34,19 +34,27 @@
 #   ./serena aws init          point Terraform at this environment's state, to run terraform commands yourself
 #   ./serena aws rehearsal-vpc [destroy]   for a stage 2 rehearsal in your own account (REHEARSAL=true): make (or,
 #                              once the environment is destroyed, delete) what Ops provides for stage 2, a VPC and a
-#                              deployer role with only the stage 2 policy, as REHEARSAL_ADMIN_PROFILE
+#                              deployer role with only the stage 2 policy, as ADMIN_PROFILE
 #   ./serena aws settings push|show|delete   for an environment with SETTINGS=ssm (D273): put its settings in SSM
 #                              Parameter Store from its files (shows what changes and asks), list them, or delete them
+#   ./serena aws pipeline [destroy]   as the account's administrator (ADMIN_PROFILE): make (or delete) the environment's
+#                              deploy pipeline (deploy/terraform/pipeline, DP1): GitHub's OIDC provider if the account
+#                              has none, the roles the deploy workflow assumes, the CodeBuild projects and their role
+#   ./serena aws sim-secrets   with the simulator, in a pipeline environment: set the secrets a deploy from here sets
+#                              itself (the simulator's account, random ETL tokens and portal keys; DP12)
+#   ./serena aws pipeline-plan | pipeline-apply   only in the pipeline's builds (deploy/pipeline/): no questions, the
+#                              build's own role, the settings from SSM (DP11)
 #
 # Which environment: --env NAME or SERENA_AWS_ENV (default personal-dev). Its settings are in
 # deploy/environments/NAME.conf; NAME.local.conf (not committed) holds the account number and allowed addresses.
 # With SETTINGS=ssm (D273, DP10), every setting but AWS_PROFILE, AWS_REGION, SERENA_ENV_NAME and
-# REHEARSAL_ADMIN_PROFILE is read from SSM Parameter Store in the account instead (/serena-<name>/settings/<SETTING>),
+# ADMIN_PROFILE is read from SSM Parameter Store in the account instead (/serena-<name>/settings/<SETTING>),
 # where ./serena aws settings push puts them from the files; the files then matter only to settings push.
 # TERRAFORM_ROOT says which Terraform builds it (D302): personal (the default: personal environments and stage 1,
 # CloudFront in front of everything) or shared (QA and production, the split). A shared environment also needs
 # VPC_ID, APP_SUBNET_IDS, LB_SUBNET_IDS, DOMAIN_NAME, ETL_CIDRS, ADMIN_CIDRS and APACHE_CIDRS, and is deployed here
-# only while it uses only the simulator; otherwise by the pipeline, or as a break-glass deploy (D276, TQ8).
+# only while it uses only the simulator; otherwise by the pipeline, or as a break-glass deploy (D276, TQ8). Once an
+# environment has a pipeline (./serena aws pipeline), a deploy, pause or resume from here is a break-glass one too.
 # CSPACE_TENANTS lists the museums the environment serves, each with its CollectionSpace server
 # ("pahma=https://... cinefiles=https://..."). With SIMULATED_CSPACE=true the environment runs the simulated
 # CollectionSpace instead, for the museums in SIMULATED_MUSEUMS, and ./serena aws etl runs the fake ETL; deploy then
@@ -89,17 +97,24 @@ load_env() {
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
-  REHEARSAL="" REHEARSAL_ADMIN_PROFILE="" SETTINGS=""
+  REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
   [ -f "$LOCAL" ] && . "$LOCAL"
   : "${AWS_PROFILE:?set AWS_PROFILE in $CONF}" "${AWS_REGION:?set AWS_REGION in $CONF}" "${SERENA_ENV_NAME:?set SERENA_ENV_NAME in $CONF}"
+  [ -z "${REHEARSAL_ADMIN_PROFILE:-}" ] || die "REHEARSAL_ADMIN_PROFILE is now ADMIN_PROFILE: rename it in $CONF or $LOCAL."
   NAME="serena-$SERENA_ENV_NAME"   # the cluster's name and the prefix of every resource
-  # A rehearsal's settings and VPC are the account administrator's to make (rehearsal-vpc runs before the deployer
-  # role exists).
+  # The settings, a rehearsal's VPC and the pipeline are the account administrator's to make (they come before the
+  # deployer role exists, or make it).
   DEPLOYER_PROFILE="$AWS_PROFILE"
-  case "$CMD" in settings|rehearsal-vpc) [ -z "$REHEARSAL_ADMIN_PROFILE" ] || AWS_PROFILE="$REHEARSAL_ADMIN_PROFILE" ;; esac
+  case "$CMD" in settings|rehearsal-vpc|pipeline) [ -z "$ADMIN_PROFILE" ] || AWS_PROFILE="$ADMIN_PROFILE" ;; esac
+  # The pipeline's builds (DP11) sign in as the build's own role, and always read the settings from SSM.
+  IN_BUILD=false
+  case "$CMD" in pipeline-plan|pipeline-apply)
+    [ -n "${CODEBUILD_BUILD_ID:-}" ] || die "./serena aws $CMD runs only in the pipeline's builds (deploy/pipeline/)."
+    IN_BUILD=true SETTINGS=ssm; unset AWS_PROFILE ;;
+  esac
   case "${SETTINGS:=files}" in files|ssm) ;; *) die "SETTINGS must be files or ssm ($CONF, $LOCAL)." ;; esac
   [ "$SETTINGS" = files ] || [ "$CMD" = settings ] || from_ssm   # settings push reads the files
   ROOT="${TERRAFORM_ROOT:-personal}"
@@ -136,13 +151,22 @@ load_env() {
   [ -n "$ENV_LABEL" ] || ENV_LABEL="AWS · $ENV"
   case "${WEB_COUNT:=1}" in [1-9]|[1-9][0-9]) ;; *) die "WEB_COUNT must be a number of web tasks, such as 2 ($CONF, $LOCAL)." ;; esac
   command -v python3 >/dev/null || die "python3 isn't installed (it comes with the Xcode command line tools on a Mac)."
-  export AWS_PAGER="" AWS_PROFILE AWS_REGION   # Terraform signs in with the same profile
+  export AWS_PAGER="" AWS_REGION
+  [ "$IN_BUILD" = true ] || export AWS_PROFILE   # Terraform signs in with the same profile
   # Keys in the shell would win over the profile in Terraform (though not in "aws --profile"): never use them here.
   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   export TF_IN_AUTOMATION=1
 }
 
-aws_() { aws --profile "$AWS_PROFILE" --region "$AWS_REGION" "$@"; }
+aws_() {  # the AWS CLI with the environment's profile; in the pipeline's builds, the build's role
+  if [ -n "${AWS_PROFILE:-}" ]; then aws --profile "$AWS_PROFILE" --region "$AWS_REGION" "$@"
+  else aws --region "$AWS_REGION" "$@"
+  fi
+}
+
+signed_in_as() {  # who the AWS calls are made as, for messages
+  if [ -n "${AWS_PROFILE:-}" ]; then echo "Profile $AWS_PROFILE"; else echo "The build's role"; fi
+}
 
 # ---- the museums ----------------------------------------------------------------------------------------------------
 check_museum_name() {
@@ -227,9 +251,13 @@ SSM_SETTINGS="ACCOUNT_ID ALLOWED_CIDRS ETL_CIDRS ADMIN_CIDRS SIMULATED_CSPACE SI
   OPEN_IMAGES WAF PROTECT_DATA WEB_COUNT ALERT_EMAIL TERRAFORM_ROOT APACHE_CIDRS VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS
   CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME REHEARSAL"
 # Always from the files: what says how to reach the account, and SETTINGS itself.
-FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME REHEARSAL_ADMIN_PROFILE SETTINGS"
+FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME ADMIN_PROFILE SETTINGS"
+# In SSM only, written by ./serena aws pipeline (never by settings push, never by the build): the account the
+# administrator typed for an environment with real data (DP11).
+PIPELINE_SETTINGS="REAL_DATA_ACCOUNT"
 
 is_ssm_setting() { case " $(echo $SSM_SETTINGS) " in *" $1 "*) true ;; *) false ;; esac; }
+is_pipeline_setting() { case " $PIPELINE_SETTINGS " in *" $1 "*) true ;; *) false ;; esac; }
 settings_path() { echo "/$NAME/settings"; }
 settings_home() { [ "$SETTINGS" = ssm ] && echo "SSM ($(settings_path)/, ./serena aws settings push)" || echo "$LOCAL"; }
 
@@ -267,9 +295,9 @@ from_ssm() {
   local who lines key value file_values="" differ=""
   export AWS_PAGER=""
   who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" ||
-    die "Not signed in to AWS for '$ENV'. Run: aws sso login --profile $AWS_PROFILE"
+    die "Not signed in to AWS for '$ENV'. Run: aws sso login --profile ${AWS_PROFILE:-<profile>}"
   [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "$who" ] ||
-    die "Profile $AWS_PROFILE is signed in to account $who, but '$ENV' is account $ACCOUNT_ID ($LOCAL). Stopped."
+    die "$(signed_in_as) is signed in to account $who, but '$ENV' is account $ACCOUNT_ID ($LOCAL). Stopped."
   lines="$(ssm_settings)"
   [ -n "$lines" ] || die "'$ENV' keeps its settings in SSM (SETTINGS=ssm), and account $who has none under $(settings_path)/.
 Put them there from $CONF and $LOCAL: ./serena aws settings push --env $ENV"
@@ -278,11 +306,13 @@ Put them there from $CONF and $LOCAL: ./serena aws settings push --env $ENV"
 "
     printf -v "$key" '%s' "$(setting_in "$key" "$lines")"
   done
+  for key in $PIPELINE_SETTINGS; do printf -v "$key" '%s' "$(setting_in "$key" "$lines")"; done
   [ "$ACCOUNT_ID" = "$who" ] ||
     die "SSM's ACCOUNT_ID for '$ENV' (${ACCOUNT_ID:-none}) isn't the account it is in ($who): ./serena aws settings push --env $ENV"
   while IFS='	' read -r key value; do
     [ -n "$key" ] || continue
-    is_ssm_setting "$key" || { echo "Note: $(settings_path)/$key in SSM isn't a setting ./serena aws reads; ignored." >&2; continue; }
+    is_ssm_setting "$key" || is_pipeline_setting "$key" ||
+      echo "Note: $(settings_path)/$key in SSM isn't a setting ./serena aws reads; ignored." >&2
   done <<EOF
 $lines
 EOF
@@ -295,7 +325,7 @@ EOF
 }
 
 # ./serena aws settings push|show|delete (SETTINGS=ssm). The account is this computer's ACCOUNT_ID, asked the first
-# time as for a deploy; a rehearsal's run as its REHEARSAL_ADMIN_PROFILE (load_env).
+# time as for a deploy; they run as the environment's ADMIN_PROFILE, if it has one (load_env).
 settings() {
   load_env
   [ "$SETTINGS" = ssm ] || die "'$ENV' keeps its settings in $CONF and $LOCAL. To keep them in SSM Parameter Store instead
@@ -346,7 +376,8 @@ settings_show() {
   echo "'$ENV' in SSM, account $ACCOUNT_ID, $(settings_path)/:"
   [ -n "$lines" ] || { echo "  none yet (./serena aws settings push --env $ENV)"; return 0; }
   while IFS='	' read -r key value; do
-    if ! is_ssm_setting "$key"; then echo "  $key=$value   (not a setting ./serena aws reads; ignored)"
+    if is_pipeline_setting "$key"; then echo "  $key=$value   (set by ./serena aws pipeline)"
+    elif ! is_ssm_setting "$key"; then echo "  $key=$value   (not a setting ./serena aws reads; ignored)"
     elif [ "${!key}" != "$value" ]; then echo "  $key=$value   (the files here: ${!key:-not set})"
     else echo "  $key=$value"
     fi
@@ -360,7 +391,7 @@ EOF
 
 settings_delete() {  # only once the environment is destroyed: a deploy, plan or destroy needs them
   local lines key value ok
-  for key in shared personal registry; do
+  for key in shared personal registry pipeline; do
     ! state_has_resources "$key" ||
       die "'$ENV' is still deployed (serena/$SERENA_ENV_NAME/$key.tfstate): ./serena aws destroy --env $ENV first."
   done
@@ -398,7 +429,7 @@ check_not_someone_elses() {  # check_not_someone_elses ACCOUNT
 check_account() {
   local who ok
   who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" ||
-    die "Not signed in to AWS for '$ENV'. Run: aws sso login --profile $AWS_PROFILE"
+    die "Not signed in to AWS for '$ENV'. Run: aws sso login --profile ${AWS_PROFILE:-<profile>}"
   if [ -z "$ACCOUNT_ID" ]; then
     echo "Profile $AWS_PROFILE is signed in to AWS account $who."
     read -r -p "Is that the account for the '$ENV' environment? [y/N] " ok
@@ -406,7 +437,7 @@ check_account() {
     check_not_someone_elses "$who"
     save_local ACCOUNT_ID "$who"; ACCOUNT_ID="$who"
   elif [ "$who" != "$ACCOUNT_ID" ]; then
-    die "Profile $AWS_PROFILE is signed in to account $who, but '$ENV' is account $ACCOUNT_ID ($LOCAL). Stopped."
+    die "$(signed_in_as) is signed in to account $who, but '$ENV' is account $ACCOUNT_ID ($(settings_home)). Stopped."
   fi
   STATE_BUCKET="serena-tfstate-$ACCOUNT_ID-$AWS_REGION"
 }
@@ -449,7 +480,7 @@ ensure_state_bucket() {
   aws_ s3api put-bucket-tagging --bucket "$STATE_BUCKET" --tagging 'TagSet=[{Key=project,Value=serena}]'
 }
 
-tf() {  # tf registry|personal|shared <terraform arguments> (deploy/terraform/<part>; D302)
+tf() {  # tf registry|personal|shared|rehearsal|pipeline <terraform arguments> (deploy/terraform/<part>; D302)
   local part="$1"; shift
   terraform -chdir="$TF_DIR/$part" "$@"
 }
@@ -513,26 +544,36 @@ certificate_arn() {
 
 # A shared environment's certificate is issued only once DevOps has added its validation record (D294, TQ4). Until
 # then, say which record, and stop before the shared root.
-need_certificate() {
+certificate_issued() {  # fails, after printing its validation record, while the certificate isn't issued
   local arn status
   arn="$(tf registry output -raw certificate_arn 2>/dev/null || true)"
-  [ -n "$arn" ] || die "No certificate for $DOMAIN_NAME in ../registry's state. Run ./serena aws deploy again."
+  [ -n "$arn" ] || die "No certificate for $DOMAIN_NAME in ../registry's state. Run the deploy again."
   status="$(aws_ acm describe-certificate --certificate-arn "$arn" --query Certificate.Status --output text)"
   [ "$status" = ISSUED ] && return 0
   echo
   echo "The certificate for $DOMAIN_NAME is $status. DevOps adds this record in campus DNS, once (ACM renews it after):"
   aws_ acm describe-certificate --certificate-arn "$arn" \
     --query 'Certificate.DomainValidationOptions[0].ResourceRecord.[Type,Name,Value]' --output text
-  die "Run ./serena aws deploy again once the record is in DNS and the certificate is ISSUED. Nothing else was changed."
+  return 1
+}
+
+need_certificate() {
+  certificate_issued ||
+    die "Run ./serena aws deploy again once the record is in DNS and the certificate is ISSUED. Nothing else was changed."
 }
 
 # TQ8: ./serena aws deploys a shared environment only while it uses only the simulator (stage 2's first phase, D300).
 # With a real CollectionSpace the pipeline deploys it (D268); by hand only as a break-glass deploy (D276).
 need_break_glass() {
-  [ "$ROOT" = shared ] && [ "$SIMULATED_CSPACE" != true ] || return 0
-  local typed
+  local typed why=""
+  if [ "$ROOT" = shared ] && [ "$SIMULATED_CSPACE" != true ]; then
+    why="'$ENV' is a shared environment with real data: the pipeline deploys it (D268)."
+  elif has_pipeline; then
+    why="'$ENV' has a deploy pipeline (pipeline-$ENV-…): it deploys it (DP13)."
+  fi
+  [ -n "$why" ] || return 0
   echo
-  echo "'$ENV' is a shared environment with real data: the pipeline deploys it (D268)."
+  echo "$why"
   echo "Deploy it from here only if the pipeline can't, as a break-glass deploy (D276), signed in with the break-glass"
   echo "permission set and following the recovery runbook; CloudTrail records it."
   read -r -p "Type 'break glass' to go ahead: " typed
@@ -563,6 +604,7 @@ need_deployed() {
 # only where data isn't protected, and when its name is typed: its bucket (its cached files) and secrets go with it.
 check_museums() {  # check_museums ask|look: ask = this command applies (removing asks first); look = plan only
   local deployed museum url now removed="" ok
+  REMOVED_MUSEUMS=""
   deployed="$(applied museums)"
   [ -n "$deployed" ] || return 0   # never deployed: nothing to check
   for museum in $(museum_names "$deployed"); do
@@ -579,12 +621,18 @@ or deploy the new server as another environment: a different SERENA_ENV_NAME in 
   for museum in $(museum_names); do
     server_of "$museum" "$deployed" >/dev/null || echo "Adding the museum $museum ($(server_of "$museum"))."
   done
+  REMOVED_MUSEUMS="${removed# }"
   for museum in $removed; do
     [ "$PROTECT_DATA" != true ] ||
       die "Stopped; nothing was changed. '$ENV' protects its data (PROTECT_DATA=true), so $museum can't be removed."
     echo "$museum is no longer in the settings. Removing it deletes its bucket (every file Serena cached for it) and its"
     echo "secrets. Its rows stay in the tables, unused."
-    [ "$1" = ask ] || { echo "(./serena aws deploy asks before removing it.)"; continue; }
+    if [ "$1" != ask ]; then
+      if [ "$IN_BUILD" = true ]; then echo "(The reviewer approves it with this plan.)"
+      else echo "(./serena aws deploy asks before removing it.)"
+      fi
+      continue
+    fi
     read -r -p "Type the museum's name ($museum) to remove it: " ok || ok=""
     [ "$ok" = "$museum" ] || die "Stopped; nothing was changed."
   done
@@ -730,40 +778,58 @@ apply_again() {  # apply with the running images and settings (no prompt for a c
 }
 
 cdn_key() {  # a new signing key: made, trusted by CloudFront (Terraform), then used
-  local id version name public keys
-  id="$(cdn_secret)"
-  need_secret "$id"
-  command -v openssl >/dev/null || die "openssl isn't installed."
+  need_secret "$(cdn_secret)"
   if [ -n "$(pending_version)" ]; then
     echo "A new signing key is already waiting for CloudFront to trust it (an earlier cdn-key didn't finish): applying."
   else
-    name="$NAME-$(date -u +%Y%m%d%H%M%S)"
-    version="$(python3 -c 'import uuid; print(uuid.uuid4())')"
-    echo "Making the CloudFront signing key $name. Its private key goes straight to AWS Secrets Manager ($id)."
-    openssl genrsa 2048 2>/dev/null |
-      KEY_NAME="$name" python3 -c 'import json, os, sys; print(json.dumps({"name": os.environ["KEY_NAME"], "private_key": sys.stdin.read()}))' |
-      aws_ secretsmanager put-secret-value --secret-id "$id" --client-request-token "$version" --version-stages AWSPENDING \
-        --secret-string file:///dev/stdin >/dev/null
-    public="$(aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
-      python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin)["private_key"])' | openssl rsa -pubout 2>/dev/null || true)"
-    case "$public" in
-      "-----BEGIN PUBLIC KEY-----"*) ;;
-      *) aws_ secretsmanager update-secret-version-stage --secret-id "$id" --version-stage AWSPENDING --remove-from-version-id "$version" >/dev/null || true
-         die "openssl couldn't make the key pair; nothing was changed." ;;
-    esac
-    keys="$(aws_ ssm get-parameter --name "$(cdn_param)" --query Parameter.Value --output text 2>/dev/null || echo '[]')"
-    KEYS="$keys" KEY_NAME="$name" PUBLIC="$public" python3 -c '
-import json, os
-old = json.loads(os.environ["KEYS"])
-print(json.dumps(old[-1:] + [{"name": os.environ["KEY_NAME"], "public_key": os.environ["PUBLIC"] + "\n"}]))' |
-      aws_ ssm put-parameter --name "$(cdn_param)" --type String --overwrite --value file:///dev/stdin >/dev/null
+    make_cdn_key
     echo "Terraform now adds it to the key group CloudFront trusts (a few minutes)."
   fi
   apply_again
   finish_cdn_key
 }
 
-finish_cdn_key() {  # the pending key becomes the one the app signs with, once CloudFront trusts it
+# In an environment with a pipeline (DP12), cdn-key applies nothing: it makes the key and stops; the next pipeline
+# run has CloudFront trust it; cdn-key again then has the app sign with it. A first key isn't used until then (the
+# app answers with the unavailable image: delivery isn't set up).
+cdn_key_pipeline() {
+  need_secret "$(cdn_secret)"
+  if [ -n "$(pending_version)" ]; then
+    finish_cdn_key pipeline
+    return 0
+  fi
+  make_cdn_key
+  echo "Next: run the deploy pipeline for '$ENV' (Actions › Deploy), which has CloudFront trust it; then"
+  echo "./serena aws cdn-key --env $ENV again, which has the app sign with it."
+}
+
+make_cdn_key() {  # a new key pair: the private key as the secret's pending version, the public key in SSM
+  local id version name public keys
+  id="$(cdn_secret)"
+  command -v openssl >/dev/null || die "openssl isn't installed."
+  name="$NAME-$(date -u +%Y%m%d%H%M%S)"
+  version="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+  echo "Making the CloudFront signing key $name. Its private key goes straight to AWS Secrets Manager ($id)."
+  openssl genrsa 2048 2>/dev/null |
+    KEY_NAME="$name" python3 -c 'import json, os, sys; print(json.dumps({"name": os.environ["KEY_NAME"], "private_key": sys.stdin.read()}))' |
+    aws_ secretsmanager put-secret-value --secret-id "$id" --client-request-token "$version" --version-stages AWSPENDING \
+      --secret-string file:///dev/stdin >/dev/null
+  public="$(aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
+    python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin)["private_key"])' | openssl rsa -pubout 2>/dev/null || true)"
+  case "$public" in
+    "-----BEGIN PUBLIC KEY-----"*) ;;
+    *) aws_ secretsmanager update-secret-version-stage --secret-id "$id" --version-stage AWSPENDING --remove-from-version-id "$version" >/dev/null || true
+       die "openssl couldn't make the key pair; nothing was changed." ;;
+  esac
+  keys="$(aws_ ssm get-parameter --name "$(cdn_param)" --query Parameter.Value --output text 2>/dev/null || echo '[]')"
+  KEYS="$keys" KEY_NAME="$name" PUBLIC="$public" python3 -c '
+import json, os
+old = json.loads(os.environ["KEYS"])
+print(json.dumps(old[-1:] + [{"name": os.environ["KEY_NAME"], "public_key": os.environ["PUBLIC"] + "\n"}]))' |
+    aws_ ssm put-parameter --name "$(cdn_param)" --type String --overwrite --value file:///dev/stdin >/dev/null
+}
+
+finish_cdn_key() {  # [pipeline] the pending key becomes the one the app signs with, once CloudFront trusts it
   local id version name key_id
   id="$(cdn_secret)"
   version="$(pending_version)"
@@ -773,7 +839,13 @@ finish_cdn_key() {  # the pending key becomes the one the app signs with, once C
   key_id="$(tf "$ROOT" output -json cdn_key_ids 2>/dev/null |
     KEY_NAME="$name" python3 -c 'import json, os, sys; print(json.load(sys.stdin).get(os.environ["KEY_NAME"], ""))' 2>/dev/null || true)"
   if [ -z "$key_id" ]; then
-    echo "The new signing key $name isn't trusted by CloudFront yet: run ./serena aws deploy (or cdn-key) again to finish."
+    if [ "${1:-}" = pipeline ]; then
+      echo "The new signing key $name isn't trusted by CloudFront yet: run the deploy pipeline for '$ENV', then"
+      echo "./serena aws cdn-key --env $ENV again to finish."
+    else
+      echo "The new signing key $name isn't trusted by CloudFront yet: run ./serena aws deploy (or cdn-key) again"
+      echo "to finish."
+    fi
     return 0
   fi
   aws_ secretsmanager get-secret-value --secret-id "$id" --version-id "$version" --query SecretString --output text |
@@ -858,7 +930,7 @@ deploy() {
   docker info >/dev/null 2>&1 || die "Docker isn't running. Start Docker Desktop and try again."
   ensure_state_bucket
   tf_init "$ROOT"; check_museums ask   # before building anything
-  local tag repo registry image devtools_image="" base url code museum _try
+  local tag repo registry image devtools_image="" url code museum _try
   tag="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
   [ -z "$(git status --porcelain 2>/dev/null)" ] || tag="$tag-dirty"
   tag="$tag-$(date -u +%Y%m%d%H%M%S)"
@@ -884,11 +956,7 @@ deploy() {
     # on a shared address). Here only: CI and the local stack build backend/Dockerfile from Docker Hub, since ECR
     # Public refuses GitHub's shared runners ("429 Data limit exceeded"). A named build context replaces the image
     # its FROM names, so the Dockerfile (and Dependabot's updates to it) stays as it is.
-    base="$(awk 'toupper($1) == "FROM" { print $2; exit }' backend/Dockerfile)"
-    case "$base" in
-      */*|"") die "backend/Dockerfile's base image ($base) isn't a Docker official image; update deploy/aws.sh." ;;
-    esac
-    docker build --pull --platform linux/arm64 --build-context "$base=docker-image://public.ecr.aws/docker/library/$base" \
+    docker build --pull --platform linux/arm64 --build-context "$(devtools_base)" \
       -f backend/Dockerfile -t "$devtools_image" backend
     docker push "$devtools_image"
   fi
@@ -939,6 +1007,15 @@ deploy() {
   fi
 }
 
+devtools_base() {  # the --build-context that takes backend/Dockerfile's base image from ECR Public (see deploy)
+  local base
+  base="$(awk 'toupper($1) == "FROM" { print $2; exit }' backend/Dockerfile)"
+  case "$base" in
+    */*|"") die "backend/Dockerfile's base image ($base) isn't a Docker official image; update deploy/aws.sh." ;;
+  esac
+  echo "$base=docker-image://public.ecr.aws/docker/library/$base"
+}
+
 was_running() {  # true unless the environment is paused
   [ "$(applied running)" = false ] && echo false || echo true
 }
@@ -951,7 +1028,7 @@ plan() {
 
 # Apply again with the running images: for a changed setting (pause, resume, the allowlist).
 reapply() {  # reapply RUNNING
-  prepare; tf_init "$ROOT"; need_deployed; check_museums ask
+  prepare; need_break_glass; tf_init "$ROOT"; need_deployed; check_museums ask
   app_vars "$IMAGE" "$1" "$(applied devtools_image_uri)"
   # shellcheck disable=SC2046
   tf "$ROOT" apply -input=false $(approve) "${TF_VARS[@]}"
@@ -978,6 +1055,7 @@ status() {
   local url deployed museum services="web worker"
   echo "Environment: $ENV (account $ACCOUNT_ID, $AWS_REGION); Terraform state in s3://$STATE_BUCKET/serena/$SERENA_ENV_NAME/"
   [ "$SETTINGS" != ssm ] || echo "Settings: SSM, $(settings_path)/ (./serena aws settings show)"
+  ! has_pipeline || echo "Deployed by: its pipeline (Actions › Deploy); ./serena aws deploy here is break-glass"
   IMAGE="$(applied image_uri)"
   [ -n "$IMAGE" ] || { echo "Not deployed (./serena aws deploy)."; return 0; }
   url="$(app_url)"
@@ -1256,7 +1334,7 @@ destroy() {
 # ---- the stage 2 rehearsal ------------------------------------------------------------------------------------------
 # A rehearsal deploys the shared root in a developer's own account, as a role with only the stage 2 deployer policy
 # (docs/testing-checklist.md, section 54). What Ops provides for stage 2, the VPC and that role, comes from
-# deploy/terraform/rehearsal, applied as the account's administrator (REHEARSAL_ADMIN_PROFILE), never as the deployer.
+# deploy/terraform/rehearsal, applied as the account's administrator (ADMIN_PROFILE), never as the deployer.
 state_has_resources() {  # state_has_resources KEY: whether this environment's KEY.tfstate holds any resource
   aws_ s3 cp "s3://$STATE_BUCKET/serena/$SERENA_ENV_NAME/$1.tfstate" - 2>/dev/null |
     python3 -c 'import json, sys; sys.exit(0 if json.load(sys.stdin).get("resources") else 1)' 2>/dev/null
@@ -1267,8 +1345,8 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
   [ "$REHEARSAL" = true ] || die "'$ENV' isn't a rehearsal (REHEARSAL=true in $CONF): for stage 2, Ops provides the VPC and the deployer."
   [ "$ROOT" = shared ] && [ "$SIMULATED_CSPACE" = true ] && [ "$PROTECT_DATA" = false ] ||
     die "A rehearsal is on the shared root, with the simulator only and PROTECT_DATA=false ($CONF)."
-  [ -n "$REHEARSAL_ADMIN_PROFILE" ] || die "Set REHEARSAL_ADMIN_PROFILE in $CONF: the account's administrator profile."
-  local deployer_profile="$DEPLOYER_PROFILE" key role   # load_env signed in as REHEARSAL_ADMIN_PROFILE
+  [ -n "$ADMIN_PROFILE" ] || die "Set ADMIN_PROFILE in $CONF: the account's administrator profile."
+  local deployer_profile="$DEPLOYER_PROFILE" key role   # load_env signed in as ADMIN_PROFILE
   check_account; need_terraform; ensure_state_bucket
   tf_init rehearsal
   local vars=(-var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "env_name=$SERENA_ENV_NAME")
@@ -1301,13 +1379,289 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
     echo "The deployer's profile $deployer_profile is in ~/.aws/config."
   else
     echo
-    echo "Add the deployer's profile to ~/.aws/config (it signs in through $REHEARSAL_ADMIN_PROFILE, then takes the role):"
+    echo "Add the deployer's profile to ~/.aws/config (it signs in through $ADMIN_PROFILE, then takes the role):"
     echo
-    printf '[profile %s]\nrole_arn = %s\nsource_profile = %s\nregion = %s\n' "$deployer_profile" "$role" "$REHEARSAL_ADMIN_PROFILE" "$AWS_REGION"
+    printf '[profile %s]\nrole_arn = %s\nsource_profile = %s\nregion = %s\n' "$deployer_profile" "$role" "$ADMIN_PROFILE" "$AWS_REGION"
     echo
   fi
   [ -n "$DOMAIN_NAME" ] || echo "Then set DOMAIN_NAME in $(settings_home): a name in a DNS zone you control, for the certificate."
   echo "Next: ./serena aws deploy --env $ENV   (as the deployer: note every AccessDenied, checklist section 54)"
+}
+
+# ---- the deploy pipeline (deploy/terraform/pipeline, deploy/pipeline/, .github/workflows/deploy.yml; DP1 to DP17) ----
+# ./serena aws pipeline makes an environment's pipeline, as the account's administrator; pipeline-plan and
+# pipeline-apply are what its builds run, with the build's own role and the settings from SSM, asking nothing.
+PIPELINE_REPO="ets-berkeley-edu/cspace-media-server"
+
+has_pipeline() { state_has_resources pipeline; }  # whether ./serena aws pipeline made this environment's pipeline
+
+# UC Berkeley data only in UC Berkeley accounts: the build can't ask, so for an environment with real data it needs
+# the account an administrator typed at ./serena aws pipeline, saved in SSM where the build can't change it (DP11).
+need_real_data_confirmed() {
+  [ "$SIMULATED_CSPACE" != true ] || return 0
+  [ -n "$REAL_DATA_ACCOUNT" ] && [ "$REAL_DATA_ACCOUNT" = "$ACCOUNT_ID" ] ||
+    die "'$ENV' uses a real CollectionSpace, and no administrator has confirmed that its account is UC Berkeley's
+(./serena aws pipeline --env $ENV asks). UC Berkeley data goes only in UC Berkeley accounts. Stopped."
+}
+
+result() {  # result NAME VALUE: one of the build's exported variables (the buildspec reads $PIPELINE_RESULT)
+  printf '%s=%q\n' "$1" "$2" >> "$PIPELINE_RESULT"
+}
+
+plan_counts() {  # plan_counts PART PLANFILE: what the saved plan does, as Terraform counts it
+  tf "$1" show -json "$2" | python3 -c '
+import json, sys
+count = {"create": 0, "update": 0, "delete": 0}
+for change in json.load(sys.stdin).get("resource_changes", []):
+    for action in change["change"]["actions"]:
+        if action in count:
+            count[action] += 1
+print("%(create)d to add, %(update)d to change, %(delete)d to destroy" % count)'
+}
+
+push_image() {  # push_image IMAGE DOCKER-BUILD-ARGUMENTS...: built and pushed, unless the image is already there
+  local image="$1" repo
+  shift
+  repo="${image#*/}"; repo="${repo%%:*}"
+  if aws_ ecr describe-images --repository-name "$repo" --image-ids "imageTag=${image##*:}" >/dev/null 2>&1; then
+    echo "$image is already pushed."
+    return 0
+  fi
+  docker build --pull --platform linux/arm64 -t "$image" "$@"
+  docker push "$image"
+}
+
+# The plan build: the images (tagged with the commit), then the registry's plan and the root's, their text in this
+# build's log and the files in the bucket of saved plans. Exported for the workflow: PLAN_STATUS (changes, no-changes,
+# registry-only or certificate-pending), the counts, and any museum the plan removes.
+pipeline_plan() {
+  load_env; check_account; need_terraform; need_real_data_confirmed
+  [ "$ROOT" = shared ] || die "The pipeline deploys only environments on the shared root (DP1)."
+  : "${PIPELINE_PLANS:?the bucket of saved plans}" "${PIPELINE_RESULT:?}"
+  ensure_state_bucket
+  local commit id dir code repo image devtools_image=""
+  commit="$(git rev-parse HEAD)" id="${CODEBUILD_BUILD_ID##*:}" dir="$(mktemp -d)"
+  : > "$PIPELINE_RESULT"
+  result PLAN_ID "$id"; result REGISTRY_CHANGES "no changes"; result ROOT_CHANGES ""; result REMOVED_MUSEUMS ""
+
+  echo "== The registry: image repositories and the certificate"
+  registry_vars; tf_init registry
+  code=0
+  tf registry plan -input=false -detailed-exitcode -out="$dir/registry.tfplan" "${REGISTRY_VARS[@]}" || code=$?
+  case "$code" in 0) rm -f "$dir/registry.tfplan" ;; 2) ;; *) die "The registry's plan failed (above)." ;; esac
+  if [ "$code" = 2 ]; then
+    result REGISTRY_CHANGES "$(plan_counts registry "$dir/registry.tfplan")"
+    echo "The registry has changes. This run applies only them, since the root's plan depends on them: run the deploy"
+    echo "again afterwards (DP7)."
+    save_plan "$dir" "$commit" "$id" registry-only
+    return 0
+  fi
+  if ! certificate_issued; then
+    echo "Run the deploy again once the record is in DNS and the certificate is ISSUED."
+    result PLAN_STATUS certificate-pending
+    return 0
+  fi
+
+  echo "== The images, tagged with the commit (linux/arm64)"
+  repo="$(tf registry output -raw repository_url)"
+  image="$repo:${commit:0:12}"
+  # The registry's short-lived token goes straight from the AWS CLI to Docker; it is never shown or saved.
+  aws_ ecr get-login-password | docker login --username AWS --password-stdin "${repo%%/*}" >/dev/null
+  push_image "$image" -f deploy/Dockerfile .
+  if [ "$SIMULATED_CSPACE" = true ]; then
+    devtools_image="$(tf registry output -raw devtools_repository_url):${commit:0:12}"
+    push_image "$devtools_image" --build-context "$(devtools_base)" -f backend/Dockerfile backend
+  fi
+
+  echo "== Serena: the plan the reviewer reads"
+  tf_init "$ROOT"; check_museums look
+  result REMOVED_MUSEUMS "$REMOVED_MUSEUMS"
+  app_vars "$image" "$(was_running)" "$devtools_image"
+  code=0
+  tf "$ROOT" plan -input=false -detailed-exitcode -out="$dir/root.tfplan" "${TF_VARS[@]}" || code=$?
+  case "$code" in
+    0) result ROOT_CHANGES "no changes"; result PLAN_STATUS no-changes
+       echo "No changes: '$ENV' matches this commit." ;;
+    2) result ROOT_CHANGES "$(plan_counts "$ROOT" "$dir/root.tfplan")"
+       save_plan "$dir" "$commit" "$id" changes ;;
+    *) die "The plan failed (above)." ;;
+  esac
+}
+
+save_plan() {  # save_plan DIR COMMIT ID STATUS: the plan files and what they are, in the bucket of saved plans
+  COMMIT="$2" ENVIRONMENT="$ENV" STATUS="$4" python3 -c '
+import json, os, time
+print(json.dumps({"commit": os.environ["COMMIT"], "environment": os.environ["ENVIRONMENT"],
+                  "status": os.environ["STATUS"], "made": int(time.time())}))' > "$1/plan.json"
+  aws_ s3 cp --recursive --only-show-errors "$1/" "s3://$PIPELINE_PLANS/plans/$3/"
+  result PLAN_STATUS "$4"
+  echo "Saved as plan $3. The reviewer reads it above, then approves the deploy in GitHub."
+}
+
+# The apply build: exactly the saved plans of PLAN_ID (the workflow passes the plan build's), for this commit and
+# environment, at most 24 hours old. Terraform itself refuses a plan made against a state that has changed since.
+pipeline_apply() {
+  load_env; check_account; need_terraform; need_real_data_confirmed
+  : "${PIPELINE_PLANS:?the bucket of saved plans}" "${PIPELINE_RESULT:?}" "${PLAN_ID:?PLAN_ID, from the plan build}"
+  case "$PLAN_ID" in ""|*[!0-9a-f-]*) die "PLAN_ID isn't a plan build's ID." ;; esac
+  local dir status url museum
+  dir="$(mktemp -d)"
+  : > "$PIPELINE_RESULT"
+  aws_ s3 cp --recursive --only-show-errors "s3://$PIPELINE_PLANS/plans/$PLAN_ID/" "$dir/"
+  [ -f "$dir/plan.json" ] || die "No saved plan $PLAN_ID (plans are kept 7 days). Run the deploy again."
+  status="$(COMMIT="$(git rev-parse HEAD)" ENVIRONMENT="$ENV" python3 -c '
+import json, os, sys, time
+plan = json.load(open(sys.argv[1]))
+if plan["commit"] != os.environ["COMMIT"]:
+    sys.exit("Plan %s is of commit %s, not this one: run the deploy again." % (sys.argv[2], plan["commit"]))
+if plan["environment"] != os.environ["ENVIRONMENT"]:
+    sys.exit("Plan %s is for %s, not this environment." % (sys.argv[2], plan["environment"]))
+if time.time() - plan["made"] > 24 * 3600:
+    sys.exit("Plan %s is more than 24 hours old: run the deploy again." % sys.argv[2])
+print(plan["status"])' "$dir/plan.json" "$PLAN_ID")" || exit 1
+  if [ -f "$dir/registry.tfplan" ]; then
+    echo "== The registry"
+    tf_init registry
+    tf registry apply -input=false "$dir/registry.tfplan"
+  fi
+  if [ "$status" = registry-only ]; then
+    result APPLY_STATUS registry-only
+    echo "The registry is applied. Run the deploy again for the rest (DP7)."
+    return 0
+  fi
+  [ "$status" = changes ] && [ -f "$dir/root.tfplan" ] || die "Plan $PLAN_ID has nothing to apply ($status)."
+  echo "== Serena. It finishes when the app and the worker are running."
+  tf_init "$ROOT"
+  tf "$ROOT" apply -input=false "$dir/root.tfplan"
+  result APPLY_STATUS applied
+  url="$(app_url)"
+  echo "$ENV_LABEL is deployed at commit $(git rev-parse --short HEAD): $url"
+  # What only an admin can do (DP12): the build can't read or set a secret's value.
+  [ "$(cdn_keys_exist)" = true ] || echo "Next: ./serena aws cdn-key --env $ENV makes the first CloudFront signing key."
+  [ -z "$(pending_version)" ] || echo "Next: ./serena aws cdn-key --env $ENV has the app sign with the new key."
+  for museum in $(museum_names); do
+    [ "$(secret_versions "$(secret_id cspace "$museum")")" = 0 ] || continue
+    if [ "$SIMULATED_CSPACE" = true ]; then echo "Next: ./serena aws sim-secrets --env $ENV"; break; fi
+    echo "Next: ./serena aws cspace-secret $museum --env $ENV"
+  done
+}
+
+gh_get() {  # gh_get PATH: a GitHub API read, signed in with gh if it's there, otherwise anonymously; empty on failure
+  if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+    gh api "$1" 2>/dev/null || true
+  else
+    curl -fsS -H "Accept: application/vnd.github+json" "https://api.github.com/$1" 2>/dev/null || true
+  fi
+}
+
+# The GitHub environments must exist, with their rules, before the roles that trust them (DP9): GitHub makes an
+# environment without rules the first time a job names it.
+check_github_environments() {
+  local name json branches problems="" problem
+  for name in "$ENV-plan" "$ENV"; do
+    json="$(gh_get "repos/$PIPELINE_REPO/environments/$name")"
+    if [ -z "$json" ]; then problems="$problems
+  $name: not found"; continue; fi
+    branches="$(gh_get "repos/$PIPELINE_REPO/environments/$name/deployment-branch-policies")"
+    [ -n "$branches" ] || branches='{}'
+    problem="$(NAME="$name" ENVIRONMENT="$ENV" REAL="$([ "$SIMULATED_CSPACE" = true ] && echo false || echo true)" \
+      BRANCHES="$branches" python3 -c '
+import json, os, sys
+env, branches = json.load(sys.stdin), json.loads(os.environ["BRANCHES"])
+policy = env.get("deployment_branch_policy") or {}
+names = [(b.get("name"), b.get("type", "branch")) for b in branches.get("branch_policies", [])]
+problems = []
+if not policy.get("custom_branch_policies") or names != [("main", "branch")]:
+    problems.append("deployments from main only (Deployment branches and tags: main)")
+reviewers = [r for r in env.get("protection_rules", []) if r.get("type") == "required_reviewers"]
+if os.environ["NAME"] == os.environ["ENVIRONMENT"]:
+    if not reviewers or not reviewers[0].get("reviewers"):
+        problems.append("a required reviewer")
+    elif not reviewers[0].get("prevent_self_review"):
+        if os.environ["REAL"] == "true":
+            problems.append("Prevent self-review (it has real data)")
+        else:
+            print("note: self-review is allowed (only for an environment with the simulator, DP13)", file=sys.stderr)
+print("; ".join(problems))' <<<"$json")"
+    [ -z "$problem" ] || problems="$problems
+  $name needs: $problem"
+  done
+  [ -z "$problems" ] && return 0
+  die "The GitHub environments aren't ready (repository Settings › Environments; docs/testing-checklist.md):$problems
+Set them up first: the pipeline's roles trust them. Nothing was changed."
+}
+
+confirm_real_data_account() {  # for an environment with real data: the account typed, and saved for the build
+  [ "$SIMULATED_CSPACE" != true ] || return 0
+  acknowledge_real_data
+  put_setting REAL_DATA_ACCOUNT "$ACCOUNT_ID"
+}
+
+set_github_secrets() {  # the roles' ARNs as the GitHub environments' AWS_ROLE_ARN, and the region as AWS_REGION
+  local mode env ok=""
+  echo
+  echo "The deploy workflow signs in with these roles: each GitHub environment needs its role's ARN as the secret"
+  echo "AWS_ROLE_ARN (a secret, so the account number is masked in the logs) and the region as the variable AWS_REGION."
+  if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+    read -r -p "Set them now with gh, signed in as you? [y/N] " ok
+  fi
+  for mode in plan apply; do
+    env="$ENV"; [ "$mode" = apply ] || env="$ENV-plan"
+    case "$ok" in
+      y|Y|yes)
+        tf pipeline output -raw "${mode}_role_arn" | gh secret set AWS_ROLE_ARN --repo "$PIPELINE_REPO" --env "$env"
+        gh variable set AWS_REGION --repo "$PIPELINE_REPO" --env "$env" --body "$AWS_REGION" ;;
+      *)
+        echo "  terraform -chdir=deploy/terraform/pipeline output -raw ${mode}_role_arn |"
+        echo "    gh secret set AWS_ROLE_ARN --repo $PIPELINE_REPO --env $env"
+        echo "  gh variable set AWS_REGION --repo $PIPELINE_REPO --env $env --body $AWS_REGION" ;;
+    esac
+  done
+}
+
+pipeline_root() {  # pipeline_root [destroy]
+  load_env
+  [ "$SETTINGS" = ssm ] ||
+    die "The pipeline reads the settings of '$ENV' from SSM (D273): add SETTINGS=ssm to $LOCAL, then
+./serena aws settings push --env $ENV"
+  [ "$ROOT" = shared ] || die "The pipeline is for environments on the shared root: stage 2, QA, production (DP1)."
+  check_account; need_terraform; ensure_state_bucket
+  tf_init pipeline
+  local create vars
+  # GitHub's OIDC provider can exist only once in an account (DP2): made here only where there is none.
+  if tf pipeline state list 2>/dev/null | grep -q '^aws_iam_openid_connect_provider\.github'; then create=true
+  elif aws_ iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text |
+    grep -q 'oidc-provider/token\.actions\.githubusercontent\.com'; then create=false
+  else create=true
+  fi
+  vars=(-var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "environment=$ENV" -var "env_name=$SERENA_ENV_NAME"
+        -var "create_oidc_provider=$create")
+  case "${1:-}" in
+    "") ;;
+    destroy)
+      echo "This deletes the deploy pipeline of '$ENV' in account $ACCOUNT_ID: the roles GitHub Actions assumes,"
+      echo "the CodeBuild projects and their role, the saved plans and the builds' logs. The environment stays."
+      [ "$create" = false ] || echo "It also deletes GitHub's OIDC provider, which this pipeline made: if anything else"
+      [ "$create" = false ] || echo "in the account uses it, answer no."
+      # shellcheck disable=SC2046
+      tf pipeline destroy -input=false $(approve) "${vars[@]}"
+      echo "Done. Delete the GitHub environments $ENV-plan and $ENV too."
+      return ;;
+    *) die "./serena aws pipeline [destroy]" ;;
+  esac
+  check_github_environments
+  confirm_real_data_account
+  if [ "$create" = true ]; then echo "GitHub's OIDC provider: this pipeline makes (or keeps) it."
+  else echo "GitHub's OIDC provider: the account's own (this pipeline doesn't make another)."
+  fi
+  echo "Terraform shows its plan (the OIDC roles, the CodeBuild projects, their role and policies, a log group and the"
+  echo "bucket of saved plans) and asks."
+  # shellcheck disable=SC2046
+  tf pipeline apply -input=false $(approve) "${vars[@]}"
+  set_github_secrets
+  echo
+  echo "Next: Actions › Deploy › Run workflow, from main, with the environment $ENV. From now on the pipeline deploys"
+  echo "'$ENV'; ./serena aws deploy here is break-glass."
 }
 
 case "$CMD" in
@@ -1339,7 +1693,8 @@ case "$CMD" in
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
   etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;
-  cdn-key) prepare; tf_init "$ROOT"; need_deployed; check_museums ask; cdn_key ;;
+  cdn-key) prepare; tf_init "$ROOT"; need_deployed
+           if has_pipeline; then cdn_key_pipeline; else check_museums ask; cdn_key; fi ;;
   confirm-alerts) confirm_alerts ;;
   init) prepare
         backend_config registry; tf registry init -reconfigure "${BACKEND[@]}"
@@ -1347,6 +1702,16 @@ case "$CMD" in
   destroy) destroy ;;
   rehearsal-vpc) rehearsal_vpc "$@" ;;
   settings) settings "$@" ;;
+  pipeline) pipeline_root "$@" ;;
+  pipeline-plan) pipeline_plan ;;
+  pipeline-apply) pipeline_apply ;;
+  sim-secrets)
+    load_env
+    [ "$SIMULATED_CSPACE" = true ] ||
+      die "'$ENV' uses a real CollectionSpace: its secrets are set with cspace-secret, etl-token and portal-key."
+    check_account; need_terraform; tf_init "$ROOT"; need_deployed
+    sim_secrets
+    echo "Done: the simulator's account, and the ETL tokens and portal keys not set yet, are set (nothing is shown)." ;;
   help|-h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" ;;
   *) die "Unknown command '$CMD'. ./serena aws help lists them." ;;
 esac

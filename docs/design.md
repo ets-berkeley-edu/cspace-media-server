@@ -483,6 +483,9 @@ shows every unserved request by reason, and "Media look up" explains any one fil
   public keys, the current one and the one before it, are in an SSM parameter (`/serena-<env>/cloudfront-public-keys`)
   that Terraform reads into the key group, so a URL signed with the previous key keeps working after a rotation (a
   URL lives at most 30 minutes; rotations are further apart). No private key is in Terraform's state or a file.
+  Until the secret has a key ID, the app signs nothing and answers with the unavailable image ("delivery not set up"):
+  in an environment with a pipeline, a first key that CloudFront trusts before `cdn-key` has finished it (DP12;
+  decided November 2, 2026).
 - One distribution per environment (`SERENA_CDN_BASE_URL` is its address): in personal environments and stage 1 the
   same one as the app's; in QA and production a distribution for the files and the unavailable images only, at its
   own `*.cloudfront.net` address, beside the app's load balancer (D289, D293, D301). A stored file's URL is
@@ -1738,6 +1741,22 @@ their hashed names, with no CDN (D296).
     reading the environment's settings, the plan bucket and its own logs, and an explicit deny of reading or setting
     a secret's value. None of the pipeline's roles is named `serena-…`, since the deployer policy may change
     `serena-*` roles.
+  - **As built (PR 3, November 2026).** The pipeline's resources are named after the `./serena aws` environment, which
+    is also its GitHub environments' name: `pipeline-<environment>-plan`, `-apply` and `-build`, the log group
+    `/pipeline/<environment>` (kept a year) and the bucket `pipeline-<environment>-plans-<account>-<region>` (SSE-S3,
+    TLS only, plans deleted after 7 days). Nothing in the root is named `serena-…` or tagged `project=serena`, both of
+    which the deployer policy may change. The split of the deployer policy into managed policies is a module,
+    `deploy/terraform/modules/deployer_policy`, which the rehearsal's deployer and the build role both use. Besides
+    DP5's deny of secret values, the build role is denied changing any SSM parameter (its settings, the real-data
+    confirmation below and the CloudFront public keys are an admin's) and writing the pipeline's and the rehearsal's
+    Terraform state. The builds use the CodeBuild image `aws/codebuild/amazonlinux-aarch64-standard:3.0`, small, one
+    build at a time per project. `./serena aws pipeline` runs as the environment's `ADMIN_PROFILE` (the account's
+    administrator; it replaced `REHEARSAL_ADMIN_PROFILE`). It refuses an environment without `SETTINGS=ssm`, and
+    checks GitHub's API before applying: both GitHub environments exist and take only `main`, and `<env>` has a
+    required reviewer (with "prevent self-review" where there is real data). It makes GitHub's OIDC provider only if
+    its own state already holds it or the account has none. Then it offers to set the environments' `AWS_ROLE_ARN`
+    secrets and `AWS_REGION` variables with `gh`. Once an environment has a pipeline, `./serena aws deploy`, `pause`
+    and `resume` from a laptop are break-glass (typing "break glass"), and `status` says the pipeline deploys it.
   - **The builds (DP6, DP7, DP11, DP17).** Both run `deploy/aws.sh` (`pipeline-plan`, `pipeline-apply`: no prompts, the
     build's own credentials, the settings from SSM), so the pipeline and a break-glass deploy do the same steps. The
     plan build builds and pushes the images, tagged with the commit (skipped if already pushed; nothing runs them
@@ -1746,6 +1765,13 @@ their hashed names, with no CDN (D296).
     refuses one made against a state that has changed since. If the registry's plan has changes, the apply applies
     only the registry and asks for the deploy to be run again, since the root's plan was made before them. The
     buildspecs install Terraform at CI's version, checked against its SHA256; one deploy at a time per environment.
+    The workflow's jobs run `deploy/pipeline/run-build.sh`, which starts the build at the run's commit, polls its
+    status and reads only its exported variables: the plan's status (`changes`, `no-changes`, `registry-only` or
+    `certificate-pending`), the counts for each root, any museum the plan removes (shown as a caution) and the plan's
+    ID, which the apply job passes to the apply build. The apply job runs only when there is something to apply, so a
+    run with no changes is the check that an environment matches `main` (D276). Images are tagged with the commit's
+    first 12 characters. A museum's removal is approved with the plan, and Terraform still refuses it where
+    `PROTECT_DATA` is on.
   - **Approval.** GitHub environments with protection rules, two per AWS environment (D272, amended November 2, 2026,
     DP9): `<env>-plan`, deployments from `main` only, no reviewer; and `<env>`, from `main` only, with required
     reviewers (Richard and one other person) and "prevent self-review", so whoever started the deploy can't approve
@@ -1767,7 +1793,8 @@ their hashed names, with no CDN (D296).
     the deployer's existing SSM permissions. The values are private but not secret (addresses, the
     team's list, Ops's VPC). For an environment with real data, `./serena aws pipeline` asks the administrator to type
     the account's number and records it, and the build refuses real data without it (UC Berkeley data only in UC
-    Berkeley accounts, below). Secret values never pass through the pipeline: Terraform creates each secret empty, and
+    Berkeley accounts, below). It is the SSM setting `REAL_DATA_ACCOUNT`, which only `./serena aws pipeline`
+    writes: `settings push` leaves it alone, and the build can't change it. Secret values never pass through the pipeline: Terraform creates each secret empty, and
     an admin sets it with `./serena aws cspace-secret`, `etl-token`, `portal-key` or `cdn-key`, signed in with their
     own SSO, from any machine; CloudTrail records it (D274). So in a pipeline environment two steps that make secret
     values stay with an admin (DP12): `./serena aws sim-secrets` after the first deploy with the simulator, and the
@@ -1786,7 +1813,7 @@ their hashed names, with no CDN (D296).
     GitHub environments `personal-stage2-plan` and `personal-stage2` and Richard the only reviewer, self-review
     allowed: the one difference from the UC Berkeley environments. The build's role, with only the stage 2 policy,
     takes the rehearsal deployer's place. Afterwards the environment and its pipeline root are destroyed and the two
-    GitHub environments deleted. Then stage 2.
+    GitHub environments deleted (`docs/testing-checklist.md`, section 56). Then stage 2.
   - **Break-glass.** If the pipeline is broken when a deploy is urgent, a named admin runs `./serena aws`, signed in
     through a separate, time-limited break-glass permission set (audited in CloudTrail) and following the recovery
     runbook (`docs/runbook.md`, Break-glass deploy); the next pipeline run confirms the environment matches `main` (D276).

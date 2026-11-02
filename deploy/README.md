@@ -16,7 +16,7 @@ modeled on the BMU's `./bmu aws`, and the commands are the same where they can b
   shell's history.
 - **Who deploys (D268 to D277).** personal-dev and stage 1: `./serena aws` from the deployer's own machine. Stage 2
   and production: only the deploy pipeline (GitHub Actions starts AWS CodeBuild in the account after a reviewer
-  approves the plan; not built yet), with `./serena aws` kept for setting secrets and for break-glass. See
+  approves the plan; see "The deploy pipeline"), with `./serena aws` kept for setting secrets and for break-glass. See
   `docs/design.md`, Infrastructure and operations › Deploys. CI checks the Terraform code with no AWS sign-in.
 
 What it builds: the app and the worker on ECS Fargate, CloudFront (HTTPS, the address rules, WAF where it's on) in
@@ -47,6 +47,9 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 | `./serena aws destroy` | Deletes everything in AWS for the environment, data included. It asks for the environment's name first. |
 | `./serena aws init` | Points Terraform at the environment's state, to run `terraform` commands yourself. |
 | `./serena aws rehearsal-vpc [destroy]` | For a stage 2 rehearsal in your own account only (`REHEARSAL=true`): makes, as the account's administrator, what Ops provides for stage 2 (a VPC and a deployer role with only the stage 2 policy), or deletes it once the environment is destroyed. See "Rehearsing stage 2 in your own account". |
+| `./serena aws pipeline [destroy]` | As the account's administrator (`ADMIN_PROFILE`), for an environment on the shared root with `SETTINGS=ssm`: makes (or deletes) its deploy pipeline, `terraform/pipeline`. Checks its GitHub environments first, asks for the account's number where there is real data, shows Terraform's plan and asks, then offers to set the GitHub environments' secrets with `gh`. See "The deploy pipeline". |
+| `./serena aws sim-secrets` | With the simulator, in an environment the pipeline deploys: sets what `deploy` sets itself from a laptop (the simulator's account, random ETL tokens and portal keys), where they aren't set. Nothing is shown. |
+| `./serena aws pipeline-plan` / `pipeline-apply` | Only in the pipeline's builds (`pipeline/`): they refuse to run anywhere else. |
 | `./serena aws settings push` / `show` / `delete` | For an environment with `SETTINGS=ssm` (D273): puts its settings in SSM Parameter Store from its files, showing what changes and asking first (always, even with `SERENA_AWS_YES=1`); lists them, marking any the files on this computer disagree with; or, once the environment is destroyed, deletes them (it asks for the environment's name). See "Settings in SSM Parameter Store". |
 
 **Picking the environment.** Add `--env NAME`, or set `SERENA_AWS_ENV`. The default is `personal-dev`.
@@ -55,12 +58,15 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 **Settings in SSM Parameter Store (D273, DP10).** With `SETTINGS=ssm` in the environment's `.conf` or `.local.conf`,
 `./serena aws` reads every setting below from SSM in the environment's account, one String parameter each under
 `/serena-<SERENA_ENV_NAME>/settings/`, except `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and
-`REHEARSAL_ADMIN_PROFILE`, which say how to reach the account. The files then matter only to `./serena aws settings
+`ADMIN_PROFILE` (the account administrator's profile), which say how to reach the
+account. The files then matter only to `./serena aws settings
 push`, which puts them there; a command whose files disagree with SSM says so and uses SSM's. Changing a setting is:
 edit the file, `settings push`, then deploy (or, with the pipeline, run it). Commands that save a setting
 (`rehearsal-vpc`, `allow-my-ip`) save it in SSM and in the `.local.conf`, so the files stay a whole copy and a later
-push doesn't undo it. A rehearsal's `settings` commands run as
-`REHEARSAL_ADMIN_PROFILE`, since they come before the deployer role exists. The deploy pipeline's environments keep
+push doesn't undo it. The `settings`, `rehearsal-vpc` and `pipeline` commands run as
+`ADMIN_PROFILE` where the environment has one, since they come before the deployer role exists (or make it).
+`REAL_DATA_ACCOUNT` is in SSM only: `./serena aws pipeline` writes it, and `settings push` leaves
+it alone. The deploy pipeline's environments keep
 their settings this way (it reads them in the build); personal-dev keeps its files (D277).
 
 **Settings** (in `<env>.conf`, or in the uncommitted `<env>.local.conf`, which wins; with `SETTINGS=ssm`, in SSM):
@@ -69,6 +75,7 @@ their settings this way (it reads them in the build); personal-dev keeps its fil
 | --- | --- |
 | `AWS_PROFILE`, `AWS_REGION` | The AWS CLI profile (IAM Identity Center) and region. personal-dev uses the BMU's profile (Richard's): the same account, side by side with the BMU. Anyone else sets their own in `personal-dev.local.conf` (see "Your own AWS account"). |
 | `SERENA_ENV_NAME` | Resource names (`serena-<name>-…`) and the Terraform state's key. |
+| `ADMIN_PROFILE` | The account administrator's profile, where it isn't `AWS_PROFILE`: `settings`, `rehearsal-vpc` and `pipeline` run as it (personal-stage2: `bmu-personal`). It was `REHEARSAL_ADMIN_PROFILE`. |
 | `CSPACE_TENANTS` | The museums and their CollectionSpace servers: `"pahma=https://<PAHMA's CollectionSpace server>"`. Each needs `backend/serena/museums/<museum>.yaml`. |
 | `SIMULATED_CSPACE`, `SIMULATED_MUSEUMS` | `true` runs the simulated CollectionSpace for the museums listed (default `pahma`) instead of `CSPACE_TENANTS`. |
 | `ALLOWED_CIDRS` | Addresses that may reach everything. The first deploy adds this computer's; `allow-my-ip` adds more. |
@@ -203,7 +210,7 @@ museum, as a role that has only the stage 2 deployer policy (`iam/serena-deploye
 54). It needs a DNS zone you control for the certificate, such as a cheap domain registered in Route 53.
 
 1. `./serena aws rehearsal-vpc --env personal-stage2`, signed in as the account's administrator
-   (`REHEARSAL_ADMIN_PROFILE`, `bmu-personal`). It applies `terraform/rehearsal`: what Ops provides for stage 2, a VPC
+   (`ADMIN_PROFILE`, `bmu-personal`). It applies `terraform/rehearsal`: what Ops provides for stage 2, a VPC
    with two public and two private subnets in two zones and a NAT gateway (no gateway endpoints, and nothing tagged
    `project=serena`), and the role `rehearsal-stage2r-deployer`, which only that administrator role may assume, with
    the stage 2 policy as three managed policies. It saves the subnets, the NAT gateway's address (`ETL_CIDRS`) and
@@ -217,6 +224,39 @@ museum, as a role that has only the stage 2 deployer policy (`iam/serena-deploye
 
 The role takes AWS's one-hour limit for a role assumed from a sign-in session; the AWS CLI and Terraform renew it as
 they go. The NAT gateway bills while paused: about $5 a day running, so destroy it between sessions.
+
+## The deploy pipeline
+
+An environment on the shared root is deployed by its pipeline (D268 to D277, DP1 to DP17; `docs/design.md`,
+Infrastructure and operations › Deploys): `.github/workflows/deploy.yml` starts AWS CodeBuild in the environment's
+account, and Terraform runs only there, so its plans and logs never reach the public repository's Actions logs.
+
+1. **GitHub environments** (repository Settings › Environments; an admin of the repository): `<env>-plan`, deployments
+   from `main` only, no reviewer; and `<env>`, from `main` only, with required reviewers and "Prevent self-review".
+   They come first: the roles trust them, and GitHub makes an environment without rules the first time a job names it.
+2. **Settings in SSM:** `SETTINGS=ssm` in the environment's files, then `./serena aws settings push --env <env>`.
+3. **The pipeline**, as the account's administrator: `./serena aws pipeline --env <env>`. It applies
+   `terraform/pipeline` (state `serena/<SERENA_ENV_NAME>/pipeline.tfstate`): GitHub's OIDC provider, if the account
+   has none; the roles `pipeline-<env>-plan` and `-apply`, which only the GitHub environments `<env>-plan` and `<env>`
+   may assume, and which may only start their own build and read its status; the CodeBuild projects
+   `pipeline-<env>-plan` and `-apply`; the build's role `pipeline-<env>-build`, with the stage 2 deployer policy
+   (`iam/`) and a deny of secret values and of SSM changes; the log group `/pipeline/<env>`; and the bucket of saved
+   plans. Then each GitHub environment needs the secret `AWS_ROLE_ARN` (its role's ARN) and the variable `AWS_REGION`;
+   the command offers to set them with `gh`, or prints the commands.
+4. **A deploy:** Actions › Deploy › Run workflow, from `main`, choosing the environment. The plan job starts the plan
+   build (`pipeline/buildspec-plan.yml`: `./serena aws pipeline-plan`), which builds and pushes the images tagged with
+   the commit, plans the registry and the root, and saves the plans. The job's summary shows only the counts and a
+   link to the build in the AWS console: sign in and read the plan in its log. A reviewer other than the person who
+   started the run approves, and the apply job starts the apply build (`./serena aws pipeline-apply`), which applies
+   exactly those plans. A run with no changes ends after the plan.
+5. **What stays an admin's** (the build can't read or set a secret's value, D274, DP12): `./serena aws sim-secrets`
+   after the first deploy with the simulator; `cspace-secret`, `etl-token` and `portal-key`; and the CloudFront signing
+   key: `./serena aws cdn-key` makes it and stops, the next pipeline run has CloudFront trust it, and `cdn-key` again
+   has the app sign with it. Until then the app answers files with the unavailable image.
+
+Once an environment has a pipeline, `./serena aws deploy`, `pause` and `resume` from a laptop are break-glass
+deploys (D276): they ask you to type "break glass". `./serena aws pipeline --env <env> destroy` deletes the pipeline
+(not the environment); then delete the two GitHub environments.
 
 ## Diagrams
 
@@ -449,8 +489,10 @@ provides (service-linked roles, CloudFront verification on a new account). perso
 
 ## Terraform
 
-- **Two configurations.** `registry` (the image repositories) and `app` (everything else), applied in turn, with
-  the images pushed in between.
+- **The roots.** `registry` (the image repositories and, for the shared root, the certificate), then `personal` or
+  `shared` (everything else), applied in turn with the images pushed in between. Applied by an account's
+  administrator only: `rehearsal` (a stage 2 rehearsal's VPC and deployer) and `pipeline` (the deploy pipeline).
+  `modules/deployer_policy` splits the stage 2 deployer policy into managed policies for the last two.
 - **Versions.** Terraform 1.10 or later (CI uses 1.16.5) and the AWS provider 6.x, pinned by `.terraform.lock.hcl`
   in each folder for Macs and Linux.
 - **State** in `s3://serena-tfstate-<account>-<region>/serena/<env>/registry.tfstate` and `personal.tfstate`, versioned
@@ -462,9 +504,10 @@ provides (service-linked roles, CloudFront verification on a new account). perso
 
 ## Checking the Terraform code
 
-CI's `terraform` job runs `terraform fmt -check`, `validate` for both configurations and `terraform test` (a
-simulated AWS provider: `deploy/terraform/personal/tests/personal.tftest.hcl`, which reads the modules' resources
-through their `test` outputs), with no AWS sign-in.
+CI's `terraform` job runs `terraform fmt -check`, and `validate` and `terraform test` for each root (a simulated AWS
+provider: `deploy/terraform/<root>/tests/*.tftest.hcl`, which read the modules' resources through their `test`
+outputs), with no AWS sign-in. The pipeline root's test checks the roles' trust (each GitHub environment exactly),
+that each role starts only its own build, the build role's denies, and the bucket of saved plans.
 `backend/tests/test_deploy.py` checks that the tables and the settings Terraform gives the app match the code. On
 your computer, use an empty Terraform folder, since one `./serena aws` initialized points at the state in S3:
 

@@ -98,17 +98,35 @@ def shell_words(aws_sh: str, variable: str) -> set[str]:
 
 def test_every_setting_is_either_in_ssm_or_in_the_files() -> None:
     """With SETTINGS=ssm (D273), load_env reads every setting from SSM but the few that say how to reach the account:
-    a new setting must be listed in SSM_SETTINGS or FILE_SETTINGS, or a pipeline environment would never get it."""
+    a new setting must be listed in SSM_SETTINGS or FILE_SETTINGS, or a pipeline environment would never get it.
+    PIPELINE_SETTINGS are in SSM only, written by ./serena aws pipeline, never by settings push (DP11)."""
     aws_sh = (DEPLOY / "aws.sh").read_text()
     in_ssm, in_files = shell_words(aws_sh, "SSM_SETTINGS"), shell_words(aws_sh, "FILE_SETTINGS")
-    assert in_ssm & in_files == set()
+    in_pipeline = shell_words(aws_sh, "PIPELINE_SETTINGS")
+    assert in_ssm & in_files == in_ssm & in_pipeline == in_files & in_pipeline == set()
     load_env = aws_sh[aws_sh.index("load_env() {") :]
     resets = load_env[: load_env.index('. "$CONF"')]  # what load_env empties before reading the files
     started_empty = set(re.findall(r'\b([A-Z][A-Z0-9_]+)=""', resets))
-    assert started_empty == (in_ssm | in_files) - {"AWS_PROFILE", "AWS_REGION", "SERENA_ENV_NAME"}
+    assert started_empty == (in_ssm | in_files | in_pipeline) - {"AWS_PROFILE", "AWS_REGION", "SERENA_ENV_NAME"}
     set_in_committed_files = {
         name
         for f in committed_settings_files()
         for name in re.findall(r"^([A-Z][A-Z0-9_]+)=", f.read_text(), re.MULTILINE)
     }
     assert sorted(set_in_committed_files - in_ssm - in_files) == []
+
+
+def test_the_pipeline_installs_the_terraform_ci_uses() -> None:
+    """DP17: the buildspecs install Terraform at CI's version (Dependabot reads neither), and both the same one."""
+    ci = (DEPLOY.parent / ".github" / "workflows" / "ci.yml").read_text()
+    ci_version = re.search(r'terraform_version: "([0-9.]+)"', ci)
+    assert ci_version
+    pins = set()
+    for mode in ("plan", "apply"):
+        buildspec = (DEPLOY / "pipeline" / f"buildspec-{mode}.yml").read_text()
+        version = re.search(r'TERRAFORM_VERSION: "([0-9.]+)"', buildspec)
+        sha = re.search(r'TERRAFORM_SHA256: "([0-9a-f]{64})"', buildspec)
+        assert version and sha, f"buildspec-{mode}.yml pins Terraform's version and SHA256"
+        assert version.group(1) == ci_version.group(1), f"buildspec-{mode}.yml installs CI's Terraform"
+        pins.add((version.group(1), sha.group(1)))
+    assert len(pins) == 1

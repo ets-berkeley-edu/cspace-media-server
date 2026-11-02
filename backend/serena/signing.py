@@ -32,6 +32,11 @@ class Signer(Protocol):
     def url(self, tenant: str, object_key: str, expires: int) -> str: ...
 
 
+class KeyNotReady(Exception):
+    """The signing key's secret has no CloudFront key ID yet: a first key that ./serena aws cdn-key made, which
+    CloudFront may already trust but cdn-key hasn't finished (DP12). Delivery isn't set up until it has."""
+
+
 class CloudFrontURLSigner:
     """CloudFront signed URLs with a canned policy, signed with the key group's private key (RSA, as CloudFront
     requires) from Secrets Manager: {"key_pair_id": ..., "private_key": "<PEM>"}. The key is read again after the
@@ -53,6 +58,8 @@ class CloudFrontURLSigner:
 
     def url(self, tenant: str, object_key: str, expires: int) -> str:
         value = self.secrets.get_json(self.secret_id)
+        if not value.get("key_pair_id"):
+            raise KeyNotReady
         key = self._key(value["private_key"])
 
         def rsa_signer(message: bytes) -> bytes:
