@@ -32,6 +32,9 @@
 #                              it), so that unsubscribing needs an AWS sign-in
 #   ./serena aws destroy       delete everything in AWS for this environment, data included (asks first)
 #   ./serena aws init          point Terraform at this environment's state, to run terraform commands yourself
+#   ./serena aws rehearsal-vpc [destroy]   for a stage 2 rehearsal in your own account (REHEARSAL=true): make (or,
+#                              once the environment is destroyed, delete) what Ops provides for stage 2, a VPC and a
+#                              deployer role with only the stage 2 policy, as REHEARSAL_ADMIN_PROFILE
 #
 # Which environment: --env NAME or SERENA_AWS_ENV (default personal-dev). Its settings are in
 # deploy/environments/NAME.conf; NAME.local.conf (not committed) holds the account number and allowed addresses.
@@ -81,6 +84,7 @@ load_env() {
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
+  REHEARSAL="" REHEARSAL_ADMIN_PROFILE=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
@@ -91,8 +95,9 @@ load_env() {
   case "$ROOT" in
     personal) ;;
     shared)
-      local need
-      for need in VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS DOMAIN_NAME; do
+      local need needs="VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS DOMAIN_NAME"
+      [ "$CMD" != rehearsal-vpc ] || needs=""   # it makes the VPC and the subnets, and saves them in $LOCAL
+      for need in $needs; do
         [ -n "$(eval echo "\$$need")" ] || die "'$ENV' is on the shared root: set $need in $LOCAL (D303, D293)."
       done ;;
     *) die "TERRAFORM_ROOT must be personal or shared ($CONF)." ;;
@@ -186,6 +191,14 @@ save_local() {  # save_local KEY VALUE: set one setting in the environment's .lo
   tmp="$(mktemp)"
   { [ -f "$LOCAL" ] && grep -v "^$key=" "$LOCAL" || echo "# ./serena aws settings for '$ENV' on this computer only (not committed)."; } > "$tmp"
   echo "$key=\"$value\"" >> "$tmp"
+  mv "$tmp" "$LOCAL"
+}
+
+remove_local() {  # remove_local KEY: remove one setting from the environment's .local.conf
+  [ -f "$LOCAL" ] || return 0
+  local tmp
+  tmp="$(mktemp)"
+  grep -v "^$1=" "$LOCAL" > "$tmp" || true
   mv "$tmp" "$LOCAL"
 }
 
@@ -1061,6 +1074,64 @@ destroy() {
   echo "The Terraform state bucket s3://$STATE_BUCKET is kept; it holds the (now empty) state and its history."
 }
 
+# ---- the stage 2 rehearsal ------------------------------------------------------------------------------------------
+# A rehearsal deploys the shared root in a developer's own account, as a role with only the stage 2 deployer policy
+# (docs/testing-checklist.md, section 54). What Ops provides for stage 2, the VPC and that role, comes from
+# deploy/terraform/rehearsal, applied as the account's administrator (REHEARSAL_ADMIN_PROFILE), never as the deployer.
+state_has_resources() {  # state_has_resources KEY: whether this environment's KEY.tfstate holds any resource
+  aws_ s3 cp "s3://$STATE_BUCKET/serena/$SERENA_ENV_NAME/$1.tfstate" - 2>/dev/null |
+    python3 -c 'import json, sys; sys.exit(0 if json.load(sys.stdin).get("resources") else 1)' 2>/dev/null
+}
+
+rehearsal_vpc() {  # rehearsal_vpc [destroy]
+  load_env
+  [ "$REHEARSAL" = true ] || die "'$ENV' isn't a rehearsal (REHEARSAL=true in $CONF): for stage 2, Ops provides the VPC and the deployer."
+  [ "$ROOT" = shared ] && [ "$SIMULATED_CSPACE" = true ] && [ "$PROTECT_DATA" = false ] ||
+    die "A rehearsal is on the shared root, with the simulator only and PROTECT_DATA=false ($CONF)."
+  [ -n "$REHEARSAL_ADMIN_PROFILE" ] || die "Set REHEARSAL_ADMIN_PROFILE in $CONF: the account's administrator profile."
+  local deployer_profile="$AWS_PROFILE" key role
+  AWS_PROFILE="$REHEARSAL_ADMIN_PROFILE"; export AWS_PROFILE
+  check_account; need_terraform; ensure_state_bucket
+  tf_init rehearsal
+  local vars=(-var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "env_name=$SERENA_ENV_NAME")
+  case "${1:-}" in
+    "") ;;
+    destroy)
+      for key in shared registry; do
+        ! state_has_resources "$key" ||
+          die "'$ENV' is still deployed (serena/$SERENA_ENV_NAME/$key.tfstate): ./serena aws destroy --env $ENV first, as its deployer."
+      done
+      echo "This deletes the rehearsal's VPC, NAT gateway and deployer role in account $ACCOUNT_ID. Terraform asks first."
+      # shellcheck disable=SC2046
+      tf rehearsal destroy -input=false $(approve) "${vars[@]}"
+      for key in VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS ETL_CIDRS; do remove_local "$key"; done
+      echo "Done. The [profile $deployer_profile] section in ~/.aws/config can go too."
+      return ;;
+    *) die "./serena aws rehearsal-vpc [destroy]" ;;
+  esac
+  echo "Terraform shows its plan (a VPC, two public and two private subnets, a NAT gateway, the deployer role) and asks."
+  # shellcheck disable=SC2046
+  tf rehearsal apply -input=false $(approve) "${vars[@]}"
+  save_local VPC_ID "$(tf rehearsal output -raw vpc_id)"
+  save_local APP_SUBNET_IDS "$(tf rehearsal output -raw app_subnet_ids)"
+  save_local LB_SUBNET_IDS "$(tf rehearsal output -raw lb_subnet_ids)"
+  save_local ETL_CIDRS "$(tf rehearsal output -raw nat_address)/32"   # the fake ETL's calls come from the NAT gateway
+  [ -n "$ADMIN_CIDRS" ] || { ADMIN_CIDRS="$(my_ip)/32"; save_local ADMIN_CIDRS "$ADMIN_CIDRS"; }
+  echo "Saved in $LOCAL: VPC_ID, APP_SUBNET_IDS, LB_SUBNET_IDS, ETL_CIDRS (the NAT gateway's address); ADMIN_CIDRS is $ADMIN_CIDRS."
+  role="$(tf rehearsal output -raw deployer_role_arn)"
+  if [ "$(aws configure get role_arn --profile "$deployer_profile" 2>/dev/null || true)" = "$role" ]; then
+    echo "The deployer's profile $deployer_profile is in ~/.aws/config."
+  else
+    echo
+    echo "Add the deployer's profile to ~/.aws/config (it signs in through $REHEARSAL_ADMIN_PROFILE, then takes the role):"
+    echo
+    printf '[profile %s]\nrole_arn = %s\nsource_profile = %s\nregion = %s\n' "$deployer_profile" "$role" "$REHEARSAL_ADMIN_PROFILE" "$AWS_REGION"
+    echo
+  fi
+  [ -n "$DOMAIN_NAME" ] || echo "Then set DOMAIN_NAME in $LOCAL: a name in a DNS zone you control, for the certificate."
+  echo "Next: ./serena aws deploy --env $ENV   (as the deployer: note every AccessDenied, checklist section 54)"
+}
+
 case "$CMD" in
   deploy) deploy ;;
   plan) plan ;;
@@ -1096,6 +1167,7 @@ case "$CMD" in
         backend_config registry; tf registry init -reconfigure "${BACKEND[@]}"
         backend_config "$ROOT"; tf "$ROOT" init -reconfigure "${BACKEND[@]}" ;;
   destroy) destroy ;;
+  rehearsal-vpc) rehearsal_vpc "$@" ;;
   help|-h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" ;;
   *) die "Unknown command '$CMD'. ./serena aws help lists them." ;;
 esac

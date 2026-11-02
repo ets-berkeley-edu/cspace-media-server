@@ -80,7 +80,7 @@ The local stack, from the repository's root (Docker only; never AWS or a real Co
 ```
 
 AWS (`deploy/README.md`): `./serena aws deploy | plan | status | logs | etl <museum> | replay | pause | resume |
-cdn-key | confirm-alerts | destroy`
+cdn-key | confirm-alerts | destroy | rehearsal-vpc`
 (`deploy/aws.sh`, Terraform in `deploy/terraform/`, the production image `deploy/Dockerfile`).
 The person deploying runs them in their own AWS account (D277). In the UC Berkeley environments, only Richard runs
 them; once an environment holds real data, the deploy pipeline deploys it (D268 to D276).

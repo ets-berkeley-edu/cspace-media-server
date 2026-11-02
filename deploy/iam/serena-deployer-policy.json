@@ -8,6 +8,7 @@
         "iam:*",
         "sts:*",
         "cloudfront:*",
+        "route53:*",
         "ce:*",
         "organizations:Describe*"
       ],
@@ -275,8 +276,7 @@
         "elasticloadbalancing:RemoveTags",
         "elasticloadbalancing:SetRulePriorities",
         "elasticloadbalancing:SetSecurityGroups",
-        "elasticloadbalancing:SetSubnets",
-        "elasticloadbalancing:SetWebAcl"
+        "elasticloadbalancing:SetSubnets"
       ],
       "Resource": [
         "arn:aws:elasticloadbalancing:us-west-2:*:loadbalancer/app/serena-*/*",
@@ -289,6 +289,16 @@
           "aws:ResourceTag/project": "serena"
         }
       }
+    },
+    {
+      "Sid": "LoadBalancerWebAcl",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:SetWebAcl"
+      ],
+      "Resource": [
+        "arn:aws:elasticloadbalancing:us-west-2:*:loadbalancer/app/serena-*/*"
+      ]
     },
     {
       "Sid": "CertificateCreateTagged",
@@ -438,6 +448,15 @@
           "aws:ResourceTag/project": "serena"
         }
       }
+    },
+    {
+      "Sid": "CloudFrontFunctionTags",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:TagResource",
+        "cloudfront:UntagResource"
+      ],
+      "Resource": "arn:aws:cloudfront::*:function/serena-*"
     },
     {
       "Sid": "Waf",

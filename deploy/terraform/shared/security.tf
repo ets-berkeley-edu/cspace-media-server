@@ -51,7 +51,7 @@ resource "aws_vpc_security_group_ingress_rule" "web_from_alb" {
 
 resource "aws_vpc_security_group_egress_rule" "web_out" {
   security_group_id = aws_security_group.web.id
-  description       = "CollectionSpace and AWS services, through the VPC's NAT gateway and endpoints"
+  description       = "CollectionSpace and AWS services, through the NAT gateway and endpoints of the VPC"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
 }

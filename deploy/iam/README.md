@@ -38,6 +38,14 @@ for stage 1's, three for stage 2's (about 15,300 characters).
 
 If the account requires a permissions boundary on roles that Terraform creates, tell us its name: it's a small change.
 
+**Don't name the deployer's role `serena-…`.** The policy lets the deployer create and change `serena-*` roles (the app's
+and the worker's), so a deployer role with such a name could change its own permissions. A permission set's role
+(`AWSReservedSSO_…`) is safe.
+
+**Rehearsed in a personal account first.** `../terraform/rehearsal` makes a role with only this policy, split into
+three managed policies as above, and `./serena aws` deploys stage 2's shared root as that role in a personal account
+(`../README.md`, Rehearsing stage 2 in your own account; `docs/testing-checklist.md`, section 54).
+
 ## Also needed from Operations, outside the policy
 
 - **Service-linked roles.** If guardrails stop the deployer creating them, create these once:
