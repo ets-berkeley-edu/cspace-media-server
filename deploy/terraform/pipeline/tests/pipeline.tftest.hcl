@@ -53,18 +53,19 @@ variables {
   environment          = "personal-stage2"
   env_name             = "stage2r"
   create_oidc_provider = true
+  github_subject       = "repo:ets-berkeley-edu@283538/cspace-media-server@1410958489"
 }
 
 run "only_the_github_environments_may_sign_in" {
   command = plan
 
   assert {
-    condition     = jsondecode(aws_iam_role.github["plan"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:ets-berkeley-edu/cspace-media-server:environment:personal-stage2-plan"
+    condition     = jsondecode(aws_iam_role.github["plan"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:ets-berkeley-edu@283538/cspace-media-server@1410958489:environment:personal-stage2-plan"
     error_message = "the plan role trusts only the GitHub environment personal-stage2-plan"
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role.github["apply"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:ets-berkeley-edu/cspace-media-server:environment:personal-stage2"
+    condition     = jsondecode(aws_iam_role.github["apply"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:ets-berkeley-edu@283538/cspace-media-server@1410958489:environment:personal-stage2"
     error_message = "the apply role trusts only the GitHub environment personal-stage2, the one with the reviewer"
   }
 
@@ -225,4 +226,27 @@ run "the_account_already_has_the_oidc_provider" {
     condition     = jsondecode(aws_iam_role.github["apply"].assume_role_policy).Statement[0].Principal.Federated == "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
     error_message = "the roles trust the account's own provider"
   }
+}
+
+run "the_default_subject" {
+  command = plan
+
+  variables {
+    github_subject = "repo:ets-berkeley-edu/cspace-media-server"
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role.github["plan"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:ets-berkeley-edu/cspace-media-server:environment:personal-stage2-plan"
+    error_message = "a repository without immutable subjects is trusted by its name"
+  }
+}
+
+run "no_wildcard_in_the_subject" {
+  command = plan
+
+  variables {
+    github_subject = "repo:ets-berkeley-edu/*"
+  }
+
+  expect_failures = [var.github_subject]
 }

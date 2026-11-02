@@ -39,6 +39,16 @@ variable "repository" {
   default     = "ets-berkeley-edu/cspace-media-server"
 }
 
+variable "github_subject" {
+  description = "The start of the sub claim in GitHub's OIDC tokens for the repository, before :environment:<name>: repo:<owner>/<name>, or repo:<owner>@<id>/<name>@<id> with immutable subjects. ./serena aws pipeline reads it from GitHub."
+  type        = string
+
+  validation {
+    condition     = can(regex("^repo:[^:*?]+$", var.github_subject))
+    error_message = "github_subject must be repo: and the repository, as GitHub names it, with no colon or wildcard."
+  }
+}
+
 variable "create_oidc_provider" {
   description = "true makes GitHub's OIDC provider; false uses the account's own (there can be only one, DP2). ./serena aws pipeline decides."
   type        = bool

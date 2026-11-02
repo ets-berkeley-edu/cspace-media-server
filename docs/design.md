@@ -1723,7 +1723,7 @@ their hashed names, with no CDN (D296).
   production) is deployed only by a pipeline, never from someone's laptop (D268; D193 now covers only personal-dev).
   - **How it runs.** Someone starts the deploy workflow by hand from `main`, choosing the environment (decided
     November 2, 2026, DP8). Its plan job signs in to AWS through OIDC as `pipeline-<env>-plan`, whose trust policy
-    accepts only `repo:ets-berkeley-edu/cspace-media-server:environment:<env>-plan` (never `pull_request_target`, so
+    accepts only tokens for `…:environment:<env>-plan` from this repository (never `pull_request_target`, so
     fork pull requests can't assume it), and starts the environment's plan build in AWS CodeBuild. After the approval,
     the apply job signs in as `pipeline-<env>-apply`, which accepts only `…:environment:<env>`, and starts the apply
     build. Each role can only start its own CodeBuild project and read its builds' status, not their logs (D271,
@@ -1757,6 +1757,11 @@ their hashed names, with no CDN (D296).
     its own state already holds it or the account has none. Then it offers to set the environments' `AWS_ROLE_ARN`
     secrets and `AWS_REGION` variables with `gh`. Once an environment has a pipeline, `./serena aws deploy`, `pause`
     and `resume` from a laptop are break-glass (typing "break glass"), and `status` says the pipeline deploys it.
+    The roles' trust takes the start of the tokens' `sub` claim from GitHub's API when `./serena aws pipeline` runs
+    (decided November 2, 2026, while proving the pipeline): the repository uses GitHub's immutable subjects,
+    `repo:ets-berkeley-edu@<owner ID>/cspace-media-server@<repository ID>:environment:<name>`, which a repository
+    made again under the same name wouldn't match; one without them gets `repo:<owner>/<name>:…`. A repository with
+    its own claim keys isn't supported: the command stops.
   - **The builds (DP6, DP7, DP11, DP17).** Both run `deploy/aws.sh` (`pipeline-plan`, `pipeline-apply`: no prompts, the
     build's own credentials, the settings from SSM), so the pipeline and a break-glass deploy do the same steps. The
     plan build builds and pushes the images, tagged with the commit (skipped if already pushed; nothing runs them
