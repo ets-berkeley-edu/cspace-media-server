@@ -491,6 +491,9 @@ directly.
 
 ## If something goes wrong
 
+These are problems with `./serena aws` itself. For a deployed Serena's alerts, alarms and failed refreshes, see the
+recovery runbook, `docs/runbook.md`.
+
 - **"Not signed in to AWS".** The sign-in (8 hours) expired: `aws sso login --profile <profile>`, then repeat the
   command, which changed nothing.
 - **"The new signing key … isn't trusted by CloudFront yet".** The apply after `cdn-key` didn't finish:
