@@ -1716,32 +1716,35 @@ which are public in this repository, from anyone in `ADMIN_CIDRS` (campus and th
 What it checks: Manual refresh's "Make one from the simulator" (serena-fakecspace-questions F12, mockup version 57).
 With `./serena up` (rebuilt: `SERENA_SIMULATED_CSPACE` is new) and `./serena etl pahma`, sign in to PAHMA:
 
-- [ ] **1. The choice.** Manual refresh's "Replace with:" has a third choice, "Make one from the simulator". Choose it:
+- [x] **1. The choice.** Manual refresh's "Replace with:" has a third choice, "Make one from the simulator". Choose it:
   the bottom card "Make an ETL list from the simulator" has "Make the ETL list"; there's no check button yet.
-- [ ] **2. Make it.** Press it: "N rows from M records", and the top card names the list
+- [x] **2. Make it.** Press it: "N rows from M records", and the top card names the list
   (`simulator-pahma-<time>.tsv`). The rows are the 20 records `./serena etl` added and the placeholder image.
 - [ ] **3. What's left out.** Soft-delete one of the records (`curl -s -X POST
   http://localhost:8380/_fake/delete/<Media CSID>`, a CSID from Media look up) and press "Make it again": one row fewer,
   and "not listed: 1 soft-deleted". The dry run's result, if there was one, is gone.
-- [ ] **4. Check and apply.** Check it: "The dry run passed" (or failed only on the delta threshold, with a small
+- [x] **4. Check and apply.** Check it: "The dry run passed" (or failed only on the delta threshold, with a small
   list). There's no live public core checkbox. Give a reason and apply: the summary says "made from the simulator";
   on Past refreshes the refresh is Updated by itself and its page's reasons say "… made from the simulator: <reason>".
 - [ ] **5. Not elsewhere.** In personal-dev without the simulator, or in stage 2, the choice isn't there (the app's and
   backend's tests cover the 404 and the refused setting).
 
+Checked by hand October 30, 2026, on `main` @ 9ce98b0 (with section 52): steps 1, 2 and 4. Steps 3 and 5 not
+checked by hand; the backend's and the app's tests cover them.
 
 ## 52. The simulator from the fakecspace package, on the local stack (10 minutes; before merging the pull request that adds it)
 
 What it checks: the local stack runs the shared simulator (fakecspace 0.2.0 from PyPI, F15 step 2) in place of
 `backend/fakecspace`, with one store per museum. Rebuild first: `./serena down`, then `./serena up`.
 
-- [ ] **1. It starts.** `./serena logs fakecspace` shows Uvicorn on port 8180; Overview loads for PAHMA.
-- [ ] **2. Each museum's records.** `./serena etl pahma` and `./serena etl cinefiles`: both refreshes are Updated, and
+- [x] **1. It starts.** `./serena logs fakecspace` shows Uvicorn on port 8180; Overview loads for PAHMA.
+- [x] **2. Each museum's records.** `./serena etl pahma` and `./serena etl cinefiles`: both refreshes are Updated, and
   a PAHMA image and a CineFiles PDF from Media look up open.
-- [ ] **3. Make one from the simulator** (section 51) for CineFiles: its rows are CineFiles' records only (the
+- [x] **3. Make one from the simulator** (section 51) for CineFiles: its rows are CineFiles' records only (the
   restricted PDFs listed as restricted), none of PAHMA's.
-- [ ] **4. Sign in** as `admin`, `pahma-admin` and `viewer` as before (the simulator's accounts are the package's).
+- [x] **4. Sign in** as `admin`, `pahma-admin` and `viewer` as before (the simulator's accounts are the package's).
 
+Checked by hand October 30, 2026, on `main` @ 9ce98b0 (after #148): all four steps passed.
 
 ## 53. Shared mode, on the local stack (15 minutes; before merging the pull request that adds it)
 
