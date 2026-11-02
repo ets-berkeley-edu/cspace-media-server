@@ -1758,3 +1758,45 @@ pull` first). Start from `./serena down`.
 - [ ] **5. With the BMU** (once the BMU has `./bmu up shared`): a BMU job for PAHMA with an image; then Manual refresh,
   "Make one from the simulator" for PAHMA lists that record, and after Apply its image comes out of Serena.
 - [ ] **6. Back to its own.** `./serena down && ./serena up`: the stack has its own simulator again (port 8380).
+
+## 54. Stage 2 rehearsed in a personal account, with the simulator museum (about half a day, mostly waiting; before section 50)
+
+What it checks: section 50 in a personal account first, so that Ops gets a policy we've seen work. The shared root
+(D302) is deployed by a role that has only the stage 2 deployer policy (`deploy/iam/serena-deployer-policy.json`, D297,
+D305), in a VPC made like Ops's (D303), with only the simulator museum. Every command here takes
+`--env personal-stage2` (`deploy/environments/personal-stage2.conf`; `deploy/README.md`, Rehearsing stage 2 in your own
+account). Steps 6 and 7 of section 50 need DevOps's Apache hosts and aren't rehearsed. It costs about $5 a day while
+it exists, so finish with step 11.
+
+**Before you start** (once): a domain whose DNS is a Route 53 hosted zone in the account (a cheap one registered
+through Route 53 does), Docker running, and `aws sso login --profile bmu-personal`.
+
+- [ ] **1. What Ops provides.** `./serena aws rehearsal-vpc --env personal-stage2`. The first time it asks you to confirm
+  the account. Terraform's plan only creates: the VPC, four subnets, the internet and NAT gateways, two route tables,
+  the role `rehearsal-stage2r-deployer` and three policies `rehearsal-stage2r-deployer-1` to `-3`; type `yes`. It
+  saves `VPC_ID`, the subnets, `ETL_CIDRS` and `ADMIN_CIDRS` in `personal-stage2.local.conf` and prints a profile:
+  add it to `~/.aws/config`. Then add `DOMAIN_NAME=stage2r.<your domain>` and `ALERT_EMAIL` to the `.local.conf`.
+- [ ] **2. The deployer is the role.** `aws sts get-caller-identity --profile serena-rehearsal-deploy`: an `Arn` with
+  `assumed-role/rehearsal-stage2r-deployer/`. `aws ec2 create-vpc --cidr-block 10.99.0.0/16 --profile
+  serena-rehearsal-deploy --region us-west-2`: `UnauthorizedOperation` (no VPC changes, D303).
+- [ ] **3. The certificate.** `./serena aws deploy --env personal-stage2`: the image repositories and the certificate,
+  then its DNS record (CNAME, name, value) and "Run ./serena aws deploy again". Add the record in the hosted zone (Route
+  53 › Hosted zones › your domain › Create record: the name without the domain, type CNAME, the value). Within a few
+  minutes the certificate is issued (ACM in us-west-2). Note every `AccessDenied` below (action and resource).
+- [ ] **4. The deploy.** `./serena aws deploy --env personal-stage2` again: a plan that only creates (with two gateway
+  endpoints, `CREATE_GATEWAY_ENDPOINTS=true`); `yes`. It ends with the load balancer's own name. Add a CNAME
+  `stage2r` in the hosted zone pointing at it. Note every `AccessDenied`.
+- [ ] **5. Section 50, step 3:** `status`, `confirm-alerts` and `plan` ("No changes."), with `--env personal-stage2`.
+- [ ] **6. Section 50, step 4,** from this computer (its address is `ADMIN_CIDRS`): `./serena aws etl pahma` and
+  `./serena aws test`. Every test passes but T108, which skips.
+- [ ] **7. Section 50, step 5,** from a phone's hotspot (an address not in `ADMIN_CIDRS`): `./serena aws test -k t108`
+  passes, and `curl -sS --max-time 10 https://<DOMAIN_NAME>/health` times out.
+- [ ] **8. Section 50, step 8:** a slow first fetch is answered (`--sizes 100MB:1`), not a 504.
+- [ ] **9. Pause and resume** as the deployer: `./serena aws pause`, then `./serena aws resume`; no `AccessDenied`.
+- [ ] **10. The findings.** Each `AccessDenied` from steps 3 to 9 (and step 11's destroy) is fixed in
+  `deploy/iam/serena-deployer-policy.json` and listed in the pull request, then `./serena aws rehearsal-vpc` again
+  updates the role and the failed step is repeated. None left: the policy goes to Ops for section 50.
+- [ ] **11. Clean up.** `./serena aws destroy --env personal-stage2`, as the deployer (no `AccessDenied`), then
+  `./serena aws rehearsal-vpc --env personal-stage2 destroy`. `aws ec2 describe-nat-gateways --profile bmu-personal
+  --region us-west-2 --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'`: `[]`. The hosted zone
+  and the domain stay (about $0.50 a month and $3 a year).

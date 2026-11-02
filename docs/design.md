@@ -1760,7 +1760,9 @@ their hashed names, with no CDN (D296).
     No CloudFront VPC origin, no CloudFront web ACL in us-east-1, and no VPC, subnet, route or gateway changes (D297,
     D303). Writes to security groups, the load balancer, target groups, listeners, CloudFront distributions and the
     web ACL are limited to resources tagged `project=serena` wherever AWS allows it, since production workloads share
-    the account (D305).
+    the account (D305). Before stage 2, the policy is rehearsed in a personal account: the shared root, with only the
+    simulator, deployed by a role that has only that policy, in a VPC made like Operations' (`deploy/terraform/rehearsal`,
+    `./serena aws rehearsal-vpc`; decided November 1, 2026).
 - **Protecting data (D192).** Where the data matters (QA, production), tables can't be deleted, a destroy won't
   empty the buckets, and deleted secrets and the key wait 30 days; personal-dev can be thrown away. Everywhere:
   point-in-time recovery on every table but the admin sessions, bucket versioning, no lifecycle rule that deletes,

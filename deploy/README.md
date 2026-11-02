@@ -5,8 +5,10 @@ modeled on the BMU's `./bmu aws`, and the commands are the same where they can b
 
 - **One environment per settings file** in `deploy/environments/`. `personal-dev.conf`, the default, is a
   developer's own account (us-west-2), with the simulator only: its committed profile is Richard's, and anyone else
-  sets their own (see "Your own AWS account"). Stage 1 in the UC Berkeley account (CS-9523) has a file too; stage 2
-  and production keep their settings in SSM Parameter Store in their account instead (D273).
+  sets their own (see "Your own AWS account"). Stage 1 in the UC Berkeley account (CS-9523) has a file too, and so
+  does stage 2 while it uses only the simulator (TQ8); with the pipeline, an environment keeps its settings in SSM
+  Parameter Store in its account instead (D273). `personal-stage2.conf` rehearses stage 2 in a personal account (see
+  "Rehearsing stage 2 in your own account").
 - **Infrastructure as code.** Terraform (`deploy/terraform/`) creates everything, so nothing is clicked together in
   the console, and the whole environment can be deleted and created again.
 - **No keys or passwords in files.** You sign in with IAM Identity Center (`aws sso login`). Terraform creates
@@ -44,6 +46,7 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 | `./serena aws confirm-alerts` | Confirms the alert email's subscription (D201): paste the link from AWS's "Subscription Confirmation" email. Don't click the link: confirmed here, unsubscribing needs an AWS sign-in. |
 | `./serena aws destroy` | Deletes everything in AWS for the environment, data included. It asks for the environment's name first. |
 | `./serena aws init` | Points Terraform at the environment's state, to run `terraform` commands yourself. |
+| `./serena aws rehearsal-vpc [destroy]` | For a stage 2 rehearsal in your own account only (`REHEARSAL=true`): makes, as the account's administrator, what Ops provides for stage 2 (a VPC and a deployer role with only the stage 2 policy), or deletes it once the environment is destroyed. See "Rehearsing stage 2 in your own account". |
 
 **Picking the environment.** Add `--env NAME`, or set `SERENA_AWS_ENV`. The default is `personal-dev`.
 `SERENA_AWS_YES=1` applies without Terraform's `yes` prompt.
@@ -179,6 +182,29 @@ what Ops and DevOps provide: `VPC_ID`, `APP_SUBNET_IDS` (private, behind the NAT
 
 `./serena aws deploy` refuses a shared environment with a real CollectionSpace: the pipeline deploys it (D268). As a
 break-glass deploy (D276) it goes ahead once you type "break glass" and then the account's number.
+
+## Rehearsing stage 2 in your own account
+
+`deploy/environments/personal-stage2.conf` deploys the shared root in a personal account, with only the simulator
+museum, as a role that has only the stage 2 deployer policy (`iam/serena-deployer-policy.json`), so that every
+`AccessDenied` is the policy's and Ops gets a policy that has been seen to work (`docs/testing-checklist.md`, section
+54). It needs a DNS zone you control for the certificate, such as a cheap domain registered in Route 53.
+
+1. `./serena aws rehearsal-vpc --env personal-stage2`, signed in as the account's administrator
+   (`REHEARSAL_ADMIN_PROFILE`, `bmu-personal`). It applies `terraform/rehearsal`: what Ops provides for stage 2, a VPC
+   with two public and two private subnets in two zones and a NAT gateway (no gateway endpoints, and nothing tagged
+   `project=serena`), and the role `rehearsal-stage2r-deployer`, which only that administrator role may assume, with
+   the stage 2 policy as three managed policies. It saves the subnets, the NAT gateway's address (`ETL_CIDRS`) and
+   this computer's address (`ADMIN_CIDRS`, if empty) in `personal-stage2.local.conf`, and prints the deployer's
+   profile for `~/.aws/config` (`serena-rehearsal-deploy`: the role, from `bmu-personal`).
+2. Add `DOMAIN_NAME` (for example `stage2r.<your domain>`) and `ALERT_EMAIL` to `personal-stage2.local.conf`.
+3. Section 50's steps with `--env personal-stage2`, as the deployer. You add the certificate's validation record and
+   the name for the load balancer in your own zone, as DevOps will in campus DNS.
+4. `./serena aws destroy --env personal-stage2`, as the deployer (deleting is part of the rehearsal), then
+   `./serena aws rehearsal-vpc --env personal-stage2 destroy`, which refuses while the environment still exists.
+
+The role takes AWS's one-hour limit for a role assumed from a sign-in session; the AWS CLI and Terraform renew it as
+they go. The NAT gateway bills while paused: about $5 a day running, so destroy it between sessions.
 
 ## Diagrams
 
