@@ -1704,8 +1704,11 @@ which are public in this repository, from anyone in `ADMIN_CIDRS` (campus and th
   `serena-stage2` › Rules: `rate-limit-per-visitor-through-apache` aggregates on the forwarded IP. With DevOps, a
   burst of requests through Apache from one browser (above the rate limit within 5 minutes) is blocked for that
   visitor only; another visitor through the same Apache host still gets images.
-- [ ] **8. A slow first fetch is answered** (D295): `./serena aws etl pahma --sizes 100MB:1`, then request that record's
-  original through the campus name. The 302 comes after the fetch (tens of seconds), not a 504.
+- [ ] **8. A slow first fetch is answered** (D295): `./serena aws etl pahma --sizes 100KB:20,100MB:1` adds a record 20,
+  a catalog card with a 100 MB original (records 0 to 19 are the ones step 4 listed and cached, so one of them would be
+  a hit). Then `curl -sS -o /dev/null -w '%{http_code} after %{time_total}s\n'
+  https://<campus name>/pahma/imageserver/blobs/ef4acca9-f986-5c88-9c4d-b99289417c73/content` (PAHMA's record 20):
+  a 302 after the fetch (seconds to tens of seconds), not a 504; again, at once.
 - [ ] **9. Leave it running** for stage 2's next phase (PAHMA's QA records, with the pipeline, D268).
 
 ## 51. Make an ETL list from the simulator, on the local stack (10 minutes; before merging the pull request that adds it)
@@ -1784,19 +1787,22 @@ through Route 53 does), Docker running, and `aws sso login --profile bmu-persona
   53 › Hosted zones › your domain › Create record: the name without the domain, type CNAME, the value). Within a few
   minutes the certificate is issued (ACM in us-west-2). Note every `AccessDenied` below (action and resource).
 - [ ] **4. The deploy.** `./serena aws deploy --env personal-stage2` again: a plan that only creates (with two gateway
-  endpoints, `CREATE_GATEWAY_ENDPOINTS=true`); `yes`. It ends with the load balancer's own name. Add a CNAME
-  `stage2r` in the hosted zone pointing at it. Note every `AccessDenied`.
+  endpoints, `CREATE_GATEWAY_ENDPOINTS=true`); `yes`. Note every `AccessDenied`. As soon as the load balancer
+  `serena-stage2r` exists (a few minutes into the apply), add `stage2r` in the hosted zone: an alias A record to it.
+  Added after the deploy's health check, your resolver may keep "no such name" for up to 15 minutes; on a Mac,
+  `sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder` clears its own cache (a router that answers DNS
+  itself may keep it longer).
 - [ ] **5. Section 50, step 3:** `status`, `confirm-alerts` and `plan` ("No changes."), with `--env personal-stage2`.
 - [ ] **6. Section 50, step 4,** from this computer (its address is `ADMIN_CIDRS`): `./serena aws etl pahma` and
   `./serena aws test`. Every test passes but T108, which skips.
 - [ ] **7. Section 50, step 5,** from a phone's hotspot (an address not in `ADMIN_CIDRS`): `./serena aws test -k t108`
   passes, and `curl -sS --max-time 10 https://<DOMAIN_NAME>/health` times out.
-- [ ] **8. Section 50, step 8:** a slow first fetch is answered (`--sizes 100MB:1`), not a 504.
+- [ ] **8. Section 50, step 8:** a slow first fetch is answered, not a 504.
 - [ ] **9. Pause and resume** as the deployer: `./serena aws pause`, then `./serena aws resume`; no `AccessDenied`.
 - [ ] **10. The findings.** Each `AccessDenied` from steps 3 to 9 (and step 11's destroy) is fixed in
   `deploy/iam/serena-deployer-policy.json` and listed in the pull request, then `./serena aws rehearsal-vpc` again
   updates the role and the failed step is repeated. None left: the policy goes to Ops for section 50.
-- [ ] **11. Clean up.** `./serena aws destroy --env personal-stage2`, as the deployer (no `AccessDenied`), then
+- [ ] **11. Clean up.** Delete the `stage2r` record in the hosted zone. `./serena aws destroy --env personal-stage2`, as the deployer (no `AccessDenied`), then
   `./serena aws rehearsal-vpc --env personal-stage2 destroy`. `aws ec2 describe-nat-gateways --profile bmu-personal
   --region us-west-2 --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'`: `[]`. The hosted zone
   and the domain stay (about $0.50 a month and $3 a year).
