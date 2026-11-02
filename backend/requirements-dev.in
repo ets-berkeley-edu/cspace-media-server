@@ -3,8 +3,8 @@
 -c requirements.txt
 -r requirements.in
 -r requirements-sim.in
-pytest>=8
-moto[dynamodb,s3,secretsmanager,sns,sqs]>=5.2.4
-ruff>=0.17.2
-mypy>=1.11
-types-PyYAML>=6
+pytest>=9.2.0
+moto[dynamodb,s3,secretsmanager,sns,sqs]>=5.2.5
+ruff>=0.17.3
+mypy>=2.4.1
+types-PyYAML>=6.0.12.20261030
