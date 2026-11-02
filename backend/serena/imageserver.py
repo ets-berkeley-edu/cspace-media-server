@@ -66,7 +66,11 @@ def _redirect(request: Request, tenant: str, entry: cache_index.Entry, signed_ki
         return _unavailable(request, tenant, Reason.DELIVERY_NOT_SET_UP, kind)
     now = datetime.now(UTC)
     expires = signing.expiry(now)
-    url = signer.url(tenant, entry.key, expires)
+    try:
+        url = signer.url(tenant, entry.key, expires)
+    except signing.KeyNotReady:
+        log.warning("the CloudFront signing key has no key ID yet: ./serena aws cdn-key finishes it")
+        return _unavailable(request, tenant, Reason.DELIVERY_NOT_SET_UP, kind)
     served = {"museum": tenant, "path": paths.log_path(request.url.path), "size": size, "kind": kind,
               "cache": cache, "signed": signed_kid is not None}
     if signed_kid is not None:

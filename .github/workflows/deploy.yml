@@ -1,0 +1,80 @@
+# The deploy pipeline (D268 to D277, DP1 to DP17; docs/design.md, Infrastructure and operations › Deploys). Someone
+# starts it by hand, from main, choosing the environment (DP8). The plan job signs in to AWS through OIDC as
+# pipeline-<env>-plan and starts the environment's plan build in CodeBuild; the apply job waits for a reviewer in the
+# GitHub environment <env>, who isn't the person who started it, then signs in as pipeline-<env>-apply and starts the
+# apply build, which applies exactly the plan the reviewer read (DP3, DP6, DP9). Terraform runs only in CodeBuild, in
+# the environment's account: its plans and logs never reach this public repository's Actions logs (D270). The jobs
+# see only the plan's counts.
+#
+# Inert until an administrator applies the environment's pipeline root (./serena aws pipeline), which makes the roles
+# the jobs assume; its GitHub environments, with their rules, come first (DP9, DP14). Never pull_request_target.
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "The environment (deploy/environments/<name>.conf)"
+        type: choice
+        options: [personal-stage2, ucb-stage2]
+        required: true
+# Only the jobs that sign in to AWS get an OIDC token (id-token: write, below).
+permissions:
+  contents: read
+# One deploy at a time per environment, and never cancel one that's running (DP17).
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    # The environment <env>-plan takes only main, so a run from another branch never gets this far (DP9).
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}-plan
+    permissions: { contents: read, id-token: write }
+    timeout-minutes: 80
+    outputs:
+      plan_id: ${{ steps.plan.outputs.plan_id }}
+      status: ${{ steps.plan.outputs.status }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # AWS_ROLE_ARN is an environment secret, so the role's ARN is masked in the logs; so is the account number.
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+          role-duration-seconds: 7200
+          role-session-name: deploy-plan-${{ github.run_id }}
+      - name: Plan, in AWS CodeBuild (the plan itself is read there)
+        id: plan
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          COMMIT: ${{ github.sha }}
+        run: deploy/pipeline/run-build.sh plan
+
+  apply:
+    needs: plan
+    # Nothing to approve when nothing changes: that run is the check that the environment matches main (D276).
+    if: needs.plan.outputs.status == 'changes' || needs.plan.outputs.status == 'registry-only'
+    runs-on: ubuntu-latest
+    # Required reviewers, and the person who started the run can't approve it (DP8, DP9).
+    environment: ${{ inputs.environment }}
+    permissions: { contents: read, id-token: write }
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+          role-duration-seconds: 7200
+          role-session-name: deploy-apply-${{ github.run_id }}
+      - name: Apply the approved plan, in AWS CodeBuild
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          COMMIT: ${{ github.sha }}
+          PLAN_ID: ${{ needs.plan.outputs.plan_id }}
+        run: deploy/pipeline/run-build.sh apply

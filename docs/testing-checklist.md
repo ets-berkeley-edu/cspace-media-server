@@ -1821,7 +1821,7 @@ setting is one parameter, named `/serena-<SERENA_ENV_NAME>/settings/<SETTING>`: 
 
 - `SETTINGS=ssm` in the environment's files switches it on. Then every `./serena aws` command reads the settings
   from SSM, not from the files. Only four stay in the files, since they say how to reach the account at all:
-  `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and `REHEARSAL_ADMIN_PROFILE`.
+  `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and `ADMIN_PROFILE`.
 - `./serena aws settings push` copies the files' settings into SSM. It lists what it would change and asks first.
   `settings show` lists what's in SSM. `settings delete` removes them all once the environment is gone.
 - To change a setting: edit the file, then `settings push`.
@@ -1842,7 +1842,7 @@ bills by the hour).
   Claude session never prints it (it holds the account number and an email address).
 
 Two profiles take part. The `settings` and `rehearsal-vpc` commands run as `bmu-personal`, the account's
-administrator (`REHEARSAL_ADMIN_PROFILE` in `personal-stage2.conf`), since they come before the deployer exists. Every
+administrator (`ADMIN_PROFILE` in `personal-stage2.conf`), since they come before the deployer exists. Every
 other command runs as `serena-rehearsal-deploy`, the deployer role with only the stage 2 policy, which `rehearsal-vpc`
 makes.
 
@@ -1941,3 +1941,287 @@ makes.
   whether the environment already in it is yours; answer `y` to both (it saves the account in a new
   `personal-dev.local.conf` here). Then it answers as it did before this change: no `Settings:` line and no note
   about SSM.
+
+## 56. The deploy pipeline, proven on personal-stage2 (about a day, mostly waiting; after merging its pull request)
+
+**What this is about.** Until now every deploy ran `./serena aws deploy` on someone's computer. Stage 2 and production
+will be deployed only by the deploy pipeline (D268 to D277, DP1 to DP17): someone starts the **Deploy** workflow in
+GitHub Actions; its plan job starts a build in AWS CodeBuild, in the environment's own account, which builds the images
+and makes Terraform's plan; a reviewer reads the plan in AWS and approves; then the apply job starts a second build,
+which applies exactly that plan. Terraform never runs in GitHub, so the plans, which show the account number and
+addresses, never reach this public repository's Actions logs.
+
+This section proves the whole of it in your personal account, on personal-stage2 (the shared root, the rehearsal's
+VPC, the simulator only), before stage 2 has real data (DP13, DP14). It is done **after** the pull request is merged:
+GitHub runs a workflow started by hand only once it's on `main`. The one difference from the UC Berkeley environments:
+you are the only reviewer, so "prevent self-review" is off here and you approve your own runs. When it's done, it is
+all deleted again (step 14).
+
+Who does what. Three AWS identities take part, as they will in the UC Berkeley account:
+
+- `bmu-personal`, the account's administrator (`ADMIN_PROFILE` in `personal-stage2.conf`): the settings, the
+  rehearsal's VPC and the pipeline itself, as Ops will in the UC Berkeley account.
+- `serena-rehearsal-deploy`, the rehearsal's deployer role with only the stage 2 policy (`AWS_PROFILE`): the admin
+  steps that set secrets (`sim-secrets`, `cdn-key`), `status`, `etl`, `test` and the final `destroy`.
+- `pipeline-personal-stage2-build`, the build's role, with the same policy minus secret values: every deploy.
+
+It costs about $5 a day while the VPC exists (its NAT gateway) plus cents for the builds, so do it in one or two
+sittings and finish with step 14.
+
+**Before you start:**
+
+- The pull request is merged, and you work in a clone (or worktree) of `main` at or after the merge: `git switch
+  main && git pull`.
+- Sign in: `aws sso login --profile bmu-personal`. Docker isn't needed: the images are built in CodeBuild.
+- `gh` (GitHub's CLI) is signed in as you, with admin rights on the repository: `gh auth status`.
+- That folder has `deploy/environments/personal-stage2.local.conf` (copy it from the folder section 55 ran in, as
+  there). It must not contain `REHEARSAL_ADMIN_PROFILE` (now `ADMIN_PROFILE`, which is in the committed `.conf`); a command
+  says so if it does. A Claude session never prints this file.
+- The domain and its Route 53 hosted zone from section 54 still exist, and `DOMAIN_NAME` (for example
+  `stage2r.<your domain>`) and `ALERT_EMAIL` are in the `.local.conf`.
+
+**The steps:**
+
+- [ ] **1. Settings in SSM.** The builds have no `.local.conf`: they read the environment's settings from SSM. Open
+  `deploy/environments/personal-stage2.local.conf` in an editor and add a line `SETTINGS=ssm`. Then:
+
+  ```
+  ./serena aws settings push --env personal-stage2
+  ```
+
+  It lists the settings with a `+` each (as in section 55, step 2) and asks; answer `y`. Expect `Done.`
+
+- [ ] **2. What Ops provides: the VPC and the deployer.**
+
+  ```
+  ./serena aws rehearsal-vpc --env personal-stage2
+  ```
+
+  Terraform's plan only creates (the VPC, four subnets, two gateways, two route tables, the role
+  `rehearsal-stage2r-deployer` and three policies `rehearsal-stage2r-deployer-1` to `-3`); type `yes`. It saves the
+  VPC's IDs in SSM and in the `.local.conf` (`Saved in SSM …`). If the deployer's profile isn't in `~/.aws/config` yet,
+  it prints the section to add, as in section 54.
+
+- [ ] **3. The GitHub environments.** The pipeline's roles trust two GitHub environments, so they must exist, with their
+  rules, before the roles do: GitHub would otherwise make one without rules the first time a job names it. The plan
+  environment takes deployments from `main` only:
+
+  ```
+  gh api --method PUT repos/ets-berkeley-edu/cspace-media-server/environments/personal-stage2-plan --input - <<'EOF'
+  {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+  EOF
+  ```
+
+  ```
+  gh api --method POST repos/ets-berkeley-edu/cspace-media-server/environments/personal-stage2-plan/deployment-branch-policies -f name=main -f type=branch
+  ```
+
+  The apply environment also takes `main` only, and needs a reviewer: you, with self-review allowed, since you're the
+  only one (in the UC Berkeley environments, `prevent_self_review` is `true` and there are two reviewers):
+
+  ```
+  gh api --method PUT repos/ets-berkeley-edu/cspace-media-server/environments/personal-stage2 --input - <<EOF
+  {"reviewers": [{"type": "User", "id": $(gh api user -q .id)}], "prevent_self_review": false,
+   "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+  EOF
+  ```
+
+  ```
+  gh api --method POST repos/ets-berkeley-edu/cspace-media-server/environments/personal-stage2/deployment-branch-policies -f name=main -f type=branch
+  ```
+
+  Check them in the repository's Settings › Environments: `personal-stage2-plan` with "Deployment branches: 1 branch"
+  (`main`), and `personal-stage2` with the same and "Required reviewers: 1".
+
+- [ ] **4. The pipeline.** As the account's administrator:
+
+  ```
+  ./serena aws pipeline --env personal-stage2
+  ```
+
+  Expect, in order:
+  - `note: self-review is allowed (only for an environment with the simulator, DP13)`: its check of the GitHub
+    environments passed (if one isn't set up as in step 3, it stops and says what's missing);
+  - `GitHub's OIDC provider: this pipeline makes (or keeps) it.` (or "the account's own", if your account already has
+    one from something else: then this pipeline won't make or delete it);
+  - Terraform's plan, which only creates: the OIDC provider (if made here), the roles `pipeline-personal-stage2-plan`,
+    `-apply` and `-build` with their policies (three `pipeline-personal-stage2-build-1` to `-3`, two attachments and
+    three inline policies), the CodeBuild projects `pipeline-personal-stage2-plan` and `-apply`, the log group
+    `/pipeline/personal-stage2` and the bucket `pipeline-personal-stage2-plans-…` with its five settings. Nothing is
+    named `serena-…`. Type `yes`;
+  - `Set them now with gh, signed in as you? [y/N]`: answer `y`. It sets each environment's secret `AWS_ROLE_ARN` and
+    variable `AWS_REGION` (nothing is shown).
+
+  In Settings › Environments, each of the two now has one secret and one variable.
+
+- [ ] **5. The roles can do only what they should.** IAM's policy simulator, as the administrator. First the ARNs:
+
+  ```
+  plan_role="$(aws iam get-role --role-name pipeline-personal-stage2-plan --profile bmu-personal --query Role.Arn --output text)"
+  build_role="$(aws iam get-role --role-name pipeline-personal-stage2-build --profile bmu-personal --query Role.Arn --output text)"
+  plan_project="$(aws codebuild batch-get-projects --names pipeline-personal-stage2-plan --profile bmu-personal --region us-west-2 --query 'projects[0].arn' --output text)"
+  apply_project="$(aws codebuild batch-get-projects --names pipeline-personal-stage2-apply --profile bmu-personal --region us-west-2 --query 'projects[0].arn' --output text)"
+  ```
+
+  The plan role may start the plan build, and not the apply build:
+
+  ```
+  aws iam simulate-principal-policy --profile bmu-personal --policy-source-arn "$plan_role" --action-names codebuild:StartBuild --resource-arns "$plan_project" "$apply_project" --query 'EvaluationResults[].[EvalResourceName,EvalDecision]' --output text
+  ```
+
+  Expect the plan project `allowed` and the apply project `implicitDeny`. The build role can't read or set a secret's
+  value, or change a setting:
+
+  ```
+  aws iam simulate-principal-policy --profile bmu-personal --policy-source-arn "$build_role" --action-names secretsmanager:GetSecretValue secretsmanager:PutSecretValue ssm:PutParameter --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
+  ```
+
+  Expect `explicitDeny` for all three.
+
+- [ ] **6. The first run: the image repositories and the certificate.** In GitHub: Actions › Deploy › Run workflow,
+  branch `main`, environment `personal-stage2`, Run workflow (or `gh workflow run deploy.yml --repo
+  ets-berkeley-edu/cspace-media-server --ref main -f environment=personal-stage2`).
+
+  The plan job takes a few minutes. Its summary (the run's page, below the jobs) shows a table: "Image repositories
+  and certificate: 3 to add …" and "Serena: not planned this run", and says only they change this time. Follow the
+  summary's link to the build in the AWS console (signed in to the personal account): its log shows Terraform's plan
+  for the two image repositories, their lifecycle policies and the certificate. The link itself has no 12-digit
+  number in it.
+
+  The apply job waits: "Review deployments" on the run's page, tick `personal-stage2`, Approve and deploy. The apply
+  build applies the registry; its summary says "run the deploy again for the rest".
+
+- [ ] **7. The certificate's DNS record.** Run the workflow again (as in step 6). This time the summary says the
+  certificate waits for its DNS validation record, and nothing to approve. The record (CNAME, name, value) is in the
+  plan build's log, from the summary's link. Add it in the hosted zone (Route 53 › Hosted zones › your domain › Create
+  record: the name without the domain, type CNAME, the value). Within a few minutes the certificate is issued:
+
+  ```
+  aws acm list-certificates --profile bmu-personal --region us-west-2 --query 'CertificateSummaryList[].[DomainName,Status]' --output text
+  ```
+
+  Expect your `DOMAIN_NAME` and `ISSUED`.
+
+- [ ] **8. The deploy.** Run the workflow again. The plan build now also builds the two images (about 10 minutes), and
+  the summary shows "Serena: N to add, 0 to change, 0 to destroy". In the build's log, read the plan as a reviewer
+  would: the load balancer `serena-stage2r`, the tables, the buckets, the services, two gateway endpoints and so on.
+  Approve. The apply build takes about 20 minutes (CloudFront). As soon as the load balancer `serena-stage2r` exists (a
+  few minutes in; EC2 › Load balancers), add `stage2r` in the hosted zone: an alias A record to it (section 54, step 4).
+  The apply's summary says "Applied."; its log ends with the address and "Next:" lines for `cdn-key` and `sim-secrets`.
+
+- [ ] **9. What only an admin does: the simulator's secrets.** The build can't set a secret, so as the deployer:
+
+  ```
+  ./serena aws sim-secrets --env personal-stage2
+  ```
+
+  Expect `Done: …`. Then:
+
+  ```
+  ./serena aws status --env personal-stage2
+  ```
+
+  Expect `Settings: SSM, /serena-stage2r/settings/`, `Deployed by: its pipeline …`, the web, worker and fakecspace
+  services running, `Image delivery: off (no signing key yet …)`, and every museum secret `set`.
+
+- [ ] **10. The first CloudFront signing key, in three steps.** First `cdn-key` makes it and stops:
+
+  ```
+  ./serena aws cdn-key --env personal-stage2
+  ```
+
+  Expect `Making the CloudFront signing key serena-stage2r-…` and `Next: run the deploy pipeline …`; no Terraform plan.
+  Run the workflow again: the plan has a few changes (the key group, its public key, the cache behaviors and the app's
+  delivery settings); approve. While the key isn't finished, a file is answered with the unavailable image. Run a
+  refresh and pick a file:
+
+  ```
+  ./serena aws etl pahma --env personal-stage2
+  ./serena aws list pahma --env personal-stage2 --limit 1
+  ```
+
+  ```
+  curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' <the address list printed>
+  ```
+
+  Expect `302` to `…/unavailable/pahma.svg` (from this computer, whose address is `ADMIN_CIDRS`). Then finish the key:
+
+  ```
+  ./serena aws cdn-key --env personal-stage2
+  ```
+
+  Expect `Serena signs the museums' files with serena-stage2r-… within 5 minutes.` After 5 minutes the same `curl`
+  gives `302` to a CloudFront address with `Signature=` in it.
+
+- [ ] **11. The environment works.** As in section 54, steps 5 and 6: `./serena aws confirm-alerts --env
+  personal-stage2` (paste the link from AWS's email), then `./serena aws test --env personal-stage2`. Every test passes
+  but T108, which skips.
+
+- [ ] **12. Nothing to deploy, and nothing public.** Run the workflow once more. The summary says "No changes: the
+  environment matches this commit", and the apply job is skipped (nothing to approve). Then check that no run's log has
+  the account number or the plan's text. The run IDs are in `gh run list --repo ets-berkeley-edu/cspace-media-server
+  --workflow deploy.yml`; for each run of this section:
+
+  ```
+  gh run view <run ID> --repo ets-berkeley-edu/cspace-media-server --log | grep -c -e "$(aws sts get-caller-identity --profile bmu-personal --query Account --output text)" -e 'will be created' -e 'arn:aws:'
+  ```
+
+  Expect `0` each time.
+
+- [ ] **13. Only main, and the laptop is break-glass.** A run from another branch doesn't reach AWS:
+
+  ```
+  gh workflow run deploy.yml --repo ets-berkeley-edu/cspace-media-server --ref feature/pipeline -f environment=personal-stage2
+  ```
+
+  (any branch that has `deploy.yml`). On its page both jobs are skipped. And from this computer, now that the pipeline
+  deploys personal-stage2:
+
+  ```
+  ./serena aws pause --env personal-stage2
+  ```
+
+  Expect `'personal-stage2' has a deploy pipeline (pipeline-personal-stage2-…): it deploys it (DP13).` and `Type 'break
+  glass' to go ahead:`; type `no`: `Stopped; nothing was deployed.`
+
+- [ ] **14. Clean up, in this order.** Delete the `stage2r` alias record and the certificate's CNAME in the hosted zone.
+  Then the environment, as the deployer (deleting is part of what the policy must allow):
+
+  ```
+  ./serena aws destroy --env personal-stage2
+  ```
+
+  Type `personal-stage2` when asked (about 15 to 20 minutes). Then the pipeline, as the administrator:
+
+  ```
+  ./serena aws pipeline --env personal-stage2 destroy
+  ```
+
+  Terraform's plan only destroys; type `yes`. Then the VPC and the settings:
+
+  ```
+  ./serena aws rehearsal-vpc --env personal-stage2 destroy
+  ./serena aws settings delete --env personal-stage2
+  ```
+
+  Remove the `SETTINGS=ssm` line from the `.local.conf`. Delete the two GitHub environments (their secrets go with
+  them):
+
+  ```
+  gh api --method DELETE repos/ets-berkeley-edu/cspace-media-server/environments/personal-stage2-plan
+  gh api --method DELETE repos/ets-berkeley-edu/cspace-media-server/environments/personal-stage2
+  ```
+
+  Check nothing is left: no NAT gateway, and no GitHub OIDC provider if step 4 made it:
+
+  ```
+  aws ec2 describe-nat-gateways --profile bmu-personal --region us-west-2 --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'
+  aws iam list-open-id-connect-providers --profile bmu-personal --query 'OpenIDConnectProviderList[].Arn'
+  ```
+
+  Expect `[]` for the first, and no `token.actions.githubusercontent.com` in the second. The hosted zone, the domain and
+  the state bucket stay.
+
+- [ ] **15. The findings.** Each `AccessDenied` in a build's log, and anything else that didn't go as written, is fixed
+  in a follow-up pull request (the policy in `deploy/iam/serena-deployer-policy.json`, as in section 54, step 10), and
+  the step is repeated. None left: the pipeline is ready for stage 2.

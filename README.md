@@ -45,7 +45,7 @@ placeholder image's Media record among them. Watermarking (the Botanical Garden)
 | `serenade/` | The admin app's Selenium tests (`./serena ui`), the AWS tests (`./serena aws test`) and the access-log replay (`./serena aws replay`) |
 | `backend/devtools/` | Local-only tools: seeding the AWS stand-in, and a fake ETL |
 | `docker-compose.yml`, `serena` | The local stack and its script (`./serena help`) |
-| `deploy/` | The AWS deployment: the production image, Terraform and `./serena aws` (`deploy/README.md`) |
+| `deploy/` | The AWS deployment: the production image, Terraform, `./serena aws` and the deploy pipeline's builds (`deploy/README.md`) |
 | `.github/workflows/` | CI (`ci.yml`), the weekly dependency audit (`audit.yml`) and the secret scan (`security.yml`) |
 
 ## Run it locally

@@ -1,0 +1,24 @@
+# The deploy pipeline's apply build (deploy/terraform/pipeline, DP6, DP7, DP11): started by the deploy workflow's apply
+# job, after a reviewer approved, at the same commit as the plan build, with PLAN_ID set to that build's plan. Applies
+# exactly the saved plans with ./serena aws pipeline-apply: the same commit and environment, at most 24 hours old, and
+# Terraform refuses one made against a state that has changed since.
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    # As in buildspec-plan.yml (backend/tests/test_deploy.py checks they agree with CI's). Change both together.
+    TERRAFORM_VERSION: "1.16.5"
+    TERRAFORM_SHA256: "61a50b00485ee4810cf20581ef080fc54d34d666e175c58d9a10501c65c1ccde"
+    PIPELINE_RESULT: "/tmp/pipeline-result"
+  exported-variables:
+    - APPLY_STATUS
+
+phases:
+  install:
+    commands:
+      - deploy/pipeline/prepare.sh
+  build:
+    commands:
+      - deploy/aws.sh pipeline-apply
+      - set -a; . "$PIPELINE_RESULT"; set +a
