@@ -116,6 +116,18 @@ run "the_split" {
     condition     = length(aws_vpc_endpoint.s3) == 0 && length(module.simulator) == 0
     error_message = "No gateway endpoints unless asked (D303); no simulator unless asked."
   }
+
+  # EC2 refuses any other character in a security group's or a rule's description (an apostrophe stopped the stage 2
+  # rehearsal's first deploy); the simulated provider doesn't check.
+  assert {
+    condition = alltrue([for d in concat(
+      [aws_security_group.alb.description, aws_security_group.web.description, aws_security_group.worker.description],
+      [for r in aws_vpc_security_group_ingress_rule.alb_https : r.description],
+      [aws_vpc_security_group_egress_rule.alb_to_web.description, aws_vpc_security_group_ingress_rule.web_from_alb.description],
+      [aws_vpc_security_group_egress_rule.web_out.description, aws_vpc_security_group_egress_rule.worker_out.description],
+    ) : can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]*$", d))])
+    error_message = "Security group and rule descriptions use only the characters EC2 allows."
+  }
 }
 
 run "simulator_museum" {
