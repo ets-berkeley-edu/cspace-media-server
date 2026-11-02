@@ -1817,8 +1817,15 @@ What it checks: `SETTINGS=ssm` (D273, DP10) on the stage 2 rehearsal's environme
 `rehearsal-vpc` saves its settings in SSM; and that the deployer, with only the stage 2 policy, can read them.
 Nothing is deployed: steps 3 to 5 make the rehearsal's VPC for a few minutes (its NAT gateway bills by the hour).
 
-**Before you start:** `aws sso login --profile bmu-personal`, and `deploy/environments/personal-stage2.local.conf` in
-this clone (copy it from the rehearsal's worktree; don't print it).
+**Before you start:**
+- `aws sso login --profile bmu-personal`.
+- Run every command from the clone or worktree that has this pull request's branch: only it has
+  `./serena aws settings`.
+- That folder needs `deploy/environments/personal-stage2.local.conf`, the rehearsal's settings that aren't committed
+  (the account number, `ADMIN_CIDRS`, `DOMAIN_NAME`, `ALERT_EMAIL`). Git ignores it, so a new clone or worktree doesn't
+  have it: copy it from the folder section 54 ran in, for example
+  `cp <that folder>/deploy/environments/personal-stage2.local.conf deploy/environments/`. Edit it with any editor; a
+  Claude session never prints it (it holds the account number and an email address).
 
 - [ ] **1. Nothing in SSM yet.** Add `SETTINGS=ssm` to `personal-stage2.local.conf`. `./serena aws settings show --env
   personal-stage2` (as `bmu-personal`, the rehearsal's administrator): "none yet".
