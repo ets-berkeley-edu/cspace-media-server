@@ -149,3 +149,9 @@ variable "delivery" {
   description = "Whether the museums' files are delivered (a signing key exists, D200)."
   type        = bool
 }
+
+variable "etl_reader_role_arns" {
+  description = "museum => the role its ETL server reads its token with (ETL_READER_ROLE_ARNS, D275, DP15); {}: none."
+  type        = map(string)
+  default     = {}
+}

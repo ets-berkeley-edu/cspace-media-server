@@ -23,6 +23,8 @@ module "core" {
   worker_cpu         = var.worker_cpu
   worker_memory      = var.worker_memory
 
+  etl_reader_role_arns = var.etl_reader_role_arns
+
   # The tasks in Ops's private subnets, out through its NAT gateway (D303). The target group from the listener, so
   # the app's service is created after it.
   subnet_ids               = [for s in data.aws_subnet.app : s.id]

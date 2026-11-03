@@ -1,8 +1,9 @@
 # The stage 2 rehearsal (personal accounts only): what Ops provides for stage 2, made in a developer's own account so
 # that the shared root can be deployed there first, under the stage 2 deployer policy alone (checklist section 54). A VPC
-# like Ops's (network.tf) and a deployer role with only ../../iam/serena-deployer-policy.json (deployer.tf). Applied
-# by ./serena aws rehearsal-vpc with the account's administrator profile, never by the deployer it makes; the shared
-# root stays as it is (D303). Nothing here is tagged project=serena, as Ops's VPC can't carry Serena's tag.
+# like Ops's (network.tf), a deployer role with only ../../iam/serena-deployer-policy.json (deployer.tf), and a stand-in
+# for an ETL server's role (etl_reader.tf, section 57). Applied by ./serena aws rehearsal-vpc with the account's
+# administrator profile, never by the deployer it makes; the shared root stays as it is (D303). Nothing here is tagged
+# project=serena, as Ops's VPC can't carry Serena's tag.
 
 terraform {
   required_version = ">= 1.10"

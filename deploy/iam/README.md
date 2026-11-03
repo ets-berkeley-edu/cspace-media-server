@@ -33,10 +33,13 @@ parameters. Stage 1 keeps CloudFront in front, so its policy is unaffected.
   `AmazonECSTaskExecutionRolePolicy`.
 - The deployer can read and write Serena's own secrets: `./serena aws` sets them (a museum's service account, ETL
   tokens, signing keys) without showing or storing them.
+- Stage 2's policy lets the deployer set and remove the resource policy of an ETL token secret only
+  (`serena-*/etl-tokens-*`), which lets a museum's ETL server's role read its token (D275, DP15), and only a policy
+  Secrets Manager has checked isn't public (`secretsmanager:BlockPublicPolicy`). No other secret gets a resource policy.
 
 **Size.** Each policy is over 10,240 characters, the limit for a role's inline policies, so on a role it goes in
 as customer managed policies (6,144 characters each at most, whitespace not counted), split between statements: two
-for stage 1's, three for stage 2's (about 15,300 characters).
+for stage 1's, three for stage 2's (about 16,000 characters; the largest part about 5,900).
 
 If the account requires a permissions boundary on roles that Terraform creates, tell us its name: it's a small change.
 

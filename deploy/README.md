@@ -40,13 +40,13 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 | `./serena aws test [pytest options]` | The AWS tests (`serenade/aws/`, T90 to T105) against the running environment, after a deploy or resume: about 5 to 10 minutes. Against a real CollectionSpace only the tests that look; set `SERENADE_ADMIN_USER` and it asks for the password. See `serenade/README.md`, The AWS tests. |
 | `./serena aws list <museum> [--limit N] [--kind KIND]` | What Serena may serve for the museum, from its servability table (the last updated refresh's servable list): each file's kind, access and Media CSID, with its address. The first 25, or N (`--limit 0` for all); `--kind image` (or `pdf`, `3D` ...) for one kind. Only reads. With the simulator, a deploy or pause empties the simulator but not this table, so a listed file not cached yet can't be fetched until `./serena aws etl` runs again. |
 | `./serena aws cspace-secret <museum>` | Sets the museum's read-only CollectionSpace service account. It asks for the user name and password and passes them straight to Secrets Manager. Not with the simulator, whose account deploy sets. |
-| `./serena aws etl-token <museum>` | Makes a new random ETL token. The old one becomes "previous" and keeps working until the next rotation. Shows the new token once, for the ETL's token file (Jira CSW-1027). |
+| `./serena aws etl-token <museum> [--show]` | Makes a new random ETL token. The old one becomes "previous" and keeps working until the next rotation. Shows the new token once, for the ETL's token file (Jira CSW-1027). Where the museum's ETL server reads its token with its own role (`ETL_READER_ROLE_ARNS`), the token isn't shown unless `--show`. |
 | `./serena aws portal-key <museum>` | For a museum with signed access (Cinefiles): makes a new signing key for its signed links, keeping the old one as "previous". Shows the key and its ID once, for the portal (Glimmer). |
 | `./serena aws cdn-key` | Makes a new CloudFront signing key for the museums' files (D200): the private key goes straight to Secrets Manager, CloudFront is told to trust the new public key (Terraform shows a small plan), then the app signs with it within 5 minutes. The key before it stays trusted until the next rotation. Nothing is shown. The first deploy makes the first key. |
 | `./serena aws confirm-alerts` | Confirms the alert email's subscription (D201): paste the link from AWS's "Subscription Confirmation" email. Don't click the link: confirmed here, unsubscribing needs an AWS sign-in. |
 | `./serena aws destroy` | Deletes everything in AWS for the environment, data included. It asks for the environment's name first. |
 | `./serena aws init` | Points Terraform at the environment's state, to run `terraform` commands yourself. |
-| `./serena aws rehearsal-vpc [destroy]` | For a stage 2 rehearsal in your own account only (`REHEARSAL=true`): makes, as the account's administrator, what Ops provides for stage 2 (a VPC and a deployer role with only the stage 2 policy), or deletes it once the environment is destroyed. See "Rehearsing stage 2 in your own account". |
+| `./serena aws rehearsal-vpc [destroy]` | For a stage 2 rehearsal in your own account only (`REHEARSAL=true`): makes, as the account's administrator, what Ops provides for stage 2 (a VPC and a deployer role with only the stage 2 policy), and a stand-in for an ETL server's role, or deletes them once the environment is destroyed. See "Rehearsing stage 2 in your own account". |
 | `./serena aws pipeline [destroy]` | As the account's administrator (`ADMIN_PROFILE`), for an environment on the shared root with `SETTINGS=ssm`: makes (or deletes) its deploy pipeline, `terraform/pipeline`. Checks its GitHub environments first, asks for the account's number where there is real data, shows Terraform's plan and asks, then offers to set the GitHub environments' secrets with `gh`. See "The deploy pipeline". |
 | `./serena aws sim-secrets` | With the simulator, in an environment the pipeline deploys: sets what `deploy` sets itself from a laptop (the simulator's account, random ETL tokens and portal keys), where they aren't set. Nothing is shown. |
 | `./serena aws pipeline-plan` / `pipeline-apply` | Only in the pipeline's builds (`pipeline/`): they refuse to run anywhere else. |
@@ -167,12 +167,66 @@ only in a UC Berkeley AWS account, never in a personal one; a personal account i
 With `SIMULATED_CSPACE=false` and `CSPACE_TENANTS` set, after the first deploy:
 
 1. `./serena aws cspace-secret <museum>` for each museum: its read-only service account.
-2. `./serena aws etl-token <museum>`: give the token to whoever runs the ETL, for its token file (CSW-1027). Allow
-   the ETL server's addresses with `ETL_CIDRS`.
+2. The ETL's token. Where the ETL server has an IAM role, it reads the token itself (below); otherwise
+   `./serena aws etl-token <museum>`, and give the token to whoever runs the ETL, for its token file (CSW-1027).
+   Either way, allow the ETL server's addresses with `ETL_CIDRS`.
 3. `./serena aws portal-key cinefiles`, once Cinefiles is served: give the key ID and key to Glimmer.
 
 `status` says "NOT SET" for any secret still empty. A token or key rotation keeps the previous one working until
 the next rotation, so the ETL or the portal can switch at its own pace.
+
+## The ETL reads its token with its own role (D275)
+
+Where the ETL server has an IAM role (an EC2 instance profile), it reads its museum's token from Serena's Secrets
+Manager on each run, so no person sees or copies the token, and a rotation needs no change on the ETL server
+(`docs/design.md`, Infrastructure and operations › Deploys; DP15). Shared root only. The ETL's side is CSW-1027's
+token source setting, decided in the CSpace ETL Process project.
+
+1. **The role first.** AWS refuses a policy naming a role that doesn't exist, so Ops makes the ETL server's role
+   before Serena's deploy names it. Add a museum only once its ETL actually reads with the role: from then on,
+   `etl-token` doesn't show its token.
+2. **The setting,** in the environment's settings (SSM, `./serena aws settings push`): `ETL_READER_ROLE_ARNS`, each
+   museum with its ETL server's role, like `CSPACE_TENANTS`:
+   `ETL_READER_ROLE_ARNS="pahma=arn:aws:iam::<account>:role/<name> cinefiles=arn:aws:iam::<account>:role/<name>"`.
+   One role may read several museums' tokens; each museum is named.
+3. **A deploy** (the pipeline). For each museum named, the museum's `etl-tokens` secret gets a policy allowing that
+   role `secretsmanager:GetSecretValue` and nothing else, and Serena's KMS key's policy lets the role use
+   `kms:Decrypt` only through Secrets Manager (`kms:ViaService`) and only for that secret
+   (`kms:EncryptionContext:SecretARN`). Not another museum's token, not the CollectionSpace account, not a change.
+4. **In another AWS account,** the role also needs its own policy allowing the same two actions. `./serena aws
+   status` prints the secret's and the key's ARNs for it, under each museum:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": "secretsmanager:GetSecretValue",
+         "Resource": "<the museum's etl-tokens secret's ARN>"
+       },
+       {
+         "Effect": "Allow",
+         "Action": "kms:Decrypt",
+         "Resource": "<Serena's KMS key's ARN>",
+         "Condition": {"StringEquals": {"kms:ViaService": "secretsmanager.us-west-2.amazonaws.com"}}
+       }
+     ]
+   }
+   ```
+
+   In Serena's own account, nothing more is needed.
+5. **What the ETL reads:** the secret's value, `{"current": "<token>", "previous": "<token or null>"}`; it sends
+   `current`. After a rotation (`./serena aws etl-token <museum>`, which then shows nothing), its next run uses the new
+   one: the admin app's audit log shows the ETL's calls with `which_key` current. `--show` shows the token for a
+   token file, the fallback.
+
+To stop a role reading, remove its museum from `ETL_READER_ROLE_ARNS` and deploy: the secret's policy and the key's
+statement go. Do that before the role is deleted: AWS refuses a key policy naming a role that no longer exists, so the
+next deploy would fail until the setting is removed.
+
+Proven in the same account on personal-stage2 (`docs/testing-checklist.md`, section 57), with a stand-in role that has
+no policy of its own; across accounts, on stage 2.
 
 ## The simulated CollectionSpace and the fake ETL (D189)
 
@@ -199,6 +253,9 @@ what Ops and DevOps provide: `VPC_ID`, `APP_SUBNET_IDS` (private, behind the NAT
 3. With the simulator, the fake ETL calls the campus name from the private subnets, so its calls come from the NAT
    gateway's outbound address: list it in `ETL_CIDRS`.
 
+An ETL server with its own IAM role reads its museum's token itself: `ETL_READER_ROLE_ARNS` ("The ETL reads its token
+with its own role", above).
+
 `./serena aws deploy` refuses a shared environment with a real CollectionSpace: the pipeline deploys it (D268). As a
 break-glass deploy (D276) it goes ahead once you type "break glass" and then the account's number.
 
@@ -213,9 +270,10 @@ museum, as a role that has only the stage 2 deployer policy (`iam/serena-deploye
    (`ADMIN_PROFILE`, `bmu-personal`). It applies `terraform/rehearsal`: what Ops provides for stage 2, a VPC
    with two public and two private subnets in two zones and a NAT gateway (no gateway endpoints, and nothing tagged
    `project=serena`), and the role `rehearsal-stage2r-deployer`, which only that administrator role may assume, with
-   the stage 2 policy as three managed policies. It saves the subnets, the NAT gateway's address (`ETL_CIDRS`) and
+   the stage 2 policy as three managed policies; and `rehearsal-stage2r-etl-reader`, a stand-in for an ETL server's
+   role with no policy of its own (section 57). It saves the subnets, the NAT gateway's address (`ETL_CIDRS`) and
    this computer's address (`ADMIN_CIDRS`, if empty) in `personal-stage2.local.conf`, and prints the deployer's
-   profile for `~/.aws/config` (`serena-rehearsal-deploy`: the role, from `bmu-personal`).
+   profile for `~/.aws/config` (`serena-rehearsal-deploy`: the role, from `bmu-personal`), and the stand-in's.
 2. Add `DOMAIN_NAME` (for example `stage2r.<your domain>`) and `ALERT_EMAIL` to `personal-stage2.local.conf`.
 3. Section 50's steps with `--env personal-stage2`, as the deployer. You add the certificate's validation record and
    the name for the load balancer in your own zone, as DevOps will in campus DNS.

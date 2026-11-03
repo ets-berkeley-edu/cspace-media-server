@@ -27,3 +27,8 @@ output "deployer_policy_parts" {
   description = "How many managed policies the deployer policy was split into, and each one's length."
   value       = module.deployer_policy.parts
 }
+
+output "etl_reader_role_arn" {
+  description = "The stand-in for an ETL server's role, for ETL_READER_ROLE_ARNS (checklist section 57)."
+  value       = aws_iam_role.etl_reader.arn
+}

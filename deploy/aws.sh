@@ -22,8 +22,9 @@
 #                              services' CPU and memory from CloudWatch for the run. --dry-run prints the slice and
 #                              the ./serena aws etl --sizes command to run first, sending nothing
 #   ./serena aws cspace-secret MUSEUM   set a museum's read-only CollectionSpace account (asks; nothing is shown or saved)
-#   ./serena aws etl-token MUSEUM       make a museum's new ETL token (the old one keeps working until the next);
-#                              shows it once, for the ETL's token file
+#   ./serena aws etl-token MUSEUM [--show]   make a museum's new ETL token (the old one keeps working until the
+#                              next); shows it once, for the ETL's token file. Where the museum's ETL server reads it
+#                              with its own role (ETL_READER_ROLE_ARNS), it isn't shown unless --show
 #   ./serena aws portal-key MUSEUM      make a new signing key for a museum's signed links (the old one keeps working
 #                              until the next); shows it once, for the portal
 #   ./serena aws cdn-key       make a new CloudFront signing key for the museums' files (the first deploy makes the
@@ -56,9 +57,12 @@
 # only while it uses only the simulator; otherwise by the pipeline, or as a break-glass deploy (D276, TQ8). Once an
 # environment has a pipeline (./serena aws pipeline), a deploy, pause or resume from here is a break-glass one too.
 # CSPACE_TENANTS lists the museums the environment serves, each with its CollectionSpace server
-# ("pahma=https://... cinefiles=https://..."). With SIMULATED_CSPACE=true the environment runs the simulated
-# CollectionSpace instead, for the museums in SIMULATED_MUSEUMS, and ./serena aws etl runs the fake ETL; deploy then
-# sets every secret itself (the simulator's account, random ETL tokens and portal keys). Never with data that matters.
+# ("pahma=https://... cinefiles=https://..."). On the shared root, ETL_READER_ROLE_ARNS names the IAM role with which a
+# museum's ETL server reads its token itself, in this account or another ("pahma=arn:aws:iam::...:role/... ..."; D275,
+# DP15): the deploy lets that role read that museum's token secret, and nothing else.
+# With SIMULATED_CSPACE=true the environment runs the simulated CollectionSpace instead, for the museums in
+# SIMULATED_MUSEUMS, and ./serena aws etl runs the fake ETL; deploy then sets every secret itself (the simulator's
+# account, random ETL tokens and portal keys). Never with data that matters.
 # Sign in first with: aws sso login --profile <the environment's AWS_PROFILE>. Nothing here handles a password, token
 # or key except cspace-secret, etl-token, portal-key and cdn-key, which pass them straight to AWS Secrets Manager.
 # ALERT_EMAIL (in NAME.local.conf, never committed) is where alerts and alarms are emailed (D201).
@@ -97,7 +101,7 @@ load_env() {
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
-  REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT=""
+  REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT="" ETL_READER_ROLE_ARNS=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
@@ -149,6 +153,7 @@ load_env() {
     read_museums
   fi
   [ -n "$ENV_LABEL" ] || ENV_LABEL="AWS · $ENV"
+  read_etl_readers
   case "${WEB_COUNT:=1}" in [1-9]|[1-9][0-9]) ;; *) die "WEB_COUNT must be a number of web tasks, such as 2 ($CONF, $LOCAL)." ;; esac
   command -v python3 >/dev/null || die "python3 isn't installed (it comes with the Xcode command line tools on a Mac)."
   export AWS_PAGER="" AWS_REGION
@@ -208,9 +213,35 @@ need_museum() {  # need_museum MUSEUM COMMAND
   server_of "$1" >/dev/null || die "'$ENV' doesn't serve a museum '$1'. Its museums: $(museum_names | tr '\n' ' ')"
 }
 
+# ETL_READERS is "museum=role-ARN museum=role-ARN": the museums whose ETL server reads its token with its own role.
+read_etl_readers() {
+  local entry museum arn seen=" "
+  ETL_READERS=""
+  [ -n "$ETL_READER_ROLE_ARNS" ] || return 0
+  [ "$ROOT" = shared ] ||
+    die "ETL_READER_ROLE_ARNS is for the shared root only (QA and production); '$ENV' is on the $ROOT root."
+  for entry in $ETL_READER_ROLE_ARNS; do
+    museum="${entry%%=*}" arn="${entry#*=}"
+    [ "$museum" != "$entry" ] || die "ETL_READER_ROLE_ARNS: '$entry' isn't museum=role-ARN."
+    server_of "$museum" >/dev/null ||
+      die "ETL_READER_ROLE_ARNS names $museum, which '$ENV' doesn't serve. Its museums: $(museum_names | tr '\n' ' ')"
+    echo "$arn" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$' ||
+      die "ETL_READER_ROLE_ARNS: $museum's '$arn' must be an IAM role's ARN, arn:aws:iam::<account>:role/<name>."
+    case "$seen" in *" $museum "*) die "ETL_READER_ROLE_ARNS lists $museum twice." ;; esac
+    seen="$seen$museum "
+    ETL_READERS="${ETL_READERS:+$ETL_READERS }$museum=$arn"
+  done
+}
+
 tenants_var() {  # MUSEUMS as a Terraform map: {"pahma"="https://..."}
   local entry out=""
   for entry in $MUSEUMS; do out="${out:+$out,}\"${entry%%=*}\"=\"${entry#*=}\""; done
+  printf '{%s}' "$out"
+}
+
+etl_readers_var() {  # ETL_READERS as a Terraform map: {"pahma"="arn:aws:iam::...:role/..."}
+  local entry out=""
+  for entry in $ETL_READERS; do out="${out:+$out,}\"${entry%%=*}\"=\"${entry#*=}\""; done
   printf '{%s}' "$out"
 }
 
@@ -249,7 +280,7 @@ remove_local() {  # remove_local KEY: remove one setting from the environment's 
 # ssm:DescribeParameters and ssm:GetParameters, which the deployer policies have.
 SSM_SETTINGS="ACCOUNT_ID ALLOWED_CIDRS ETL_CIDRS ADMIN_CIDRS SIMULATED_CSPACE SIMULATED_MUSEUMS ENV_LABEL CSPACE_TENANTS
   OPEN_IMAGES WAF PROTECT_DATA WEB_COUNT ALERT_EMAIL TERRAFORM_ROOT APACHE_CIDRS VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS
-  CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME REHEARSAL"
+  CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME REHEARSAL ETL_READER_ROLE_ARNS"
 # Always from the files: what says how to reach the account, and SETTINGS itself.
 FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME ADMIN_PROFILE SETTINGS"
 # In SSM only, written by ./serena aws pipeline (never by settings push, never by the build): the account the
@@ -529,7 +560,7 @@ app_vars() {
       -var "apache_cidrs=$(cidr_list "$APACHE_CIDRS")" -var "vpc_id=$VPC_ID"
       -var "app_subnet_ids=$(cidr_list "$APP_SUBNET_IDS")" -var "lb_subnet_ids=$(cidr_list "$LB_SUBNET_IDS")"
       -var "create_gateway_endpoints=$CREATE_GATEWAY_ENDPOINTS" -var "domain_name=$DOMAIN_NAME"
-      -var "certificate_arn=$(certificate_arn)"
+      -var "certificate_arn=$(certificate_arn)" -var "etl_reader_role_arns=$(etl_readers_var)"
     )
   else
     TF_VARS+=(-var "allowed_cidrs=$(cidr_list "$ALLOWED_CIDRS")" -var "open_images=$OPEN_IMAGES")
@@ -677,13 +708,36 @@ print(json.dumps({"current": new, "previous": old.get("current") if isinstance(o
 
 new_token() { python3 -c 'import secrets; print(secrets.token_urlsafe(32))'; }
 
-etl_token() {  # etl_token MUSEUM [quiet]
-  local id token
+# etl_reader ID: the role the token secret's policy lets read it (secrets.tf; D275, DP15); empty if none. Never reads
+# the value.
+etl_reader() {
+  aws_ secretsmanager get-resource-policy --secret-id "$1" --query ResourcePolicy --output text 2>/dev/null |
+    python3 -c 'import json, sys
+try:
+    print(json.load(sys.stdin)["Statement"][0]["Principal"]["AWS"])
+except (ValueError, KeyError, IndexError, TypeError):
+    pass' || true
+}
+
+etl_token() {  # etl_token MUSEUM [quiet|--show]
+  local id token reader
   id="$(secret_id etl-tokens "$1")"
   need_secret "$id"
+  reader="$(etl_reader "$id")"
   token="$(new_token)"
   printf '"%s"' "$token" | rotate "$id"
   [ "${2:-}" = quiet ] && return 0
+  if [ -n "$reader" ] && [ "${2:-}" != --show ]; then
+    echo "$1's new ETL token is stored in $id, and not shown: $1's ETL server reads it itself, with the role"
+    echo "$reader (ETL_READER_ROLE_ARNS)."
+    echo "Its previous token keeps working until the next ./serena aws etl-token $1. Serena reads the new one within 5"
+    echo "minutes. To check that the ETL server uses the new one, see that its next refresh's ETL calls used Serena's"
+    echo "current token (the admin app's audit log, which_key)."
+    echo "For a token file instead: ./serena aws etl-token $1 --show"
+    return 0
+  fi
+  [ -z "$reader" ] ||
+    echo "Note: $1's ETL server can read its token itself, with the role $reader; this one is for a token file."
   echo "$1's new ETL token, stored in $id. Copy it now into the ETL's token file for $1; it isn't shown again:"
   echo
   echo "  $token"
@@ -1052,6 +1106,23 @@ alert_subscription() {  # confirmed, pending or none: the alert topic's email su
   case "$arn" in arn:*) echo confirmed ;; PendingConfirmation) echo pending ;; *) echo none ;; esac
 }
 
+etl_reader_line() {  # etl_reader_line MUSEUM: the role its ETL server reads its token with, and what that role's own
+  # policy needs where it is in another account (deploy/README.md)
+  local id reader arn key
+  id="$(secret_id etl-tokens "$1")"
+  reader="$(etl_reader "$id")"
+  case " $ETL_READERS " in
+    *" $1="*) [ -n "$reader" ] || { echo "    ETL server's role: in the settings, not deployed yet"; return 0; } ;;
+    *) [ -z "$reader" ] || echo "    ETL server's role: $reader, no longer in the settings (deploy to remove it)"
+       return 0 ;;
+  esac
+  arn="$(aws_ secretsmanager describe-secret --secret-id "$id" --query ARN --output text 2>/dev/null || true)"
+  key="$(aws_ kms describe-key --key-id "alias/$NAME" --query KeyMetadata.Arn --output text 2>/dev/null || true)"
+  echo "    ETL server's role: $reader reads the token itself"
+  echo "      its own policy: secretsmanager:GetSecretValue on $arn,"
+  echo "      kms:Decrypt on $key"
+}
+
 status() {
   look
   local url deployed museum services="web worker" redeploy="./serena aws deploy"
@@ -1104,6 +1175,7 @@ status() {
     echo "  $museum: $(server_of "$museum" "${deployed:-$MUSEUMS}")"
     secret_line "CollectionSpace account" "$(secret_id cspace "$museum")" "./serena aws cspace-secret $museum"
     secret_line "ETL token" "$(secret_id etl-tokens "$museum")" "./serena aws etl-token $museum"
+    [ "$ROOT" != shared ] || etl_reader_line "$museum"
     ! signed_museum "$museum" ||
       secret_line "portal signing key" "$(secret_id portal-signing-key "$museum")" "./serena aws portal-key $museum"
   done
@@ -1379,11 +1451,16 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
       # shellcheck disable=SC2046
       tf rehearsal destroy -input=false $(approve) "${vars[@]}"
       for key in VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS ETL_CIDRS; do remove_local "$key"; done
-      echo "Done. The [profile $deployer_profile] section in ~/.aws/config can go too."
+      case "$ETL_READER_ROLE_ARNS" in
+        *":role/rehearsal-$SERENA_ENV_NAME-etl-reader"*) remove_local ETL_READER_ROLE_ARNS ;;   # the stand-in's
+      esac
+      echo "Done. The [profile $deployer_profile] and [profile rehearsal-$SERENA_ENV_NAME-etl-reader] sections in"
+      echo "~/.aws/config can go too."
       return ;;
     *) die "./serena aws rehearsal-vpc [destroy]" ;;
   esac
-  echo "Terraform shows its plan (a VPC, two public and two private subnets, a NAT gateway, the deployer role) and asks."
+  echo "Terraform shows its plan (a VPC, two public and two private subnets, a NAT gateway, the deployer role, and a"
+  echo "stand-in for an ETL server's role) and asks."
   # shellcheck disable=SC2046
   tf rehearsal apply -input=false $(approve) "${vars[@]}"
   save_local VPC_ID "$(tf rehearsal output -raw vpc_id)"
@@ -1402,6 +1479,13 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
     printf '[profile %s]\nrole_arn = %s\nsource_profile = %s\nregion = %s\n' "$deployer_profile" "$role" "$ADMIN_PROFILE" "$AWS_REGION"
     echo
   fi
+  role="$(tf rehearsal output -raw etl_reader_role_arn)"
+  echo "The stand-in for an ETL server's role (checklist section 57) is $role."
+  echo "For section 57, its profile in ~/.aws/config is:"
+  echo
+  printf '[profile rehearsal-%s-etl-reader]\nrole_arn = %s\nsource_profile = %s\nregion = %s\n' \
+    "$SERENA_ENV_NAME" "$role" "$ADMIN_PROFILE" "$AWS_REGION"
+  echo
   [ -n "$DOMAIN_NAME" ] || echo "Then set DOMAIN_NAME in $(settings_home): a name in a DNS zone you control, for the certificate."
   if [ "$SETTINGS" = ssm ]; then
     echo "Next: ./serena aws pipeline --env $ENV to deploy it with the pipeline (checklist section 56), or"
@@ -1741,7 +1825,9 @@ case "$CMD" in
   test) run_tests "$@" ;;
   replay) replay_logs "$@" ;;
   cspace-secret) load_env; need_museum "${1:-}" cspace-secret; check_account; cspace_secret "$1" ;;
-  etl-token) load_env; need_museum "${1:-}" etl-token; check_account; etl_token "$1" ;;
+  etl-token) load_env; need_museum "${1:-}" etl-token; check_account
+             case "${2:-}" in ""|--show) ;; *) die "./serena aws etl-token MUSEUM [--show]" ;; esac
+             etl_token "$1" "${2:-}" ;;
   portal-key) load_env; need_museum "${1:-}" portal-key; check_account; portal_key "$1" ;;
   cdn-key) prepare; tf_init "$ROOT"; need_deployed
            if has_pipeline; then cdn_key_pipeline; else check_museums ask; cdn_key; fi ;;

@@ -64,5 +64,9 @@ output "test" {
       { web-down = aws_cloudwatch_metric_alarm.web_down.actions_enabled, worker-down = aws_cloudwatch_metric_alarm.worker_down.actions_enabled },
     )
     unserved_patterns = { for k, f in aws_cloudwatch_log_metric_filter.unserved : k => f.pattern }
+    etl_reader_policies = { for m, p in aws_secretsmanager_secret_policy.etl_reader : m => {
+      policy = jsondecode(p.policy), block_public_policy = p.block_public_policy, secret = p.secret_arn
+    } }
+    etl_reader_key_statements = [for s in data.aws_iam_policy_document.key.statement : s if startswith(s.sid, "EtlServer")]
   }
 }

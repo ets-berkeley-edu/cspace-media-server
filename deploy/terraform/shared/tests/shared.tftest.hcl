@@ -172,6 +172,91 @@ run "no_waf" {
   }
 }
 
+run "etl_readers" {
+  command = plan
+
+  override_resource {
+    target          = module.core.aws_secretsmanager_secret.etl_tokens["pahma"]
+    override_during = plan
+    values = {
+      arn = "arn:aws:secretsmanager:us-west-2:123456789012:secret:serena-qa/pahma/etl-tokens-AbCdEf"
+    }
+  }
+
+  override_resource {
+    target          = module.core.aws_secretsmanager_secret.etl_tokens["cinefiles"]
+    override_during = plan
+    values = {
+      arn = "arn:aws:secretsmanager:us-west-2:123456789012:secret:serena-qa/cinefiles/etl-tokens-GhIjKl"
+    }
+  }
+
+  variables {
+    tenants = {
+      pahma     = "https://pahma.qa.collectionspace.org"
+      cinefiles = "https://cinefiles.qa.collectionspace.org"
+    }
+    etl_reader_role_arns = {
+      pahma     = "arn:aws:iam::444455556666:role/etl-server"
+      cinefiles = "arn:aws:iam::444455556666:role/etl-server"
+    }
+  }
+
+  assert {
+    condition     = alltrue([for m, p in module.core.test.etl_reader_policies : p.block_public_policy && length(p.policy.Statement) == 1 && p.policy.Statement[0].Effect == "Allow" && p.policy.Statement[0].Principal.AWS == var.etl_reader_role_arns[m] && p.policy.Statement[0].Action == "secretsmanager:GetSecretValue"])
+    error_message = "Each listed museum's ETL token secret lets its ETL server's role read its value, and nothing else; never a public policy (D275, DP15)."
+  }
+
+  assert {
+    condition     = length(module.core.test.etl_reader_key_statements) == 2 && alltrue([for s in module.core.test.etl_reader_key_statements : s.actions == toset(["kms:Decrypt"])])
+    error_message = "One key policy statement a museum, allowing only kms:Decrypt."
+  }
+
+  assert {
+    condition     = alltrue([for s in module.core.test.etl_reader_key_statements : length(s.condition) == 2 && contains([for c in s.condition : "${c.test} ${c.variable} ${join(",", c.values)}"], "StringEquals kms:ViaService secretsmanager.us-west-2.amazonaws.com")])
+    error_message = "The ETL server's role decrypts only through Secrets Manager."
+  }
+
+  assert {
+    condition     = alltrue([for m, p in module.core.test.etl_reader_policies : length([for s in module.core.test.etl_reader_key_statements : s if one(s.principals).identifiers == toset([var.etl_reader_role_arns[m]]) && contains([for c in s.condition : "${c.test} ${c.variable} ${join(",", c.values)}"], "StringEquals kms:EncryptionContext:SecretARN ${p.secret}")]) >= 1])
+    error_message = "Each statement lets the role decrypt only its museum's token secret (kms:EncryptionContext:SecretARN)."
+  }
+
+  assert {
+    condition     = output.etl_readers == "cinefiles=arn:aws:iam::444455556666:role/etl-server pahma=arn:aws:iam::444455556666:role/etl-server"
+    error_message = "./serena aws status reads which museums' ETL servers read their tokens with a role."
+  }
+}
+
+run "no_etl_readers" {
+  command = plan
+
+  assert {
+    condition     = length(module.core.test.etl_reader_policies) == 0 && length(module.core.test.etl_reader_key_statements) == 0 && output.etl_readers == ""
+    error_message = "Without ETL_READER_ROLE_ARNS no secret has a policy and the key's policy is as before: the ETL uses a token file."
+  }
+}
+
+run "an_etl_reader_for_a_museum_not_served" {
+  command = plan
+
+  variables {
+    etl_reader_role_arns = { cinefiles = "arn:aws:iam::444455556666:role/etl-server" }
+  }
+
+  expect_failures = [var.etl_reader_role_arns]
+}
+
+run "an_etl_reader_that_isnt_a_role" {
+  command = plan
+
+  variables {
+    etl_reader_role_arns = { pahma = "arn:aws:iam::444455556666:user/someone" }
+  }
+
+  expect_failures = [var.etl_reader_role_arns]
+}
+
 run "a_subnet_outside_the_vpc" {
   command = plan
 
