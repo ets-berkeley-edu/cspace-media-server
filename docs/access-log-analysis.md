@@ -70,3 +70,98 @@ Browsers alone show the same skew, so crawlers don't cause it.
 
 The skew and the size of the working set relative to the store are large enough that the conclusions hold well
 beyond that variation.
+
+## URL forms, audio and video, and file sizes (November 3, 2026)
+
+A second pass over the same cleaned logs (25,018,271 imageserver requests, January 2025 to October 7, 2026), for
+three open questions in `docs/design.md`: the URL forms in use, audio and video, and size limits. Bytes are those
+sent for `GET` requests answered 200; a megabyte is 1,000,000 bytes.
+
+### Which sizes are requested
+
+Requests by museum and URL form (all methods; `GET` was 99.6% of them, `HEAD` almost all the rest):
+
+| Museum | Thumbnail | Small | Medium | FullHD | OriginalJpeg | File itself (`/content`) | PDF links |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BAMPFA | 48,372 | 6 | 3,068,878 | 1 | 58 | 10 | |
+| Botanical Garden | 37,460 | 0 | 67,272 | 0 | 2,976 | 0 | |
+| Cinefiles | 34,447 | 6 | 3,952,404 | 0 | 47,965 | 5,359 | 1,123,245 |
+| PAHMA | 1,036,444 | 0 | 6,781,540 | 0 | 3,351,113 | 64,109 | |
+| UCJEPS | 2,471,961 | 1 | 1,887,173 | 0 | 1,019,843 | 0 | |
+
+- **Small and FullHD are not used anywhere:** 14 requests in 21 months, all five museums together.
+- **UCJEPS and the Botanical Garden never requested a file itself.** BAMPFA's 10 such requests, and its 58 for
+  OriginalJpeg, got no file from the legacy imageserver either: neither is on BAMPFA's list.
+- **Exact matching of derivative names loses next to nothing.** 1,944 requests spelled a listed name another way
+  (`originaljpeg`, `medium`, `thumbnail`), and the legacy imageserver sent none of them a file: its largest answer to
+  any of them was 1,669 bytes, an error. Most were browsers; UCJEPS' `originaljpeg` (1,149 requests, 680 of them
+  since July 2026) is the only one still in steady use. About 180 more used a name on no museum's list (`Large`,
+  `Full`, `Zoom` and a few dozen others); only `Original`, CollectionSpace's own name, got a file (44 requests at
+  Cinefiles and PAHMA, in 21 months).
+- **No Media URLs** (`media/<csid>/blob/…`) appear: every request used a Blob URL.
+- **Query strings carry nothing Serena needs:** a few hundred requests in all, with tracking parameters (`fbclid`,
+  `utm_source`) and the like.
+- **Odd paths are rare.** Apart from UCJEPS' second URL after `|` (above), a few hundred requests had truncated or
+  garbled paths, which get the unavailable image today too.
+
+### Who links to the imageserver
+
+From the referrer's host, which is all the cleaned logs keep:
+
+- **The museums' own portals,** current and QA (Hearst Museum, Cinefiles, BAMPFA's collection site) and the legacy
+  portals on the webapps hosts: most requests with a referrer.
+- **Other sites embedding UCJEPS images:** the Symbiota herbarium portals (CCH2 about 1.15 million requests,
+  Pteridoportal about 310,000, the Lichen portal, and Symbiota development hosts), Calflora (about 215,000) and
+  African Plants (about 50,000).
+- **Search engines,** the ARK resolver (n2t.net), and developers' local copies of the portals (`localhost`).
+- **No referrer** for about 10 million requests: crawlers, direct links, and apps.
+
+So the portals are not the only clients: UCJEPS' URLs in particular are embedded in other institutions' sites, which
+is why the legacy URLs must keep working (as the design already requires).
+
+### Audio and video
+
+The logs carry no file type, so they can't say which requests were for audio or video. They do bound them:
+
+- Audio and video can only have come as the file itself (`/content`), whole: there were no 206 or 304 responses.
+- That's 69,478 requests in 21 months, 0.28% of all: PAHMA 64,109, Cinefiles 5,359, BAMPFA 10. PAHMA's are rising
+  (14,226 in 2025, 49,883 in 2026 to October 7), but their largest file was 55 MB, and 99% were under 13 MB.
+- Cinefiles' 5,359 were for 279 files, but 4,690 of them for one 54 MB file.
+
+To split these by kind, the logged Blob CSIDs would have to be matched against the audio and video rows of a real
+ETL list.
+
+### Largest files, against the starting size limits
+
+| Requests for | Requests | Median | 99.9th percentile | Largest | Distinct files over 100 MB |
+| --- | --- | --- | --- | --- | --- |
+| PDFs (Cinefiles) | 1,122,091 | 0.26 MB | 70 MB | 234 MB | at least 15 |
+| Medium (Cinefiles) | 3,951,909 | 0.09 MB | 0.4 MB | 161 MB | 3 |
+| OriginalJpeg (PAHMA) | 3,262,221 | 1.1 MB | 21 MB | 112 MB | 1 |
+| File itself (Cinefiles) | 5,303 | 54 MB | 54 MB | 92 MB | 0 |
+| File itself (PAHMA) | 63,241 | 1.1 MB | 34 MB | 55 MB | 0 |
+| OriginalJpeg (UCJEPS) | 1,018,453 | 4.7 MB | 17 MB | 32 MB | 0 |
+
+Everything else was 32 MB or less (BAMPFA's largest was 2 MB).
+
+- **Images and catalog cards (500 MB):** well inside, at 161 MB at most.
+- **PDFs (200 MB):** one Cinefiles PDF, of 234 MB, is over the starting limit; Serena would refuse it as `too_large`
+  until the limit is raised. The next largest is 187 MB.
+- **3D (1 GB):** nothing in the logs comes near it.
+- **Three Cinefiles Medium answers of 147 to 161 MB** are out of line with a median of 0.09 MB. They may be
+  derivatives of very large scans, or the legacy imageserver answering for a file that isn't an image; worth a look
+  at those records before the Cinefiles cutover.
+- **The largest answer was 234 MB, not 92 MB.** The 92 MB in the design's Compute section was the largest file
+  itself at Cinefiles.
+
+### What it means for Serena's design
+
+1. **Each museum's list of derivatives can be trimmed** to what's used: Small and FullHD at every museum, and the
+   file itself at UCJEPS. Whether to trim, and whether UCJEPS should keep the file itself for other reasons, is for
+   the museums to decide.
+2. **Keep exact matching of derivative names.** Accepting other spellings would serve requests the legacy
+   imageserver never served; the 44 requests for `Original` don't justify a name of their own.
+3. **Raise the PDF limit for Cinefiles to at least 250 MB,** or accept that its 234 MB PDF is refused. Image and 3D
+   limits need no change.
+4. **Audio and video are at most a small, whole-file load.** If Serena serves them, they fit the existing fetch and
+   cache path; nothing in the logs calls for streaming.

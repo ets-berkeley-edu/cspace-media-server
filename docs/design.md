@@ -1629,8 +1629,8 @@ their hashed names, with no CDN (D296).
   - **When to revisit:** sustained heavy load (every museum moved, with crawler traffic far above today's), a need for a
     large local disk cache shared by tasks, or host-level agents that campus security requires. Moving would change the
     Terraform's ECS capacity, not the containers or the rest of the design.
-  - **Task sizes are starting values.** 1 vCPU and 2 GB for the app allows for fetching large originals (up to 92 MB in
-    the logs) and for watermarking; the CPU may be more than needed. They are to be measured in stage 1 (the simulator
+  - **Task sizes are starting values.** 1 vCPU and 2 GB for the app allows for fetching large files (up to 234 MB in
+    the logs, a PDF; 161 MB for an image) and for watermarking; the CPU may be more than needed. They are to be measured in stage 1 (the simulator
     in the UC Berkeley account) by replaying a slice of the access logs, and set from what CloudWatch reports.
   - **The replay (decided October 22, 2026, D278 to D288).** `./serena aws replay` (`serenade/load/replay.py`) sends a
     slice of a cleaned monthly access log (the busiest hour or minute, or a time and length; the logs stay on the
@@ -2028,11 +2028,18 @@ The F numbers follow the team's list of follow-ups.
   code override nor a Source should be public, as they are today. And with Lyrasis: whether their denorm job runs the
   repository's `doclist_view.sql` unchanged, when it runs relative to the ETL, and who is told when it fails.
 - **Audio and video.** Whether Serena serves them, as kinds audio and video; to be settled from the access logs and
-  whether clients other than Glimmer request them. The ETL list lists them either way.
+  whether clients other than Glimmer request them. The ETL list lists them either way. The logs (November 3, 2026;
+  `docs/access-log-analysis.md`) bound them: whole files only, no range requests, and at most 0.28% of requests (the
+  `/content` requests, mostly PAHMA's, none over 92 MB); splitting those by kind needs a real ETL list.
 - **URL forms in use.** Confirm from the access logs which URL shapes and derivative names are requested, and which
-  clients use the legacy imageserver. This sets each museum's exact list of sizes.
+  clients use the legacy imageserver. This sets each museum's exact list of sizes. The logs (November 3, 2026;
+  `docs/access-log-analysis.md`): Small and FullHD are unused at every museum, and UCJEPS and the Botanical Garden
+  never request the file itself; other spellings of the names got no file from the legacy imageserver either, so
+  exact matching stays; UCJEPS' images are embedded in other sites (the Symbiota portals, Calflora). Whether to
+  trim the lists is for the museums.
 - **Size limits.** Confirm with the museums and the DevOps team the size limits for production (starting values in
-  Kinds).
+  Kinds). The logs (November 3, 2026; `docs/access-log-analysis.md`): one Cinefiles PDF (234 MB) is over the 200 MB
+  PDF limit; images reach 161 MB, under their 500 MB limit; nothing comes near the 3D limit.
 - **Image validation.** Which further checks to run on a fetched file (dimensions, a refusal size for very large
   originals).
 - **Sensitive derivatives.** Check that the ETL treats every derivative of a sensitive image as sensitive, and that
