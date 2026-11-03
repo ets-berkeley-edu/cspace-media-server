@@ -2001,8 +2001,9 @@ The F numbers follow the team's list of follow-ups.
 - **F1. Watermarked copies.** How watermarked copies are keyed in the cache index (a version number or a hash of the
   settings), and whether the unwatermarked copy of a watermarked size should be stored at all. To settle before
   watermarking is built.
-- **F2. Recovery runbook.** Drafted in `docs/runbook.md` (November 1, 2026): what an admin does for each alert, each
-  alarm, a failed refresh and the break-glass deploy. Still open: its review with the DevOps team (F7), who is told
+- **F2. Recovery runbook.** Drafted in `docs/runbook.md` (November 1, 2026; brought up to date with the deploy
+  pipeline, settings in SSM and the ETL's token read on November 3, 2026): what an admin does for each alert, each
+  alarm, a failed refresh, the ETL's failed token read, a failed deploy and the break-glass deploy. Still open: its review with the DevOps team (F7), who is told
   (Notifications list), and links to it from the admin app's alerts.
 - **F3. "Fetch again now".** Whether the admin app could pick up a Media record's current image at once, and whether
   the rules deciding what is restricted could live in one place shared by Serena and the ETL. Possibly a dead end.

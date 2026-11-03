@@ -35,7 +35,7 @@ placeholder image's Media record among them. Watermarking (the Botanical Garden)
 | --- | --- |
 | `docs/design.md` | The design document |
 | `docs/testing-checklist.md` | Checks to do by hand |
-| `docs/runbook.md` | The recovery runbook: what an admin does for each alert, alarm and failed refresh (a draft) |
+| `docs/runbook.md` | The recovery runbook: what an admin does for each alert, alarm, failed refresh and failed deploy (a draft) |
 | `docs/access-log-analysis.md` | What the legacy imageserver's access logs say about Serena's cache design |
 | `docs/api/etl-v1.json` | The ETL API's OpenAPI description, generated from the code |
 | `backend/` | The Python 3.11 app (`serena/`), its tests and its pinned requirements |

@@ -1,11 +1,13 @@
 # Serena recovery runbook
 
-What an admin does when something goes wrong with Serena: each alert, each alarm, a failed refresh and the failures
-nothing alerts on, and the break-glass deploy. It follows `docs/design.md` (The daily sequence, Watchdog and alerts,
-Admin actions on refreshes, Infrastructure and operations); where they differ, the design document wins.
+What an admin does when something goes wrong with Serena: each alert, each alarm, a failed refresh, the failures
+nothing alerts on, a failed deploy and the break-glass deploy. It follows `docs/design.md` (The daily sequence,
+Watchdog and alerts, Admin actions on refreshes, Infrastructure and operations); where they differ, the design
+document wins.
 
-**Draft** (November 1, 2026, F2). To review with the DevOps team (F7). Still open: who is told (the Notifications list
-open question), and the break-glass permission set, which Operations hasn't made yet (D276).
+**Draft** (November 1, 2026, F2; brought up to date with the deploy pipeline, settings in SSM and the ETL's token
+read on November 3, 2026). To review with the DevOps team (F7). Still open: who is told (the Notifications list open
+question), and the break-glass permission set, which Operations hasn't made yet (D276).
 
 ## The principle
 
@@ -37,12 +39,16 @@ email goes to Richard). Whoever acts on an alert acknowledges it on the Alerts p
 - **Admin app**, Overview: each museum's current and pending refresh. Then the refresh's page (What went wrong, What
   admins did, the check's result), Alerts, and the Audit log for who did what.
 - **`./serena aws status --env <env>`**: the running tasks, the image, image delivery, the alert email's subscription,
-  the alarms and any firing, and each museum's secrets (set or NOT SET).
+  the alarms and any firing, each museum's secrets (set or NOT SET) and the ETL server's role that reads its token,
+  and whether the pipeline deploys the environment.
+- **`./serena aws settings show --env <env>`**: the environment's settings, which a pipeline environment reads from
+  SSM Parameter Store, not from the files on your computer (D273). It marks any the files there disagree with.
 - **`./serena aws logs web --env <env>`** (or `worker`): the last 30 minutes, then follows. Logs carry no personal
   data, secrets or signed URLs.
 
 Sign in with your own SSO profile for the environment first. In an environment the pipeline deploys, these commands only
-read, apart from setting secrets: never deploy from your computer there except as a break-glass deploy (below).
+read, apart from setting secrets and settings: never deploy from your computer there except as a break-glass deploy
+(below).
 
 ## Refresh alerts
 
@@ -59,7 +65,9 @@ read, apart from setting secrets: never deploy from your computer there except a
     the ETL list script on the ETL server and applies its list on Manual refresh (Upload one). Or apply one of the ETL's
     recent lists (Choose from previous), if nothing has changed since. Or wait: the next day's refresh catches up.
   - Refused at the door (the ETL job's report shows a 403 "Not from this address"): the ETL server's address changed
-    or isn't in `ETL_CIDRS`. A settings change and a deploy.
+    or isn't in `ETL_CIDRS`. Correct `ETL_CIDRS` with `./serena aws settings push --env <env>`, then run the deploy
+    pipeline (Deploys, below).
+  - The ETL couldn't read its token: see The ETL can't read its token, below.
 - **Escalate:** the ETL team, when the ETL job itself failed or can't reach Serena.
 
 ### An ETL list check failed
@@ -108,6 +116,29 @@ read, apart from setting secrets: never deploy from your computer there except a
   public sees Serena's generic picture where the museum's placeholder belongs.
 - **Do:** on Settings, name the Media record that holds the placeholder image's Blob (Media look up finds it). For
   PAHMA, the record has to exist in CollectionSpace first (issue #166).
+
+### The ETL can't read its token
+
+Where a museum's ETL server reads its token with its own role (D275; `deploy/README.md`, The ETL reads its token with
+its own role), a failed read stops the ETL's call to Serena, and the deadline alert follows.
+
+- **Means:** the ETL job's report shows an `AccessDenied` (or `AccessDeniedException`) from Secrets Manager or KMS.
+- **Check:**
+  - `./serena aws status --env <env>`: is the museum listed with the ETL server's role, and is that the role the
+    server runs as (Ops knows)? If it isn't listed, the museum isn't in `ETL_READER_ROLE_ARNS` (`settings show`).
+  - If the ETL server is in another AWS account: does the role have its own policy for the two actions, naming the
+    secret's and the key's ARNs that `status` prints? Ops checks this in that account.
+  - Was the role deleted and made again under the same name? A policy naming the old role no longer matches it. Run
+    the deploy pipeline: its plan should show the secret's and the key's policies changing, and applying it names
+    the role as it is now.
+- **Do:**
+  - Correct `ETL_READER_ROLE_ARNS` with `settings push`, then run the deploy pipeline.
+  - Until the read works, the ETL can use a token file, the fallback: `./serena aws etl-token <museum> --env <env>
+    --show` rotates the token and shows it; give it to the ETL team (CSW-1027), who switch the ETL's token source.
+- **A role that is to go:** remove its museum from `ETL_READER_ROLE_ARNS` and deploy before Ops deletes the role. AWS
+  refuses a key policy naming a role that no longer exists, so if the role is already gone, every deploy fails until
+  the setting is removed.
+- **Escalate:** Ops for the ETL server's role; the ETL team for the job.
 
 ## Notices of admin actions
 
@@ -162,22 +193,52 @@ at its own pace.
 | Secret | When | Command, then |
 | --- | --- | --- |
 | A museum's CollectionSpace service account | Its password changed (the `cspace-refused` alarm), or it may have leaked | Ask Lyrasis and the museum to change it, then `./serena aws cspace-secret <museum>` |
-| A museum's ETL token | It may have leaked, or the ETL's token file changes | `./serena aws etl-token <museum>`; give the token to the ETL team (CSW-1027). Rotate twice to retire the old one at once |
+| A museum's ETL token | It may have leaked, or the ETL's token file changes | `./serena aws etl-token <museum>`. If the museum's ETL reads its token with its role, the token isn't shown and nothing more is needed: the ETL's next run uses it, and the Audit log shows its calls with `which_key` current. Otherwise `--show` shows it: give it to the ETL team (CSW-1027). Rotate twice to retire the old one at once |
 | A museum's portal signing key (Cinefiles) | It may have leaked | `./serena aws portal-key <museum>`; give the key and its ID to Glimmer's team. Rotate twice to retire the old one at once |
-| The CloudFront signing key | It may have leaked | `./serena aws cdn-key`. Rotate twice to retire the old one at once |
+| The CloudFront signing key | It may have leaked | `./serena aws cdn-key`. In a pipeline environment it makes the key and stops: run the deploy pipeline, so CloudFront trusts the new key, then `cdn-key` again, so the app signs with it. Rotate twice to retire the old one at once |
+
+## Deploys
+
+An environment with a pipeline is deployed only by it (`deploy/README.md`, The deploy pipeline): Actions › Deploy ›
+Run workflow, from `main`. The plan job's summary says what to do next; its link opens the build's log in the AWS
+console, where the plan is. A settings change reaches the environment only through a deploy: `settings push`, then a
+pipeline run.
+
+| The plan job says | Means | Do |
+| --- | --- | --- |
+| No changes | The environment matches the commit | Nothing. This is also the check after a break-glass deploy |
+| Read the plan … approve | A plan to apply | Read the plan in the build's log. The reviewer, not the person who started the run, approves it if it is what's expected |
+| Caution: this plan removes the museum(s) … | The settings no longer name a museum: its bucket (every cached file) and secrets would be deleted | Don't approve unless the museum is really to go. Otherwise correct `CSPACE_TENANTS` with `settings push` and run the deploy again. Where data is protected, Terraform refuses the removal anyway |
+| Only the image repositories and certificate change | The registry root changes first | Approve; then run the deploy again for the rest |
+| The certificate waits for its DNS validation record | A new name's certificate isn't issued yet | Give DevOps the record from the build's log; run the deploy again once the certificate is issued |
+| Unexpected result | The plan build failed | The build's log says why. A missing setting or an `AccessDenied` is fixed in SSM or the deployer's policy (`deploy/iam/`), then the deploy runs again |
+
+When the apply job fails:
+
+- **The plan is of another commit, more than 24 hours old, or gone** (plans are kept 7 days), or Terraform says the
+  saved plan is stale (the state changed since it was made): run the deploy again and approve the new plan.
+- **The apply stopped partway:** the build's log says where. Terraform's state records what was done, and a deploy that
+  doesn't start rolls back to the tasks before it. Once the cause is fixed, run the deploy again: its plan shows only
+  what's left.
+- **The build ends with "Next: …":** a step only an admin can do, since the build can't set a secret's value
+  (`sim-secrets`, `cspace-secret`, `cdn-key`). Do it, signed in with your own SSO.
+
+**Escalate:** Ops for an AWS problem (a quota, a service outage, the deployer's or the build's permissions); GitHub's
+status for Actions. If the pipeline itself is broken and a deploy can't wait, use a break-glass deploy.
 
 ## Break-glass deploy (D276)
 
 For an urgent deploy when the deploy pipeline is broken. Only in an environment with real data, which the pipeline
-otherwise deploys.
+otherwise deploys. `./serena aws pause` and `resume` there are break-glass too, and follow the same steps.
 
 1. **Who:** a named admin, with the break-glass permission set, which is separate and time-limited. Tell the team's
    list before you start.
 2. **Sign in** with that permission set, as the environment's profile.
 3. **From a clean checkout of `main`** (or the commit the fix is on, once reviewed): `./serena aws plan --env <env>`,
-   and read the plan.
-4. **`./serena aws deploy --env <env>`.** It asks you to type `break glass`, then the account's number, to confirm the
-   account is UC Berkeley's. CloudTrail records the session.
+   and read the plan. It reads the settings from SSM, as the pipeline does; a setting to change goes in with
+   `settings push` first.
+4. **`./serena aws deploy --env <env>`.** It asks you to type `break glass`, then, with real data, the account's
+   number, to confirm the account is UC Berkeley's. CloudTrail records the session.
 5. **Afterwards:** the next pipeline run from `main` must show that the environment matches `main` (a plan with no
    changes, or only the fix once it is merged). Record what was done and why in the incident's notes.
 
