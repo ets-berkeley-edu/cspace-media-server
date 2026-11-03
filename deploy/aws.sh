@@ -854,7 +854,9 @@ finish_cdn_key() {  # [pipeline] the pending key becomes the one the app signs w
   # Moving AWSCURRENT to the new version may already have taken AWSPENDING off the old one.
   [ -z "$(pending_version)" ] ||
     aws_ secretsmanager update-secret-version-stage --secret-id "$id" --version-stage AWSPENDING --remove-from-version-id "$version" >/dev/null
-  echo "Serena signs the museums' files with $name within 5 minutes. The key before it stays trusted until the next ./serena aws cdn-key."
+  echo "Serena signs the museums' files with $name within 5 minutes."
+  [ "$(cdn_key_names | wc -l)" -lt 2 ] ||
+    echo "The key before it stays trusted until the next ./serena aws cdn-key."
 }
 
 # ---- alert email (D201; deploy/terraform/modules/core/alerts.tf) -----------------------------------------------------
@@ -1052,10 +1054,13 @@ alert_subscription() {  # confirmed, pending or none: the alert topic's email su
 
 status() {
   look
-  local url deployed museum services="web worker"
+  local url deployed museum services="web worker" redeploy="./serena aws deploy"
   echo "Environment: $ENV (account $ACCOUNT_ID, $AWS_REGION); Terraform state in s3://$STATE_BUCKET/serena/$SERENA_ENV_NAME/"
   [ "$SETTINGS" != ssm ] || echo "Settings: SSM, $(settings_path)/ (./serena aws settings show)"
-  ! has_pipeline || echo "Deployed by: its pipeline (Actions › Deploy); ./serena aws deploy here is break-glass"
+  if has_pipeline; then
+    echo "Deployed by: its pipeline (Actions › Deploy); ./serena aws deploy here is break-glass"
+    redeploy="the deploy pipeline (Actions › Deploy)"
+  fi
   IMAGE="$(applied image_uri)"
   [ -n "$IMAGE" ] || { echo "Not deployed (./serena aws deploy)."; return 0; }
   url="$(app_url)"
@@ -1067,16 +1072,24 @@ status() {
       --query "services[].[serviceName, join('', ['running ', to_string(runningCount), ' of ', to_string(desiredCount)])]" --output text 2>/dev/null || true; } |
   while IFS="$(printf '\t')" read -r name counts; do echo "  $name: $counts"; done
   if [ "$ROOT" = shared ]; then
-    echo "Admitted addresses: Apache $APACHE_CIDRS; ETL $ETL_CIDRS; admin $ADMIN_CIDRS"
+    echo "Admitted addresses: Apache ${APACHE_CIDRS:-none}; ETL ${ETL_CIDRS:-none}; admin ${ADMIN_CIDRS:-none}"
   else
     echo "Allowed addresses: $ALLOWED_CIDRS"
   fi
   if [ "$(applied delivery)" = true ]; then
     echo "Image delivery: on; signing keys trusted: $(cdn_key_names | tr '\n' ' ')(the newest signs)"
   else
-    echo "Image delivery: off (no signing key yet: ./serena aws deploy or cdn-key)"
+    if [ "$redeploy" = "./serena aws deploy" ]; then
+      echo "Image delivery: off (no signing key yet: ./serena aws deploy or cdn-key)"
+    else
+      echo "Image delivery: off (no signing key yet: ./serena aws cdn-key)"
+    fi
   fi
-  [ -z "$(pending_version)" ] || echo "  A new signing key is waiting to be trusted: ./serena aws deploy"
+  if [ -n "$(pending_version)" ]; then
+    if [ "$redeploy" = "./serena aws deploy" ]; then echo "  A new signing key is waiting to be trusted: ./serena aws deploy"
+    else echo "  A new signing key is waiting to be trusted: $redeploy, then ./serena aws cdn-key"
+    fi
+  fi
   case "$(alert_subscription)" in
     confirmed) echo "Alert email: $(applied alert_email)" ;;
     pending) echo "Alert email: $(applied alert_email), NOT CONFIRMED (./serena aws confirm-alerts)" ;;
@@ -1197,6 +1210,11 @@ run_tests() {  # run_tests [pytest options]
   url="$(app_url)"
   case "$url" in https://*) ;; *) die "'$ENV' has no address yet: run ./serena aws deploy again." ;; esac
   saved="$(cat "$URL_FILE" 2>/dev/null || true)"
+  if [ "$saved" != "$url" ] && has_pipeline; then
+    # Its pipeline deploys it, so no deploy here saved the address: it comes from the state the pipeline applied.
+    echo "$url" > "$URL_FILE"; saved="$url"
+    echo "Saved $url in $URL_FILE, from the state its pipeline applied."
+  fi
   [ "$saved" = "$url" ] || die "$URL_FILE says '${saved:-nothing}', but '$ENV' is at $url: ./serena aws deploy saves it."
   deployed="$(applied museums)"
   museum="$(museum_names "${deployed:-$MUSEUMS}" | head -n 1)"
@@ -1385,7 +1403,12 @@ rehearsal_vpc() {  # rehearsal_vpc [destroy]
     echo
   fi
   [ -n "$DOMAIN_NAME" ] || echo "Then set DOMAIN_NAME in $(settings_home): a name in a DNS zone you control, for the certificate."
-  echo "Next: ./serena aws deploy --env $ENV   (as the deployer: note every AccessDenied, checklist section 54)"
+  if [ "$SETTINGS" = ssm ]; then
+    echo "Next: ./serena aws pipeline --env $ENV to deploy it with the pipeline (checklist section 56), or"
+    echo "./serena aws deploy --env $ENV from here (as the deployer: note every AccessDenied, checklist section 54)"
+  else
+    echo "Next: ./serena aws deploy --env $ENV   (as the deployer: note every AccessDenied, checklist section 54)"
+  fi
 }
 
 # ---- the deploy pipeline (deploy/terraform/pipeline, deploy/pipeline/, .github/workflows/deploy.yml; DP1 to DP17) ----
@@ -1536,6 +1559,8 @@ print(plan["status"])' "$dir/plan.json" "$PLAN_ID")" || exit 1
   result APPLY_STATUS applied
   url="$(app_url)"
   echo "$ENV_LABEL is deployed at commit $(git rev-parse --short HEAD): $url"
+  # The build's address isn't one the load balancer admits, so it can't check /health as a deploy from a laptop does.
+  echo "DNS: $DOMAIN_NAME must point at the load balancer $(applied load_balancer_dns_name) (DevOps's record, TQ4)."
   # What only an admin can do (DP12): the build can't read or set a secret's value.
   [ "$(cdn_keys_exist)" = true ] || echo "Next: ./serena aws cdn-key --env $ENV makes the first CloudFront signing key."
   [ -z "$(pending_version)" ] || echo "Next: ./serena aws cdn-key --env $ENV has the app sign with the new key."
