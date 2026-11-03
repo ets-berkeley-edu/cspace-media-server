@@ -1638,7 +1638,9 @@ their hashed names, with no CDN (D296).
     Every request goes to one simulated museum, and each logged file becomes one of the simulator's records, the same
     file always the same record, so Serena's hits and misses follow the real pattern. The fake ETL makes the records
     first, with files of about the logged sizes (`--sizes`, which the replay prints; see The simulator in AWS).
-    Redirects aren't followed, except one in `--follow`. A first replay over a set of records is cold, a repeat warm;
+    Redirects aren't followed, except one in `--follow`. A request that fails before any answer on a connection that
+    has already had one is sent once more on a new connection, since CloudFront closes idle keep-alive connections
+    (November 3, 2026). A first replay over a set of records is cold, a repeat warm;
     `--first-row` maps onto new records for another cold one. It runs only against an environment with the simulator
     and closed image paths, so a miss never reaches a museum's CollectionSpace, and it ends with the web and worker
     services' CPU and memory from CloudWatch for the run.

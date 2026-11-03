@@ -207,7 +207,47 @@ def test_it_sends_every_request_in_order_and_follows_one_redirect_in_n(server: s
 def test_an_unreachable_server_counts_as_no_answer() -> None:
     outcomes = replay.replay("http://127.0.0.1:9", [(0.0, "GET", "/x", "f", "pahma")], speed=1, concurrency=1,
                              follow=0, timeout=2)
-    assert [o.status for o in outcomes] == [0]
+    assert [o.status for o in outcomes] == [0] and not outcomes[0].retried  # a new connection: not sent again
+
+
+class Closer(Recorder):
+    """Keeps HTTP/1.1 connections open as far as the client knows, but closes each one after answering (as CloudFront
+    does with idle ones), and answers only the first `answers` requests: later ones are read and dropped."""
+    protocol_version = "HTTP/1.1"
+    answers = 0
+
+    def answer(self) -> None:
+        self.close_connection = True
+        if Closer.answers > 0:
+            Closer.answers -= 1
+            super().answer()
+
+
+@pytest.fixture
+def closer() -> Iterator[str]:
+    Recorder.seen = []
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Closer)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{httpd.server_address[1]}"
+    httpd.shutdown()
+
+
+def test_a_request_on_a_closed_connection_is_sent_once_more_on_a_new_one(closer: str) -> None:
+    Closer.answers = 3
+    requests = [(n * 0.1, "GET", f"/pahma/objects/{n}", f"f{n}", "pahma") for n in range(3)]
+    outcomes = replay.replay(closer, requests, speed=1, concurrency=1, follow=0, timeout=5)
+    assert [o.status for o in outcomes] == [302] * 3
+    assert [o.retried for o in outcomes] == [False, True, True]
+    assert replay.report(outcomes, 1.0)["retried"] == 2
+
+
+def test_a_second_failure_counts_as_no_answer(closer: str) -> None:
+    Closer.answers = 1
+    requests = [(n * 0.1, "GET", f"/pahma/objects/{n}", f"f{n}", "pahma") for n in range(2)]
+    outcomes = replay.replay(closer, requests, speed=1, concurrency=1, follow=0, timeout=5)
+    assert [(o.status, o.retried) for o in outcomes] == [(302, False), (0, True)]
+    assert [o.answer for o in outcomes] == ["served", "no answer"]
 
 
 def test_the_report_counts_late_requests_statuses_and_latency() -> None:

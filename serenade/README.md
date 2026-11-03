@@ -122,7 +122,9 @@ repository.
   so each second's requests are spread across it), all to the environment's museum, each keeping its URL form and
   method; Cinefiles' PDF links as the file itself; forms Serena doesn't answer are left out and counted. Each logged
   file is one record, always the same, numbered band by band as the fake ETL's `--sizes` makes them. Redirects aren't
-  followed, except one in `--follow N`.
+  followed, except one in `--follow N`. A request that fails before any answer on a connection that has already had
+  one is sent once more on a new connection: CloudFront closes idle keep-alive connections, and the first busiest-hour
+  run in stage 1 lost 653 requests that way, none of which reached Serena (added November 3, 2026).
 - **The records come first.** Run the `./serena aws etl … --sizes …` command the dry run prints before replaying; again
   after a deploy, pause or resume (the simulator forgets its records). If its servable list check fails on the delta
   threshold (the last updated refresh had other records), override the threshold on that refresh on the admin app's
@@ -136,7 +138,8 @@ repository.
   prints the fake ETL command with the same `--first-row`, which makes new records Serena hasn't cached.
 - **What it reports** (D287): requests sent, how many went more than a second late (the Mac or the network couldn't
   keep up), the answers by status and by what Serena did (`served`: a 302 to a stored file; `unavailable`: a 302 to
-  the unavailable image, as when the records aren't servable), the latency of all answers and of the served ones,
+  the unavailable image, as when the records aren't servable; `no answer`: none, even after one more try), how many
+  were sent again on a new connection (`retried`), the latency of all answers and of the served ones,
   then, after 3 minutes, the web and worker services' CPU and memory from CloudWatch, a minute at a time (average,
   busiest minute, highest), as a percentage of the task size. On personal-dev (one web task of 1 vCPU and 2 GB),
   September 2026's busiest minute cold took about 25% CPU in the busiest minute and 7% memory (checklist section 32).
