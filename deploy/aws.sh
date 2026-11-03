@@ -1042,7 +1042,8 @@ deploy() {
   echo
   echo "$ENV_LABEL is up: $url   (the admin app: $url/admin/)"
   if [ "$code" != 200 ] && [ "$ROOT" = shared ]; then
-    echo "Note: $url/health answers $code. DevOps's DNS record must point $DOMAIN_NAME at $(applied load_balancer_dns_name),"
+    echo "Note: $url/health answers $code. The DNS record (DevOps's, or yours in a rehearsal) must point $DOMAIN_NAME"
+    echo "at $(applied load_balancer_dns_name), not at an earlier load balancer,"
     echo "and this computer's address must be in ADMIN_CIDRS (or another list the load balancer admits)."
   elif [ "$code" != 200 ]; then
     echo "Note: $url/health still answers $code after 2 minutes. If it's 403, your address may have changed: ./serena aws allow-my-ip"
