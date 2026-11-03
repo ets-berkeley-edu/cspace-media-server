@@ -175,6 +175,7 @@ class Outcome:
     seconds: float
     answer: str    # what Serena's answer was (see answer_of)
     museum: str
+    retried: bool = False  # sent a second time, on a new connection (see replay)
 
 
 def answer_of(status: int, location: str | None) -> str:
@@ -196,7 +197,12 @@ def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, s
            sleep: Callable[[float], None] = time.sleep, progress: Callable[[str], None] | None = None,
            ) -> list[Outcome]:
     """Sends the requests at their times divided by `speed`, at most `concurrency` at once, each thread keeping its
-    own connection. Follows one 302 in `follow` (0: none)."""
+    own connection. Follows one 302 in `follow` (0: none).
+
+    A request that fails before any answer on a connection that has already had one is sent once more, on a new
+    connection: CloudFront closes idle keep-alive connections, and the first replay in stage 1 lost 653 requests that
+    way, none of which reached Serena. Only a second failure, a failure on a new connection, or a timeout counts as
+    "no answer"."""
     target = urllib.parse.urlsplit(base_url)
     jobs: queue.Queue[tuple[float, str, str, str] | None] = queue.Queue(maxsize=concurrency)
     outcomes: list[Outcome] = []
@@ -209,21 +215,32 @@ def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, s
         return kind(target.hostname or "", target.port, timeout=timeout)
 
     def work() -> None:
-        connection = connect()
+        connection, used = connect(), False
         while (job := jobs.get()) is not None:
             due, method, path, museum = job
             sent = clock()
-            status = 0
-            try:
-                connection.request(method, path, headers={"User-Agent": "serena-replay"})
-                answer = connection.getresponse()
-                answer.read()
-                status = answer.status
-                location = answer.getheader("Location")
-            except (OSError, http.client.HTTPException):
-                connection.close()
-                connection = connect()
-                location = None
+            status, location, retried = 0, None, False
+            while True:
+                try:
+                    connection.request(method, path, headers={"User-Agent": "serena-replay"})
+                    answer = connection.getresponse()
+                except (OSError, http.client.HTTPException) as error:
+                    connection.close()
+                    stale = used and not retried and not isinstance(error, TimeoutError)
+                    connection, used = connect(), False
+                    if stale:
+                        retried = True
+                        continue
+                    break
+                used = True
+                try:
+                    answer.read()
+                    status = answer.status
+                    location = answer.getheader("Location")
+                except (OSError, http.client.HTTPException):
+                    connection.close()
+                    connection, used = connect(), False
+                break
             took = clock() - sent
             answer_is = answer_of(status, location)
             if status == 302 and location and follow:
@@ -233,7 +250,7 @@ def replay(base_url: str, requests: list[tuple[float, str, str, str, str]], *, s
                 if check:
                     status = _follow(location, timeout)
             with lock:
-                outcomes.append(Outcome(due, max(0.0, sent - start - due), status, took, answer_is, museum))
+                outcomes.append(Outcome(due, max(0.0, sent - start - due), status, took, answer_is, museum, retried))
         connection.close()
 
     threads = [threading.Thread(target=work, daemon=True) for _ in range(concurrency)]
@@ -293,6 +310,7 @@ def report(outcomes: list[Outcome], wall_seconds: float) -> dict[str, object]:
         "latest": round(max((o.late for o in outcomes), default=0.0), 1),
         "statuses": dict(sorted(Counter(str(o.status) for o in outcomes).items())),
         "answers": dict(sorted(Counter(o.answer for o in outcomes).items())),
+        "retried": sum(o.retried for o in outcomes),  # sent again on a new connection after a closed one
         # Seconds to Serena's answer: on a cold run most are misses (fetched first), on a warm one hits.
         "latency": latency(outcomes),
         "latency_served": latency([o for o in outcomes if o.answer == "served"]),

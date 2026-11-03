@@ -1171,7 +1171,10 @@ on October 21, 2026, since stage 1 holds only synthetic data. Don't put anything
   `LOG=~/dev/src/rtl/rtl-team-notes/monsoon-imageserver/tools/access-logs/out/clean/2026-09.tsv.gz`, or a later
   month). Each run ends with the web and worker services' CPU and memory; note them here, with the run's `sent`,
   `late` and `statuses`. Expect no 5xx answers other than a 504 on a first request whose fetch takes over 60
-  seconds (D184), and few or no `late` requests (many means the Mac or the VPN couldn't keep up: note it).
+  seconds (D184), and few or no `late` requests (many means the Mac or the VPN couldn't keep up: note it). Expect
+  few or no `no answer` (status 0) either. A request on a connection CloudFront had closed is now sent once more on a
+  new one, and `retried` counts those (added November 3, 2026: the first busiest-hour run, before that, lost 653
+  requests this way, all within 1.3 seconds, none of which reached Serena). Note `retried` with the other figures.
   1. The busiest hour, cold: `./serena aws replay --env ucb-stage1 --log $LOG --busiest hour --dry-run`, then the
      `./serena aws etl …` command it prints (override the delta threshold on that refresh if its check fails, as in
      section 32, step 3), then the same replay without `--dry-run` (about an hour). Expect `answers` all `served`.
