@@ -1776,7 +1776,11 @@ their hashed names, with no CDN (D296).
     ID, which the apply job passes to the apply build. The apply job runs only when there is something to apply, so a
     run with no changes is the check that an environment matches `main` (D276). Images are tagged with the commit's
     first 12 characters. A museum's removal is approved with the plan, and Terraform still refuses it where
-    `PROTECT_DATA` is on.
+    `PROTECT_DATA` is on. The build's address isn't one the load balancer admits, so the apply build doesn't check
+    `/health` as a deploy from a laptop does; its log ends with the DNS record the environment's name needs. Since no
+    deploy from a laptop saves a pipeline environment's address, `./serena aws test` saves it from the Terraform state
+    the pipeline applied (D225), and T91 accepts either image tag. Proven on personal-stage2, November 2, 2026
+    (checklist section 56).
   - **Approval.** GitHub environments with protection rules, two per AWS environment (D272, amended November 2, 2026,
     DP9): `<env>-plan`, deployments from `main` only, no reviewer; and `<env>`, from `main` only, with required
     reviewers (Richard and one other person) and "prevent self-review", so whoever started the deploy can't approve

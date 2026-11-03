@@ -84,8 +84,10 @@ October 21, 2026): T90 to T105, from the checklist's AWS sections (24, 25 and 27
 - **You run it, signed in.** Never in CI and never by Claude (D229). It checks the sign-in and that the environment is
   deployed and running, then passes the tests its address, museum, image tag and the rest (`aws/target.py`). The
   tests refuse any address but the one the environment's last deploy saved in `deploy/environments/<env>.url`
-  (D225).
-- **What it checks:** `./serena aws status`; `/health` and that the image is the checked-out commit; the fake ETL's
+  (D225). In an environment its pipeline deploys, `./serena aws test` saves that file itself, from the Terraform state
+  the pipeline applied.
+- **What it checks:** `./serena aws status`; `/health` and that the image is the checked-out commit (tagged
+  `<commit>-<time>` by a deploy from a laptop, with the commit's first 12 characters by the pipeline); the fake ETL's
   refreshes (`./serena aws etl … --json`); a file request's 302 to a signed address, its delivery and CloudFront's
   cache, bad and missing signatures, the bucket refusing direct requests, the unavailable images; the admin app's
   header, Past refreshes, Past requests (CloudWatch Logs Insights, which can take a few minutes to catch up) and Media

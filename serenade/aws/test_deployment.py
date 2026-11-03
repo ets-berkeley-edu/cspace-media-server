@@ -79,13 +79,15 @@ def test_t90_status(target: Target) -> None:
 
 def test_t91_health_and_the_running_commit(target: Target) -> None:
     """Checklist section 24, steps 1 and 2: /health answers ok, and the image is this branch's commit (the code and the
-    checklist come from the same branch)."""
+    checklist come from the same branch). A deploy from a laptop tags it <short commit>-<time>, the pipeline's builds
+    with the commit's first 12 characters."""
     health = get(f"{target.url}/health")
     assert (health.status, health.body) == (200, b"ok")
-    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,  # noqa: S607
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,  # noqa: S607
                             check=True).stdout.strip()
-    assert target.image_tag.startswith(f"{commit}-"), (
-        f"'{target.env}' runs {target.image_tag}, not this branch's commit {commit}: ./serena aws deploy first")
+    tagged = target.image_tag.split("-")[0]
+    assert len(tagged) >= 7 and commit.startswith(tagged), (
+        f"'{target.env}' runs {target.image_tag}, not this branch's commit {commit[:12]}: deploy it first")
 
 
 # ---- the fake ETL's refreshes (personal-dev) ------------------------------------------------------------------------
