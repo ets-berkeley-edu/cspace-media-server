@@ -65,6 +65,22 @@ variable "tenants" {
   }
 }
 
+variable "etl_reader_role_arns" {
+  description = "museum => the IAM role its ETL server reads its token with, in this account or another (ETL_READER_ROLE_ARNS; D275, DP15): {pahma = \"arn:aws:iam::<account>:role/<name>\"}. {}: every museum's ETL uses a token file."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for m in keys(var.etl_reader_role_arns) : contains(keys(var.tenants), m)])
+    error_message = "Each museum in etl_reader_role_arns must be one this environment serves (tenants)."
+  }
+
+  validation {
+    condition     = alltrue([for arn in values(var.etl_reader_role_arns) : can(regex("^arn:aws:iam::\\d{12}:role/[A-Za-z0-9+=,.@_/-]+$", arn))])
+    error_message = "Each value in etl_reader_role_arns must be an IAM role's ARN, arn:aws:iam::<12-digit account>:role/<name>."
+  }
+}
+
 variable "etl_cidrs" {
   description = "Addresses that may reach /etl/ (the ETL servers; ETL_CIDRS, D291). With the simulator, include the NAT gateway's outbound address, which the fake ETL's calls come from."
   type        = list(string)

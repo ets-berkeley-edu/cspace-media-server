@@ -38,6 +38,11 @@ output "museums" {
   value       = join(" ", [for m, url in var.tenants : "${m}=${url}"])
 }
 
+output "etl_readers" {
+  description = "The museums whose ETL server reads its token with a role, as \"museum=role-ARN museum=role-ARN\" (D275, DP15)."
+  value       = join(" ", [for m, arn in var.etl_reader_role_arns : "${m}=${arn}"])
+}
+
 output "simulated_cspace" {
   description = "Whether the environment runs the simulated CollectionSpace (../modules/simulator)."
   value       = var.simulated_cspace

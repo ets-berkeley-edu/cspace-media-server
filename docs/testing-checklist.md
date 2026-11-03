@@ -2254,3 +2254,303 @@ sittings and finish with step 14.
 - [x] **15. The findings.** Each `AccessDenied` in a build's log, and anything else that didn't go as written, is fixed
   in a follow-up pull request (the policy in `deploy/iam/serena-deployer-policy.json`, as in section 54, step 10), and
   the step is repeated. None left: the pipeline is ready for stage 2.
+
+## 57. An ETL server's own role reads its token, on personal-stage2 (about half a day, mostly waiting; before merging the pull request that adds it)
+
+**What this is about.** Today a museum's ETL token reaches the ETL by hand: `./serena aws etl-token <museum>` shows it
+once and a person copies it into a token file on the ETL server (Jira CSW-1027). Where the ETL server has an IAM role,
+it can instead read the token itself from Serena's Secrets Manager on each run, so no one sees or copies it and a
+rotation needs nothing on the ETL server (D275, DP15). The setting `ETL_READER_ROLE_ARNS` names each museum's ETL
+server's role, and a deploy gives that role exactly two permissions, both granted on Serena's side:
+
+- the museum's `etl-tokens` secret gets a resource policy allowing the role `secretsmanager:GetSecretValue`, and
+  nothing else;
+- the KMS key's policy gets a statement allowing the role `kms:Decrypt`, only through Secrets Manager
+  (`kms:ViaService`) and only for that secret (`kms:EncryptionContext:SecretARN`).
+
+This section proves those two policies in one account, on personal-stage2, with a stand-in for the ETL server's role
+that `rehearsal-vpc` now makes: `rehearsal-stage2r-etl-reader`. It has **no policy of its own**, so whatever it can
+read, Serena's two policies granted. That is all Serena provides across accounts too (the ETL server's account adds
+its role's own policy), but crossing accounts is proven only on stage 2, once Ops says which account the ETL server is
+in: there's no second personal account for it.
+
+**Why not through the pipeline.** The pipeline's build role and the rehearsal's deployer get the same managed policies
+(`deploy/terraform/modules/deployer_policy`), and with `SETTINGS=ssm` a deploy from this computer reads the same
+settings from SSM as a build. So a deploy as the deployer tries the new permissions (`PutResourcePolicy`,
+`DeleteResourcePolicy`, `PutKeyPolicy`) exactly as a build would, without making the pipeline and its GitHub
+environments again (section 56). The pipeline itself changes in nothing here.
+
+Three AWS identities take part:
+
+- `bmu-personal`, the account's administrator (`ADMIN_PROFILE`): the settings and the rehearsal's VPC and roles.
+- `serena-rehearsal-deploy`, the deployer, with only the stage 2 policy (`AWS_PROFILE`): the deploys and `status`.
+- `rehearsal-stage2r-etl-reader`, the stand-in for the ETL server's role, assumed from `bmu-personal`.
+
+It costs about $5 a day while the VPC exists (its NAT gateway), so do it in one sitting and finish with step 13.
+
+**Before you start:**
+
+- Run every command from the worktree that has this pull request's branch, `feature/etl-token-read`, in one terminal
+  window: some steps set shell variables that later steps use. Docker is running (the deploy builds the images here).
+- Sign in: `aws sso login --profile bmu-personal`.
+- Copy `deploy/environments/personal-stage2.local.conf` from the folder section 56 ran in, for example
+  `cp <that folder>/deploy/environments/personal-stage2.local.conf deploy/environments/`. A Claude session never
+  prints it. It must have `DOMAIN_NAME` (`stage2r.<your domain>`) and `ALERT_EMAIL`, and the line `SETTINGS=ssm`;
+  add that line if it isn't there.
+- The domain and its Route 53 hosted zone from section 54 still exist.
+- No token appears anywhere below: every read of the secret prints only its name.
+
+**The steps:**
+
+- [ ] **1. Settings in SSM.** As in section 56, step 1:
+
+  ```
+  ./serena aws settings push --env personal-stage2
+  ```
+
+  It lists the settings with a `+` each and asks; answer `y`. Expect `Done.` (If SSM still has them from before, it
+  says `SSM already has these settings …`.)
+
+- [ ] **2. What Ops provides, and the stand-in.**
+
+  ```
+  ./serena aws rehearsal-vpc --env personal-stage2
+  ```
+
+  Terraform's plan only creates, 22 resources: section 56's 21 (the VPC, four subnets, the internet and NAT gateways and
+  the NAT's address, two route tables and their four associations, the deployer role and its three policies and
+  attachments) and the role `rehearsal-stage2r-etl-reader`, with no policy attached. Type `yes`. It saves the VPC's
+  IDs in SSM and the `.local.conf`, then prints `The stand-in for an ETL server's role (checklist section 57) is
+  arn:aws:iam::<account>:role/rehearsal-stage2r-etl-reader` and a profile section:
+
+  ```
+  [profile rehearsal-stage2r-etl-reader]
+  role_arn = arn:aws:iam::<account>:role/rehearsal-stage2r-etl-reader
+  source_profile = bmu-personal
+  region = us-west-2
+  ```
+
+  Add it to `~/.aws/config` (and the deployer's, if it printed that too). Check the stand-in:
+
+  ```
+  aws sts get-caller-identity --profile rehearsal-stage2r-etl-reader --query Arn --output text
+  aws iam list-attached-role-policies --role-name rehearsal-stage2r-etl-reader --profile bmu-personal
+  aws iam list-role-policies --role-name rehearsal-stage2r-etl-reader --profile bmu-personal
+  ```
+
+  Expect an ARN with `assumed-role/rehearsal-stage2r-etl-reader/`, then `"AttachedPolicies": []` and
+  `"PolicyNames": []`: the stand-in has no permissions of its own.
+
+- [ ] **3. Name the stand-in as pahma's ETL server's role.** Keep its ARN in a shell variable for later steps, and put
+  it in the settings:
+
+  ```
+  ROLE=$(aws iam get-role --role-name rehearsal-stage2r-etl-reader --profile bmu-personal --query Role.Arn --output text)
+  ```
+
+  Open `deploy/environments/personal-stage2.local.conf` in an editor and add the line
+  `ETL_READER_ROLE_ARNS="pahma=<the ARN rehearsal-vpc printed>"`. Then:
+
+  ```
+  ./serena aws settings push --env personal-stage2
+  ```
+
+  Expect one change, `+ ETL_READER_ROLE_ARNS=pahma=arn:aws:iam::<account>:role/rehearsal-stage2r-etl-reader`; answer
+  `y`.
+
+- [ ] **4. The certificate.** As the deployer:
+
+  ```
+  ./serena aws deploy --env personal-stage2
+  ```
+
+  As in section 54, step 3: the image repositories and the certificate, then its DNS record and "Run ./serena aws deploy
+  again". If the CNAME from an earlier certificate is still in the hosted zone, ACM issues the new one at once;
+  otherwise add the record. Note any `AccessDenied`.
+
+- [ ] **5. The deploy.** Again:
+
+  ```
+  ./serena aws deploy --env personal-stage2
+  ```
+
+  Terraform's plan only creates (about 97 resources: section 56's 96 and one more). Before typing `yes`, find in it
+  `module.core.aws_secretsmanager_secret_policy.etl_reader["pahma"]`, with `block_public_policy = true` and a policy
+  whose one statement is `EtlServerReadsItsToken`: `Allow`, the principal `<the stand-in's ARN>`, the action
+  `secretsmanager:GetSecretValue`, the resource `*` (in a secret's policy, `*` means that secret). The key's policy
+  (`module.core.aws_kms_key_policy.main`) shows as `(known after apply)`: it names the token secret's ARN, which
+  doesn't exist yet. Step 6 reads it once applied.
+
+  Type `yes`. As soon as the load balancer `serena-stage2r` exists, add the `stage2r` alias A record in the hosted zone
+  (section 54, step 4). Expect the deploy to finish with no `AccessDenied`: the deployer was allowed to set the
+  secret's policy and the key's.
+
+- [ ] **6. What status says.**
+
+  ```
+  ./serena aws status --env personal-stage2
+  ```
+
+  Under `Museums:` › `pahma`, after the `ETL token: set …` line:
+
+  ```
+      ETL server's role: arn:aws:iam::<account>:role/rehearsal-stage2r-etl-reader reads the token itself
+        its own policy: secretsmanager:GetSecretValue on arn:aws:secretsmanager:us-west-2:<account>:secret:serena-stage2r/pahma/etl-tokens-<6 characters>,
+        kms:Decrypt on arn:aws:kms:us-west-2:<account>:key/<key ID>
+  ```
+
+  Those two ARNs are what an ETL server's role in another account needs in its own policy (`deploy/README.md`, The ETL
+  reads its token with its own role). Then `./serena aws plan --env personal-stage2`: `No changes.`
+
+  The two policies as AWS has them, as the administrator:
+
+  ```
+  aws secretsmanager get-resource-policy --secret-id serena-stage2r/pahma/etl-tokens --profile bmu-personal --query ResourcePolicy --output text | python3 -m json.tool
+  KEY=$(aws kms describe-key --key-id alias/serena-stage2r --profile bmu-personal --query KeyMetadata.KeyId --output text)
+  aws kms get-key-policy --key-id "$KEY" --policy-name default --profile bmu-personal --query Policy --output text | python3 -m json.tool
+  ```
+
+  The secret's: one statement, `EtlServerReadsItsToken`, as in step 5. The key's: the usual four statements
+  (`AccountPoliciesControlUse`, `CloudWatchLogsForSerenasLogGroups`, `CloudFrontDecryptsForThisDistribution`,
+  `CloudWatchAlarmsPublishToTheAlertTopic`) and a fifth, `EtlServerDecryptsItsTokenPahma`: `kms:Decrypt` for the
+  stand-in's ARN, with `"StringEquals"` on `kms:ViaService` (`secretsmanager.us-west-2.amazonaws.com`) and on
+  `kms:EncryptionContext:SecretARN` (the token secret's ARN, as `status` printed it).
+
+- [ ] **7. The stand-in reads pahma's token.** The read of the secret's value, printing only the secret's name:
+
+  ```
+  aws secretsmanager get-secret-value --secret-id serena-stage2r/pahma/etl-tokens --profile rehearsal-stage2r-etl-reader --query Name --output text
+  ```
+
+  Expect `serena-stage2r/pahma/etl-tokens`. This is the proof: a role with no permissions of its own read the token,
+  and decrypted it with Serena's key, through the secret's policy and the key's policy alone.
+
+- [ ] **8. And nothing else.** Each of these, as the stand-in, ends with `An error occurred (AccessDeniedException)`:
+
+  ```
+  aws secretsmanager get-secret-value --secret-id serena-stage2r/pahma/cspace --profile rehearsal-stage2r-etl-reader --query Name --output text
+  aws secretsmanager describe-secret --secret-id serena-stage2r/pahma/etl-tokens --profile rehearsal-stage2r-etl-reader --query Name --output text
+  aws secretsmanager list-secret-version-ids --secret-id serena-stage2r/pahma/etl-tokens --profile rehearsal-stage2r-etl-reader --query Name --output text
+  aws secretsmanager get-resource-policy --secret-id serena-stage2r/pahma/etl-tokens --profile rehearsal-stage2r-etl-reader --query Name --output text
+  ```
+
+  That is: not another secret (here the CollectionSpace account; with one simulator museum there's no other museum's
+  token to try), and not even the token secret's description, versions or policy.
+
+- [ ] **9. The key only through Secrets Manager.** The key's statement lets the stand-in decrypt only when Secrets
+  Manager asks on its behalf. To try a direct decrypt, the administrator encrypts a word with the key and the token
+  secret's encryption context, as Secrets Manager does, and the stand-in tries to decrypt it itself:
+
+  ```
+  ARN=$(aws secretsmanager describe-secret --secret-id serena-stage2r/pahma/etl-tokens --profile bmu-personal --query ARN --output text)
+  D=$(mktemp -d)
+  printf proof > "$D/word"
+  aws kms encrypt --key-id alias/serena-stage2r --plaintext "fileb://$D/word" --encryption-context "SecretARN=$ARN" --profile bmu-personal --query CiphertextBlob --output text | base64 -d > "$D/cipher"
+  aws kms decrypt --ciphertext-blob "fileb://$D/cipher" --encryption-context "SecretARN=$ARN" --profile rehearsal-stage2r-etl-reader --query Plaintext --output text
+  ```
+
+  The last command ends with `An error occurred (AccessDeniedException)`: the right key and the right secret's
+  context, but not through Secrets Manager. The same decrypt as the administrator shows the ciphertext itself is good:
+
+  ```
+  aws kms decrypt --ciphertext-blob "fileb://$D/cipher" --encryption-context "SecretARN=$ARN" --profile bmu-personal --query Plaintext --output text
+  rm -r "$D"
+  ```
+
+  Expect `cHJvb2Y=` (`proof`, in base64).
+
+- [ ] **10. The deployer can't widen it.** The deployer may set the resource policy of an ETL token secret only, and
+  only with Secrets Manager's check that it isn't public. Two tries, each with a harmless policy (the stand-in's own);
+  each ends with `An error occurred (AccessDeniedException)`:
+
+  ```
+  P="{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"$ROLE\"},\"Action\":\"secretsmanager:GetSecretValue\",\"Resource\":\"*\"}]}"
+  aws secretsmanager put-resource-policy --secret-id serena-stage2r/pahma/etl-tokens --resource-policy "$P" --no-block-public-policy --profile serena-rehearsal-deploy
+  aws secretsmanager put-resource-policy --secret-id serena-stage2r/pahma/cspace --resource-policy "$P" --block-public-policy --profile serena-rehearsal-deploy
+  ```
+
+  The first is the token secret without the check; the second is the CollectionSpace account's secret, with it. If
+  either succeeds instead, stop: it's a finding (step 14). Undo the second with `aws secretsmanager
+  delete-resource-policy --secret-id serena-stage2r/pahma/cspace --profile bmu-personal` (the first only wrote the
+  policy the deploy had set).
+
+- [ ] **11. A rotation, with nothing shown.**
+
+  ```
+  ./serena aws etl-token pahma --env personal-stage2
+  ```
+
+  Expect no token, and `pahma's new ETL token is stored in serena-stage2r/pahma/etl-tokens, and not shown: pahma's ETL
+  server reads it itself, with the role arn:aws:iam::<account>:role/rehearsal-stage2r-etl-reader
+  (ETL_READER_ROLE_ARNS).`, then how its previous token keeps working and how to check the ETL uses the new one. Step
+  7's command again: `serena-stage2r/pahma/etl-tokens` (the stand-in reads the new version too). Wait 5 minutes for
+  Serena to read the new token, then
+
+  ```
+  ./serena aws etl pahma --env personal-stage2
+  ```
+
+  ends with the refresh's result, as in section 54, step 6 (the fake ETL reads the token with its own role, which this
+  pull request doesn't change). Then the fallback, for a token file:
+
+  ```
+  ./serena aws etl-token pahma --env personal-stage2 --show
+  ```
+
+  Expect `Note: pahma's ETL server can read its token itself, with the role …; this one is for a token file.` and the
+  token, shown once (synthetic: the simulator's environment). `./serena aws etl-token pahma --env personal-stage2
+  --shw` stops with `./serena aws etl-token MUSEUM [--show]`.
+
+- [ ] **12. Removing the role takes the read away.** Delete the `ETL_READER_ROLE_ARNS` line from the `.local.conf`,
+  then:
+
+  ```
+  ./serena aws settings push --env personal-stage2
+  ```
+
+  Expect `- ETL_READER_ROLE_ARNS (was pahma=…)`; answer `y`. `./serena aws status --env personal-stage2` now says,
+  under pahma, `ETL server's role: arn:… no longer in the settings (deploy to remove it)`. Then:
+
+  ```
+  ./serena aws deploy --env personal-stage2
+  ```
+
+  The plan has, among anything else this deploy changes, `aws_secretsmanager_secret_policy.etl_reader["pahma"]`
+  destroyed and `aws_kms_key_policy.main` updated in place, its `EtlServerDecryptsItsTokenPahma` statement removed.
+  Type `yes`; no `AccessDenied` (the deployer removed the secret's policy). Step 6's `get-key-policy` now shows the
+  four usual statements only, and the secret has no policy:
+
+  ```
+  aws secretsmanager get-resource-policy --secret-id serena-stage2r/pahma/etl-tokens --profile bmu-personal --query ResourcePolicy --output text
+  ```
+
+  prints `None`. Then step 7's command again ends with
+  `AccessDeniedException`, and `status` has no `ETL server's role` line under pahma. `./serena aws etl-token pahma
+  --env personal-stage2` shows the token again, as for any museum without a role.
+
+- [ ] **13. Clean up.** Delete the `stage2r` alias record in the hosted zone. As the deployer:
+
+  ```
+  ./serena aws destroy --env personal-stage2
+  ```
+
+  Type `personal-stage2`; no `AccessDenied`. Then the VPC, the roles and the settings, as the administrator:
+
+  ```
+  ./serena aws rehearsal-vpc --env personal-stage2 destroy
+  ./serena aws settings delete --env personal-stage2
+  ```
+
+  Terraform's plan destroys 22, the stand-in among them. Remove the `SETTINGS=ssm` line from the `.local.conf`, and
+  the `[profile rehearsal-stage2r-etl-reader]` section from `~/.aws/config`. Check no NAT gateway is left:
+
+  ```
+  aws ec2 describe-nat-gateways --profile bmu-personal --region us-west-2 --filter Name=state,Values=available --query 'NatGateways[].NatGatewayId'
+  ```
+
+  Expect `[]`. The hosted zone, the domain and the state bucket stay.
+
+- [ ] **14. The findings.** Each `AccessDenied` the deployer met (steps 4, 5, 12 and 13), and anything else that
+  didn't go as written, is fixed on this pull request's branch (the policy in `deploy/iam/serena-deployer-policy.json`,
+  as in section 54, step 10), and the step is repeated. None left: the pull request can merge, and stage 2 proves the
+  read across accounts once Ops says where the ETL server is.

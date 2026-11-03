@@ -2,7 +2,8 @@
 # buckets, the secrets, the logs and the alert topic. The account's IAM policies decide who may use it (iam.tf).
 # Besides: CloudWatch Logs may use it for Serena's own log groups only; CloudFront may decrypt for this environment's
 # distribution only, to deliver the museums' files (D196); CloudWatch alarms may use it to publish to the alert topic
-# (D201). Yearly rotation. The policy is its own resource, so the key needn't wait for the distribution.
+# (D201); a museum's ETL server may decrypt its own token, through Secrets Manager only (D275, DP15). Yearly rotation.
+# The policy is its own resource, so the key needn't wait for the distribution.
 
 data "aws_iam_policy_document" "key" {
   statement {
@@ -66,6 +67,34 @@ data "aws_iam_policy_document" "key" {
       test     = "ArnLike"
       variable = "aws:SourceArn"
       values   = ["arn:${local.partition}:cloudwatch:${var.region}:${local.account_id}:alarm:${local.name}-*"]
+    }
+  }
+
+  # A museum's ETL server's role decrypts its token, only as Secrets Manager reads it and only for that museum's secret
+  # (secrets.tf; D275, DP15). One statement a museum, so no role can decrypt another museum's token.
+  dynamic "statement" {
+    for_each = var.etl_reader_role_arns
+    content {
+      sid       = "EtlServerDecryptsItsToken${title(statement.key)}"
+      actions   = ["kms:Decrypt"]
+      resources = ["*"]
+
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value]
+      }
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["secretsmanager.${var.region}.amazonaws.com"]
+      }
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:SecretARN"
+        values   = [aws_secretsmanager_secret.etl_tokens[statement.key].arn]
+      }
     }
   }
 }

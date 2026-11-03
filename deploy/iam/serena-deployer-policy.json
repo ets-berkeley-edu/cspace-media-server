@@ -658,6 +658,31 @@
       ]
     },
     {
+      "Sid": "EtlTokenReaders",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:PutResourcePolicy"
+      ],
+      "Resource": [
+        "arn:aws:secretsmanager:us-west-2:*:secret:serena-*/etl-tokens-*"
+      ],
+      "Condition": {
+        "Bool": {
+          "secretsmanager:BlockPublicPolicy": "true"
+        }
+      }
+    },
+    {
+      "Sid": "EtlTokenReadersRemoved",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:DeleteResourcePolicy"
+      ],
+      "Resource": [
+        "arn:aws:secretsmanager:us-west-2:*:secret:serena-*/etl-tokens-*"
+      ]
+    },
+    {
       "Sid": "PublicKeysParameter",
       "Effect": "Allow",
       "Action": [

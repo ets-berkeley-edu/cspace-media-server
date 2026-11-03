@@ -702,7 +702,8 @@ accepts the old and the new token. Errors are `application/problem+json` with re
 Tokens (decided October 9, 2026): one Secrets Manager secret per museum, `{"current": …, "previous": …}`, each token at
 least 32 characters (a shorter one is never accepted). Each task reads it again every 5 minutes, so a rotation reaches
 every task within 5 minutes without a restart: put the new token in `current` and the old one in `previous`, give the
-ETL team the new token, then clear `previous`. Tokens are compared in constant time and never logged; at any log level
+ETL team the new token (or nothing, where the ETL server reads its token with its own role: Deploys, The ETL's token),
+then clear `previous`. Tokens are compared in constant time and never logged; at any log level
 the AWS libraries' own logging stays at warnings, since at debug it would log a secret's value.
 
 | Method | Path | What it does |
@@ -1813,9 +1814,21 @@ their hashed names, with no CDN (D296).
     Secrets Manager on each run (cross-account through the secret's resource policy and the KMS key's policy,
     read-only, that one secret), so no person sees or copies it and a rotation needs no change on the ETL server; a
     token file stays the fallback (D275). The ETL's side is decided in the CSpace ETL Process project (Jira CSW-1027).
-    Serena's side (DP15): a setting `ETL_READER_ROLE_ARNS` names each museum's ETL role; for each, the museum's
-    `etl-tokens` secret gets a resource policy allowing that role to read it, and the KMS key's policy lets the role
-    decrypt only through Secrets Manager and only for that secret. Built after the pipeline, in its own pull request.
+    Serena's side (decided November 2 and 3, 2026, DP15): on the shared root, the setting `ETL_READER_ROLE_ARNS`
+    (SSM, like `CSPACE_TENANTS`: `"pahma=arn:aws:iam::<account>:role/<name> …"`) names each museum's ETL server's
+    role, in Serena's account or another. For each museum named, its `etl-tokens` secret gets a resource policy
+    allowing that role `secretsmanager:GetSecretValue` and nothing else, which Secrets Manager checks isn't public;
+    and the KMS key's policy gets a statement for that museum letting the role `kms:Decrypt` only through Secrets
+    Manager (`kms:ViaService`) and only for that secret (`kms:EncryptionContext:SecretARN`). Each statement is part
+    of the one policy document Terraform writes, so the key's other statements stay. Another museum's token, the
+    CollectionSpace accounts and every change stay out of reach. In another account the role needs its own policy
+    for the same two actions too; `./serena aws status` prints the ARNs it names. The deployer may set or remove the
+    resource policy of an ETL token secret only, and only one that isn't public. While a museum's ETL server reads
+    with its role, `./serena aws etl-token` rotates the token without showing it (`--show` shows it, for a token
+    file), so a rotation reaches the ETL with no one seeing the token; its next run's calls, `which_key` current in
+    the audit log, show it did. Proven in one account on personal-stage2 with a stand-in role that has no policy
+    of its own, so only the secret's and the key's policies grant the read (`docs/testing-checklist.md`, section 57);
+    across accounts once Ops says where the ETL server is, on stage 2.
   - **Proving it (DP13, DP14).** GitHub runs a workflow started by hand only once it's on `main`, so the pipeline's
     pull request merges first, inert: no job can reach AWS until an administrator applies a pipeline root. It is then
     proven in a personal account on `personal-stage2` (the shared root, the rehearsal's VPC, the simulator only), with
@@ -1875,7 +1888,8 @@ their hashed names, with no CDN (D296).
   D98), read and write the request counts and run Logs Insights queries on the app's log group, for the daily request
   counts (issue #96), read and put the ETL lists in S3, and publish to the alert topic. Neither can delete S3
   objects or create or delete tables. With the simulator, the fake ETL's role reads its museums' ETL tokens and
-  nothing else.
+  nothing else. A museum's ETL server's role, where `ETL_READER_ROLE_ARNS` names one, may read that museum's ETL token
+  and nothing else, through the secret's and the key's policies (Deploys, The ETL's token).
 - **Logs and metrics.** Structured JSON logs to CloudWatch (one log group each for the app and the worker, kept 30
   days and encrypted with the KMS key, D110). For now the alarms' numbers come from CloudWatch Logs metric filters on
   those lines (decided October 20, 2026, D203); embedded metrics (requests, hits, misses, unserved requests by reason,

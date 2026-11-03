@@ -41,3 +41,25 @@ resource "aws_secretsmanager_secret" "cdn_key" {
   kms_key_id              = aws_kms_key.main.arn
   recovery_window_in_days = var.protect_data ? 30 : 0
 }
+
+# Where a museum's ETL server has an IAM role (ETL_READER_ROLE_ARNS; D275, DP15), it reads its token itself, from this
+# account or another: the secret's policy lets that role read its value, and the key's policy (kms.tf) lets it decrypt
+# only through Secrets Manager and only for this secret. Nothing else: not another museum's token, not a secret's
+# description or versions, not a change. In another account, the role also needs its own policy allowing the same two
+# actions on this secret and the key (deploy/README.md). Secrets Manager refuses a policy that would make the secret
+# public.
+resource "aws_secretsmanager_secret_policy" "etl_reader" {
+  for_each            = var.etl_reader_role_arns
+  secret_arn          = aws_secretsmanager_secret.etl_tokens[each.key].arn
+  block_public_policy = true
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EtlServerReadsItsToken"
+      Effect    = "Allow"
+      Principal = { AWS = each.value }
+      Action    = "secretsmanager:GetSecretValue"
+      Resource  = "*"
+    }]
+  })
+}

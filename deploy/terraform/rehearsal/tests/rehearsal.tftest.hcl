@@ -86,3 +86,17 @@ run "a_deployer_with_only_the_stage_2_policy" {
     error_message = "the parts hold every statement of the policy, in order, and nothing else"
   }
 }
+
+run "a_stand_in_for_the_etl_servers_role" {
+  command = plan
+
+  assert {
+    condition     = jsondecode(aws_iam_role.etl_reader.assume_role_policy).Statement[0].Principal.AWS == "arn:aws:iam::123456789012:role/aws-reserved/sso.amazonaws.com/us-west-2/AWSReservedSSO_AdministratorAccess_0123456789abcdef"
+    error_message = "only the administrator role that applies this root may assume the stand-in"
+  }
+
+  assert {
+    condition     = !startswith(aws_iam_role.etl_reader.name, "serena-")
+    error_message = "the stand-in isn't serena-*, which the deployer may change"
+  }
+}
