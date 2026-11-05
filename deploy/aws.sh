@@ -101,11 +101,16 @@ load_env() {
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
-  REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT="" ETL_READER_ROLE_ARNS=""
+  REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT="" ETL_READER_ROLE_ARNS="" ALLOW_SELF_REVIEW=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
   [ -f "$LOCAL" ] && . "$LOCAL"
+  # D308: only the committed settings file may allow self-review, so allowing it is a reviewed change.
+  if [ -f "$LOCAL" ] && grep -q '^[[:space:]]*ALLOW_SELF_REVIEW=' "$LOCAL"; then
+    die "ALLOW_SELF_REVIEW goes only in $CONF, the committed file (D308): remove it from $LOCAL."
+  fi
+  case "${ALLOW_SELF_REVIEW:=false}" in true|false) ;; *) die "ALLOW_SELF_REVIEW must be true or false ($CONF)." ;; esac
   : "${AWS_PROFILE:?set AWS_PROFILE in $CONF}" "${AWS_REGION:?set AWS_REGION in $CONF}" "${SERENA_ENV_NAME:?set SERENA_ENV_NAME in $CONF}"
   [ -z "${REHEARSAL_ADMIN_PROFILE:-}" ] || die "REHEARSAL_ADMIN_PROFILE is now ADMIN_PROFILE: rename it in $CONF or $LOCAL."
   NAME="serena-$SERENA_ENV_NAME"   # the cluster's name and the prefix of every resource
@@ -282,7 +287,7 @@ SSM_SETTINGS="ACCOUNT_ID ALLOWED_CIDRS ETL_CIDRS ADMIN_CIDRS SIMULATED_CSPACE SI
   OPEN_IMAGES WAF PROTECT_DATA WEB_COUNT ALERT_EMAIL TERRAFORM_ROOT APACHE_CIDRS VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS
   CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME REHEARSAL ETL_READER_ROLE_ARNS"
 # Always from the files: what says how to reach the account, and SETTINGS itself.
-FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME ADMIN_PROFILE SETTINGS"
+FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME ADMIN_PROFILE SETTINGS ALLOW_SELF_REVIEW"
 # In SSM only, written by ./serena aws pipeline (never by settings push, never by the build): the account the
 # administrator typed for an environment with real data (DP11).
 PIPELINE_SETTINGS="REAL_DATA_ACCOUNT"
@@ -1675,7 +1680,7 @@ check_github_environments() {
     branches="$(gh_get "repos/$PIPELINE_REPO/environments/$name/deployment-branch-policies")"
     [ -n "$branches" ] || branches='{}'
     problem="$(NAME="$name" ENVIRONMENT="$ENV" REAL="$([ "$SIMULATED_CSPACE" = true ] && echo false || echo true)" \
-      BRANCHES="$branches" python3 -c '
+      ALLOW="$ALLOW_SELF_REVIEW" CONF="$CONF" BRANCHES="$branches" python3 -c '
 import json, os, sys
 env, branches = json.load(sys.stdin), json.loads(os.environ["BRANCHES"])
 policy = env.get("deployment_branch_policy") or {}
@@ -1688,8 +1693,11 @@ if os.environ["NAME"] == os.environ["ENVIRONMENT"]:
     if not reviewers or not reviewers[0].get("reviewers"):
         problems.append("a required reviewer")
     elif not reviewers[0].get("prevent_self_review"):
-        if os.environ["REAL"] == "true":
-            problems.append("Prevent self-review (it has real data)")
+        if os.environ["ALLOW"] == "true":
+            print("note: self-review is allowed (ALLOW_SELF_REVIEW=true in " + os.environ["CONF"]
+                  + "; D308: QA and dev only)", file=sys.stderr)
+        elif os.environ["REAL"] == "true":
+            problems.append("Prevent self-review (it has real data; D308 allows it only with ALLOW_SELF_REVIEW=true)")
         else:
             print("note: self-review is allowed (only for an environment with the simulator, DP13)", file=sys.stderr)
 print("; ".join(problems))' <<<"$json")"
