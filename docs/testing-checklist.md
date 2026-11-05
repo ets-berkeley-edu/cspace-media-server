@@ -2610,10 +2610,10 @@ it. On November 5, 2026 it took that provider for the account's own and planned 
 change, 1 to destroy"): `terraform state list | grep -q` failed under `pipefail` when grep stopped at its first match
 (SIGPIPE). Nothing is applied here.
 
-- [ ] **1. Run it from the pull request's branch,** as the account's administrator (`ADMIN_PROFILE`), in a clone of
+- [x] **1. Run it from the pull request's branch,** as the account's administrator (`ADMIN_PROFILE`), in a clone of
   this repository: `git switch <the branch> && ./serena aws pipeline --env ucb-stage2`. Type the account's number when
   asked. Expect `GitHub's OIDC provider: this pipeline makes (or keeps) it.`, not "the account's own".
-- [ ] **2. The plan:** `No changes. Your infrastructure matches the configuration.` If it plans to destroy
+- [x] **2. The plan:** `No changes. Your infrastructure matches the configuration.` If it plans to destroy
   `aws_iam_openid_connect_provider.github`, answer `no` and stop. Decline setting the GitHub environments' secrets
   (they're set).
 
