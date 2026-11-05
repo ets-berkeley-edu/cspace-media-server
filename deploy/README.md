@@ -90,7 +90,10 @@ their settings this way (it reads them in the build); personal-dev keeps its fil
 **Once deployed, a museum's server never changes.** A museum's servability, recalls and cached files refer to the
 records on the server it was deployed for. So `deploy`, `plan`, `pause`, `resume` and `allow-my-ip` stop before
 changing anything if a museum's server changed. Either put the setting back, or `./serena aws destroy` first, or
-deploy the new server as another environment (a different `SERENA_ENV_NAME` in your `.local.conf`). Adding a museum
+deploy the new server as another environment (a different `SERENA_ENV_NAME` in your `.local.conf`). The one exception
+is a museum moving from the simulator to a real server (stage 2, November 5, 2026): the simulator's records are
+synthetic, its rows are replaced by the museum's first ETL list, and its cached files are keyed by Blob CSIDs a real
+CollectionSpace doesn't have. Adding a museum
 is allowed. Removing one asks you to type its name: its bucket (its cached files) and secrets go with it. Never where
 data is protected.
 

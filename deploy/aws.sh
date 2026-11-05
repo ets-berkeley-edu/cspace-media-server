@@ -647,6 +647,13 @@ check_museums() {  # check_museums ask|look: ask = this command applies (removin
     url="$(server_of "$museum" "$deployed")"
     if now="$(server_of "$museum")"; then
       [ "$now" = "$url" ] && continue
+      # From the simulator to a real server is allowed (November 5, 2026): the simulator's records are synthetic, its
+      # servability rows are replaced by the museum's first ETL list, and its cached files are keyed by Blob CSIDs a
+      # real CollectionSpace doesn't have. Any other change of server still stops.
+      if [ "$url" = "$(sim_url)/$museum" ]; then
+        echo "$museum moves from the simulator to $now: its synthetic rows stay until its first ETL list replaces them."
+        continue
+      fi
       echo "'$ENV' was deployed with $museum on $url, but its settings now say $now." >&2
       echo "$museum's servability, recalls and cached files refer to records on the first." >&2
       die "Stopped; nothing was changed. Put the setting back; or run ./serena aws destroy first (it deletes Serena's data);

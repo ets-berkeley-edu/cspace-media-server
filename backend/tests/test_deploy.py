@@ -185,3 +185,41 @@ def test_only_qa_and_dev_settings_files_allow_self_review() -> None:
     """D308: ALLOW_SELF_REVIEW=true never in a production environment's committed settings."""
     allowed = {f.name for f in committed_settings_files() if re.search(r"^ALLOW_SELF_REVIEW=true", f.read_text(), re.M)}
     assert not {name for name in allowed if "prod" in name.lower()}
+
+
+def shell_function(aws_sh: str, name: str) -> str:
+    """One function of deploy/aws.sh, from its "name() {" line to the closing brace at the start of a line."""
+    match = re.search(rf"^{name}\(\) {{.*?^}}$|^{name}\(\) {{[^\n]*}}$", aws_sh, re.MULTILINE | re.DOTALL)
+    assert match, f"{name} isn't in deploy/aws.sh"
+    return match.group(0)
+
+
+SIMULATOR = "pahma=http://fakecspace.serena-stage2.internal:8180/pahma"
+QA, PRODUCTION = "pahma=https://pahma.qa.collectionspace.org", "pahma=https://pahma.collectionspace.org"
+
+
+@pytest.mark.parametrize(
+    ("deployed", "now", "stops"),
+    [
+        (SIMULATOR, QA, False),  # the simulator's records are synthetic
+        (QA, PRODUCTION, True),  # one real server to another: Serena's data refers to the first
+        (QA, QA, False),
+        (QA, SIMULATOR, True),
+    ],
+)
+def test_a_museum_may_move_only_from_the_simulator(deployed: str, now: str, stops: bool) -> None:
+    aws_sh = (DEPLOY / "aws.sh").read_text()
+    functions = "\n".join(shell_function(aws_sh, f) for f in ("museum_names", "server_of", "sim_url", "check_museums"))
+    script = f"""set -euo pipefail
+die() {{ echo "STOPPED: $*"; exit 3; }}
+applied() {{ echo "$DEPLOYED"; }}
+ENV=ucb-stage2 NAME=serena-stage2 LOCAL=ucb-stage2.local.conf PROTECT_DATA=true IN_BUILD=true MUSEUMS="$NOW"
+{functions}
+check_museums look
+echo CHECKED
+"""
+    env = {**os.environ, "DEPLOYED": deployed, "NOW": now}
+    # The script is this repository's own deploy/aws.sh, not outside input.
+    result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)  # noqa: S603, S607
+    assert ("STOPPED" in result.stdout) is stops
+    assert ("CHECKED" in result.stdout) is not stops
