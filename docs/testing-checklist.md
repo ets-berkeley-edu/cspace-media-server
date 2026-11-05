@@ -2602,3 +2602,17 @@ It costs about $5 a day while the VPC exists (its NAT gateway), so do it in one 
   didn't go as written, is fixed in a follow-up pull request (the policy in `deploy/iam/serena-deployer-policy.json`,
   as in section 54, step 10), and the step is repeated. None left: the pull request can merge, and stage 2 proves the
   read across accounts once Ops says where the ETL server is.
+
+## 58. The pipeline command keeps its own OIDC provider, on ucb-stage2 (10 minutes, with an Ops administrator; before merging the pull request that fixes it)
+
+What it checks: `./serena aws pipeline` run again on an environment whose pipeline made GitHub's OIDC provider keeps
+it. On November 5, 2026 it took that provider for the account's own and planned to destroy it ("Plan: 0 to add, 0 to
+change, 1 to destroy"): `terraform state list | grep -q` failed under `pipefail` when grep stopped at its first match
+(SIGPIPE). Nothing is applied here.
+
+- [ ] **1. Run it from the pull request's branch,** as the account's administrator (`ADMIN_PROFILE`), in a clone of
+  this repository: `git switch <the branch> && ./serena aws pipeline --env ucb-stage2`. Type the account's number when
+  asked. Expect `GitHub's OIDC provider: this pipeline makes (or keeps) it.`, not "the account's own".
+- [ ] **2. The plan:** `No changes. Your infrastructure matches the configuration.` If it plans to destroy
+  `aws_iam_openid_connect_provider.github`, answer `no` and stop. Decline setting the GitHub environments' secrets
+  (they're set).

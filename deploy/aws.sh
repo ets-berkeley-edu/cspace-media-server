@@ -1759,12 +1759,19 @@ pipeline_root() {  # pipeline_root [destroy]
   [ "$ROOT" = shared ] || die "The pipeline is for environments on the shared root: stage 2, QA, production (DP1)."
   check_account; need_terraform; ensure_state_bucket
   tf_init pipeline
-  local create vars subject
-  # GitHub's OIDC provider can exist only once in an account (DP2): made here only where there is none.
-  if tf pipeline state list 2>/dev/null | grep -q '^aws_iam_openid_connect_provider\.github'; then create=true
-  elif aws_ iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text |
-    grep -q 'oidc-provider/token\.actions\.githubusercontent\.com'; then create=false
-  else create=true
+  local create vars subject state providers
+  # GitHub's OIDC provider can exist only once in an account (DP2): made here only where there is none. Each list is
+  # read whole before it's searched: with pipefail, "terraform state list | grep -q" fails when grep stops at its first
+  # match while terraform is still writing (SIGPIPE), and a provider this pipeline made then looked like the account's
+  # own, so Terraform planned to destroy it (November 5, 2026).
+  state="$(tf pipeline state list 2>/dev/null)" ||
+    die "Couldn't read the pipeline's Terraform state (terraform state list) for '$ENV'. Nothing was changed."
+  if grep -q '^aws_iam_openid_connect_provider\.github' <<<"$state"; then create=true
+  else
+    providers="$(aws_ iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[].Arn' --output text)"
+    if grep -q 'oidc-provider/token\.actions\.githubusercontent\.com' <<<"$providers"; then create=false
+    else create=true
+    fi
   fi
   # Deleting needs no answer from GitHub: any subject will do.
   if [ "${1:-}" = destroy ]; then subject="repo:$PIPELINE_REPO"; else subject="$(github_subject)" || exit 1; fi

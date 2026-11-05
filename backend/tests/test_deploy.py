@@ -130,3 +130,16 @@ def test_the_pipeline_installs_the_terraform_ci_uses() -> None:
         assert version.group(1) == ci_version.group(1), f"buildspec-{mode}.yml installs CI's Terraform"
         pins.add((version.group(1), sha.group(1)))
     assert len(pins) == 1
+
+
+def test_aws_sh_never_pipes_a_command_into_grep_q() -> None:
+    """deploy/aws.sh runs with pipefail. "cmd | grep -q" then fails at random when grep stops at its first match while
+    cmd is still writing (SIGPIPE): ./serena aws pipeline once took the pipeline's own OIDC provider for the account's
+    and planned to destroy it (November 5, 2026). Read the output into a variable and search that. An echo of one
+    value is the exception: it has written everything before grep reads."""
+    aws_sh = (DEPLOY / "aws.sh").read_text()
+    assert re.search(r"^set -euo pipefail$", aws_sh, re.MULTILINE)
+    code = re.sub(r"^\s*#.*$", "", aws_sh, flags=re.MULTILINE)  # comments may name the pattern
+    pipes = re.finditer(r"([^\n|]*)\|\s*(?:\\\n)?\s*grep -[A-Za-z]*q", code)
+    offenders = [m.group(0).strip() for m in pipes if not m.group(1).strip().startswith("echo ")]
+    assert offenders == []
