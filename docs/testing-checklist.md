@@ -2610,9 +2610,25 @@ it. On November 5, 2026 it took that provider for the account's own and planned 
 change, 1 to destroy"): `terraform state list | grep -q` failed under `pipefail` when grep stopped at its first match
 (SIGPIPE). Nothing is applied here.
 
-- [ ] **1. Run it from the pull request's branch,** as the account's administrator (`ADMIN_PROFILE`), in a clone of
+- [x] **1. Run it from the pull request's branch,** as the account's administrator (`ADMIN_PROFILE`), in a clone of
   this repository: `git switch <the branch> && ./serena aws pipeline --env ucb-stage2`. Type the account's number when
   asked. Expect `GitHub's OIDC provider: this pipeline makes (or keeps) it.`, not "the account's own".
-- [ ] **2. The plan:** `No changes. Your infrastructure matches the configuration.` If it plans to destroy
+- [x] **2. The plan:** `No changes. Your infrastructure matches the configuration.` If it plans to destroy
   `aws_iam_openid_connect_provider.github`, answer `no` and stop. Decline setting the GitHub environments' secrets
   (they're set).
+
+## 59. Self-review on ucb-stage2 (15 minutes; after merging the pull request that allows it)
+
+What it checks: D308, decided November 5, 2026. QA and dev environments may let whoever starts a deploy approve it;
+production never. `ucb-stage2.conf` says `ALLOW_SELF_REVIEW=true` (only the committed file may: `./serena aws` stops
+if a `.local.conf` sets it).
+
+- [ ] **1. The GitHub setting.** The repository's Settings › Environments › `ucb-stage2` › Deployment protection
+  rules: uncheck **Prevent self-review**, keep **Required reviewers** (you among them), and click **Save protection
+  rules**. Leave `ucb-stage2-plan` as it is.
+- [ ] **2. A deploy you approve yourself.** Actions › Deploy › Run workflow, from `main`, with `ucb-stage2`. Once the
+  plan job is done, read the plan in the AWS console, then Review deployments › `ucb-stage2` › Approve and deploy:
+  GitHub accepts your approval, and the apply job runs.
+- [ ] **3. The pipeline command accepts it** (the next time an Ops administrator runs `./serena aws pipeline --env
+  ucb-stage2`): expect `note: self-review is allowed (ALLOW_SELF_REVIEW=true in …; D308: QA and dev only)` and no
+  "needs: Prevent self-review".

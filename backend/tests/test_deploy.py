@@ -3,8 +3,14 @@ it gives the app. The committed settings files keep the default environment on t
 belongs only in an uncommitted <env>.local.conf."""
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from serena import tables
 from serena.config import Settings
@@ -143,3 +149,39 @@ def test_aws_sh_never_pipes_a_command_into_grep_q() -> None:
     pipes = re.finditer(r"([^\n|]*)\|\s*(?:\\\n)?\s*grep -[A-Za-z]*q", code)
     offenders = [m.group(0).strip() for m in pipes if not m.group(1).strip().startswith("echo ")]
     assert offenders == []
+
+
+def github_environment_check() -> str:
+    """The Python that ./serena aws pipeline runs on a GitHub environment's rules (check_github_environments)."""
+    aws_sh = (DEPLOY / "aws.sh").read_text()
+    body = aws_sh[aws_sh.index("check_github_environments() {") :]
+    return body[body.index("python3 -c '") + len("python3 -c '") : body.index("' <<<\"$json\"")]
+
+
+@pytest.mark.parametrize(
+    ("real", "allow", "prevent", "refused"),
+    [
+        ("true", "false", False, True),  # real data: self-review only with ALLOW_SELF_REVIEW (D308)
+        ("true", "true", False, False),
+        ("true", "false", True, False),
+        ("false", "false", False, False),  # the simulator only (DP13)
+    ],
+)
+def test_self_review_needs_allow_self_review_where_there_is_real_data(
+    real: str, allow: str, prevent: bool, refused: bool
+) -> None:
+    rules = {"protection_rules": [{"type": "required_reviewers", "prevent_self_review": prevent,
+                                   "reviewers": [{"type": "User"}]}],
+             "deployment_branch_policy": {"custom_branch_policies": True}}
+    env = {**os.environ, "NAME": "ucb-stage2", "ENVIRONMENT": "ucb-stage2", "REAL": real, "ALLOW": allow,
+           "CONF": "ucb-stage2.conf", "BRANCHES": json.dumps({"branch_policies": [{"name": "main", "type": "branch"}]})}
+    # The program is this repository's own deploy/aws.sh, not outside input.
+    result = subprocess.run([sys.executable, "-c", github_environment_check()],  # noqa: S603
+                            input=json.dumps(rules), env=env, capture_output=True, text=True, check=True)
+    assert ("Prevent self-review" in result.stdout) is refused
+
+
+def test_only_qa_and_dev_settings_files_allow_self_review() -> None:
+    """D308: ALLOW_SELF_REVIEW=true never in a production environment's committed settings."""
+    allowed = {f.name for f in committed_settings_files() if re.search(r"^ALLOW_SELF_REVIEW=true", f.read_text(), re.M)}
+    assert not {name for name in allowed if "prod" in name.lower()}

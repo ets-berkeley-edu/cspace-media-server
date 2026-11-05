@@ -1756,7 +1756,8 @@ their hashed names, with no CDN (D296).
     build at a time per project. `./serena aws pipeline` runs as the environment's `ADMIN_PROFILE` (the account's
     administrator; it replaced `REHEARSAL_ADMIN_PROFILE`). It refuses an environment without `SETTINGS=ssm`, and
     checks GitHub's API before applying: both GitHub environments exist and take only `main`, and `<env>` has a
-    required reviewer (with "prevent self-review" where there is real data). It makes GitHub's OIDC provider only if
+    required reviewer (with "prevent self-review" where there is real data, unless the environment's committed
+    settings file says `ALLOW_SELF_REVIEW=true`, D308). It makes GitHub's OIDC provider only if
     its own state already holds it or the account has none. Then it offers to set the environments' `AWS_ROLE_ARN`
     secrets and `AWS_REGION` variables with `gh`. Once an environment has a pipeline, `./serena aws deploy`, `pause`
     and `resume` from a laptop are break-glass (typing "break glass"), and `status` says the pipeline deploys it.
@@ -1787,7 +1788,9 @@ their hashed names, with no CDN (D296).
   - **Approval.** GitHub environments with protection rules, two per AWS environment (D272, amended November 2, 2026,
     DP9): `<env>-plan`, deployments from `main` only, no reviewer; and `<env>`, from `main` only, with required
     reviewers (Richard and one other person) and "prevent self-review", so whoever started the deploy can't approve
-    it. The plan job's summary in Actions shows only the counts (to add, change and destroy) and a link to the build
+    it. QA and dev environments may allow self-review (D308, decided November 5, 2026): `ALLOW_SELF_REVIEW=true` in
+    the environment's committed settings file (never its `.local.conf`, so allowing it is a reviewed change), and
+    "Prevent self-review" unchecked on `<env>`. Production never allows it. The plan job's summary in Actions shows only the counts (to add, change and destroy) and a link to the build
     in the AWS console, which has no account number in it; the reviewer signs in to AWS and reads the plan there before
     approving (DP6). The roles' ARNs are environment secrets, so the account number is masked in the logs. Production
     takes only a commit already deployed to pre-production: its workflow checks GitHub's deployments first. GitHub

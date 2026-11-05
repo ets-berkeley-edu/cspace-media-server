@@ -291,6 +291,8 @@ account, and Terraform runs only there, so its plans and logs never reach the pu
 
 1. **GitHub environments** (repository Settings › Environments; an admin of the repository): `<env>-plan`, deployments
    from `main` only, no reviewer; and `<env>`, from `main` only, with required reviewers and "Prevent self-review".
+   A QA or dev environment may leave "Prevent self-review" unchecked if its committed `.conf` says
+   `ALLOW_SELF_REVIEW=true` (D308; `ucb-stage2` does). Production never.
    They come first: the roles trust them, and GitHub makes an environment without rules the first time a job names it.
 2. **Settings in SSM:** `SETTINGS=ssm` in the environment's files, then `./serena aws settings push --env <env>`.
 3. **The pipeline**, as the account's administrator: `./serena aws pipeline --env <env>`. It applies
