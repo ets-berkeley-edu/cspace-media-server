@@ -1883,7 +1883,8 @@ their hashed names, with no CDN (D296).
   tables (the admin app's recalls and settings are served by the app), the cache index (its `last_served` too, D142),
   refreshes, alerts,
   audit log and admin sessions; read and put objects (reading is needed to make watermarked copies) and the
-  uploaded ETL lists; use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
+  uploaded ETL lists (put by the ETL API; read by Manual refresh's dry run, which compares with the last updated
+  refresh's list; fixed November 5, 2026, when the first dry run in AWS was refused); use the KMS key; read its own secrets (the CollectionSpace accounts included, for the light
   check, fetches, the recall form's lookups and thumbnails, and Media look up's read of the Media record, and the
   CloudFront signing key); and run Logs Insights queries on its own log group
   only (`logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`), for the Past requests page (D110), and read

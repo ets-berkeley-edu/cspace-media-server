@@ -116,9 +116,11 @@ data "aws_iam_policy_document" "web" {
     resources = local.object_arns
   }
 
+  # Put: the ETL API stores each ETL list. Get: Manual refresh's dry run reads the last updated refresh's list to
+  # compare with (admin_refreshes.py), and a dry run of one of the ETL's recent lists reads that list.
   statement {
-    sid       = "ServableListUploads"
-    actions   = ["s3:PutObject", "s3:AbortMultipartUpload"]
+    sid       = "ServableLists"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload"]
     resources = local.servable_list_arn
   }
 

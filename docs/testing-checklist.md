@@ -2632,3 +2632,22 @@ if a `.local.conf` sets it).
 - [ ] **3. The pipeline command accepts it** (the next time an Ops administrator runs `./serena aws pipeline --env
   ucb-stage2`): expect `note: self-review is allowed (ALLOW_SELF_REVIEW=true in …; D308: QA and dev only)` and no
   "needs: Prevent self-review".
+
+## 60. Manual refresh's dry run in AWS, on ucb-stage2 (10 minutes; after the Deploy that brings the fix)
+
+What it checks: the web task's role may read the stored ETL lists (`servable-list/*` in the museum's bucket). A dry
+run compares the chosen ETL list with the last updated refresh's list, which it reads from there; without
+`s3:GetObject` it ended in a 500 ("Serena gave an unexpected answer.") and, in `./serena aws logs web --env
+ucb-stage2`, `ClientError: An error occurred (403) when calling the HeadObject operation: Forbidden`. The local stack
+couldn't show it: moto doesn't enforce IAM. `tests/test_deploy.py` now checks the grant.
+
+- [ ] **1. The plan.** In the Deploy run's plan (Actions › Deploy, from `main`, with `ucb-stage2`), expect one change
+  in place: the web role's policy, `module.core.aws_iam_role_policy.web`, with `s3:GetObject`
+  added to the statement now named `ServableLists`. Nothing replaced, nothing destroyed. Approve and deploy.
+- [ ] **2. A dry run of an upload.** In the admin app, signed in to PAHMA: Manual refresh › Upload one, choose an ETL
+  list file and its refresh date, then **Check the ETL list**. Expect the dry run's result (passed, failed only on
+  the delta threshold, or the problems it found), not "Serena gave an unexpected answer. (500)".
+- [ ] **3. A dry run of a previous list.** Manual refresh › Choose from previous, pick a list, **Check the ETL list**.
+  Expect its result, not a 500.
+- [ ] **4. The log.** `cd /Users/remillet/dev/src/rtl/cspace-media-server && ./serena aws logs web --env ucb-stage2
+  2>&1 | grep -iE "HeadObject|Forbidden"` (Ctrl+C after 10 seconds): expect nothing from after the Deploy.

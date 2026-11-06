@@ -223,3 +223,25 @@ echo CHECKED
     result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)  # noqa: S603, S607
     assert ("STOPPED" in result.stdout) is stops
     assert ("CHECKED" in result.stdout) is not stops
+
+
+def policy_statements(document: str) -> list[tuple[list[str], str]]:
+    """The statements of one aws_iam_policy_document in modules/core/iam.tf: each one's actions and resources."""
+    iam = (DEPLOY / "terraform" / "modules" / "core" / "iam.tf").read_text()
+    match = re.search(rf'^data "aws_iam_policy_document" "{document}" {{.*?^}}$', iam, re.MULTILINE | re.DOTALL)
+    assert match, f"the {document} policy isn't in modules/core/iam.tf"
+    statements = []
+    for body in re.findall(r"^  statement {(.*?)^  }$", match.group(0), re.MULTILINE | re.DOTALL):
+        actions = re.search(r"actions\s*=\s*\[(.*?)\]", body, re.DOTALL)
+        resources = re.search(r"resources\s*=\s*(.+)", body)
+        statements.append((re.findall(r'"([^"]+)"', actions.group(1)) if actions else [],
+                           resources.group(1).strip() if resources else ""))
+    return statements
+
+
+@pytest.mark.parametrize("role", ["web", "worker"])
+def test_web_and_worker_can_read_stored_etl_lists(role: str) -> None:
+    """The worker checks and applies each stored ETL list; the web task's Manual refresh dry run reads the last updated
+    refresh's list to compare with. Moto doesn't enforce IAM, so only this catches a missing grant before AWS does."""
+    assert any("s3:GetObject" in actions and resources == "local.servable_list_arn"
+               for actions, resources in policy_statements(role))
