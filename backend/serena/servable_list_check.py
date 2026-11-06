@@ -12,7 +12,7 @@ from typing import IO, Any
 
 from .csid import is_csid
 from .museum import Museum
-from .servable_list import ACCESS, HEADER, KINDS, Row, lines
+from .servable_list import ACCESS, HEADER, KINDS, Row, lines, row
 
 MAX_PROBLEMS = 20  # problems listed in the refresh; all are counted
 
@@ -97,7 +97,7 @@ def check(museum: Museum, new: IO[bytes], previous: dict[str, Row] | None, thres
         if blob in rows:
             problems.add(number, "blob_csid", "is listed twice")
             continue
-        rows[blob] = Row(media, kind, access)
+        rows[blob] = row(media, kind, access)
     if not seen_header:
         problems.add(1, "header", "missing: the file is empty")
 

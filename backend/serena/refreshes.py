@@ -111,6 +111,9 @@ class Refresh:
     retry_until: str | None = None
     owner: str | None = None  # the worker doing this refresh's step
     heartbeat_at: int | None = None  # when that worker last said it was still on it (Unix seconds)
+    # An update under way: how many of its writes are done and how many there are, renewed with the heartbeat
+    # (November 5, 2026); removed when the worker lets the refresh go.
+    progress: dict[str, int] | None = None
 
     @property
     def refresh_id(self) -> str:
@@ -208,7 +211,8 @@ def _from_item(item: dict[str, Any]) -> Refresh:
                    override=_plain(plain.get("override")), admin_refresh=_plain(plain.get("admin_refresh")),
                    retry_until=plain.get("retry_until"),
                    owner=plain.get("owner"),
-                   heartbeat_at=int(plain["heartbeat_at"]) if "heartbeat_at" in plain else None)
+                   heartbeat_at=int(plain["heartbeat_at"]) if "heartbeat_at" in plain else None,
+                   progress=_plain(plain.get("progress")))
 
 
 class Refreshes:
@@ -319,7 +323,7 @@ class Refreshes:
         if upload is not None:
             removing.append("retry_until")
         if release:
-            removing += ["#owner", "heartbeat_at"]
+            removing += ["#owner", "heartbeat_at", "progress"]
             names["#owner"] = "owner"
         if removing:
             update += " REMOVE " + ", ".join(removing)
@@ -344,7 +348,7 @@ class Refreshes:
         for name, result in (results or {}).items():
             setattr(refresh, name, result)
         if release:
-            refresh.owner, refresh.heartbeat_at = None, None
+            refresh.owner, refresh.heartbeat_at, refresh.progress = None, None, None
         return refresh
 
     # The worker's claim on a refresh's step (decided October 9, 2026, D33): a conditional write sets the owner and a
@@ -366,14 +370,19 @@ class Refreshes:
         refresh.owner, refresh.heartbeat_at = owner, now
         return True
 
-    def heartbeat(self, refresh: Refresh, owner: str) -> bool:
+    def heartbeat(self, refresh: Refresh, owner: str, progress: dict[str, int] | None = None) -> bool:
+        """`progress`: an update's writes done and in all, written with the heartbeat."""
         now = int(self.clock().timestamp())
+        update = "SET heartbeat_at = :now"
+        values: dict[str, Any] = {":owner": {"S": owner}, ":now": {"N": str(now)}}
+        if progress is not None:
+            update += ", progress = :progress"
+            values[":progress"] = _serializer.serialize(progress)
         try:
             self.client.update_item(
                 TableName=self.table, Key={"pk": {"S": refresh.tenant}, "sk": {"S": refresh.sort_key}},
-                UpdateExpression="SET heartbeat_at = :now", ConditionExpression="#owner = :owner",
-                ExpressionAttributeNames={"#owner": "owner"},
-                ExpressionAttributeValues={":owner": {"S": owner}, ":now": {"N": str(now)}})
+                UpdateExpression=update, ConditionExpression="#owner = :owner",
+                ExpressionAttributeNames={"#owner": "owner"}, ExpressionAttributeValues=values)
         except self.client.exceptions.ConditionalCheckFailedException:
             return False
         return True

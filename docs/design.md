@@ -609,7 +609,7 @@ where the table is read as a list, a sort key:
 | --- | --- | --- | --- |
 | Servability | `<tenant>#<blob CSID>` | | museum, Blob CSID, Media CSID, kind, access, and when the row was last written new or changed (`listed_at`, so a Media URL can pick the Blob listed most recently, D175); indexed by `<tenant>#<media CSID>` (`by_media`) and by museum (`by_tenant`, for the ETL list update) |
 | Recalls | `<tenant>#<media CSID>` | | indexed by museum (`by_tenant`, for the Recalls page and the ETL list update); the Blob CSID the Media record had when it was recalled; who, when, why; and, once an ETL list update has kept it because the same Blob is still listed as public, which refresh kept it (D119). A recall that ends is deleted; its history is in the audit log (see How a recall ends) |
-| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the ETL list check's result, the ETL list update's counts, an admin's override, a manual refresh's list (its refresh date, and the refresh an ETL list came with), the worker's claim (owner, heartbeat), timestamps, reasons |
+| Refreshes | `<tenant>` | `<refresh date>#<nnn>` (sorts by refresh date, then refresh) | refresh ID, refresh date, state, the upload (SHA-256, rows, size, S3 key), the ETL list check's result, the ETL list update's counts, an admin's override, a manual refresh's list (its refresh date, and the refresh an ETL list came with), the worker's claim (owner, heartbeat), an update's progress, timestamps, reasons |
 | Settings | `<tenant>` | | an admin's values (as JSON) for the watchdog deadline, ETL poll interval and step timeout, delta threshold, size limits, audit retention and the placeholder image's Media record (D169), over the starting values in configuration, and a version (each change is a conditional write on it, so two admins can't undo each other's change); a value outside the allowed bounds is refused, and one that isn't valid is ignored; each task reads them again after a minute |
 | Alerts | `<tenant>` | `<refresh date>#<kind>#<subject>` | kind, subject, message, created, emailed, acknowledged by and when; read by the admin app for its bell, banner and Alerts page |
 | Cache index | see Storage | | |
@@ -812,6 +812,15 @@ table, so a restart never loses a step.
   time it was written (`listed_at`); unchanged rows aren't touched. Writes are batched (25 at a time), and what
   DynamoDB leaves unprocessed is retried with backoff; a whole ETL list update that still fails is tried twice more
   before the refresh ends `update_failed` with the reason. The refresh shows the counts: deleted, written, unchanged.
+  **Memory** (November 5, 2026, after a first load of some 970,000 rows ran a 1 GiB worker out of memory, over and
+  over: each new worker claimed the stale step and ran out again): the update holds the ETL list's rows (about 270 MB
+  for a million) and, besides them, only the Blob CSIDs to write. It compares the table's rows a page at a time
+  without keeping them, and makes each batch's requests just before sending it. `tests/test_servability_update.py`
+  fails if an update of 200,000 rows uses more than 20 MB beside them.
+  **Progress** (November 5, 2026): once it knows what to write, the update counts its writes done and in all, and
+  the worker sends them with each heartbeat; the refresh's page shows them while it applies (see Admin web app), and
+  they're removed when the worker lets the refresh go. DynamoDB takes at most about 1,000 writes a second for one
+  `by_tenant` key (one museum), so a first load of a million rows takes at least some 17 minutes.
   **An update that failed partway** (decided October 28, 2026): the batches are not one all-or-nothing change, so
   what was done stays. Failing while deleting, some Blobs the new ETL list drops are no longer served; failing while
   writing, all of those are gone and some of the new and changed rows are written, the rest not. Serena then serves
@@ -1374,7 +1383,9 @@ their hashed names, with no CDN (D296).
     call, with a clock ("Waiting for the ETL list" for `started`; "ETL list received" for `received`, until the ETL
     job asks for the check), or working, with a small spinner, still for those who ask for reduced motion
     ("Checking the ETL list", "Applying the ETL list" for `updating`). Where there's room (a refresh's page, Manual
-    refresh), a line says how long and what's normal ("Checking since 16:57 UTC (3 min): usually a few minutes."), and,
+    refresh), a line says how long and what's normal ("Checking since 16:57 UTC (3 min): usually a few minutes."; an
+    update, once the worker has counted its writes, says how far it has got instead: "Applying since 16:57 UTC
+    (12 min): 120,000 of 969,351 rows applied.", mockup version 59), and,
     for an ETL refresh past the watchdog's deadline, says so in the warning colour, adding, while it still waits for
     its ETL list, that the ETL job may have failed.
   - **The current refresh and the pending one** (decided October 28, 2026, mockup version 55). The **current
