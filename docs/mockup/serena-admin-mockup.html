@@ -590,7 +590,7 @@
   const BLOB = BR, MEDIA = "20349bfa-cad6-5f47-9acd-dcd34e3f0b98";
 
   // The Media records. `blobs`: the Blobs the ETL list has for the record (`until`: when a refresh dropped it).
-  // `cs`: CollectionSpace's Media record now: its Blob, its "Approved for web" (PAHMA's media_pahma approvedforweb, the field its ETL reads; publish "None" means not approved), when it
+  // `cs`: CollectionSpace's Media record now: its Blob, its "Approved for web" (PAHMA's media_pahma approvedForWeb, the field its ETL reads; publish "None" means not approved), when it
   // last changed, and whether it's soft-deleted. `stored`: copies Serena stored before the log's sample lines (the
   // lines store the rest, on a miss). `recall`: the record's recall, active or ended. `ex`: an example button.
   const RECORDS = [
