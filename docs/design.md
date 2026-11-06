@@ -1533,7 +1533,7 @@ their hashed names, with no CDN (D296).
     list, the Media search by Blob CSID first), through the same client and service account as a fetch, with its
     timeouts and retries; nothing is stored. It shows whether the record exists or is soft-deleted, its Blob (marked
     when it differs from Serena's), when it last changed, and the museum's lookup fields (D140: configured per museum,
-    `lookup_fields`; PAHMA shows "Approved for web", `media_pahma`'s `approvedforweb`, the field its ETL reads; a
+    `lookup_fields`; PAHMA shows "Approved for web", `media_pahma`'s `approvedForWeb` (the XML element; the ETL's SQL reads it as column `approvedforweb`); a
     vocabulary term shows by its display name, a boolean as Yes or No). Serena never decides from them:
     the ETL's rules do, partly from the Object record, which isn't shown. A size without a cached copy of a record
     that is soft-deleted or gone is shown as refused, since its fetch would be. If CollectionSpace can't be reached,

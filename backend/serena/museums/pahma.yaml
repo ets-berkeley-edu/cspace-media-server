@@ -12,9 +12,10 @@ placeholder_blob_csid: 59a733dd-d641-4e1a-8552
 admin_role: Serena_Admin
 # The Media record fields Media look up shows from CollectionSpace, beside Serena's records (D140). Serena shows
 # them and never decides from them: the ETL's rules decide what's public. PAHMA's ETL reads "Approved for web"
-# (media_pahma's approvedforweb), not media_common's publishTo; it also tests the Object record, which isn't shown.
+# (media_pahma's approvedForWeb), not media_common's publishTo; it also tests the Object record, which isn't shown.
+# `field` is the XML element's name, which is case-sensitive: approvedForWeb, though the ETL's SQL column is approvedforweb.
 lookup_fields:
-  - {part: media_pahma, field: approvedforweb, label: Approved for web}
+  - {part: media_pahma, field: approvedForWeb, label: Approved for web}
 settings:
   watchdog_deadline: "08:00"          # Pacific time: today's refresh must be updated or abandoned by then
   etl_poll_interval_seconds: 15       # returned to the ETL in every refresh response

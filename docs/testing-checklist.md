@@ -2679,3 +2679,21 @@ time another worker claimed the stale step, and the refresh stayed "Applying the
 - [ ] **5. No restarts.** `aws ecs list-tasks --cluster serena-stage2 --service-name worker --desired-status STOPPED
   --profile serena-stage2-deploy --region us-west-2`: no worker stopped since step 3. In CloudWatch, the worker
   service's MemoryUtilization stays under 50%.
+
+## 62. PAHMA's Approved for web in Media look up, on ucb-stage2 (5 minutes; after the Deploy that brings the fix)
+
+What it checks: Media look up shows PAHMA's "Approved for web" from CollectionSpace. Before the fix, Serena asked for
+the XML element `approvedforweb` (the ETL's Postgres column name). CollectionSpace names the element `approvedForWeb`,
+so nothing matched and the "CollectionSpace now" column said "Approved for web: (empty)" for every record. It was
+only a display problem: what Serena serves comes from the ETL's list, never from this field.
+
+- [ ] **1. Deploy.** Actions › Deploy › Run workflow, from `main`, with `ucb-stage2`. Expect the web and worker task
+  definitions replaced for the new image tag, nothing else. Approve and deploy.
+- [ ] **2. Ticked.** In the admin app, signed in to PAHMA: Media look up for SERENA-TEST-020. In the "CollectionSpace
+  now" column, expect **Approved for web: Yes**, matching the ticked "Approved for public?" box on the Media record in
+  PAHMA QA.
+- [ ] **3. Unticked.** In PAHMA QA, untick "Approved for public?" on that Media record and save. Look it up again in
+  Serena: expect **Approved for web: No**. Serena's own answer (whether it serves the file) doesn't change: that
+  waits for the next ETL list.
+- [ ] **4. Put it back.** Tick "Approved for public?" again in PAHMA QA and save, so the next ETL run lists the record
+  as before. Look it up once more: **Yes**.

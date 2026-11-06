@@ -28,9 +28,9 @@ defusedxml==0.7.1 \
     # via
     #   -c requirements.txt
     #   fakecspace
-fakecspace==0.2.0 \
-    --hash=sha256:28af0140e5bb6fa9b284e322a919fa0bfd690650b2d9e6d703aea89c51ea9fbe \
-    --hash=sha256:3853b1ab9dc80d8ae0531a0ccd7ca973c8bf06d83872de38453493d7e27e623c
+fakecspace==0.3.0 \
+    --hash=sha256:4ed7a4d271581b7dd3d2c87be97c536c444f05d7241c47c2f73295db3f43b701 \
+    --hash=sha256:7324e70e4c017ac23858d984251fe5e7dde094b8c04824e7f2dbe2c7861a740d
     # via -r requirements-sim.in
 fastapi==0.162.0 \
     --hash=sha256:3785963de305dd09912426cb81f2d230fce98ab3521cdfe97265c8d14983128c \

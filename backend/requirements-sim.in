@@ -2,4 +2,4 @@
 # stack's image (Dockerfile), the AWS simulator's image and the tests; never in the production image
 # (deploy/Dockerfile). pin-requirements.sh compiles this into requirements-sim.txt, constrained to Serena's pins.
 -c requirements.txt
-fakecspace==0.2.0
+fakecspace==0.3.0
