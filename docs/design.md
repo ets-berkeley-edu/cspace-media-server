@@ -455,7 +455,8 @@ its own reason, so the admin app can say why a file isn't served:
 | `media_deleted` | A miss: the Media record is soft-deleted |
 | `no_file` | A miss: the Media record exists, but CollectionSpace has no such file or size (404) |
 | `cspace_unavailable` | A miss: CollectionSpace didn't answer, or answered 429, 502, 503 or 504 after the retries, or the file broke off part-way |
-| `cspace_refused` | A miss: CollectionSpace answered 401, 403 or another unexpected status (a 500 included, which isn't retried), or Serena has no account for the museum: a configuration problem. In UC Berkeley's QA instances, a 500 for a file usually means its file isn't in QA's storage (seen November 5, 2026) |
+| `cspace_refused` | A miss: CollectionSpace answered 401 or 403, or Serena has no account for the museum, or no answer it can read: a problem with Serena's account or configuration |
+| `cspace_error` | A miss: CollectionSpace answered any other unexpected status (a 500 included, which isn't retried): a problem with that record or file. In UC Berkeley's QA instances, a 500 for a file usually means its file isn't in QA's storage (seen November 5, 2026). Split from `cspace_refused` on November 6, 2026, so that its alarm stays for the account |
 | `wrong_content_type` | A miss: a content type the kind doesn't allow, or a "PDF" without `%PDF-` in its first 1024 bytes |
 | `too_large` | A miss: over the museum's size limit for the kind |
 | `not_decodable` | A miss: an image or catalog card that doesn't decode |
@@ -1928,8 +1929,10 @@ their hashed names, with no CDN (D296).
   when they clear: no healthy app task for 5 minutes; the worker not running for 10 minutes (no CPU figure from ECS
   for its service; the watchdog runs in the worker, so it can't report this itself); 5 or more 5xx answers from the
   app in 5 minutes; and, from metric filters on the app's `unserved` log lines, 5 or more `internal_error` in 15
-  minutes, any `cspace_refused` (most often a changed service-account password), and 20 or more `cspace_unavailable`
-  in 15 minutes. The thresholds are starting values, to tune in QA. CloudFront's own metrics (only in us-east-1) aren't
+  minutes, any `cspace_refused` (most often a changed service-account password), 20 or more `cspace_error` in 15
+  minutes, and 20 or more `cspace_unavailable` in 15 minutes. `cspace_error` was split from `cspace_refused` on
+  November 6, 2026: in QA, a reader asking for a record whose file isn't in QA's storage tripped the account's alarm,
+  and raising that alarm's threshold would have delayed it for a changed password (Richard). The thresholds are starting values, to tune in QA. CloudFront's own metrics (only in us-east-1) aren't
   alarmed for now. While an environment is paused, the alarms send nothing.
 - **Configuration.** Settings come from environment variables prefixed `SERENA_` (never a secret: those are in Secrets
   Manager). Each museum has a YAML file in `backend/serena/museums/`: its derivatives, whether it serves the original

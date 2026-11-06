@@ -106,8 +106,8 @@ run "names_and_sizes" {
   }
 
   assert {
-    condition     = length(module.core.test.unserved_patterns) == 3 && module.core.test.unserved_patterns["cspace-refused"] == "{ $.message = \"unserved\" && $.reason = \"cspace_refused\" }"
-    error_message = "Three alarms on unserved requests, from metric filters on the app's log lines (D202, D203)."
+    condition     = length(module.core.test.unserved_patterns) == 4 && module.core.test.unserved_patterns["cspace-refused"] == "{ $.message = \"unserved\" && $.reason = \"cspace_refused\" }" && module.core.test.unserved_patterns["cspace-errors"] == "{ $.message = \"unserved\" && $.reason = \"cspace_error\" }"
+    error_message = "Four alarms on unserved requests, from metric filters on the app's log lines (D202, D203; cspace_error split from cspace_refused November 6, 2026)."
   }
 }
 
@@ -159,7 +159,7 @@ run "paused_alarms_are_silent" {
   }
 
   assert {
-    condition     = length(module.core.test.alarms_enabled) == 5 && alltrue([for enabled in values(module.core.test.alarms_enabled) : !enabled])
+    condition     = length(module.core.test.alarms_enabled) == 6 && alltrue([for enabled in values(module.core.test.alarms_enabled) : !enabled])
     error_message = "A paused environment sends no alarm (D204)."
   }
 }

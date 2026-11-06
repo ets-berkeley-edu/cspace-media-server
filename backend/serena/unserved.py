@@ -40,7 +40,10 @@ class Reason(StrEnum):
     MEDIA_DELETED = "media_deleted"  # the Media record is soft-deleted
     NO_FILE = "no_file"  # the Media record exists, but CollectionSpace has no such file or size (404)
     CSPACE_UNAVAILABLE = "cspace_unavailable"  # no answer, or 429 or 5xx after the retries
-    CSPACE_REFUSED = "cspace_refused"  # 401, 403 or another unexpected answer: Serena's account or configuration
+    # 401 or 403, or no account or no answer Serena can read: Serena's account or configuration (decided November 6,
+    # 2026: a 500 for one file isn't a sign of that, so it has its own reason and alarm)
+    CSPACE_REFUSED = "cspace_refused"
+    CSPACE_ERROR = "cspace_error"  # any other unexpected status, a 500 included (not retried): that record or file
     WRONG_CONTENT_TYPE = "wrong_content_type"  # not a type the kind allows, or a "PDF" without %PDF-
     TOO_LARGE = "too_large"  # over the museum's size limit for the kind
     NOT_DECODABLE = "not_decodable"  # an image or card that doesn't decode

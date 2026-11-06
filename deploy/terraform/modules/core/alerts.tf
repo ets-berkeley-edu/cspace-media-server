@@ -35,7 +35,13 @@ locals {
       reason      = "cspace_refused"
       metric      = "CollectionSpaceRefused"
       threshold   = 1
-      description = "CollectionSpace refused Serena (401, 403 or an unexpected answer): most often the museum's service account's password changed. ./serena aws cspace-secret <museum>."
+      description = "CollectionSpace refused Serena (401 or 403, or no account): most often the museum's service account's password changed. ./serena aws cspace-secret <museum>."
+    }
+    cspace-errors = {
+      reason      = "cspace_error"
+      metric      = "CollectionSpaceErrors"
+      threshold   = 20
+      description = "CollectionSpace answered 20 or more of Serena's fetches in 15 minutes with an unexpected error (a 500, say): files missing from its storage, or a problem at Lyrasis. ./serena aws logs web."
     }
     cspace-unavailable = {
       reason      = "cspace_unavailable"

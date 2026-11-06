@@ -217,6 +217,28 @@ def test_collectionspace_refuses(client: TestClient, store: Store, recorder: Mem
     assert unavailable(client, recorder, path()) == Reason.CSPACE_REFUSED
 
 
+def test_collectionspace_errs_on_one_file(client: TestClient, store: Store, recorder: MemoryRecorder) -> None:
+    """A 500 for the file (in UC Berkeley's QA, a file not in its storage): not retried, remembered, and not
+    `cspace_refused`, whose alarm is for Serena's account (decided November 6, 2026)."""
+    add_blob(store, "pahma", BLOB, MEDIA)
+    fake.add(MEDIA)
+    fake.fail("/content", 500, times=1)
+    assert unavailable(client, recorder, path()) == Reason.CSPACE_ERROR
+    assert len(content_calls()) == 1  # not retried
+    assert unavailable(client, recorder, path()) == Reason.CSPACE_ERROR  # remembered: CollectionSpace not asked again
+    assert len(content_calls()) == 1
+
+
+@pytest.mark.parametrize("status", [401, 500])
+def test_the_light_checks_status_decides_the_reason(client: TestClient, store: Store, recorder: MemoryRecorder,
+                                                    status: int) -> None:
+    add_blob(store, "pahma", BLOB, MEDIA)
+    fake.add(MEDIA)
+    fake.fail(f"/media/{MEDIA}", status)
+    expected = Reason.CSPACE_REFUSED if status == 401 else Reason.CSPACE_ERROR
+    assert unavailable(client, recorder, path()) == expected
+
+
 def test_wrong_credentials(client: TestClient, store: Store, recorder: MemoryRecorder, secretsmanager: Any,
                            caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
