@@ -2641,9 +2641,13 @@ run compares the chosen ETL list with the last updated refresh's list, which it 
 ucb-stage2`, `ClientError: An error occurred (403) when calling the HeadObject operation: Forbidden`. The local stack
 couldn't show it: moto doesn't enforce IAM. `tests/test_deploy.py` now checks the grant.
 
-- [ ] **1. The plan.** In the Deploy run's plan (Actions › Deploy, from `main`, with `ucb-stage2`), expect one change
-  in place: the web role's policy, `module.core.aws_iam_role_policy.web`, with `s3:GetObject`
-  added to the statement now named `ServableLists`. Nothing replaced, nothing destroyed. Approve and deploy.
+- [ ] **1. The plan.** Actions › Deploy › Run workflow, from `main`, with `ucb-stage2`. GitHub shows only the plan's
+  counts (D270); the plan itself is in the plan build's log in the AWS console: follow the link in the plan job's
+  summary, signed in to the account as RTL-Developer (the deployer role can't read `/pipeline/ucb-stage2`). Expect
+  `module.core.aws_iam_role_policy.web` updated in place, with `s3:GetObject` added and the `sid` changing from
+  `ServableListUploads` to `ServableLists`; and, as on every run with a new commit, the web and worker task
+  definitions replaced for the new image tag and their services updated in place. Nothing else changed or destroyed.
+  Approve and deploy.
 - [ ] **2. A dry run of an upload.** In the admin app, signed in to PAHMA: Manual refresh › Upload one, choose an ETL
   list file and its refresh date, then **Check the ETL list**. Expect the dry run's result (passed, failed only on
   the delta threshold, or the problems it found), not "Serena gave an unexpected answer. (500)".
