@@ -46,7 +46,19 @@ ALLOWED_TYPES: dict[str, frozenset[str]] = {
 PDF_MARKER, PDF_MARKER_WITHIN = b"%PDF-", 1024  # where PDF readers look for it
 # Failures that would repeat if asked again at once. Not CollectionSpace being unavailable, or a full disk.
 REMEMBERED = frozenset({Reason.MEDIA_GONE, Reason.MEDIA_DELETED, Reason.NO_FILE, Reason.CSPACE_REFUSED,
-                        Reason.WRONG_CONTENT_TYPE, Reason.TOO_LARGE, Reason.NOT_DECODABLE})
+                        Reason.CSPACE_ERROR, Reason.WRONG_CONTENT_TYPE, Reason.TOO_LARGE, Reason.NOT_DECODABLE})
+
+
+def _refusal(step: str, status: int | None, context: dict[str, Any]) -> Reason:
+    """CollectionSpace's unexpected answer to the light check or the fetch. 401 or 403, or none Serena can read (no
+    account, an answer that isn't XML): Serena's account or configuration, `cspace_refused`. Any other status, a 500
+    included: an error for that record or file, `cspace_error` (in UC Berkeley's QA, usually a file not in its
+    storage)."""
+    if status is None or status in (401, 403):
+        log.warning(f"CollectionSpace refused {step}", extra={**context, "status": status})
+        return Reason.CSPACE_REFUSED
+    log.warning(f"CollectionSpace answered {step} with an error", extra={**context, "status": status})
+    return Reason.CSPACE_ERROR
 
 
 class _KeyedLocks:
@@ -169,8 +181,7 @@ class Fetcher:
         except CSpaceUnavailable:
             return Reason.CSPACE_UNAVAILABLE
         except CSpaceError as error:
-            log.warning("CollectionSpace refused the light check", extra={**context, "status": error.status})
-            return Reason.CSPACE_REFUSED
+            return _refusal("the light check", error.status, context)
         if state is MediaState.GONE:
             return Reason.MEDIA_GONE
         if state is MediaState.DELETED:
@@ -214,8 +225,7 @@ class Fetcher:
                 if fetched.status == 404:
                     return Reason.NO_FILE
                 if fetched.status != 200:
-                    log.warning("CollectionSpace refused the fetch", extra={**context, "status": fetched.status})
-                    return Reason.CSPACE_REFUSED
+                    return _refusal("the fetch", fetched.status, context)
                 if fetched.content_type not in ALLOWED_TYPES[kind]:
                     log.info("refused: content type", extra={**context, "content_type": fetched.content_type})
                     return Reason.WRONG_CONTENT_TYPE

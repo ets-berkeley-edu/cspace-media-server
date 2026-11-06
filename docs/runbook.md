@@ -167,7 +167,8 @@ the reason) and ask them.
 | `serena-<env>-worker-down`: the worker hasn't run for 10 minutes | No refresh is checked or updated, and the watchdog is silent, so no refresh alerts come | `status` and `logs worker`. The worker's old task stops before a new one starts, so a deploy can fire this briefly. |
 | `serena-<env>-web-5xx`: 5 or more 5xx answers in 5 minutes | The app is failing requests | `logs web` for the errors. |
 | `serena-<env>-internal-errors`: 5 or more in 15 minutes | Serena couldn't decide (DynamoDB unreachable, say) and served the unavailable image | `logs web`: the `unserved` lines with `internal_error` name the cause. |
-| `serena-<env>-cspace-refused`: any, in 15 minutes | CollectionSpace answered 401, 403 or another unexpected status: most often the museum's service account's password changed | Get the new password from the account's owner (Lyrasis and the museum), then `./serena aws cspace-secret <museum>`. Misses get the unavailable image meanwhile; files already cached are still served. |
+| `serena-<env>-cspace-refused`: any, in 15 minutes | CollectionSpace answered 401 or 403, or Serena has no account for the museum: most often the museum's service account's password changed | Get the new password from the account's owner (Lyrasis and the museum), then `./serena aws cspace-secret <museum>`. Misses get the unavailable image meanwhile; files already cached are still served. |
+| `serena-<env>-cspace-errors`: 20 or more in 15 minutes | CollectionSpace answered many fetches with an unexpected error, most often a 500 | `logs web`: the `CollectionSpace answered … with an error` lines name the Blob and the status. Many Blobs at once: Lyrasis's status, or ask Lyrasis. In UC Berkeley's QA, a 500 usually means a file that isn't in QA's storage, which needs nothing. Each such file is retried after 10 minutes. |
 | `serena-<env>-cspace-unavailable`: 20 or more in 15 minutes | CollectionSpace didn't answer, or answered 429 or 5xx, for many fetches | Lyrasis's status, and `logs web` for the museum. Nothing to fix in Serena; misses get the unavailable image until it answers. Steady 429s mean Lyrasis is limiting Serena's fetches: talk to Lyrasis (the fetch rate, issue #160). |
 
 An alarm that fires during a deploy and clears within minutes needs nothing. The alarms send nothing while the
@@ -178,7 +179,7 @@ environment is paused: resume it before relying on them.
 - **A missing image.** Someone reports the unavailable image for a file they expect. In the admin app, **Media look
   up** says why Serena serves the file or not, beside the Media record in CollectionSpace. Not listed as public in the last ETL list: it's the ETL's decision (the record isn't
   public in the public core, or the list is a day behind). Recalled: see Recalls. Servable but failing: the Past
-  requests page shows the request's reason (`cspace_unavailable`, `cspace_refused` and so on).
+  requests page shows the request's reason (`cspace_unavailable`, `cspace_error`, `cspace_refused` and so on).
 - **An old image after a replacement.** Staff replaced a Media record's image, and Serena serves the old one: see the
   design's After an image is replaced. The new Blob is served once the ETL list lists it.
 - **The alert email stopped.** `status` says whether the subscription is confirmed. A new address needs

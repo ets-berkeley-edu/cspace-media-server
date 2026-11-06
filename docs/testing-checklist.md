@@ -53,7 +53,7 @@ remove the image from its Media record in CollectionSpace.
 
 - [ ] Request the Blob at its legacy URL. Expect the museum's unavailable image, not an error.
 - [ ] In Serena's log, expect the light check to pass and the Media service's fetch to fail, with the reason
-  `no_file`. Note the status CollectionSpace returned; if it isn't 404, the reason will be `cspace_refused`, and the
+  `no_file`. Note the status CollectionSpace returned; if it isn't 404, the reason will be `cspace_error` (`cspace_refused` for 401 or 403), and the
   fetch's handling of that status needs a second look.
 
 ## 4. The ETL API with each museum's real token (15 minutes, once Serena is deployed to QA)
