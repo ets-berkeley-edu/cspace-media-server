@@ -454,8 +454,8 @@ its own reason, so the admin app can say why a file isn't served:
 | `media_gone` | A miss: the Media record isn't in CollectionSpace (404 on the light check) |
 | `media_deleted` | A miss: the Media record is soft-deleted |
 | `no_file` | A miss: the Media record exists, but CollectionSpace has no such file or size (404) |
-| `cspace_unavailable` | A miss: CollectionSpace didn't answer, or answered 429 or 5xx after the retries, or the file broke off part-way |
-| `cspace_refused` | A miss: CollectionSpace answered 401, 403 or another unexpected status, or Serena has no account for the museum: a configuration problem |
+| `cspace_unavailable` | A miss: CollectionSpace didn't answer, or answered 429, 502, 503 or 504 after the retries, or the file broke off part-way |
+| `cspace_refused` | A miss: CollectionSpace answered 401, 403 or another unexpected status (a 500 included, which isn't retried), or Serena has no account for the museum: a configuration problem. In UC Berkeley's QA instances, a 500 for a file usually means its file isn't in QA's storage (seen November 5, 2026) |
 | `wrong_content_type` | A miss: a content type the kind doesn't allow, or a "PDF" without `%PDF-` in its first 1024 bytes |
 | `too_large` | A miss: over the museum's size limit for the kind |
 | `not_decodable` | A miss: an image or catalog card that doesn't decode |
