@@ -68,21 +68,32 @@ export function took(iso: string, now: Date = new Date()): string {
   return mins < 1 ? 'just now' : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`
 }
 
+/** What stateSince needs of a refresh; `progress`, an update's rows applied and in all (November 5, 2026). */
+export interface StateSinceRefresh {
+  state: string
+  updated_at: string
+  deadline_at?: string | null
+  progress?: {done: number, total: number} | null
+}
+
+const count = (n: number): string => n.toLocaleString('en-US')
+
 /**
  * Beside a refresh waiting or working, where there's room (mockup version 55): since when, and what's normal, so a
  * normal wait can be told from a stuck one ("Checking since 16:57 UTC (3 min): usually a few minutes."). `late` says
  * whether an ETL refresh is past the watchdog's deadline; empty for any other state.
  */
-export function stateSince(refresh: {state: string, updated_at: string, deadline_at?: string | null},
-                           now: Date = new Date()): {text: string, late: string} {
-  const {state, updated_at: at} = refresh
+export function stateSince(refresh: StateSinceRefresh, now: Date = new Date()): {text: string, late: string} {
+  const {state, updated_at: at, progress} = refresh
   if (!WAITING_STATES.has(state) && !WORKING_STATES.has(state)) {
     return {text: '', late: ''}
   }
   const since = `since ${when(at).slice(11, 16)} UTC (${took(at, now)})`
   const text = state === 'started' ? `Waiting ${since}: the ETL job uploads it.`
     : state === 'received' ? `Received ${since}: the ETL job asks Serena to check it next.`
-    : `${state === 'checking' ? 'Checking' : 'Applying'} ${since}: usually a few minutes.`
+    : state === 'updating' && progress
+      ? `Applying ${since}: ${count(progress.done)} of ${count(progress.total)} rows applied.`
+      : `${state === 'checking' ? 'Checking' : 'Applying'} ${since}: usually a few minutes.`
   const deadline = refresh.deadline_at ? new Date(refresh.deadline_at) : null
   const pacific = deadline && new Intl.DateTimeFormat('en-GB', {timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit'}).format(deadline)
   const late = deadline && now.getTime() > deadline.getTime()

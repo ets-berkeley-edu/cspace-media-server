@@ -126,6 +126,8 @@ export interface Refresh extends RefreshSummary {
   deadline_at?: string | null
   // A failed update: until when Serena tries it again by itself (decided October 28, 2026); none for an older one
   retry_until?: string | null
+  // An update under way: its rows applied so far and in all, as of the worker's last heartbeat (November 5, 2026)
+  progress?: {done: number, total: number} | null
 }
 
 export interface Status {

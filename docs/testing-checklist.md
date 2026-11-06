@@ -2655,3 +2655,27 @@ couldn't show it: moto doesn't enforce IAM. `tests/test_deploy.py` now checks th
   Expect its result, not a 500.
 - [ ] **4. The log.** `cd /Users/remillet/dev/src/rtl/cspace-media-server && ./serena aws logs web --env ucb-stage2
   2>&1 | grep -iE "HeadObject|Forbidden"` (Ctrl+C after 10 seconds): expect nothing from after the Deploy.
+
+## 61. A large ETL list's update, locally and on ucb-stage2 (about an hour, mostly waiting; locally before merging, ucb-stage2 after the Deploy that brings the fix)
+
+What it checks: an update of a large ETL list stays within the worker's memory and shows its progress. Before the fix,
+PAHMA QA's first load (969,351 rows) ran the 1 GiB worker out of memory (exit code 137) within a minute, again each
+time another worker claimed the stale step, and the refresh stayed "Applying the ETL list" with nothing written.
+
+- [ ] **1. Locally.** `./serena down`, `./serena up` (moto forgets everything, so this is PAHMA's first load and the
+  delta threshold doesn't apply; if the check still fails on it, override it on the refresh's page), then
+  `./serena etl pahma --rows 300000`. In the admin app, PAHMA › Past refreshes › the new refresh: within a minute of
+  "Applying the ETL list", the line under the state says "Applying since …: N of about 300,000 rows applied.", and N
+  grows as the page reloads by itself. It ends Updated, with the counts written and unchanged. `docker stats --no-stream` while it applies:
+  the worker's memory stays well under 1 GiB.
+- [ ] **2. Deploy.** Actions › Deploy › Run workflow, from `main`, with `ucb-stage2`. Expect the web and worker task
+  definitions replaced for the new image tag, nothing else. Approve and deploy.
+- [ ] **3. The worker back.** It was scaled to 0 while PAHMA's refresh `pahma-2026-11-05-6` was stuck applying:
+  `aws ecs update-service --cluster serena-stage2 --service worker --desired-count 1 --profile serena-stage2-deploy
+  --region us-west-2`. Within 5 minutes the worker claims the refresh again (its heartbeat is stale).
+- [ ] **4. The progress.** The refresh's page shows "… rows applied" growing; expect it to take 20 minutes or more
+  (one museum's writes are limited to about 1,000 a second). It ends Updated: written 969,351 (or the list's rows),
+  unchanged 0, and the worker-down alarm clears.
+- [ ] **5. No restarts.** `aws ecs list-tasks --cluster serena-stage2 --service-name worker --desired-status STOPPED
+  --profile serena-stage2-deploy --region us-west-2`: no worker stopped since step 3. In CloudWatch, the worker
+  service's MemoryUtilization stays under 50%.

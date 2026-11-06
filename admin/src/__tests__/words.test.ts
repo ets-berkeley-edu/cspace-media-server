@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest'
-import {FAR_PAST_TIMES, kindWord, middlePath, timesOver, timesText} from '@/words'
+import {FAR_PAST_TIMES, kindWord, middlePath, stateSince, timesOver, timesText} from '@/words'
 
 describe('how the app names kinds and paths', () => {
   it('names a kind by its word, and "file" when the kind is not known (D151)', () => {
@@ -38,5 +38,21 @@ describe('how far past the delta threshold (issue #120)', () => {
 
   it('is far past from 10 times, fixed', () => {
     expect(FAR_PAST_TIMES).toBe(10)
+  })
+})
+
+describe('how far an update has got (November 5, 2026)', () => {
+  const now = new Date('2026-11-06T07:36:00Z')
+  const applying = {state: 'updating', updated_at: '2026-11-06T07:24:18Z'}
+
+  it('says the rows applied and in all, once the worker has sent them', () => {
+    expect(stateSince({...applying, progress: {done: 120000, total: 969351}}, now).text)
+      .toBe('Applying since 07:24 UTC (12 min): 120,000 of 969,351 rows applied.')
+  })
+
+  it('says what is usual until then, and while checking', () => {
+    expect(stateSince(applying, now).text).toBe('Applying since 07:24 UTC (12 min): usually a few minutes.')
+    expect(stateSince({...applying, state: 'checking', progress: {done: 1, total: 2}}, now).text)
+      .toBe('Checking since 07:24 UTC (12 min): usually a few minutes.')
   })
 })

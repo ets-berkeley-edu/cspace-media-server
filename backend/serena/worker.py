@@ -68,17 +68,22 @@ class WorkerServices:
 
 
 class _Heartbeat(threading.Thread):
-    """Renews the claim while a step runs, even a long one."""
+    """Renews the claim while a step runs, even a long one, with an update's progress (November 5, 2026)."""
 
     def __init__(self, refreshes: Refreshes, refresh: Refresh, owner: str, every: float):
         super().__init__(daemon=True, name=f"heartbeat-{refresh.refresh_id}")
         self.refreshes, self.refresh_, self.owner, self.every = refreshes, refresh, owner, every
         self.halt = threading.Event()
+        self.progress: dict[str, int] | None = None
+
+    def tell(self, done: int, total: int) -> None:
+        """The update's progress, sent with the next heartbeat."""
+        self.progress = {"done": done, "total": total}
 
     def run(self) -> None:
         while not self.halt.wait(self.every):
             try:
-                self.refreshes.heartbeat(self.refresh_, self.owner)
+                self.refreshes.heartbeat(self.refresh_, self.owner, self.progress)
             except Exception:
                 log.warning("heartbeat failed", extra={"refresh_id": self.refresh_.refresh_id}, exc_info=True)
 
@@ -93,6 +98,7 @@ class Worker:
         self.purged_on: str | None = None  # the Pacific date of the last removal of old audit entries
         self.counted_through: str | None = None  # the latest UTC day every museum's requests are counted for
         self.count_tried_at: float | None = None
+        self.heartbeat: _Heartbeat | None = None  # the step under way's
         self.owner = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
         self.stopping = threading.Event()
 
@@ -205,6 +211,7 @@ class Worker:
     def _do(self, refresh: Refresh) -> None:
         heartbeat = _Heartbeat(self.s.refreshes, refresh, self.owner, self.s.settings.worker_heartbeat_seconds)
         heartbeat.start()
+        self.heartbeat = heartbeat
         try:
             if refresh.state == State.CHECKING:
                 self._check(refresh)
@@ -216,6 +223,7 @@ class Worker:
                         extra={"refresh_id": refresh.refresh_id, "detail": error.detail})
         finally:
             heartbeat.halt.set()
+            self.heartbeat = None
 
     def _audit_outcome(self, refresh: Refresh) -> None:
         """A refresh's outcome in the audit log, by the refresh, next to the ETL's calls (D150): updated,
@@ -286,7 +294,8 @@ class Worker:
             rows = read_rows(handle)
         for attempt in range(1, UPDATE_ATTEMPTS + 1):
             try:
-                counts = updating.update(self.s.store, refresh.tenant, rows, self.sleep)
+                counts = updating.update(self.s.store, refresh.tenant, rows, self.sleep,
+                                         progress=self.heartbeat.tell if self.heartbeat else None)
                 break
             except (BotoCoreError, ClientError, RuntimeError) as error:
                 log.warning("servability update attempt failed",

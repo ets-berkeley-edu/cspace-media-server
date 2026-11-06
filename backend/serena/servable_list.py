@@ -1,10 +1,11 @@
 """The servable list (design: The servable list) and the servability rows made from it.
 
-Reading never holds the compressed file whole; the rows themselves are kept in a dict, about a few hundred bytes each
-(PAHMA's few hundred thousand rows: some tens of MB)."""
+Reading never holds the compressed file whole; the rows themselves are kept in a dict, about 270 bytes each (a million
+rows: some 270 MB)."""
 from __future__ import annotations
 
 import gzip
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import IO, Any
@@ -22,7 +23,7 @@ def kind_word(kind: str | None) -> str:
 ACCESS = frozenset({"public", "restricted"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Row:
     media_csid: str  # "" only for the museum's placeholder image
     kind: str
@@ -36,6 +37,11 @@ def lines(compressed: IO[bytes]) -> Iterator[tuple[int, bytes]]:
             yield number, line[:-1] if line.endswith(b"\n") else line
 
 
+def row(media_csid: str, kind: str, access: str) -> Row:
+    """A Row whose kind and access are shared strings: with slots, a row costs about a third of the memory."""
+    return Row(media_csid, sys.intern(kind), sys.intern(access))
+
+
 def read_rows(compressed: IO[bytes]) -> dict[str, Row]:
     """The rows of a servable list that passed its check (no checks here)."""
     rows = {}
@@ -43,7 +49,7 @@ def read_rows(compressed: IO[bytes]) -> dict[str, Row]:
         if number == 1:
             continue
         blob, media, kind, access = line.decode("utf-8").split("\t")
-        rows[blob] = Row(media, kind, access)
+        rows[blob] = row(media, kind, access)
     return rows
 
 
@@ -58,5 +64,5 @@ def item(tenant: str, blob: str, row: Row) -> dict[str, Any]:
 
 
 def row_of(table_item: dict[str, Any]) -> tuple[str, Row]:
-    return table_item["blob_csid"]["S"], Row(table_item.get("media_csid", {}).get("S", ""),
+    return table_item["blob_csid"]["S"], row(table_item.get("media_csid", {}).get("S", ""),
                                              table_item["kind"]["S"], table_item["access"]["S"])

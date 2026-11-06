@@ -131,7 +131,9 @@ def detail(refresh: Refresh, newest: bool) -> dict[str, Any]:
                        "uploaded_at": refresh.upload.uploaded_at} if refresh.upload else None,
             "check": refresh.check, "update": refresh.update, "actions": actions(refresh, newest),
             # A failed update: until when the worker tries it again by itself (decided October 28, 2026).
-            "retry_until": refresh.retry_until if refresh.state == State.UPDATE_FAILED else None}
+            "retry_until": refresh.retry_until if refresh.state == State.UPDATE_FAILED else None,
+            # An update under way: its writes done and in all, as of the worker's last heartbeat (November 5, 2026).
+            "progress": refresh.progress if refresh.state == State.UPDATING else None}
 
 
 def threshold_only(refresh: Refresh) -> bool:

@@ -145,6 +145,30 @@ def test_an_interrupted_step_is_claimed_again(client: TestClient, worker: Worker
     assert poll(client, refresh)["state"] == "updated"
 
 
+def test_an_updates_progress_goes_with_the_heartbeat(client: TestClient, worker: Worker, store: Store,
+                                                     clock: Any) -> None:
+    """The refresh's page shows how far an update has got (November 5, 2026): the worker sends its writes done and in
+    all with each heartbeat, and the progress goes when the worker lets the refresh go."""
+    from serena.refreshes import State
+    from serena.worker import _Heartbeat
+    refresh = start(client)
+    upload(client, refresh, file_of({"b1": "m1"}))
+    client.post(refresh["links"]["check"], headers=auth())
+    refreshes = Refreshes(store, clock)
+    checking = refreshes.get("pahma", refresh["refresh_id"])
+    assert checking is not None and refreshes.claim(checking, "w", 300)
+    updating = refreshes.transition(checking, State.UPDATING)
+    beat = _Heartbeat(refreshes, updating, "w", 30)
+    beat.tell(25, 969_351)
+    assert refreshes.heartbeat(updating, "w", beat.progress)
+    now = refreshes.get("pahma", refresh["refresh_id"])
+    assert now is not None and now.progress == {"done": 25, "total": 969_351}
+    released = refreshes.transition(now, State.UPDATED, release=True)
+    assert released.progress is None
+    again = refreshes.get("pahma", refresh["refresh_id"])
+    assert again is not None and again.progress is None and again.owner is None
+
+
 def test_an_update_that_keeps_failing(client: TestClient, worker: Worker, store: Store,
                                      monkeypatch: pytest.MonkeyPatch) -> None:
     from botocore.exceptions import ClientError
