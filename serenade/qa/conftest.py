@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import os
 import time
+import urllib.parse
 from collections.abc import Callable, Iterator
 
 import pytest
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from serenade.aws.target import Target, from_environment
@@ -21,6 +23,7 @@ from serenade.conftest import new_browser
 from serenade.pages.sign_in_page import SignInPage
 from serenade.qa import progress
 from serenade.qa.harness import Admin, Log, Serena
+from serenade.secret import Secret
 
 TARGET = from_environment()
 if TARGET.env != "ucb-stage2" or TARGET.museum != "pahma" or TARGET.simulated:
@@ -84,18 +87,28 @@ def base_url() -> str:
 
 
 @pytest.fixture(scope="session")
-def admin_account() -> tuple[str, str]:
-    """PAHMA's admin account for the admin app (D228), asked by ./serena aws test; never written anywhere."""
-    return os.environ["SERENADE_ADMIN_USER"], os.environ["SERENADE_ADMIN_PASSWORD"]
+def admin_account() -> tuple[str, Secret]:
+    """PAHMA's admin account for the admin app (D228), asked by ./serena aws test; never written anywhere. The password
+    is a Secret, so a traceback shows it masked."""
+    return os.environ["SERENADE_ADMIN_USER"], Secret(os.environ["SERENADE_ADMIN_PASSWORD"])
 
 
 @pytest.fixture(scope="session")
-def api_browser(request: pytest.FixtureRequest, admin_account: tuple[str, str]) -> Iterator[WebDriver]:
-    """One browser for the whole run, signed in to PAHMA, for the admin API."""
+def api_browser(request: pytest.FixtureRequest, admin_account: tuple[str, Secret]) -> Iterator[WebDriver]:
+    """One browser for the whole run, signed in to PAHMA, for the admin API. If the sign-in doesn't reach the admin app,
+    every test errors with what the sign-in page says, and no traceback (whose frames would show the account)."""
     progress.say(f"signing in to {TARGET.admin_url} as PAHMA's admin ...")
     browser = new_browser(request.config)
-    SignInPage(browser, TARGET.admin_url).sign_in("PAHMA", *admin_account)
-    SignInPage(browser, TARGET.admin_url).wait_for_url("/admin/pahma")
+    page = SignInPage(browser, TARGET.admin_url)
+    page.sign_in("PAHMA", *admin_account)
+    try:
+        page.wait_for_url("/admin/pahma")
+    except TimeoutException:
+        shown = [e.text.strip() for e in browser.find_elements(*SignInPage.ERROR) if e.text.strip()]
+        where = urllib.parse.urlsplit(browser.current_url).path
+        browser.quit()
+        pytest.fail(f"Signing in to PAHMA as SERENADE_ADMIN_USER didn't reach the admin app: "
+                    f"{shown[0] if shown else f'no message on the page (still at {where})'}", pytrace=False)
     progress.say("signed in")
     yield browser
     browser.quit()

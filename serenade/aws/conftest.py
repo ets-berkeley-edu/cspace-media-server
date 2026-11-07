@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from serenade.aws.target import Target, fake_etl, from_environment, serena_aws
+from serenade.secret import Secret
 
 TARGET = from_environment()
 
@@ -40,10 +41,11 @@ def base_url() -> str:
 
 
 @pytest.fixture(scope="session")
-def admin() -> tuple[str, str]:
+def admin() -> tuple[str, Secret]:
     """The admin account (D228): the simulator's admin/admin, or SERENADE_ADMIN_USER and SERENADE_ADMIN_PASSWORD,
-    which ./serena aws test requires against a real CollectionSpace. Never written anywhere."""
-    return os.environ["SERENADE_ADMIN_USER"], os.environ["SERENADE_ADMIN_PASSWORD"]
+    which ./serena aws test requires against a real CollectionSpace. Never written anywhere; the password is a Secret,
+    so a traceback shows it masked."""
+    return os.environ["SERENADE_ADMIN_USER"], Secret(os.environ["SERENADE_ADMIN_PASSWORD"])
 
 
 @pytest.fixture(scope="session")
