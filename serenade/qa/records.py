@@ -134,17 +134,17 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def run_script(*options: str, typed: str = "", timeout: float = 3600) -> str:
+def run_script(*options: str, typed: str = "", timeout: float = 3600, exits: tuple[int, ...] = (0,)) -> str:
     """Runs make-test-media.py with these options against PAHMA QA, as SERENADE_CSPACE_USER, and returns what it
     printed. The password goes in its environment (MAKE_TEST_MEDIA_PASSWORD), never in an argument, and isn't in
-    anything this returns or raises. `typed` is what it reads from the keyboard (--purge asks for PURGE). Fails on a
-    non-zero exit."""
+    anything this returns or raises. `typed` is what it reads from the keyboard (--purge asks for PURGE). Fails on an
+    exit code not in `exits` (--check exits 1 when a record differs from the plan)."""
     env = {**os.environ, "MAKE_TEST_MEDIA_PASSWORD": os.environ["SERENADE_CSPACE_PASSWORD"]}
     done = subprocess.run([sys.executable, str(script()), "--base", os.environ["SERENADE_CSPACE_BASE"],  # noqa: S603
                            "--tenant", TENANT, "--user", os.environ["SERENADE_CSPACE_USER"], *options],
                           capture_output=True, text=True, timeout=timeout, env=env, input=typed, check=False)
     made.cache_clear()  # a renew adds a test-media CSV
-    if done.returncode != 0:
+    if done.returncode not in exits:
         raise AssertionError(f"make-test-media.py {' '.join(options)} ended with {done.returncode}:\n"
                              f"{done.stdout[-3000:]}\n{done.stderr[-2000:]}")
     return done.stdout

@@ -2725,6 +2725,15 @@ cd <your cspace-media-server clone> && SERENADE_ADMIN_USER=<a PAHMA admin> \
 It asks for both passwords (not shown or saved). What a test only noted (the outcomes in steps 6, 7, 8, 9, 12 and 20
 the checklist leaves open) is listed at the end, under "noted"; once seen, pin them in the tests.
 
+To see where the records stand first, add `--check-records` after `--synthetic` (same settings, same two passwords).
+It runs none of the tests and changes nothing: for every record (021-032: the copy in use) it reports, under
+"dataset", what Media look up shows in Serena (listed or not, kind, the sizes stored, the last ETL run applied, the
+placeholder setting) and what `make-test-media.py --check` finds in PAHMA QA (the Media record, its Blob,
+approvedForWeb, the description, the Object, its statuses, the relations, an older copy still live), each against the
+plan and the changes already made. A line marked PROBLEM is something that would make a step fail or skip for a reason
+that isn't Serena's (the run then ends failed); NOTE is a listing the plan leaves to confirm, or a copy waiting for its
+first ETL run. It takes about six minutes (one request a second to CollectionSpace).
+
 **What PAHMA's ETL lists** (cspace-solr-ucb, `pahma/mediaAllImages.sql`, `pahma/basic_restricted.sql`,
 `pahma/mergeObjectsAndMediaPAHMA.py`, `common/make_servable_list.py`), which decides every expectation below:
 

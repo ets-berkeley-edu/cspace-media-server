@@ -17,7 +17,8 @@
 #                              Serena serves through CloudFront, the admin app, a recall that's cancelled, the logs
 #                              (D222-D231); only the tests that look against a real CollectionSpace
 #   ./serena aws test --synthetic [pytest options]   ucb-stage2 only: checklist section 63 on PAHMA QA's synthetic
-#                              records (serenade/qa/), which changes them, two settings and a recall
+#                              records (serenade/qa/), which changes them, two settings and a recall;
+#                              with --check-records, only a report on those records' state (reads only, no tests)
 #   ./serena aws replay --log MONTH.tsv.gz (--busiest hour|minute | --from TIME [--minutes N]) [--speed X]
 #                              [--concurrency N] [--follow N] [--dry-run]   with the simulator only: replay a slice of
 #                              the cleaned access logs (serenade/load/replay.py, D278-D288), then the web and worker
@@ -1293,9 +1294,15 @@ print(f"{len(rows)} shown.{more}")'
 # --synthetic runs serenade/qa/ instead: checklist section 63 on PAHMA QA's synthetic records (SERENA-TEST-nnn), on
 # ucb-stage2 only. It changes those records in CollectionSpace through make-test-media.py (kept outside the
 # repository: SERENADE_TEST_MEDIA_SCRIPT), two of PAHMA's settings and a recall (serenade/README.md).
-run_tests() {  # run_tests [--synthetic] [pytest options]
-  local synthetic=false
+# --synthetic --check-records runs none of the tests: it reports each record's state in Serena (Media look up) and in
+# CollectionSpace (make-test-media.py --check) against the plan, and changes nothing.
+run_tests() {  # run_tests [--synthetic [--check-records]] [pytest options]
+  local synthetic=false check_records=""
   if [ "${1:-}" = --synthetic ]; then synthetic=true; shift; fi
+  if [ "${1:-}" = --check-records ]; then
+    [ "$synthetic" = true ] || die "--check-records goes with --synthetic: ./serena aws test --synthetic --check-records"
+    check_records=1; shift
+  fi
   load_env; check_account; need_terraform; tf_init "$ROOT"; need_deployed
   [ "$(was_running)" = true ] || die "'$ENV' is paused: ./serena aws resume first."
   local url saved deployed museum py files_url me
@@ -1347,7 +1354,11 @@ run_tests() {  # run_tests [--synthetic] [pytest options]
   fi
   serenade_venv test
   if [ "$synthetic" = true ]; then
-    echo "Checklist section 63 against $ENV_LABEL: $url (image ${IMAGE##*:}, PAHMA QA's synthetic records)"
+    if [ -n "$check_records" ]; then
+      echo "The synthetic records' state on $ENV_LABEL: $url and PAHMA QA (reads only; no tests run)"
+    else
+      echo "Checklist section 63 against $ENV_LABEL: $url (image ${IMAGE##*:}, PAHMA QA's synthetic records)"
+    fi
   else
     echo "The AWS tests against $ENV_LABEL: $url (image ${IMAGE##*:}, museum $museum)"
     [ "$SIMULATED_CSPACE" = true ] || echo "A real CollectionSpace: only the tests that look run."
@@ -1364,7 +1375,7 @@ run_tests() {  # run_tests [--synthetic] [pytest options]
     SERENADE_AWS_LOG_PREFIX="/serena/$SERENA_ENV_NAME" SERENADE_AWS_BUCKET="$NAME-$museum-$ACCOUNT_ID-$AWS_REGION" \
     SERENADE_ADMIN_USER="$SERENADE_ADMIN_USER" SERENADE_ADMIN_PASSWORD="$SERENADE_ADMIN_PASSWORD" \
     SERENADE_SYNTHETIC="$([ "$synthetic" = true ] && echo 1)" SERENADE_WEB_COUNT="${WEB_COUNT:-1}" \
-    SERENADE_CSPACE_PASSWORD="$cspace_password" \
+    SERENADE_CSPACE_PASSWORD="$cspace_password" SERENADE_CHECK_RECORDS="$check_records" \
     serenade/.venv/bin/python -m pytest "serenade/$([ "$synthetic" = true ] && echo qa || echo aws)" \
       -p no:cacheprovider "$@"
 }

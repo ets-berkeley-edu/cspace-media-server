@@ -70,7 +70,7 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | `tests/test_refreshes.py` | Refreshes, T16 to T21: Past refreshes, Start a refresh's missing fields, and on UCJEPS a failed check's page, overriding the threshold, an admin refresh repairing a failed one, sorting and paging 30 refreshes (sections 11, 14, 15, 21) |
 | `tests/test_lookup_and_recalls.py` | The pilot, T2 to T6: Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19). Recalls, T74 to T81: the preview (what Serena finds, paths and URLs, more than 12 CSIDs and a text file, an already recalled record), a missing reason, a recall's row and its files, Past requests and the audit log, and the recall's alert, T26 (sections 17 to 21). Media look up, T65 to T73: every size of a Media CSID, the comparison with CollectionSpace, the page's address, paths it forgives and refuses, an unknown CSID, the sizes box, and a record changed in CollectionSpace (off the web, replaced, soft-deleted), then put back (sections 17, 19 to 21, 23) |
 | `aws/test_deployment.py` | A deployed environment, T90 to T108 ("The AWS tests", below; sections 24, 25, 27, and the shared root's addresses) |
-| `qa/test_qa_*.py` | PAHMA QA's synthetic records on ucb-stage2, T109 to T133 ("The synthetic-record tests", below; section 63) |
+| `qa/test_qa_*.py` | PAHMA QA's synthetic records on ucb-stage2, T109 to T133 ("The synthetic-record tests", below; section 63); `test_qa_records.py`, only with `--check-records`, reports the records' state |
 
 ## The AWS tests
 
@@ -143,6 +143,11 @@ SERENADE_ADMIN_USER=<a PAHMA admin> SERENADE_CSPACE_BASE=https://<PAHMA QA's hos
   ("noted"); pin them once seen. Step 25 and step 13's alarm email stay by hand.
 - A setting reaches every web task within a minute (`settings_cache_seconds`), so T109 and T122 wait 65 seconds after
   each change before asking.
+- **`--check-records`** (`./serena aws test --env ucb-stage2 --synthetic --check-records`, same settings) runs only
+  `test_qa_records.py`, none of the tests: a report, under "dataset", on every record against the plan and the changes
+  already made, from Media look up (no image requested, so nothing cached) and from `make-test-media.py --check`
+  (read-only, in PAHMA QA). It fails if a record is in a state that would make a step fail or skip for a reason that
+  isn't Serena's; a listing the plan leaves "to confirm", or a copy not yet listed, is only a NOTE.
 
 ## The access-log replay
 

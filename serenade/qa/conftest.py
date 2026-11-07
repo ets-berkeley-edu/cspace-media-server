@@ -29,12 +29,21 @@ for name in ("SERENADE_CSPACE_BASE", "SERENADE_CSPACE_USER", "SERENADE_CSPACE_PA
     if not os.environ.get(name):
         raise SystemExit(f"{name} isn't set: run them with ./serena aws test --synthetic.")
 
+# --check-records (SERENADE_CHECK_RECORDS=1): only the dataset's report (test_qa_records.py), none of the tests.
+TESTS = ["test_qa_look.py", "test_qa_settings.py", "test_qa_changes.py", "test_qa_next_run.py"]
+collect_ignore = TESTS if os.environ.get("SERENADE_CHECK_RECORDS") == "1" else ["test_qa_records.py"]
+
 STARTED = time.time()
 _noted: list[str] = []
+REPORT: list[str] = []  # test_qa_records.py's report on the dataset
 
 
 def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     """What the tests noted rather than checked (decision 5: outcomes not known until the first run), to be pinned."""
+    if REPORT:
+        terminalreporter.section("dataset (checklist section 63)")
+        for line in REPORT:
+            terminalreporter.write_line(line)
     if _noted:
         terminalreporter.section("noted (checklist section 63)")
         for line in _noted:
@@ -51,6 +60,12 @@ def note() -> Note:
         print(text)  # also in the test's own report
 
     return noting
+
+
+@pytest.fixture(scope="session")
+def report() -> list[str]:
+    """test_qa_records.py's lines, printed at the end (a fixture, so it's this module's list however it's imported)."""
+    return REPORT
 
 
 @pytest.fixture(scope="session")
