@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from serenade.qa import progress
 from serenade.qa.conftest import Note
 from serenade.qa.harness import PLACEHOLDER_BLOB, Admin, Log, Serena
 from serenade.qa.records import record
@@ -42,7 +43,7 @@ def test_t109_over_the_size_limit(serena: Serena, admin: Admin, log: Log, note: 
     before = admin.setting(LIMIT)
     admin.change(LIMIT, 100, lower)
     try:
-        time.sleep(SETTLE)
+        progress.wait(SETTLE, "the setting reaching every web task")
         original = serena.send(serena.blob(rec.blob))
         medium = serena.send(serena.blob(rec.blob, "Medium"))
     finally:
@@ -71,12 +72,12 @@ def test_t122_the_placeholder_image(serena: Serena, admin: Admin, log: Log) -> N
     stamp = time.strftime("%Y-%m-%d %H:%M")
     if before["value"]:
         admin.use_default(PLACEHOLDER, f"serenade T122 {stamp}: not set again, for section 63 step 14")
-        time.sleep(SETTLE)
+        progress.wait(SETTLE, "the setting reaching every web task")
     not_set = [serena.send(serena.blob(PLACEHOLDER_BLOB, size)) for size in ("Medium", "Thumbnail")]
     reason = f"serenade T122 {stamp}: section 63 step 14, SERENA-TEST-033"
     answer = admin.change(PLACEHOLDER, ours.media, reason)
     assert "isn't the one the ETL lists" in str(answer.get("warning", "")), f"no warning: {answer.get('warning')}"
-    time.sleep(SETTLE)
+    progress.wait(SETTLE, "the setting reaching every web task")
     now_set = [serena.send(serena.blob(PLACEHOLDER_BLOB, size)) for size in ("Medium", "Thumbnail")]
     own = serena.send(serena.blob(ours.blob, "Medium"))
     log.catch_up([*not_set, *now_set, own])

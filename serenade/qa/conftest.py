@@ -19,6 +19,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from serenade.aws.target import Target, from_environment
 from serenade.conftest import new_browser
 from serenade.pages.sign_in_page import SignInPage
+from serenade.qa import progress
 from serenade.qa.harness import Admin, Log, Serena
 
 TARGET = from_environment()
@@ -36,6 +37,10 @@ collect_ignore = TESTS if os.environ.get("SERENADE_CHECK_RECORDS") == "1" else [
 STARTED = time.time()
 _noted: list[str] = []
 REPORT: list[str] = []  # test_qa_records.py's report on the dataset
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    progress.setup(config)
 
 
 def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
@@ -87,9 +92,11 @@ def admin_account() -> tuple[str, str]:
 @pytest.fixture(scope="session")
 def api_browser(request: pytest.FixtureRequest, admin_account: tuple[str, str]) -> Iterator[WebDriver]:
     """One browser for the whole run, signed in to PAHMA, for the admin API."""
+    progress.say(f"signing in to {TARGET.admin_url} as PAHMA's admin ...")
     browser = new_browser(request.config)
     SignInPage(browser, TARGET.admin_url).sign_in("PAHMA", *admin_account)
     SignInPage(browser, TARGET.admin_url).wait_for_url("/admin/pahma")
+    progress.say("signed in")
     yield browser
     browser.quit()
 

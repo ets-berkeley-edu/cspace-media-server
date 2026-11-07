@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from serenade.qa import progress
 from serenade.qa.harness import Log, Sent, Serena
 
 
@@ -44,11 +45,13 @@ def send_all(senders: list[tuple[int, Sender]], serena: Serena, log: Log) -> dic
     """Every step's requests in order, then one wait for all their log lines."""
     steps: dict[int, Step] = {}
     for number, send in senders:
+        progress.say(f"step {number}: sending its requests")
         step = Step()
         try:
             send(step)
         except Exception as error:  # kept for the step's own test; the other steps still send
             step.error = error
         steps[number] = step
+    progress.say(f"{len(serena.sent)} requests sent; waiting for their log lines")
     log.catch_up(serena.sent)
     return steps

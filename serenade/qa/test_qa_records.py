@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from serenade.qa import progress
 from serenade.qa.harness import Admin
 from serenade.qa.records import (
     CHANGED,
@@ -61,6 +62,7 @@ def test_records_as_planned(admin: Admin, report: list[str]) -> None:
 
     def line(idn: str, ok: bool | None, text: str) -> None:
         report.append(f"  {idn:<20} {'OK  ' if ok else 'NOTE' if ok is None else 'PROBLEM'}  {text}")
+        progress.say(f"Serena: {idn} {'OK' if ok else 'NOTE' if ok is None else 'PROBLEM'}")
         if ok is False:
             problems.append(f"{idn}: {text}")
 
@@ -70,6 +72,7 @@ def test_records_as_planned(admin: Admin, report: list[str]) -> None:
         except AssertionError:
             return None
 
+    progress.say(f"Serena: Media look up for {len(LISTED) + len(CHANGED)} records ...")
     refresh = admin.last_refresh()
     started = datetime.fromisoformat(refresh["started_at"]) if refresh else None
     report.append("Serena (Media look up on ucb-stage2's PAHMA):")
@@ -142,6 +145,7 @@ def test_records_as_planned(admin: Admin, report: list[str]) -> None:
     else:
         line("placeholder image", False, "names a Media record that isn't 033: step 14 won't touch it")
 
+    progress.say("CollectionSpace: make-test-media.py --check, one request a second (about six minutes)")
     printed = run_script("--check", exits=(0, 1))
     report.append("CollectionSpace (make-test-media.py --check on PAHMA QA):")
     report.extend(f"  {text}" for text in printed.rstrip().splitlines())

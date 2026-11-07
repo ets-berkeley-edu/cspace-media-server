@@ -16,10 +16,13 @@ import os
 import re
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
 from pathlib import Path
+
+from serenade.qa import progress
 
 TENANT = "pahma"
 PREFIX = "SERENA-TEST-"
@@ -136,18 +139,38 @@ def sha256(path: Path) -> str:
 
 def run_script(*options: str, typed: str = "", timeout: float = 3600, exits: tuple[int, ...] = (0,)) -> str:
     """Runs make-test-media.py with these options against PAHMA QA, as SERENADE_CSPACE_USER, and returns what it
-    printed. The password goes in its environment (MAKE_TEST_MEDIA_PASSWORD), never in an argument, and isn't in
-    anything this returns or raises. `typed` is what it reads from the keyboard (--purge asks for PURGE). Fails on an
-    exit code not in `exits` (--check exits 1 when a record differs from the plan)."""
-    env = {**os.environ, "MAKE_TEST_MEDIA_PASSWORD": os.environ["SERENADE_CSPACE_PASSWORD"]}
-    done = subprocess.run([sys.executable, str(script()), "--base", os.environ["SERENADE_CSPACE_BASE"],  # noqa: S603
-                           "--tenant", TENANT, "--user", os.environ["SERENADE_CSPACE_USER"], *options],
-                          capture_output=True, text=True, timeout=timeout, env=env, input=typed, check=False)
+    printed, showing each line as it comes (progress.say). The password goes in its environment
+    (MAKE_TEST_MEDIA_PASSWORD), never in an argument, and isn't in anything this returns or raises. `typed` is what it
+    reads from the keyboard (--purge asks for PURGE). Fails on an exit code not in `exits` (--check exits 1 when a
+    record differs from the plan), or when it runs longer than `timeout` seconds."""
+    env = {**os.environ, "MAKE_TEST_MEDIA_PASSWORD": os.environ["SERENADE_CSPACE_PASSWORD"],
+           "PYTHONUNBUFFERED": "1"}
+    progress.say(f"make-test-media.py {' '.join(options)} ...")
+    process = subprocess.Popen([sys.executable, str(script()), "--base", os.environ["SERENADE_CSPACE_BASE"],  # noqa: S603
+                                "--tenant", TENANT, "--user", os.environ["SERENADE_CSPACE_USER"], *options],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                               env=env)
+    timer = threading.Timer(timeout, process.kill)
+    timer.start()
+    lines: list[str] = []
+    try:
+        assert process.stdin and process.stdout
+        process.stdin.write(typed)
+        process.stdin.close()
+        for line in process.stdout:
+            lines.append(line)
+            progress.say(f"  {line.rstrip()}")
+        process.wait()
+    finally:
+        timer.cancel()
     made.cache_clear()  # a renew adds a test-media CSV
-    if done.returncode not in exits:
-        raise AssertionError(f"make-test-media.py {' '.join(options)} ended with {done.returncode}:\n"
-                             f"{done.stdout[-3000:]}\n{done.stderr[-2000:]}")
-    return done.stdout
+    printed = "".join(lines)
+    if process.returncode not in exits:
+        raise AssertionError(f"make-test-media.py {' '.join(options)} ended with {process.returncode}"
+                             f"{' (stopped after ' + str(int(timeout)) + ' s)' if process.returncode < 0 else ''}:\n"
+                             f"{printed[-4000:]}")
+    progress.say(f"make-test-media.py {' '.join(options)}: done")
+    return printed
 
 
 def warnings(printed: str) -> list[str]:

@@ -21,6 +21,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 
 from serenade.aws.target import Answer, Target, aws_cli, eventually, get
 from serenade.pages.page import Page
+from serenade.qa import progress
 
 API = "/admin/v1/museums"
 PLACEHOLDER_BLOB = "59a733dd-d641-4e1a-8552"  # PAHMA's placeholder image (backend/serena/museums/pahma.yaml)
@@ -127,6 +128,8 @@ class Log:
         def caught_up() -> None:
             self.read()
             missing = [p for p, n in wanted.items() if len(self.requests(p)) < n]
+            if missing:
+                progress.say(f"log lines for {len(wanted) - len(missing)} of {len(wanted)} paths so far")
             assert not missing, f"no log line yet for {len(missing)} request(s), such as {missing[0]}"
 
         eventually(caught_up, seconds=seconds, every=10)

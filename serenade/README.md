@@ -143,6 +143,10 @@ SERENADE_ADMIN_USER=<a PAHMA admin> SERENADE_CSPACE_BASE=https://<PAHMA QA's hos
   ("noted"); pin them once seen. Step 25 and step 13's alarm email stay by hand.
 - A setting reaches every web task within a minute (`settings_cache_seconds`), so T109 and T122 wait 65 seconds after
   each change before asking.
+- **Progress as it goes** (`qa/progress.py`): pytest holds a test's output until it ends, so the long parts (signing
+  in, each phase's requests and log wait, the 65-second waits, every line make-test-media.py prints, each record in
+  `--check-records`) write a line with the time straight to the terminal. A run that's working prints something at
+  least every 15 seconds, except while one CollectionSpace upload is under way.
 - **`--check-records`** (`./serena aws test --env ucb-stage2 --synthetic --check-records`, same settings) runs only
   `test_qa_records.py`, none of the tests: a report, under "dataset", on every record against the plan and the changes
   already made, from Media look up (no image requested, so nothing cached) and from `make-test-media.py --check`
