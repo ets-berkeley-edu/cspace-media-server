@@ -2722,8 +2722,10 @@ cd <your cspace-media-server clone> && SERENADE_ADMIN_USER=<a PAHMA admin> \
   SERENADE_TEST_MEDIA_SCRIPT=<absolute path to make-test-media.py> ./serena aws test --env ucb-stage2 --synthetic
 ```
 
-It asks for both passwords (not shown or saved). What a test only noted (the outcomes in steps 6, 7, 8, 9, 12 and 20
-the checklist leaves open) is listed at the end, under "noted"; once seen, pin them in the tests.
+It asks for both passwords (not shown or saved), and checks both accounts before any test. The outcomes this section
+left open in steps 6, 7, 12 and 20 are pinned since the first run (November 7, 2026); what a test still only notes
+(step 1's time, step 8 or 9 if CollectionSpace stores another type, step 13's email) is listed at the end, under
+"noted".
 
 To see where the records stand first, add `--check-records` after `--synthetic` (same settings, same two passwords).
 It runs none of the tests and changes nothing: for every record (021-032: the copy in use) it reports, under
@@ -2812,9 +2814,9 @@ listing; steps 23-24 after the next ETL run.
 - [ ] **5. Cards.** *Automated:* T113. Medium and the original of 034 and 036: served. Medium of 051: served, and Media look up shows
   kind card.
 - [ ] **6. Cards that aren't images.** *Automated:* T114. The original of 038 (PDF) and of 040 (JPEG 2000): `wrong_content_type`. Their
-  Medium: note whether it's served or `no_file` (it depends on whether CollectionSpace made a derivative).
-- [ ] **7. An image that doesn't decode.** *Automated:* T115. 041's original: `not_decodable`. Its Medium: note `no_file` or
-  `not_decodable`.
+  Medium: served (CollectionSpace made a JPEG from each; first run, November 7, 2026).
+- [ ] **7. An image that doesn't decode.** *Automated:* T115. 041's original: `not_decodable`. Its Medium: served
+  (CollectionSpace made one from the half it could read; first run, November 7, 2026).
 - [ ] **8. 3D.** *Automated:* T116. First check 042's kind in Media look up: if it isn't 3D, CollectionSpace stored another type; note
   it, expect `not_listed`, and skip the rest of this step. Otherwise 042's original: served; its Medium:
   `no_derivatives_for_kind`. 044's X3D original: served (its Object's unapproved JPEG doesn't bring the placeholder).
@@ -2828,8 +2830,9 @@ listing; steps 23-24 after the next ETL run.
   logged.
 - [ ] **12. Two first requests at once.** *Automated:* T120, on the first size of 006, 002, 010 or 020 that step 2
   doesn't ask for and isn't cached yet, so it holds on every run. 006's FullHD, not yet cached, from six terminals at the same moment: all
-  served, to the same S3 name. Expect at most one fetch per web task (two web tasks, two fetches); note if the
-  bucket keeps a second version of the object (`aws s3api list-object-versions`).
+  served, to the same S3 name. Expect at most one fetch per web task (two web tasks, two fetches), and one version of
+  the object in the bucket, or one per fetch (`aws s3api list-object-versions`): Serena stores a file only if it isn't
+  there, but two tasks fetching at once can both find it missing. First run, November 7, 2026: 2 fetches, 1 version.
 - [ ] **13. A production-copied record.** *Automated:* T121. Medium of any listed Blob that isn't a SERENA-TEST record (its file isn't in
   QA), not cached: the unavailable image, `cspace_error` (CollectionSpace's 500, not retried); again within 10
   minutes: refused from memory, no call (on the same web task). Expect no `cspace-refused` alarm email. Before the
@@ -2865,8 +2868,9 @@ the next ETL run lists), and use the copies' numbers below.
 - [ ] **19. Deleted.** *Automated:* T127. 025's Medium: the unavailable image, `media_deleted`, nothing stored; again within 10 minutes:
   no light check (section 2). 026's Medium (cached): served, from the cache. 027's Medium: `media_gone` (404 on the
   light check).
-- [ ] **20. No file.** *Automated:* T128. 028's Medium: the unavailable image, not an error page; `no_file` if CollectionSpace answers
-  404. Note the status if it's anything else (section 3).
+- [ ] **20. No file.** *Automated:* T128. 028's Medium: the unavailable image, not an error page, `cspace_error`: PAHMA QA
+  answers with an error other than 404 (which would be `no_file`), and Serena's log has the status beside it (first run,
+  November 7, 2026; section 3).
 - [ ] **21. Only the Media record is checked.** *Automated:* T129. 030 (Object deleted), 031 (relations deleted), 032 ("culturally
   affiliated"), each Medium: served.
 - [ ] **22. A recall.** *Automated:* T130. Recalls: recall 029's Media record with a reason. Its Medium (cached) and Small (not): the

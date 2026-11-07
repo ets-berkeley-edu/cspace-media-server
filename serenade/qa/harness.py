@@ -66,13 +66,19 @@ class Serena:
 
     # ---- what an answer says ----------------------------------------------------------------------------------------
 
+    @staticmethod
+    def _shown(location: str) -> str:
+        """An address for a message: without its query string (a CloudFront signature never goes in one)."""
+        return location.split("?", 1)[0] + ("?…" if "?" in location else "")
+
     def served(self, sent: Sent) -> str:
         """The S3 name (the stored file's SHA-256) a served answer's signed address names; fails if it isn't one."""
         a = sent.answer
         assert a.status == 302, f"{sent.path}: {a.status}, not 302"
         location = a.header("Location")
         prefix = f"{self.target.files_url}/{self.target.museum}/objects/"
-        assert location.startswith(prefix), f"{sent.path}: not served, but redirected to {location}"
+        is_served = location.startswith(prefix)  # a plain bool: pytest's assert would print the signed address
+        assert is_served, f"{sent.path}: not served, but redirected to {self._shown(location)}"
         assert a.header("Cache-Control").startswith("private, max-age="), f"{sent.path}: {a.header('Cache-Control')}"
         return location.removeprefix(prefix).split("?", 1)[0]
 
@@ -81,7 +87,8 @@ class Serena:
         a = sent.answer
         assert a.status == 302, f"{sent.path}: {a.status}, not 302"
         expected = f"{self.target.files_url}/{museum or self.target.museum}/unavailable.svg"
-        assert a.header("Location") == expected, f"{sent.path}: redirected to {a.header('Location')}"
+        same = a.header("Location") == expected  # a plain bool: pytest's assert would print the signed address
+        assert same, f"{sent.path}: redirected to {self._shown(a.header('Location'))}"
         assert a.header("Cache-Control") == "no-store", f"{sent.path}: {a.header('Cache-Control')}"
 
     def generic_placeholder(self, sent: Sent) -> None:
@@ -89,7 +96,8 @@ class Serena:
         a = sent.answer
         assert a.status == 302, f"{sent.path}: {a.status}, not 302"
         expected = f"{self.target.files_url}/default/placeholder.svg"
-        assert a.header("Location") == expected, f"{sent.path}: redirected to {a.header('Location')}"
+        same = a.header("Location") == expected  # a plain bool: pytest's assert would print the signed address
+        assert same, f"{sent.path}: redirected to {self._shown(a.header('Location'))}"
         assert a.header("Cache-Control") == "no-store", f"{sent.path}: {a.header('Cache-Control')}"
 
 

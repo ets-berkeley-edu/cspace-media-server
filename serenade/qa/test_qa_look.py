@@ -223,29 +223,27 @@ def test_t113_cards(phase: dict[int, Step], serena: Serena, log: Log) -> None:
     assert step.facts["51 kind"] == "card", f"051 is listed as {step.facts['51 kind']}, not card"
 
 
-def test_t114_cards_that_arent_images(phase: dict[int, Step], serena: Serena, log: Log, note: Note) -> None:
+def test_t114_cards_that_arent_images(phase: dict[int, Step], serena: Serena, log: Log) -> None:
     """Section 63 step 6: the originals of 038 (a PDF) and 040 (a JPEG 2000), listed as cards: wrong_content_type.
-    Their Medium depends on whether CollectionSpace made a derivative: noted (served or no_file)."""
+    Their Medium: served, a JPEG CollectionSpace made from each (pinned November 7, 2026, after the first run)."""
     step = phase[6].checked()
     for n in (38, 40):
         sent = step[f"{n} original"]
         serena.unavailable(sent)
         assert log.reason(sent) == "wrong_content_type", f"{n:03d} original: {log.reason(sent)}"
     for n in (38, 40):
-        reason = log.reason(step[f"{n} Medium"])
-        note(f"step 6: {n:03d}'s Medium: {reason}")
-        assert reason in ("served", "no_file"), f"{n:03d} Medium: {reason}, neither served nor no_file"
+        serena.served(step[f"{n} Medium"])
+        assert log.reason(step[f"{n} Medium"]) == "served", f"{n:03d} Medium: {log.reason(step[f'{n} Medium'])}"
 
 
-def test_t115_an_image_that_doesnt_decode(phase: dict[int, Step], serena: Serena, log: Log, note: Note) -> None:
-    """Section 63 step 7: 041's original (a JPEG cut in half): not_decodable. Its Medium: noted (no_file or
-    not_decodable)."""
+def test_t115_an_image_that_doesnt_decode(phase: dict[int, Step], serena: Serena, log: Log) -> None:
+    """Section 63 step 7: 041's original (a JPEG cut in half): not_decodable. Its Medium: served, CollectionSpace made
+    one from the half it could read (pinned November 7, 2026, after the first run)."""
     step = phase[7].checked()
     serena.unavailable(step["41 original"])
     assert log.reason(step["41 original"]) == "not_decodable", log.reason(step["41 original"])
-    reason = log.reason(step["41 Medium"])
-    note(f"step 7: 041's Medium: {reason}")
-    assert reason in ("no_file", "not_decodable"), f"041 Medium: {reason}"
+    serena.served(step["41 Medium"])
+    assert log.reason(step["41 Medium"]) == "served", f"041 Medium: {log.reason(step['41 Medium'])}"
 
 
 def test_t116_3d(phase: dict[int, Step], serena: Serena, log: Log, note: Note) -> None:
@@ -306,9 +304,11 @@ def test_t119_urls_serena_doesnt_accept(phase: dict[int, Step], serena: Serena, 
     assert "?" not in log.line(step["query string"])["path"], "the query string was logged"
 
 
-def test_t120_two_first_requests_at_once(phase: dict[int, Step], serena: Serena, log: Log, note: Note) -> None:
+def test_t120_two_first_requests_at_once(phase: dict[int, Step], serena: Serena, log: Log) -> None:
     """Section 63 step 12: six requests at the same moment for a size not stored yet: all served, the same S3 name,
-    and at most one fetch per web task. Whether the bucket kept a second version of the object is noted."""
+    and at most one fetch per web task. The bucket holds one version of the object, or one per fetch: Serena stores a
+    file only if it isn't there yet, but two tasks fetching at once can both find it missing (the first run, November
+    7, 2026: 2 fetches, 1 version)."""
     step = phase[12].checked()
     together = [a.sent for label, a in step.asked.items() if label.startswith("together")]
     assert len(together) == TOGETHER, f"only {len(together)} of {TOGETHER} requests answered"
@@ -318,7 +318,7 @@ def test_t120_two_first_requests_at_once(phase: dict[int, Step], serena: Serena,
     assert 1 <= len(fetched) <= web_count(), f"{len(fetched)} fetches for {step.facts['which']} ({web_count()} tasks)"
     versions = aws_cli("s3api", "list-object-versions", "--bucket", serena.target.bucket, "--prefix",
                        f"objects/{names.pop()}", "--query", "Versions[].VersionId") or []
-    note(f"step 12: {step.facts['which']}: {len(fetched)} fetch(es), {len(versions)} version(s) of the object")
+    assert 1 <= len(versions) <= len(fetched), f"{len(versions)} versions of the object from {len(fetched)} fetches"
 
 
 def test_t121_a_production_copied_record(phase: dict[int, Step], serena: Serena, log: Log, note: Note) -> None:

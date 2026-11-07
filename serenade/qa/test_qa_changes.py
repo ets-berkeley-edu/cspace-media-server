@@ -166,13 +166,13 @@ def test_t127_deleted(phase: dict[int, Step], copies: dict[int, Record], serena:
 
 
 @pytest.mark.after("test_t124_the_changes")
-def test_t128_no_file(phase: dict[int, Step], serena: Serena, log: Log, note: Note) -> None:
-    """Section 63 step 20: 028's Medium (its file removed, the record kept): the unavailable image, not an error page;
-    no_file if CollectionSpace answers 404. The reason is noted until the first run shows it."""
+def test_t128_no_file(phase: dict[int, Step], serena: Serena, log: Log) -> None:
+    """Section 63 step 20: 028's Medium (its file removed, the record kept): the unavailable image, not an error page.
+    cspace_error: PAHMA QA answers the Media service's derivative request with an error other than 404 (no_file),
+    and Serena logs that status beside it (pinned November 7, 2026, after the first run)."""
     step = phase[20].checked()
     serena.unavailable(step["28 Medium"])
-    reason = log.reason(step["28 Medium"])
-    note(f"step 20: 028's Medium: {reason}")
+    assert log.reason(step["28 Medium"]) == "cspace_error", f"028 Medium: {log.reason(step['28 Medium'])}"
 
 
 @pytest.mark.after("test_t124_the_changes")

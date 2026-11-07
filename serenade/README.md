@@ -139,8 +139,9 @@ SERENADE_ADMIN_USER=<a PAHMA admin> SERENADE_CSPACE_BASE=https://<PAHMA QA's hos
 - **Requests first, then the log once.** A phase sends all its requests, then reads the web service's log lines with
   `aws logs filter-log-events` (read-only, D231) until every request has its line: the reason, cache hit or miss, and
   the fetches from CollectionSpace (`qa/harness.py`). The admin API is called with one signed-in browser session.
-- **Outcomes the checklist leaves open** (steps 6, 7, 8, 9, 12, 20) are noted and listed at the end of the run
-  ("noted"); pin them once seen. Step 25 and step 13's alarm email stay by hand.
+- **Outcomes the checklist left open** in steps 6, 7, 12 and 20 are pinned since the first run (November 7, 2026);
+  step 1's time, steps 8 and 9 if CollectionSpace stores another type, and step 13's email are still noted at the end
+  of the run ("noted"). A failure message shows a CloudFront address without its query string (no signature). Step 25 and step 13's alarm email stay by hand.
 - A setting reaches every web task within a minute (`settings_cache_seconds`), so T109 and T122 wait 65 seconds after
   each change before asking.
 - **Both accounts first** (`qa/logins.py`): before any test, the run signs in to Serena's admin API as
