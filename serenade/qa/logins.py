@@ -3,7 +3,8 @@ sign in should stop in seconds, saying which account and why, not after it has s
 
 - The admin account: Serena's own sign-in (POST /admin/v1/sessions), which asks PAHMA's CollectionSpace and checks the
   Serena admin role. It's a real sign-in (the admin app's audit log records it); the browser signs in again after.
-- The CollectionSpace account make-test-media.py uses: one read (a page of one Media record).
+- The CollectionSpace account make-test-media.py uses: one read of its own roles (accounts/0/accountroles, as
+  Serena's sign-in reads them; a page of the Media list takes over 30 seconds on PAHMA QA).
 
 Passwords go only in a request's body or Authorization header, never in a URL, a message or an exception."""
 from __future__ import annotations
@@ -62,7 +63,7 @@ def admin_problem(app_url: str, museum: str, username: str, password: Secret) ->
 def cspace_problem(base: str, username: str, password: Secret) -> str | None:
     """Why make-test-media.py's account can't read PAHMA QA's CollectionSpace, or None if it can."""
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    request = _request(f"{base.rstrip('/')}/media?pgSz=1&wf_deleted=false",
+    request = _request(f"{base.rstrip('/')}/accounts/0/accountroles",
                                      headers={"Authorization": f"Basic {token}", "Accept": "application/xml"})
     status, text = _send(request)
     if status == 200:

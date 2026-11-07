@@ -144,7 +144,7 @@ SERENADE_ADMIN_USER=<a PAHMA admin> SERENADE_CSPACE_BASE=https://<PAHMA QA's hos
 - A setting reaches every web task within a minute (`settings_cache_seconds`), so T109 and T122 wait 65 seconds after
   each change before asking.
 - **Both accounts first** (`qa/logins.py`): before any test, the run signs in to Serena's admin API as
-  `SERENADE_ADMIN_USER` and reads one Media record from CollectionSpace as `SERENADE_CSPACE_USER`; if either fails it
+  `SERENADE_ADMIN_USER` and reads `SERENADE_CSPACE_USER`'s own roles from CollectionSpace; if either fails it
   stops ("Nothing ran: …") with the reason, before anything in QA changes. Passwords are `Secret`s
   (`serenade/secret.py`), masked in any traceback.
 - **Progress as it goes** (`qa/progress.py`): pytest holds a test's output until it ends, so the long parts (signing
