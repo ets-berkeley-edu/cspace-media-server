@@ -2697,3 +2697,165 @@ only a display problem: what Serena serves comes from the ETL's list, never from
   waits for the next ETL list.
 - [ ] **4. Put it back.** Tick "Approved for public?" again in PAHMA QA and save, so the next ETL run lists the record
   as before. Look it up once more: **Yes**.
+
+## 63. PAHMA QA's synthetic test records, on ucb-stage2 (about two days: 2 hours of checks around two nightly ETL runs; once SERENA-TEST-001 to -051 are in PAHMA QA)
+
+What it checks: Serena serving and refusing real CollectionSpace files, chosen to cover what PAHMA's ETL lists and
+each reason in Requests Serena doesn't serve that can be produced from outside (decided November 6, 2026). UC
+Berkeley's QA instances keep production's Media records but not their files (a copied record's file answers 500), so
+these tests use synthetic records whose files exist: Media records `SERENA-TEST-001` to `-051`, each related both ways
+to its own Object `SERENA-TEST-OBJ-nnn` with the PAHMA status "number not used", so that QA's nightly ETL lists them.
+Generated files only: labelled gradients, a one-page PDF, an X3D cube, a WAV tone, an empty MP4. Nothing from the
+collection, no personal data. The script that makes and changes them is kept in the team's notes, outside this
+repository; its CSV of identification numbers and CSIDs stays there too, so this section names records by number only.
+
+**What PAHMA's ETL lists** (cspace-solr-ucb, `pahma/mediaAllImages.sql`, `pahma/basic_restricted.sql`,
+`pahma/mergeObjectsAndMediaPAHMA.py`, `common/make_servable_list.py`), which decides every expectation below:
+
+- A Media record is listed only through a relation **from** the Media record **to** an Object, with neither deleted,
+  and only if the Object has one of the statuses the public core accepts ("number not used" is one; "missing" isn't).
+- By the Blob's type: JPEG, PNG and TIFF are images; `audio/mpeg`, `audio/aac`, `audio/x-wav` audio; `video/mp4`
+  video; the three X3D types 3D. GIF, PDF, JPEG 2000 and anything else are listed nowhere.
+- A description containing "catalog card", "HSR Datasheet", "Index" or "Ledger" (any case, anywhere) makes the record
+  a card, whatever its type.
+- approvedForWeb anything but true (false or empty): an image or card is replaced by the placeholder Blob
+  `59a733dd-d641-4e1a-8552`; audio, video and 3D are left out. An Object status containing "culturally" does the same
+  to images, not cards.
+- Every PAHMA row is public, so `restricted` can't happen here.
+
+**The records:**
+
+| Records | What they are | Listed as |
+| --- | --- | --- |
+| 001, 002, 006, 010, 020 | Public JPEGs | image |
+| 003, 007 / 004, 008, 009 | Public PNGs / TIFFs (008 about 130 MB, 009 about 192 MB) | image |
+| 005, 014 | GIFs, public and unapproved | nothing |
+| 011-013, 015, 016 / 017 | Unapproved images / approvedForWeb empty | nothing (the placeholder instead) |
+| 018, 019 | PDFs, public and unapproved | nothing |
+| 021-032 | Public JPEGs labelled "v1", each changed once after an ETL run (below) | image, before the change |
+| 033 | A PNG labelled "SERENA TEST: Image restricted", for the placeholder | image |
+| 034 / 035 | Catalog card / unapproved catalog card | card / nothing (the placeholder becomes kind card) |
+| 036 / 037 | Card / image on an Object also "culturally affiliated" | card / nothing |
+| 038 / 040 | A PDF / a JPEG 2000 described as a catalog card | card |
+| 039 | JPEG 2000 | nothing |
+| 041 | A JPEG cut off halfway | image |
+| 042 / 043 | X3D, public / unapproved | 3D / nothing |
+| 044 | X3D (public) and `044-IMG`, an unapproved JPEG, on one Object | 3D; nothing for the JPEG |
+| 045 / 047 | WAV, public / unapproved | audio / nothing |
+| 046 | MP4 | video |
+| 048 / 049 / 050 | A public JPEG with no Object / an Object only "missing" / a relation only from the Object | nothing |
+| 051 | A public JPEG described "Serena test image, indexed" | card (the "Index" rule) |
+
+**Before you start:**
+
+1. The records exist in PAHMA QA (001-020 made November 5 and 6, 2026; 021-051 November 6), and the last refresh in
+   the admin app (PAHMA › Past refreshes) is from an ETL run after they were made and shows Updated.
+2. Media look up works by identification number (`SERENA-TEST-001`) and shows each record's Blob CSID, kind and
+   whether it's listed. Below, `<001>` is record 001's Blob CSID, `<001 media>` its Media CSID.
+3. In each new terminal, on campus or the VPN, set `S` to stage 2's PAHMA URL up to and including `/imageserver`, and
+   use one request at a time, the redirect not followed:
+
+   ```
+   req() { curl -sS --connect-timeout 10 --max-time 330 -o /dev/null -D - -w 'time: %{time_total}s\n' "$S/$1" | tr -d '\r' | grep -iE '^(HTTP/|location:|cache-control:|content-type:|time:)'; }
+   ```
+
+   `req blobs/<001>/derivatives/Medium/content` for a size, `req blobs/<001>/content` for the original.
+4. Read every outcome on Past requests (served or unserved, its reason, from the cache or CollectionSpace), and the
+   fetches in `./serena aws logs web --env ucb-stage2`.
+
+**What the answers look like.** Served: a 302 to a CloudFront signed URL, `Cache-Control: private, max-age=<seconds
+to the URL's expiry>`. Not served: a 302 to PAHMA's `unavailable.svg`, `Cache-Control: no-store` (the placeholder
+before a Media record is named: `placeholder.svg`, `no-store`). Both SVGs are on CloudFront; Serena's own host answers
+404 for them.
+
+**Order matters:** step 1 before 008's original is cached; the changes (steps 15-16) only after the records' first
+listing; steps 23-24 after the next ETL run.
+
+### Records never changed (about 45 minutes)
+
+- [ ] **1. Over the size limit** (before 008's original is cached). Settings: PAHMA's image size limit 100 MB, with
+  a reason. `req blobs/<008>/content`: the unavailable image, `too_large`; then `req blobs/<008>/derivatives/Medium/content`:
+  served. Set the limit back to 500 MB, with a reason; Audit log shows both changes. Note how long the refusal took:
+  PAHMA QA sends no Content-Length, so the refusal comes only after reading up to the limit.
+- [ ] **2. Every size, twice.** For 001: Thumbnail, Small, Medium, FullHD, OriginalJpeg and the original. First run:
+  misses, each fetched; second run: hits, the same S3 names. Repeat Medium and the original for 002, 006, 010, 020.
+- [ ] **3. PNG and TIFF.** Medium and the original of 003, 007 and 004: served. 008's original twice: fetched, then
+  from the cache. 009's original: served (from the cache if it's been requested before). Each original's S3 name is
+  the SHA-256 of the generated file.
+- [ ] **4. Not listed.** Medium of 005, 011-017, 035, 037, 039, 048, 049, 050 and 044-IMG; the original of 018, 019,
+  043 and 047: the unavailable image, `not_listed`, no call to CollectionSpace.
+- [ ] **5. Cards.** Medium and the original of 034 and 036: served. Medium of 051: served, and Media look up shows
+  kind card.
+- [ ] **6. Cards that aren't images.** The original of 038 (PDF) and of 040 (JPEG 2000): `wrong_content_type`. Their
+  Medium: note whether it's served or `no_file` (it depends on whether CollectionSpace made a derivative).
+- [ ] **7. An image that doesn't decode.** 041's original: `not_decodable`. Its Medium: note `no_file` or
+  `not_decodable`.
+- [ ] **8. 3D.** First check 042's kind in Media look up: if it isn't 3D, CollectionSpace stored another type; note
+  it, expect `not_listed`, and skip the rest of this step. Otherwise 042's original: served; its Medium:
+  `no_derivatives_for_kind`. 044's X3D original: served (its Object's unapproved JPEG doesn't bring the placeholder).
+- [ ] **9. Audio and video.** The original of 045 and 046: `kind_not_served`, no call to CollectionSpace. If either
+  isn't listed (Media look up), note the type CollectionSpace stored.
+- [ ] **10. Media URLs.** `req media/<001 media>/blob/derivatives/Medium/content`: served from 001's Blob's cache
+  entry (the same S3 name), logged with the `/media/…` path. The same with a made-up Media CSID: `not_listed`.
+- [ ] **11. URLs Serena doesn't accept.** 001 with derivative `Large`, and `medium`: `derivative_not_served`. A CSID
+  with `_`: `bad_csid`. `…/derivatives/Medium/content/extra` and `media/<001 media>/content`: `unknown_path`. An
+  unknown museum: the default unavailable image, `unknown_museum`. A query string on 001's Medium: served, and not
+  logged.
+- [ ] **12. Two first requests at once.** 006's FullHD, not yet cached, from six terminals at the same moment: all
+  served, to the same S3 name. Expect at most one fetch per web task (two web tasks, two fetches); note if the
+  bucket keeps a second version of the object (`aws s3api list-object-versions`).
+- [ ] **13. A production-copied record.** Medium of any listed Blob that isn't a SERENA-TEST record (its file isn't in
+  QA), not cached: the unavailable image, `cspace_error` (CollectionSpace's 500, not retried); again within 10
+  minutes: refused from memory, no call (on the same web task). Expect no `cspace-refused` alarm email. Before the
+  Deploy that brings pull request 202, the reason is `cspace_refused` and that alarm emails.
+
+### The placeholder image (10 minutes)
+
+- [ ] **14. Not set, then 033.** `req blobs/59a733dd-d641-4e1a-8552/derivatives/Medium/content` and `…/Thumbnail/…`:
+  `placeholder.svg`, `placeholder_not_set`. Settings › Placeholder image (Media CSID): 033's Media CSID, with a reason.
+  Expect the save to fetch every size and warn that 033's Blob isn't the configured placeholder Blob, then save;
+  Audit log shows it. Both requests again: served, the 033 picture. The "placeholder image isn't set" alert doesn't
+  come back with the next refresh.
+
+### Records changed after an ETL run (about an hour)
+
+Each of 021-032 can be used once. To run these again, renew them first (a fresh copy named `021B`, then `C`…, which
+the next ETL run lists), and use the copies' numbers below.
+
+- [ ] **15. Before the changes.** Each of 021-032 is listed as image (Media look up). Cache Medium of 022, 024 and
+  026 (`req` each, a miss), and 029's Medium. **Don't** request 021, 023, 025, 027, 028, 030, 031 or 032.
+- [ ] **16. The changes**, in PAHMA QA, noting the time: 021, 022, 023 image replaced (a new Blob, labelled "v2");
+  023 and 024 approvedForWeb false; 025 and 026 Media soft-deleted; 027 Media deleted for good (only if the account
+  may; otherwise skip 027); 028 its image removed (the record stays); 030 the Object soft-deleted; 031 both relations
+  soft-deleted; 032's Object gets the status "culturally affiliated". Read each one back in CollectionSpace.
+- [ ] **17. Replaced images** (the old Blob's Medium):
+  - 021 (not cached): served, the **v2** picture; the log shows the light check, then a fetch through
+    `media/<csid>/blob/derivatives/Medium/content`, nothing by the old Blob CSID (section 1).
+  - 022 (cached): served, the **v1** picture, from the cache.
+  - 023 (not cached, now unapproved): served, the **v2** picture: the accepted window until the next ETL list.
+- [ ] **18. Unapproved after the run.** 024's Medium (cached) and Small (not): both served; the light check doesn't
+  read approval.
+- [ ] **19. Deleted.** 025's Medium: the unavailable image, `media_deleted`, nothing stored; again within 10 minutes:
+  no light check (section 2). 026's Medium (cached): served, from the cache. 027's Medium: `media_gone` (404 on the
+  light check).
+- [ ] **20. No file.** 028's Medium: the unavailable image, not an error page; `no_file` if CollectionSpace answers
+  404. Note the status if it's anything else (section 3).
+- [ ] **21. Only the Media record is checked.** 030 (Object deleted), 031 (relations deleted), 032 ("culturally
+  affiliated"), each Medium: served.
+- [ ] **22. A recall.** Recalls: recall 029's Media record with a reason. Its Medium (cached) and Small (not): the
+  unavailable image, `recalled`, nothing fetched. Cancel the recall with a reason; within a minute, Medium served from
+  the cache and Small fetched.
+
+### After the next ETL run (15 minutes, the next morning)
+
+- [ ] **23. What the ETL dropped.** The new refresh is Updated. Each request below gets the unavailable image,
+  `not_listed`: the old Blobs of 021, 022, 023; 024's Medium and Small; 025, 026, 027, 028, 030 and 031; 032.
+- [ ] **24. What it added.** The new Blobs of 021 and 022 are listed as image and served, the v2 picture. 023's new
+  Blob isn't listed (unapproved), and its Object brings the placeholder. Everything in steps 2-12 is unchanged.
+- [ ] **25. Clean up, when the records are no longer needed.** Settings › Placeholder image back to its default, with
+  a reason. Soft-delete every SERENA-TEST Media and Object record; after the next ETL run, none is listed.
+
+Not covered here, and why: the US burial and funerary-object rule (needs Object data the synthetic records don't
+have); a Blob shared by two Media records (CollectionSpace makes a new Blob on every upload); a skipped Solr refresh;
+`restricted` (never at PAHMA; checked November 5, 2026 with a hand-made list); an image replaced between the light
+check and the fetch, and CollectionSpace unavailable (simulator tests).
