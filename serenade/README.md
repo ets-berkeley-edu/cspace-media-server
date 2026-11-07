@@ -69,12 +69,13 @@ its inventory ID (`test_t3_…`), and its docstring names the checklist steps.
 | `tests/test_alerts.py` | Alerts, T23 to T25, on UCJEPS: a failed check's alert on the bell, the banner and the Alerts page; its text, with its refresh ID as a link; acknowledging (sections 14, 18, 20). T84 and T85, on BAMPFA (two alerts from a setting changed and put back): All · Waiting, the waiting rows' bar, the banner and the bell opening Waiting; Acknowledge all, its dialog's list and links, and none waiting after. T87 to T89 (20 more alerts, raised through the admin API): All held through sorting, paging and Back, Waiting back to page 1, the audit log's link opening All; the dialog's order, Cancel, no reason, only its list scrolling in a short window, a link to another page of the table, one audit entry per alert; and a second browser acknowledging one while the dialog is open (section 28) |
 | `tests/test_refreshes.py` | Refreshes, T16 to T21: Past refreshes, Start a refresh's missing fields, and on UCJEPS a failed check's page, overriding the threshold, an admin refresh repairing a failed one, sorting and paging 30 refreshes (sections 11, 14, 15, 21) |
 | `tests/test_lookup_and_recalls.py` | The pilot, T2 to T6: Media look up, a recall and its cancellation, CollectionSpace unreachable (sections 11, 17, 19). Recalls, T74 to T81: the preview (what Serena finds, paths and URLs, more than 12 CSIDs and a text file, an already recalled record), a missing reason, a recall's row and its files, Past requests and the audit log, and the recall's alert, T26 (sections 17 to 21). Media look up, T65 to T73: every size of a Media CSID, the comparison with CollectionSpace, the page's address, paths it forgives and refuses, an unknown CSID, the sizes box, and a record changed in CollectionSpace (off the web, replaced, soft-deleted), then put back (sections 17, 19 to 21, 23) |
-| `aws/test_deployment.py` | A deployed environment, T90 to T105 ("The AWS tests", above; sections 24, 25, 27) |
+| `aws/test_deployment.py` | A deployed environment, T90 to T108 ("The AWS tests", below; sections 24, 25, 27, and the shared root's addresses) |
+| `qa/test_qa_*.py` | PAHMA QA's synthetic records on ucb-stage2, T109 to T133 ("The synthetic-record tests", below; section 63) |
 
 ## The AWS tests
 
 `aws/` checks an environment in AWS after `./serena aws deploy` or `./serena aws resume` (D222 to D231, decided
-October 21, 2026): T90 to T105, from the checklist's AWS sections (24, 25 and 27, their steps marked "Automated").
+October 21, 2026): T90 to T108, from the checklist's AWS sections (24, 25 and 27, their steps marked "Automated").
 
 ```
 ./serena aws test                  # personal-dev (or --env NAME), signed in with aws sso login
@@ -100,6 +101,48 @@ October 21, 2026): T90 to T105, from the checklist's AWS sections (24, 25 and 27
   (D224), and the sample image comes from `./serena aws list`. Set `SERENADE_ADMIN_USER` to a museum admin's username;
   `./serena aws test` asks for the password (D228), which isn't shown or saved. With the simulator it's `admin`/`admin`.
 - **Read-only AWS calls** (D231) use the AWS CLI with the environment's profile: `logs filter-log-events` for T105.
+
+## The synthetic-record tests
+
+`qa/` automates checklist section 63 (decided November 6, 2026): Serena serving and refusing PAHMA QA's synthetic
+records SERENA-TEST-001 to -051 on ucb-stage2, T109 to T133. Unlike the AWS tests, they change things in QA.
+
+```
+SERENADE_ADMIN_USER=<a PAHMA admin> SERENADE_CSPACE_BASE=https://<PAHMA QA's host>/cspace-services \
+  SERENADE_CSPACE_USER=<the account> SERENADE_TEST_MEDIA_SCRIPT=<absolute path to make-test-media.py> \
+  ./serena aws test --env ucb-stage2 --synthetic
+```
+
+- **Only ucb-stage2's PAHMA, with PAHMA QA's CollectionSpace,** and only through `./serena aws test --synthetic`, which
+  Richard runs, signed in (never Claude or CI, D229). It asks for the admin's password and the CollectionSpace
+  account's, neither shown nor saved; the tests hand the second to the script in its environment, never as an
+  argument.
+- **The records come from make-test-media.py,** which is kept in the team's notes, outside this repository:
+  `SERENADE_TEST_MEDIA_SCRIPT` is its absolute path, and the tests read the records' CSIDs from its git-ignored `out/`
+  (`qa/records.py`). Nothing here names a test record's CSID (D314); the tests name records by number. Media look up
+  doesn't search by identification number, so the CSVs are the only list.
+- **What it changes** (an exception to D224 and D227, for this set only): the synthetic records in CollectionSpace,
+  through the script (step 16's changes, including 027 deleted for good, for which the test types the script's PURGE,
+  and the renewal of 021-032); PAHMA's image size limit, put back however T109 ends; the placeholder image, left on
+  record 033 as the checklist leaves it (a run that finds it there sets it back to not set first; it refuses to change
+  any other record named there); a recall of 029, cancelled however T130 ends.
+- **Every run, and every other day.** The files run in `FILE_ORDER`: `test_qa_look.py` (steps 2 to 13, looking
+  only), `test_qa_settings.py` (steps 1 and 14), `test_qa_changes.py` (steps 15 to 22) and `test_qa_next_run.py`
+  (steps 23 and 24, then T133 renews 021-032). Each of 021-032 can be changed once (D311), so the changes run only
+  while the copies in use are listed and unchanged, and the checks after them only once an ETL run Serena applied
+  started after the changes; otherwise they skip, saying why. Run it the day after the copies are listed, before
+  21:01, and again the next morning: a cycle every other day.
+- **Repeatable without renewing the rest.** Serena stores a Blob's files for good, so a first request misses only
+  once: the look-only tests read Media look up first and expect a miss only for a size not stored yet. 008's original
+  is never requested except by step 1 (a refusal stores nothing), and step 12 takes the first of 006's, 002's, 010's
+  or 020's sizes step 2 doesn't ask for that isn't stored, about 16 runs' worth.
+- **Requests first, then the log once.** A phase sends all its requests, then reads the web service's log lines with
+  `aws logs filter-log-events` (read-only, D231) until every request has its line: the reason, cache hit or miss, and
+  the fetches from CollectionSpace (`qa/harness.py`). The admin API is called with one signed-in browser session.
+- **Outcomes the checklist leaves open** (steps 6, 7, 8, 9, 12, 20) are noted and listed at the end of the run
+  ("noted"); pin them once seen. Step 25 and step 13's alarm email stay by hand.
+- A setting reaches every web task within a minute (`settings_cache_seconds`), so T109 and T122 wait 65 seconds after
+  each change before asking.
 
 ## The access-log replay
 
