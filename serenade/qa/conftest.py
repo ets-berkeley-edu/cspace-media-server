@@ -21,7 +21,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from serenade.aws.target import Target, from_environment
 from serenade.conftest import new_browser
 from serenade.pages.sign_in_page import SignInPage
-from serenade.qa import progress
+from serenade.qa import logins, progress
 from serenade.qa.harness import Admin, Log, Serena
 from serenade.secret import Secret
 
@@ -44,6 +44,22 @@ REPORT: list[str] = []  # test_qa_records.py's report on the dataset
 
 def pytest_configure(config: pytest.Config) -> None:
     progress.setup(config)
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Both accounts, before any test (serenade/qa/logins.py): a run that can't sign in stops here, saying why."""
+    if session.config.option.collectonly:
+        return
+    progress.say("checking the two accounts ...")
+    password = Secret(os.environ["SERENADE_ADMIN_PASSWORD"])
+    problems = [p for p in (
+        logins.admin_problem(TARGET.url, TARGET.museum, os.environ["SERENADE_ADMIN_USER"], password),
+        logins.cspace_problem(os.environ["SERENADE_CSPACE_BASE"], os.environ["SERENADE_CSPACE_USER"],
+                              Secret(os.environ["SERENADE_CSPACE_PASSWORD"])),
+    ) if p]
+    if problems:
+        pytest.exit("Nothing ran: " + "; ".join(problems) + ".", returncode=3)
+    progress.say("both accounts sign in")
 
 
 def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
