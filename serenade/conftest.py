@@ -17,8 +17,14 @@ from serenade.stack import ON_TEST_STACK
 
 BASE_URL = os.environ.get("SERENADE_BASE_URL", "http://localhost:5373/admin/")
 # The AWS tests (serenade/aws/) run only through ./serena aws test, which sets SERENADE_AWS_ENV; the local tests
-# (tests/) never run in the same run (serenade/aws/conftest.py).
-collect_ignore = ["tests"] if os.environ.get("SERENADE_AWS_ENV") else ["aws"]
+# (tests/) never run in the same run (serenade/aws/conftest.py). The synthetic-record tests (serenade/qa/) run only
+# through ./serena aws test --synthetic, which also sets SERENADE_SYNTHETIC, and alone (serenade/qa/conftest.py).
+if os.environ.get("SERENADE_SYNTHETIC"):
+    collect_ignore = ["tests", "aws"]
+elif os.environ.get("SERENADE_AWS_ENV"):
+    collect_ignore = ["tests", "qa"]
+else:
+    collect_ignore = ["aws", "qa"]
 # Screenshots and page HTML of failed browser tests (synthetic data only: the stack never holds real data).
 FAILURES = Path(__file__).parent / ".run" / "failures"
 
@@ -38,7 +44,10 @@ def pytest_configure(config: pytest.Config) -> None:
 # changes one record, then what affects a museum or every museum (README: How the tests share one dataset).
 FILE_ORDER = ["test_serving.py", "test_requests.py", "test_alerts.py", "test_refreshes.py",
               "test_lookup_and_recalls.py", "test_settings.py", "test_audit.py",
-              "test_layout.py", "test_sign_in.py", "test_unreachable.py"]
+              "test_layout.py", "test_sign_in.py", "test_unreachable.py",
+              # serenade/qa/ (checklist section 63): looking, then settings, then CollectionSpace changes and a
+              # recall, then what the next ETL run did (README: The synthetic-record tests)
+              "test_qa_look.py", "test_qa_settings.py", "test_qa_changes.py", "test_qa_next_run.py"]
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

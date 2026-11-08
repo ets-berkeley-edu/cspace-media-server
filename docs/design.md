@@ -1620,7 +1620,10 @@ their hashed names, with no CDN (D296).
   10, 2026). Not in CI yet. A second set, `serenade/aws/`, checks a deployed environment after a deploy or resume
   (`./serena aws test`, D222 to D231): what Serena serves through CloudFront, the admin app, a recall it cancels and
   the logs' permission errors; against a real CollectionSpace only the tests that look. Run by hand, signed in, never
-  in CI.
+  in CI. A third, `serenade/qa/`, automates the testing checklist's section 63 on ucb-stage2 against PAHMA QA's
+  synthetic records (`./serena aws test --synthetic`, decided November 6, 2026): unlike the AWS tests it changes
+  those records through the team's make-test-media.py (kept outside this repository, which names no test record's
+  CSID), two of PAHMA's settings and a recall, each put back where it can be.
 
 ## Infrastructure and operations
 
