@@ -122,7 +122,8 @@ export interface Refresh extends RefreshSummary {
   check: Check | null
   update: {deleted: number, written: number, unchanged: number, recalls_ended?: number, recalls_kept?: number} | null
   actions: RefreshAction[]
-  // When the watchdog's deadline for an ETL refresh's day passes, in UTC (mockup version 55); none for a manual one
+  // When the watchdog's deadline for an ETL refresh passes, in UTC: the first one at or after it started (mockup
+  // version 60); none for a manual one
   deadline_at?: string | null
   // A failed update: until when Serena tries it again by itself (decided October 28, 2026); none for an older one
   retry_until?: string | null

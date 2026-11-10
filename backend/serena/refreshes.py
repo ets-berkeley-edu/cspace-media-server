@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
@@ -29,6 +29,21 @@ from . import tables
 from .store import Store
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def deadline_on(day: date, deadline: str) -> datetime:
+    """The watchdog's deadline (HH:MM, Pacific) on a Pacific date."""
+    hours, minutes = (int(part) for part in deadline.split(":"))
+    return datetime.combine(day, time(hours, minutes), tzinfo=PACIFIC)
+
+
+def deadline_after(started: datetime, deadline: str) -> datetime:
+    """The deadline a refresh that started then is due by: the first one at or after its start (decided November 10,
+    2026). The ETL job starts in the evening, Pacific, so its refresh is due the next morning, the day after its
+    refresh date; a refresh that starts before the deadline is due that same morning."""
+    local = started.astimezone(PACIFIC)
+    due = deadline_on(local.date(), deadline)
+    return due if due >= local else deadline_on(local.date() + timedelta(days=1), deadline)
 
 
 class State(StrEnum):

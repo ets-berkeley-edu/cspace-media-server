@@ -1,6 +1,6 @@
 import gzip
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -120,6 +120,15 @@ def test_the_current_and_pending_refreshes(admin: TestClient, etl: TestClient, w
     assert pending["actions"] == ["retry_update"]
     assert pending["deadline_at"] == f"{failed['refresh_date']}T15:00:00Z"
     assert refresh_of(admin, failed["refresh_id"])["deadline_at"] == pending["deadline_at"]
+
+
+def test_an_evening_refresh_is_due_the_next_morning(etl: TestClient, admin: TestClient, clock: Any) -> None:
+    """The ETL job starts at 21:01 Pacific: its refresh, dated that day, is due by the next morning's deadline
+    (decided November 10, 2026)."""
+    clock.now = datetime(2026, 10, 11, 4, 1, tzinfo=UTC)  # 21:01 Pacific, October 10
+    refresh = start(etl)
+    assert refresh["refresh_id"] == "pahma-2026-10-10-1"
+    assert refresh_of(admin, refresh["refresh_id"])["deadline_at"] == "2026-10-11T15:00:00Z"
 
 
 # --- retrying a servability update (D63)

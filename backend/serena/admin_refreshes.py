@@ -21,7 +21,7 @@ import re
 import tempfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
 from urllib.parse import unquote
 
@@ -33,7 +33,18 @@ from . import simulator, uploads
 from .admin_api import SignedIn, changes, services
 from .alerts import Alert, Alerts, Kind
 from .audit import Action
-from .refreshes import BUSY, PACIFIC, Busy, OutOfOrder, ReasonKind, Refresh, Refreshes, State, Upload, reason_kinds
+from .refreshes import (
+    BUSY,
+    Busy,
+    OutOfOrder,
+    ReasonKind,
+    Refresh,
+    Refreshes,
+    State,
+    Upload,
+    deadline_after,
+    reason_kinds,
+)
 from .servable_list import read_rows
 
 log = logging.getLogger("serena.admin")
@@ -156,12 +167,12 @@ def actions(refresh: Refresh, newest: bool) -> list[str]:
 
 
 def deadline_at(refresh: Refresh, deadline: str) -> str | None:
-    """When the watchdog's deadline for an ETL refresh's day passes, in UTC (mockup version 55): the app says so
-    beside a refresh still waiting or working after it. A manual refresh has none."""
+    """When the watchdog's deadline for an ETL refresh passes, in UTC (mockup version 55): the app says so beside a
+    refresh still waiting or working after it. It is the first deadline at or after the refresh started, so the ETL
+    job's evening refresh is due the next morning (decided November 10, 2026). A manual refresh has none."""
     if refresh.admin_refresh is not None:
         return None
-    hours, minutes = (int(part) for part in deadline.split(":"))
-    at = datetime.combine(date.fromisoformat(refresh.refresh_date), time(hours, minutes), tzinfo=PACIFIC)
+    at = deadline_after(datetime.fromisoformat(refresh.created_at), deadline)
     return at.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 

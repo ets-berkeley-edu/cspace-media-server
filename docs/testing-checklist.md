@@ -90,6 +90,8 @@ The tests run whole refreshes against moto with synthetic servable lists. These 
 The tests use moto's SNS. These checks need the real topic and the team's mailing list subscribed to it.
 
 - [ ] Set a museum's deadline a few minutes ahead in the admin app (or its Settings item) and start no refresh for it.
+  Use a museum the ETL job doesn't refresh in that environment: a refresh that started since the previous day's
+  deadline counts, so last night's ETL refresh would meet it (decided November 10, 2026, section 65).
   Expect one email to the mailing list within 5 minutes after the deadline, naming the museum, the refresh date and what
   to do, and one alert record. Expect no second email on the next passes.
 - [ ] Make a servable list check fail (upload a servable list with a bad kind). Expect an email titled "A servable list check failed" with the refresh ID
@@ -1541,9 +1543,10 @@ pending refresh's four steps (decided October 28, 2026). With `./serena up`, sig
 - [ ] **6. The words.** On Past refreshes, a refresh's page, Settings ("ETL list check"), Media look up ("last ETL list
   update") and Alerts (a new "An ETL list check failed" alert from 4), no page says "servable list" or "servability
   update"; Manual refresh says "the ETL list script".
-- [ ] **7. Past the deadline.** In Settings, set the watchdog deadline to a time already past today, then run
-  `./serena etl pahma` and open the refresh while it's checking: the "since" line ends, in the warning colour, "Past
-  the HH:MM Pacific deadline: the watchdog has alerted." Set the deadline back to 08:00.
+- [ ] **7. Past the deadline.** Since November 10, 2026 (section 65), a refresh is due by the first deadline at or
+  after it starts, so a refresh started after a deadline already past today is due tomorrow and isn't late, and none
+  on the local stack works long enough to pass a deadline. The backend's tests (`test_an_evening_refresh_is_due_the_next_morning`)
+  and the admin app's (`states.test.ts`) check the line; section 65 checks it on ucb-stage2.
 
 ## 45. A failed ETL list update, on the local stack (15 minutes; before merging the pull request that adds it)
 
@@ -2926,3 +2929,30 @@ your own `~/.aws/config`. Nothing in AWS is changed: `status` only reads.
   ```
 
   Expected: the environment's status, with no sign-in message.
+
+## 65. The ETL job's evening refresh meets the next morning's deadline (on ucb-stage2: 5 minutes the morning after the Deploy that brings the fix, and 5 optional minutes during the evening's ETL run)
+
+What it checks: the watchdog's deadline alert, "Today's refresh isn't finished by the deadline", no longer comes every
+morning when the daily refresh succeeded. The ETL job starts at 21:01 Pacific, so its refresh is dated that evening
+(for example `pahma-2026-11-09-1`, its list received at 22:02 Pacific on November 9). The watchdog used to look, at
+08:00 Pacific, for a refresh dated that same day, which doesn't start until that evening, so it raised the alert every
+morning. Now a refresh is due by the first deadline at or after it starts: the evening's refresh is due the next
+morning at 08:00 (decided November 10, 2026). The same rule decides when a refresh's page says, in the warning colour,
+"Past the 08:00 Pacific deadline". CI checks the rule with a made-up clock (`backend/tests/test_watchdog.py`,
+`test_the_evenings_refresh_is_due_the_next_morning` and the tests after it); this checks it with the real ETL job.
+Nothing is changed except acknowledging old alerts.
+
+- [ ] **1. Acknowledge the old alerts.** After the Deploy, sign in to ucb-stage2's admin app as a PAHMA admin and
+  open Alerts (the bell). Expect the waiting "Today's refresh isn't finished by the deadline" alerts from before the
+  fix, one per morning. Check that each day's refresh on Past refreshes is Updated, then click **Acknowledge all**.
+  Expected: the bell shows no number.
+- [ ] **2. Optional, during the evening's ETL run (about 21:01 to 22:30 Pacific).** Open Overview while PAHMA's
+  refresh is pending, then open the refresh. Expected: the "since" line ("Waiting since …", "Checking since …" or
+  "Applying since …") is in the normal colour and doesn't say "Past the 08:00 Pacific deadline". Before the fix it did,
+  because its deadline was 08:00 on its own date, already past.
+- [ ] **3. The next morning, after 08:05 Pacific.** Open Past refreshes. Expected: last night's refresh, dated
+  yesterday, is Updated. Open Alerts and choose **Waiting**. Expected: no new "Today's refresh isn't finished by the
+  deadline" alert for today's date. If last night's refresh isn't Updated, expect that alert instead, its message
+  naming the refresh and its state ("By 08:00 Pacific, the refresh due then isn't updated or abandoned:
+  pahma-<yesterday>-1 is <state>."), or, if no refresh started, "no refresh started since 08:00 Pacific on
+  <yesterday>": follow the runbook's entry for the alert.

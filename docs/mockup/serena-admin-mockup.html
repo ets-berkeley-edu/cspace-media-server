@@ -399,6 +399,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 60 (November 10, 2026; in the app's pull request):</strong> <strong>An evening refresh is due the next morning.</strong> The ETL job starts at 21:01 Pacific, so its refresh has that evening's refresh date. A refresh is now due by the first watchdog deadline at or after it started, so the ETL job's refresh is due the next morning. "Past the 08:00 Pacific deadline" beside a refresh still waiting or working, and the deadline alert, follow that. Before, the watchdog looked for a refresh dated the deadline's own day, which an evening refresh never is, so "Today's refresh isn't finished by the deadline" came every morning. The alert's title stays; its message says which refresh was due ("By 08:00 Pacific, the refresh due then isn't updated or abandoned: no refresh started since 08:00 Pacific on 2026-10-12." or "… : pahma-2026-10-12-1 is received.").</li>
       <li><strong>Version 59 (November 5, 2026; in the app's pull request):</strong> <strong>How far an update has got.</strong> While Serena applies an ETL list, the line beside the state says how many rows it has applied and how many there are, as of the worker's last heartbeat (every 30 seconds), in place of "usually a few minutes" ("Applying since 16:57 UTC (12 min): 120,000 of 969,351 rows applied."); until the worker has counted them, the line is as before. A first load of some 970,000 rows takes much longer than a few minutes. Try "being applied" in the dashed bar's Pending refresh.</li>
       <li><strong>Version 58 (November 3, 2026; proposed for the DevOps review, issue #189):</strong> <strong>Links from alerts to the recovery runbook.</strong> Each alert on <strong>Alerts</strong>, and the one the banner names, has a <strong>What to do ↗</strong> link that opens <code>docs/runbook.md</code> on GitHub, in a new tab, at the alert's section. A refresh alert's section is its <code>###</code> heading, which is the alert's title word for word; the admin-action notices (threshold overridden, setting changed, recalled, released, cancelled, recalls ended) share Notices of admin actions; "Recalled in Serena, but still public in CollectionSpace" has its own. The section names are for the review to settle (decided November 3, 2026), so the links stay in the mockup until then. <strong>For the app, after the review:</strong> the same link on Alerts and the banner, and a line "What to do: &lt;link&gt;" in the alert email; a test that every alert title has a runbook heading.</li>
       <li><strong>Version 57 (October 29, 2026; in the app's pull request; serena-fakecspace-questions F12):</strong> <strong>Make one from the simulator.</strong> Where every museum's CollectionSpace is the simulator (the local stack, or an AWS environment with the simulator; Serena's setting <code>SERENA_SIMULATED_CSPACE</code>, refused with a real CollectionSpace), Manual refresh's <strong>Replace with:</strong> has a third choice, <strong>Make one from the simulator</strong>. There's no ETL job there, so the bottom card, <strong>Make an ETL list from the simulator</strong>, has a <strong>Make the ETL list</strong> button: Serena lists the museum's Media records in the simulator as the ETL would (each with a file that isn't soft-deleted and, for PAHMA, is approved for web, including records the BMU added), and says how many rows came from how many records and why the rest weren't listed. Then it's checked and applied as any other ETL list: the dry run, then Apply refresh. It has no live public core checkbox and no refresh date; the refresh's reasons and the summary say it was made from the simulator. What's applied is the list the dry run checked; <strong>Make it again</strong> makes a new one (and drops the dry run). Elsewhere the choice doesn't appear. <strong>Mockup only:</strong> the dashed bar's <strong>Simulated CollectionSpace</strong> turns the choice on.</li>
@@ -544,14 +545,18 @@
   }
   // Beside the pill where there's room (Manual refresh's current refresh, a refresh's page): how long the step has
   // taken and what's normal, so a normal wait can be told from a stuck one. An ETL refresh still waiting or working
-  // after the watchdog's deadline (08:00 Pacific, 15:00 UTC in October) says so, in the warning colour.
+  // after the watchdog's deadline it is due by says so, in the warning colour. Version 60: that is the first deadline
+  // (08:00 Pacific, 15:00 UTC in October) at or after the refresh started, so the ETL job's evening refresh is due the
+  // next morning. A sample refresh with no `started` started at 03:30 Pacific, as the samples did before the ETL job
+  // moved to the evening.
   function stateDetail(r) {
     const waiting = WAITING[r.state], working = WORKING.includes(r.state);
     if (!waiting && !working) return "";
     const mins = Math.max(0, Math.round((clock() - ms(r.at)) / 60000));
     const took = mins < 1 ? "just now" : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`;
     const since = `since ${whenText(r.at).slice(11, 16)} UTC (${took})`;
-    const deadline = ms(`${r.date}T15:00:00Z`), late = !r.admin && clock() > deadline;
+    const started = ms(r.started || `${r.date}T10:30:00Z`), sameDay = ms(`${r.date}T15:00:00Z`);
+    const deadline = started > sameDay ? sameDay + DAY : sameDay, late = !r.admin && clock() > deadline;
     const what = r.state === "Started" ? `Waiting ${since}: the ETL job uploads it.`
       : r.state === "File received" ? `Received ${since}: the ETL job asks Serena to check it next.`
       : r.state.startsWith("Applying") && r.progress ? `Applying ${since}: ${r.progress.done.toLocaleString("en-US")} of ${r.progress.total.toLocaleString("en-US")} rows applied.`
@@ -2165,7 +2170,7 @@
   // above: none, 1 or 3 waiting (3 adds today's missed deadline and leaves the Oct 12 "still public" one waiting).
   // "2 pages" and "3 pages" add older made-up alerts (Sep 14 to Oct 1, inside the 30 days) to make 40 or 65 alerts,
   // with the waiting ones spread over every page at 25 per page. Choosing a scenario opens Alerts on its first page.
-  const DEADLINE = {at: "2026-10-13T15:00:04Z", date: "2026-10-13", title: "Today's refresh isn't finished by the deadline", about: "2026-10-13", msg: "PAHMA's refresh for 2026-10-13 isn't updated or abandoned by its deadline, 08:00 Pacific.", ack: null};
+  const DEADLINE = {at: "2026-10-13T15:00:04Z", date: "2026-10-13", title: "Today's refresh isn't finished by the deadline", about: "2026-10-13", msg: "By 08:00 Pacific, the refresh due then isn't updated or abandoned: no refresh started since 08:00 Pacific on 2026-10-12.", ack: null};
   const SAMPLE = [...ALERTS], SAMPLE_ACK = new Map(ALERTS.map(a => [a, a.ack]));
   function olderAlerts(n) {
     const out = [];
@@ -2173,7 +2178,7 @@
       const t = ms("2026-10-01T18:00:00Z") - k * 8 * 3600 * 1000, at = new Date(t).toISOString().replace(".000", "");
       const date = at.slice(0, 10), ack = {by: k % 3 ? "admin" : "pahma-admin", at: new Date(t + 3600 * 1000).toISOString().replace(".000", "")};
       const kind = k % 3;
-      out.push(kind === 0 ? {at, date, title: "Today's refresh isn't finished by the deadline", about: date, msg: `PAHMA's refresh for ${date} isn't updated or abandoned by its deadline, 08:00 Pacific.`, ack}
+      out.push(kind === 0 ? {at, date, title: "Today's refresh isn't finished by the deadline", about: date, msg: `By 08:00 Pacific, the refresh due then isn't updated or abandoned: no refresh started since 08:00 Pacific on ${new Date(t - DAY).toISOString().slice(0, 10)}.`, ack}
         : kind === 1 ? {at, date, title: "An ETL list check failed", about: `pahma-${date}-1`, msg: `Refresh pahma-${date}-1 failed its ETL list check: ${(9000 + k * 731).toLocaleString("en-US")} rows removed (${(5 + (k % 7) * 1.3).toFixed(1)}%), more than the 5% delta threshold. Its page says more.`, ack}
         : {at, date, title: "Serena hasn't had an ETL list update in 24 hours", about: `pahma-${new Date(t - DAY * 2).toISOString().slice(0, 10)}-1`, msg: `The last ETL list update was on ${new Date(t - DAY * 2).toISOString().slice(0, 10)} (pahma-${new Date(t - DAY * 2).toISOString().slice(0, 10)}-1, updated ${new Date(t - DAY * 2).toISOString().slice(0, 10)}T17:41:13+00:00).`, ack});
     }

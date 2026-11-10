@@ -54,10 +54,12 @@ read, apart from setting secrets and settings: never deploy from your computer t
 
 ### Today's refresh isn't finished by the deadline
 
-- **Means:** today's refresh for the museum isn't `updated` or `abandoned` by the museum's deadline (08:00 Pacific to
-  start; Settings), including when no refresh started at all.
-- **Check:** Overview and Past refreshes. Did a refresh start today? If it's `checking` or `updating`, it may just be
-  late: its page reloads every 5 seconds. If none started, the ETL job didn't reach Serena: ask the ETL team for the
+- **Means:** by the museum's deadline (08:00 Pacific to start; Settings), no refresh that started since the previous
+  day's deadline is `updated` or `abandoned`, including when none started at all. The ETL job starts in the evening,
+  so the refresh due by a morning's deadline is the one that started the evening before, dated the previous day. The
+  alert's message names it, or says none started.
+- **Check:** Overview and Past refreshes. Did a refresh start since the previous day's deadline? If it's `checking` or
+  `updating`, it may just be late: its page reloads every 5 seconds. If none started, the ETL job didn't reach Serena: ask the ETL team for the
   job's report (the Solr refresh, the ETL list script, the call to `/etl/`).
 - **Do:**
   - Started and failed: see the alert for its state below.

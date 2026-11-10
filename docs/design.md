@@ -673,8 +673,8 @@ Per museum (decided October 11 and 12, 2026, D70, D71, D80 and D81):
 Serena's part never stops or undoes the Solr refresh (D71). If Serena can't be reached, a step doesn't finish within
 Serena's timeout, the check fails or the ETL list update fails, the ETL job reports it and carries on: the public
 core keeps the day's data, and Serena keeps its last ETL list update until an admin acts. That is a failed refresh.
-Serena raises an alert for a failed check or ETL list update at once, and the deadline alert when today's refresh
-isn't `updated` in time (see Watchdog and alerts). An admin brings Serena up to date (see Admin actions on refreshes):
+Serena raises an alert for a failed check or ETL list update at once, and the deadline alert when the refresh due by
+the next deadline isn't `updated` in time (see Watchdog and alerts). An admin brings Serena up to date (see Admin actions on refreshes):
 
 - The check failed only on the delta threshold: override the delta threshold, after making sure the change is
   expected (for example a museum republished many images).
@@ -988,8 +988,13 @@ The actions:
 
 The watchdog runs in the worker every 5 minutes, in Pacific time (daylight saving included). It alerts when:
 
-- a museum's refresh for today hasn't reached `updated` or `abandoned` by the museum's deadline (08:00 to start; admins
-  set it in the admin app), including when no refresh started at all. This is how Serena notices a failed refresh;
+- by the museum's deadline (08:00 to start; admins set it in the admin app), no refresh that started since the
+  previous day's deadline has reached `updated` or `abandoned`, including when none started at all. This is how Serena
+  notices a failed refresh. A refresh is due by the first deadline at or after it starts (decided November 10, 2026):
+  the ETL job starts in the evening, Pacific, so its refresh, dated that evening, is due the next morning, and one that
+  starts after midnight is due that same morning. A refresh that starts after the deadline (an admin's manual refresh,
+  the ETL job run again) ends the alert once it is updated. Until then, the watchdog looked only for a refresh dated
+  the deadline's own day, which an evening refresh never is, so it raised the alert every morning;
 - a museum's newest refresh is `check_failed`, `update_failed` or `abandoned` (an abandoned refresh's reasons say whether
   a later refresh date's refresh or a manual refresh closed it). The worker raises the first two at once, when the
   step fails; the watchdog's later passes raise them again, which records and emails nothing more;
@@ -1399,7 +1404,7 @@ their hashed names, with no CDN (D296).
     flagged **partly replaced**, with when Serena tries the update again (see An update that failed partway). **A pending refresh's page** shows its four
     steps under the state line (Started, ETL list received, ETL list checked, ETL list applied): done ones ticked in
     green, the current one in blue with its clock or spinner, or, failed, in red with what to do, and the rest to
-    come. The admin API's museum status returns both (`current`, `pending`), and a refresh's page and the pending refresh carry `deadline_at`, when the watchdog's deadline for an ETL refresh's day passes, in UTC, for the line that says it's late. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
+    come. The admin API's museum status returns both (`current`, `pending`), and a refresh's page and the pending refresh carry `deadline_at`, when the watchdog's deadline for an ETL refresh passes (the first deadline at or after it started, so the next morning for the ETL job's evening refresh; see Watchdog and alerts), in UTC, for the line that says it's late. On Past refreshes a manual refresh's Refresh date has a tag in the info colour saying where its
     list came from and, when it isn't the refresh's own day, the list's date: "manual refresh · ETL list for
     2026-10-09" or "manual refresh · uploaded list" (issue #116, folded into #118).
   - **Links** (D157, D158). A refresh ID opens that refresh's page wherever it appears: in an alert's text and its
@@ -2101,10 +2106,12 @@ The F numbers follow the team's list of follow-ups.
 - **Past requests page queries in AWS.** The Logs Insights query text is tested only as text: run the six queries
   against the QA environment's log group before production, to confirm the JSON fields (`message`, `logger`, `size`,
   `museum`) and `datefloor` behave as expected.
-- **The ETL's schedule.** Since CSW-1029 (October 2026) the ETL job starts at 21:01 server time, not 03:01. To
-  confirm with the ETL team: whether the ETL server's clock is Pacific or UTC, and so whether a museum's refresh can
-  start after midnight Pacific, which gives it the next refresh date. The ETL list's name and the watchdog
-  deadline (08:00 Pacific) follow from the refresh date.
+- **The ETL's schedule.** Since CSW-1029 (October 2026) the ETL job starts at 21:01 server time, not 03:01. In QA,
+  PAHMA's ETL list for 2026-11-09 arrived at 22:02 Pacific, which fits a Pacific clock. To confirm with the ETL
+  team for production: the server's clock, and whether a later museum's refresh can start after midnight Pacific,
+  which gives it the next refresh date and the ETL list's name. The watchdog's deadline no longer depends on the
+  refresh date: a refresh is due by the first deadline after it starts (decided November 10, 2026, see Watchdog and
+  alerts).
 - **Deploy pipeline prerequisites (D268 to D277).** From Ops: whether the production ETL server (cspace-prod-01)
   has an EC2 instance profile, and in which AWS account (D275); the break-glass permission set (D276); whether the
   account already has GitHub's OIDC provider (DP2); and a read-only permission set with which the second reviewer
