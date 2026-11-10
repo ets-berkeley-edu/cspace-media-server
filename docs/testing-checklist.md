@@ -2890,3 +2890,39 @@ Not covered here, and why: the US burial and funerary-object rule (needs Object 
 have); a Blob shared by two Media records (CollectionSpace makes a new Blob on every upload); a skipped Solr refresh;
 `restricted` (never at PAHMA; checked November 5, 2026 with a hand-made list); an image replaced between the light
 check and the fetch, and CollectionSpace unavailable (simulator tests).
+
+## 64. The sign-in hint names what signs in (2 minutes, on ucb-stage2's profile; from the pull request's branch)
+
+What it checks: when `./serena aws` finds nobody signed in, the command it tells you to run works. It used to say
+`aws sso login --profile <the environment's profile>`, which fails for a profile that takes a role from another
+(`source_profile`), as `serena-stage2-deploy` does: "Missing the following required SSO configuration values:
+sso_start_url, sso_region". It now follows `source_profile` to the profile the role is taken from and names that
+profile's SSO session (`aws sso login --sso-session <session>`), or that profile itself
+(`aws sso login --profile <profile>`) when it has SSO settings of its own. CI checks those cases against a made-up
+configuration (`test_the_sign_in_hint_names_what_signs_in` in `backend/tests/test_deploy.py`); this checks it against
+your own `~/.aws/config`. Nothing in AWS is changed: `status` only reads.
+
+- [ ] **1. Sign out.** Sign out of IAM Identity Center, which removes the cached sign-in for every profile:
+
+  ```bash
+  cd ~/dev/src/rtl/cspace-media-server && aws sso logout
+  ```
+
+  Expected: no output.
+- [ ] **2. Ask for ucb-stage2's status.**
+
+  ```bash
+  cd ~/dev/src/rtl/cspace-media-server && ./serena aws status --env ucb-stage2
+  ```
+
+  Expected: `Not signed in to AWS for 'ucb-stage2'. Run: aws sso login --sso-session berkeley`, not
+  `--profile serena-stage2-deploy`. If it shows the environment's status instead, the AWS CLI still holds the role's
+  credentials from before you signed out (they last up to an hour): try again once they have expired.
+- [ ] **3. The named command works.** Run the command step 2 named, sign in in the browser it opens, then ask for the
+  status again:
+
+  ```bash
+  cd ~/dev/src/rtl/cspace-media-server && aws sso login --sso-session berkeley && ./serena aws status --env ucb-stage2
+  ```
+
+  Expected: the environment's status, with no sign-in message.

@@ -613,8 +613,11 @@ directly.
 These are problems with `./serena aws` itself. For a deployed Serena's alerts, alarms and failed refreshes, see the
 recovery runbook, `docs/runbook.md`.
 
-- **"Not signed in to AWS".** The sign-in (8 hours) expired: `aws sso login --profile <profile>`, then repeat the
-  command, which changed nothing.
+- **"Not signed in to AWS".** The sign-in (8 hours) expired: run the `aws sso login` command that `./serena aws`
+  names, then repeat the command, which changed nothing. For a profile that takes a role from another
+  (`source_profile`), such as `serena-stage2-deploy`, it names that other profile's SSO session
+  (`aws sso login --sso-session <session>`); `aws sso login --profile serena-stage2-deploy` fails ("Missing the
+  following required SSO configuration values").
 - **"The new signing key … isn't trusted by CloudFront yet".** The apply after `cdn-key` didn't finish:
   `./serena aws deploy` (or `cdn-key`) again finishes it, without making another key.
 - **Alarm emails while you work.** Pausing switches them off. A deploy's restart can fire "web down" or "worker down"
