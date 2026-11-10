@@ -66,8 +66,9 @@
 # With SIMULATED_CSPACE=true the environment runs the simulated CollectionSpace instead, for the museums in
 # SIMULATED_MUSEUMS, and ./serena aws etl runs the fake ETL; deploy then sets every secret itself (the simulator's
 # account, random ETL tokens and portal keys). Never with data that matters.
-# Sign in first with: aws sso login --profile <the environment's AWS_PROFILE>. Nothing here handles a password, token
-# or key except cspace-secret, etl-token, portal-key and cdn-key, which pass them straight to AWS Secrets Manager.
+# Sign in first with aws sso login: for a profile that takes a role from another (source_profile, as in UC Berkeley's
+# account), through that profile's SSO session (sign_in_hint names it). Nothing here handles a password, token or key
+# except cspace-secret, etl-token, portal-key and cdn-key, which pass them straight to AWS Secrets Manager.
 # ALERT_EMAIL (in NAME.local.conf, never committed) is where alerts and alarms are emailed (D201).
 # Terraform (deploy/terraform) creates everything; its state is in an S3 bucket in the same account, which the first
 # deploy creates. SERENA_AWS_YES=1 skips Terraform's "yes" prompt. Works with the macOS bash (3.2) and needs python3.
@@ -179,6 +180,23 @@ aws_() {  # the AWS CLI with the environment's profile; in the pipeline's builds
 
 signed_in_as() {  # who the AWS calls are made as, for messages
   if [ -n "${AWS_PROFILE:-}" ]; then echo "Profile $AWS_PROFILE"; else echo "The build's role"; fi
+}
+
+# The command that signs in for AWS_PROFILE. aws sso login --profile works only for a profile with SSO settings of its
+# own: a profile that takes a role (source_profile) signs in through the profile it takes it from, and a profile on an
+# SSO session through that session (--sso-session), as for the UC Berkeley environments.
+sign_in_hint() {
+  local profile="${AWS_PROFILE:-}" source session hops=0
+  if [ -z "$profile" ]; then echo "aws sso login --profile <profile>"; return 0; fi
+  while source="$(aws configure get source_profile --profile "$profile" 2>/dev/null)" && [ -n "$source" ] && [ "$hops" -lt 5 ]; do
+    profile="$source"; hops=$((hops + 1))
+  done
+  session="$(aws configure get sso_session --profile "$profile" 2>/dev/null)" || session=""
+  if [ -n "$session" ]; then
+    echo "aws sso login --sso-session $session"
+  else
+    echo "aws sso login --profile $profile"
+  fi
 }
 
 # ---- the museums ----------------------------------------------------------------------------------------------------
@@ -334,7 +352,7 @@ from_ssm() {
   local who lines key value file_values="" differ=""
   export AWS_PAGER=""
   who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" ||
-    die "Not signed in to AWS for '$ENV'. Run: aws sso login --profile ${AWS_PROFILE:-<profile>}"
+    die "Not signed in to AWS for '$ENV'. Run: $(sign_in_hint)"
   [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "$who" ] ||
     die "$(signed_in_as) is signed in to account $who, but '$ENV' is account $ACCOUNT_ID ($LOCAL). Stopped."
   lines="$(ssm_settings)"
@@ -468,7 +486,7 @@ check_not_someone_elses() {  # check_not_someone_elses ACCOUNT
 check_account() {
   local who ok
   who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" ||
-    die "Not signed in to AWS for '$ENV'. Run: aws sso login --profile ${AWS_PROFILE:-<profile>}"
+    die "Not signed in to AWS for '$ENV'. Run: $(sign_in_hint)"
   if [ -z "$ACCOUNT_ID" ]; then
     echo "Profile $AWS_PROFILE is signed in to AWS account $who."
     read -r -p "Is that the account for the '$ENV' environment? [y/N] " ok

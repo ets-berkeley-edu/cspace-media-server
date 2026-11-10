@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -245,3 +246,52 @@ def test_web_and_worker_can_read_stored_etl_lists(role: str) -> None:
     refresh's list to compare with. Moto doesn't enforce IAM, so only this catches a missing grant before AWS does."""
     assert any("s3:GetObject" in actions and resources == "local.servable_list_arn"
                for actions, resources in policy_statements(role))
+
+
+SAMPLE_AWS_CONFIG = """\
+[profile admin-sso]
+sso_session = campus
+sso_account_id = 111111111111
+sso_role_name = Developer
+
+[sso-session campus]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-west-2
+
+[profile deployer]
+role_arn = arn:aws:iam::111111111111:role/deployer
+source_profile = admin-sso
+
+[profile old-style]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-west-2
+sso_account_id = 111111111111
+sso_role_name = Developer
+
+[profile old-style-deployer]
+role_arn = arn:aws:iam::111111111111:role/deployer
+source_profile = old-style
+"""
+
+
+@pytest.mark.skipif(not shutil.which("aws"), reason="needs the AWS CLI, which reads the sample configuration")
+@pytest.mark.parametrize(("profile", "hint"), [
+    ("deployer", "aws sso login --sso-session campus"),  # a role through a profile on an SSO session (UC Berkeley's)
+    ("admin-sso", "aws sso login --sso-session campus"),
+    ("old-style-deployer", "aws sso login --profile old-style"),  # a role through a profile with its own SSO settings
+    ("old-style", "aws sso login --profile old-style"),
+    ("missing", "aws sso login --profile missing"),
+    ("", "aws sso login --profile <profile>"),  # no profile: the pipeline's builds
+])
+def test_the_sign_in_hint_names_what_signs_in(tmp_path: Path, profile: str, hint: str) -> None:
+    """aws.sh's "Not signed in" message: aws sso login --profile fails for a profile that takes a role from another."""
+    script = (DEPLOY / "aws.sh").read_text()
+    found = re.search(r"^sign_in_hint\(\) \{\n.*?^\}\n", script, re.S | re.M)
+    assert found, "deploy/aws.sh has no sign_in_hint function"
+    (tmp_path / "config").write_text(SAMPLE_AWS_CONFIG)
+    env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "AWS_PROFILE": profile,
+           "AWS_CONFIG_FILE": str(tmp_path / "config"), "AWS_SHARED_CREDENTIALS_FILE": str(tmp_path / "credentials")}
+    # The function is this repository's own deploy/aws.sh, not outside input.
+    out = subprocess.run(["bash", "-c", f"{found.group(0)}\nsign_in_hint"],  # noqa: S603, S607
+                         env=env, capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == hint
