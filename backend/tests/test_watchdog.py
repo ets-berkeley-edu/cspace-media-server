@@ -8,7 +8,7 @@ from conftest import TENANTS
 from serena import museum, tables
 from serena.alerts import Alerts, Kind
 from serena.museum_settings import MuseumSettings
-from serena.refreshes import Refreshes, State
+from serena.refreshes import PACIFIC, Refreshes, State, deadline_after
 from serena.store import Store
 from serena.watchdog import FAILED_WORDS, Watchdog
 
@@ -59,7 +59,7 @@ def alerts_of(store: Store, tenant: str = "pahma") -> list[dict[str, Any]]:
 
 
 def at(clock: Clock, hour: int, minute: int = 0, day: int = 10) -> None:
-    clock.now = datetime(2026, 10, day, hour + 7, minute, tzinfo=UTC)  # Pacific daylight time is UTC-7
+    clock.now = datetime(2026, 10, day, hour, minute, tzinfo=PACIFIC).astimezone(UTC)  # Pacific, October
 
 
 def test_nothing_before_the_deadline(watchdog: Watchdog, clock: Clock) -> None:
@@ -71,7 +71,7 @@ def test_no_refresh_by_the_deadline(watchdog: Watchdog, clock: Clock, store: Sto
     at(clock, 8, 0)
     (alert,) = watchdog.check()
     assert (alert.kind, alert.refresh_date, alert.subject) == (Kind.MISSED_DEADLINE, "2026-10-10", "2026-10-10")
-    assert "no refresh started" in alert.message
+    assert "no refresh started since 08:00 Pacific on 2026-10-09" in alert.message
     (item,) = alerts_of(store)
     assert item["sk"]["S"] == "2026-10-10#missed_deadline#2026-10-10"
     assert "emailed_at" in item
@@ -95,7 +95,7 @@ def test_an_unfinished_refresh_by_the_deadline(watchdog: Watchdog, clock: Clock,
     refreshes.transition(refresh, State.RECEIVED)
     at(clock, 8, 0)
     (alert,) = watchdog.check()
-    assert alert.kind == Kind.MISSED_DEADLINE and "(received)" in alert.message
+    assert alert.kind == Kind.MISSED_DEADLINE and "pahma-2026-10-10-1 is received" in alert.message
 
 
 def test_an_updated_day_raises_nothing(watchdog: Watchdog, clock: Clock, store: Store) -> None:
@@ -105,6 +105,75 @@ def test_an_updated_day_raises_nothing(watchdog: Watchdog, clock: Clock, store: 
     refreshes.transition(refresh, State.UPDATED)
     at(clock, 9, 0)
     assert watchdog.check() == []
+
+
+def test_the_evenings_refresh_is_due_the_next_morning(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    """The ETL job starts at 21:01 Pacific, so its refresh has the previous day's refresh date: updated, it meets the
+    next morning's deadline (decided November 10, 2026)."""
+    refreshes = Refreshes(store, clock)
+    at(clock, 21, 1, day=9)
+    refresh, _ = refreshes.start("pahma")
+    assert refresh.refresh_date == "2026-10-09"
+    refreshes.transition(refresh, State.UPDATED)
+    at(clock, 8, 0)
+    assert watchdog.check() == []
+
+
+def test_the_evenings_refresh_unfinished_by_the_next_morning(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    refreshes = Refreshes(store, clock)
+    at(clock, 21, 1, day=9)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.RECEIVED)
+    at(clock, 8, 0)
+    (alert,) = watchdog.check()
+    assert (alert.kind, alert.refresh_date, alert.subject) == (Kind.MISSED_DEADLINE, "2026-10-10", "2026-10-10")
+    assert "pahma-2026-10-09-1 is received" in alert.message
+
+
+def test_a_refresh_due_by_the_previous_deadline_doesnt_count(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    refreshes = Refreshes(store, clock)
+    at(clock, 7, 0, day=9)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.UPDATED)
+    at(clock, 8, 0)
+    (alert,) = [a for a in watchdog.check() if a.kind == Kind.MISSED_DEADLINE]  # beside the 24-hour alert
+    assert "no refresh started since 08:00 Pacific on 2026-10-09" in alert.message
+
+
+def test_tonights_refresh_isnt_late_before_tomorrows_deadline(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    refreshes = Refreshes(store, clock)
+    at(clock, 21, 1, day=9)
+    last_night, _ = refreshes.start("pahma")
+    at(clock, 22, 0, day=9)
+    refreshes.transition(last_night, State.UPDATED)
+    at(clock, 21, 1)
+    tonight, _ = refreshes.start("pahma")
+    refreshes.transition(tonight, State.RECEIVED)
+    at(clock, 21, 30)
+    assert watchdog.check() == []
+
+
+def test_a_refresh_after_the_deadline_ends_the_alert(watchdog: Watchdog, clock: Clock, store: Store) -> None:
+    """An admin's manual refresh, or the ETL job run again, after the deadline: once updated, the alert no longer
+    holds."""
+    refreshes = Refreshes(store, clock)
+    at(clock, 8, 0)
+    assert [a.kind for a in watchdog.check()] == [Kind.MISSED_DEADLINE]
+    at(clock, 9, 0)
+    refresh, _ = refreshes.start("pahma")
+    refreshes.transition(refresh, State.UPDATED)
+    assert watchdog.check() == []
+
+
+@pytest.mark.parametrize(("started", "due"), [
+    (datetime(2026, 10, 10, 10, 1, tzinfo=UTC), datetime(2026, 10, 10, 15, 0, tzinfo=UTC)),  # 03:01: that morning
+    (datetime(2026, 10, 10, 15, 0, tzinfo=UTC), datetime(2026, 10, 10, 15, 0, tzinfo=UTC)),  # at the deadline
+    (datetime(2026, 10, 10, 15, 1, tzinfo=UTC), datetime(2026, 10, 11, 15, 0, tzinfo=UTC)),  # after it: the next
+    (datetime(2026, 10, 11, 4, 1, tzinfo=UTC), datetime(2026, 10, 11, 15, 0, tzinfo=UTC)),  # 21:01, October 10
+    (datetime(2026, 11, 1, 4, 1, tzinfo=UTC), datetime(2026, 11, 1, 16, 0, tzinfo=UTC)),  # 21:01 PDT; 08:00 PST
+])
+def test_the_deadline_a_refresh_is_due_by(started: datetime, due: datetime) -> None:
+    assert deadline_after(started, "08:00") == due
 
 
 def test_an_admins_deadline(watchdog: Watchdog, clock: Clock, store: Store) -> None:
