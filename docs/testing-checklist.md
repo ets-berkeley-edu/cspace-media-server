@@ -2905,14 +2905,14 @@ profile's SSO session (`aws sso login --sso-session <session>`), or that profile
 configuration (`test_the_sign_in_hint_names_what_signs_in` in `backend/tests/test_deploy.py`); this checks it against
 your own `~/.aws/config`. Nothing in AWS is changed: `status` only reads.
 
-- [ ] **1. Sign out.** Sign out of IAM Identity Center, which removes the cached sign-in for every profile:
+- [x] **1. Sign out.** Sign out of IAM Identity Center, which removes the cached sign-in for every profile:
 
   ```bash
   cd ~/dev/src/rtl/cspace-media-server && aws sso logout
   ```
 
   Expected: no output.
-- [ ] **2. Ask for ucb-stage2's status.**
+- [x] **2. Ask for ucb-stage2's status.**
 
   ```bash
   cd ~/dev/src/rtl/cspace-media-server && ./serena aws status --env ucb-stage2
@@ -2921,7 +2921,8 @@ your own `~/.aws/config`. Nothing in AWS is changed: `status` only reads.
   Expected: `Not signed in to AWS for 'ucb-stage2'. Run: aws sso login --sso-session berkeley`, not
   `--profile serena-stage2-deploy`. If it shows the environment's status instead, the AWS CLI still holds the role's
   credentials from before you signed out (they last up to an hour): try again once they have expired.
-- [ ] **3. The named command works.** Run the command step 2 named, sign in in the browser it opens, then ask for the
+  (12 November 2026: passed: it named `aws sso login --sso-session berkeley`.)
+- [x] **3. The named command works.** Run the command step 2 named, sign in in the browser it opens, then ask for the
   status again:
 
   ```bash
@@ -2929,6 +2930,8 @@ your own `~/.aws/config`. Nothing in AWS is changed: `status` only reads.
   ```
 
   Expected: the environment's status, with no sign-in message.
+  (12 November 2026: passed: it signed in, and ucb-stage2's status showed. Steps 1 to 3 run from `main` after the pull
+  request was merged.)
 
 ## 65. The ETL job's evening refresh meets the next morning's deadline (on ucb-stage2: 5 minutes the morning after the Deploy that brings the fix, and 5 optional minutes during the evening's ETL run)
 
