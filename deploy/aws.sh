@@ -182,21 +182,67 @@ signed_in_as() {  # who the AWS calls are made as, for messages
   if [ -n "${AWS_PROFILE:-}" ]; then echo "Profile $AWS_PROFILE"; else echo "The build's role"; fi
 }
 
+# The profile AWS_PROFILE signs in through: itself, or the profile at the end of its source_profile chain.
+sso_profile() {
+  local profile="$AWS_PROFILE" source hops=0
+  while source="$(aws configure get source_profile --profile "$profile" 2>/dev/null)" && [ -n "$source" ] && [ "$hops" -lt 5 ]; do
+    profile="$source"; hops=$((hops + 1))
+  done
+  echo "$profile"
+}
+
 # The command that signs in for AWS_PROFILE. aws sso login --profile works only for a profile with SSO settings of its
 # own: a profile that takes a role (source_profile) signs in through the profile it takes it from, and a profile on an
 # SSO session through that session (--sso-session), as for the UC Berkeley environments.
 sign_in_hint() {
-  local profile="${AWS_PROFILE:-}" source session hops=0
-  if [ -z "$profile" ]; then echo "aws sso login --profile <profile>"; return 0; fi
-  while source="$(aws configure get source_profile --profile "$profile" 2>/dev/null)" && [ -n "$source" ] && [ "$hops" -lt 5 ]; do
-    profile="$source"; hops=$((hops + 1))
-  done
+  local profile session
+  if [ -z "${AWS_PROFILE:-}" ]; then echo "aws sso login --profile <profile>"; return 0; fi
+  profile="$(sso_profile)"
   session="$(aws configure get sso_session --profile "$profile" 2>/dev/null)" || session=""
   if [ -n "$session" ]; then
     echo "aws sso login --sso-session $session"
   else
     echo "aws sso login --profile $profile"
   fi
+}
+
+# Whether the IAM Identity Center sign-in that Terraform needs is there and unexpired. The AWS CLI keeps a role's
+# credentials (source_profile) in ~/.aws/cli/cache for up to an hour, even after aws sso logout, so aws sts
+# get-caller-identity can pass while Terraform, which reads only the SSO token, fails. The token is the file the SDKs'
+# SSO token provider reads: ~/.aws/sso/cache/<sha1 of the session name, or of the start URL for a profile with SSO
+# settings of its own>.json, with its expiresAt. Only expiresAt is read; the token is never printed. A profile without
+# SSO settings (keys, or the pipeline's builds) has nothing to check.
+sso_token_valid() {
+  local profile session key
+  [ -n "${AWS_PROFILE:-}" ] || return 0
+  profile="$(sso_profile)"
+  session="$(aws configure get sso_session --profile "$profile" 2>/dev/null)" || session=""
+  if [ -n "$session" ]; then key="$session"
+  else
+    key="$(aws configure get sso_start_url --profile "$profile" 2>/dev/null)" || key=""
+    [ -n "$key" ] || return 0
+  fi
+  python3 - "$key" "$HOME/.aws/sso/cache" <<'PY'
+import datetime, hashlib, json, os, sys
+path = os.path.join(sys.argv[2], hashlib.sha1(sys.argv[1].encode()).hexdigest() + ".json")
+try:
+    with open(path) as f:
+        expires = json.load(f)["expiresAt"]
+    when = datetime.datetime.fromisoformat(expires.replace("Z", "+00:00").replace("UTC", "+00:00"))
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.timezone.utc)
+except Exception:
+    sys.exit(1)
+sys.exit(0 if when > datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=1) else 1)
+PY
+}
+
+# The account the AWS calls are made in, or a "Not signed in" stop with the command that signs in.
+signed_in_account() {
+  local who
+  who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" && sso_token_valid ||
+    die "Not signed in to AWS for '$ENV'. Run: $(sign_in_hint)"
+  echo "$who"
 }
 
 # ---- the museums ----------------------------------------------------------------------------------------------------
@@ -351,8 +397,7 @@ put_setting() {  # put_setting SETTING VALUE: in SSM; an empty VALUE deletes it 
 from_ssm() {
   local who lines key value file_values="" differ=""
   export AWS_PAGER=""
-  who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" ||
-    die "Not signed in to AWS for '$ENV'. Run: $(sign_in_hint)"
+  who="$(signed_in_account)" || exit 1
   [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "$who" ] ||
     die "$(signed_in_as) is signed in to account $who, but '$ENV' is account $ACCOUNT_ID ($LOCAL). Stopped."
   lines="$(ssm_settings)"
@@ -485,8 +530,7 @@ check_not_someone_elses() {  # check_not_someone_elses ACCOUNT
 # Signed in, and to the account this environment was first deployed to.
 check_account() {
   local who ok
-  who="$(aws_ sts get-caller-identity --query Account --output text 2>/dev/null)" ||
-    die "Not signed in to AWS for '$ENV'. Run: $(sign_in_hint)"
+  who="$(signed_in_account)" || exit 1
   if [ -z "$ACCOUNT_ID" ]; then
     echo "Profile $AWS_PROFILE is signed in to AWS account $who."
     read -r -p "Is that the account for the '$ENV' environment? [y/N] " ok

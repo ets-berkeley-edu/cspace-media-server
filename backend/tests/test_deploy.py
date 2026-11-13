@@ -3,6 +3,7 @@ it gives the app. The committed settings files keep the default environment on t
 belongs only in an uncommitted <env>.local.conf."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -286,12 +287,67 @@ source_profile = old-style
 def test_the_sign_in_hint_names_what_signs_in(tmp_path: Path, profile: str, hint: str) -> None:
     """aws.sh's "Not signed in" message: aws sso login --profile fails for a profile that takes a role from another."""
     script = (DEPLOY / "aws.sh").read_text()
-    found = re.search(r"^sign_in_hint\(\) \{\n.*?^\}\n", script, re.S | re.M)
-    assert found, "deploy/aws.sh has no sign_in_hint function"
+    functions = ""
+    for name in ("sso_profile", "sign_in_hint"):
+        found = re.search(rf"^{name}\(\) \{{\n.*?^\}}\n", script, re.S | re.M)
+        assert found, f"deploy/aws.sh has no {name} function"
+        functions += found.group(0)
     (tmp_path / "config").write_text(SAMPLE_AWS_CONFIG)
     env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "AWS_PROFILE": profile,
            "AWS_CONFIG_FILE": str(tmp_path / "config"), "AWS_SHARED_CREDENTIALS_FILE": str(tmp_path / "credentials")}
     # The function is this repository's own deploy/aws.sh, not outside input.
-    out = subprocess.run(["bash", "-c", f"{found.group(0)}\nsign_in_hint"],  # noqa: S603, S607
+    out = subprocess.run(["bash", "-c", f"{functions}\nsign_in_hint"],  # noqa: S603, S607
                          env=env, capture_output=True, text=True, check=True)
     assert out.stdout.strip() == hint
+
+
+def _sso_cache(home: Path, key: str, expires: str) -> None:
+    """A made-up SSO token file, named as the SDKs' SSO token provider names it."""
+    cache = home / ".aws" / "sso" / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    name = hashlib.sha1(key.encode()).hexdigest()  # noqa: S324 (the SDKs' file name, not a security use)
+    (cache / f"{name}.json").write_text(json.dumps({"accessToken": "made-up", "expiresAt": expires}))
+
+
+@pytest.mark.skipif(not shutil.which("aws"), reason="needs the AWS CLI, which reads the sample configuration")
+@pytest.mark.parametrize(("profile", "token", "signed_in"), [
+    ("deployer", None, False),  # the role's credentials still cached by the CLI, the SSO token gone (aws sso logout)
+    ("deployer", ("campus", "2000-01-01T00:00:00Z"), False),  # expired
+    ("deployer", ("campus", "2999-01-01T00:00:00Z"), True),
+    ("admin-sso", ("campus", "2999-01-01T00:00:00UTC"), True),
+    ("old-style-deployer", None, False),
+    ("old-style-deployer", ("https://example.awsapps.com/start", "2999-01-01T00:00:00Z"), True),
+    ("", None, True),  # no profile: the pipeline's builds have no SSO token
+])
+def test_signing_in_needs_the_sso_token_terraform_reads(
+        tmp_path: Path, profile: str, token: tuple[str, str] | None, signed_in: bool) -> None:
+    """sts get-caller-identity passes on the CLI's cached role credentials after aws sso logout; Terraform doesn't."""
+    script = (DEPLOY / "aws.sh").read_text()
+    functions = ""
+    for name in ("die", "aws_", "sso_profile", "sign_in_hint", "sso_token_valid", "signed_in_account"):
+        found = re.search(rf"^{name}\(\) \{{(?: .*?\}}\n|\n.*?^\}}\n)", script, re.S | re.M)
+        assert found, f"deploy/aws.sh has no {name} function"
+        functions += found.group(0)
+    (tmp_path / "config").write_text(SAMPLE_AWS_CONFIG)
+    real_aws = shutil.which("aws")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # A fake aws: sts answers as if the CLI still held the role's credentials; everything else is the real CLI.
+    (bin_dir / "aws").write_text(f'#!/bin/bash\ncase " $* " in *" sts get-caller-identity "*) echo 111111111111 ;;'
+                                 f' *) exec "{real_aws}" "$@" ;; esac\n')
+    (bin_dir / "aws").chmod(0o755)
+    if token:
+        _sso_cache(tmp_path, *token)
+    env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "HOME": str(tmp_path), "AWS_PROFILE": profile,
+           "AWS_REGION": "us-west-2", "AWS_CONFIG_FILE": str(tmp_path / "config"),
+           "AWS_SHARED_CREDENTIALS_FILE": str(tmp_path / "credentials")}
+    # The functions are this repository's own deploy/aws.sh, not outside input.
+    out = subprocess.run(["bash", "-c", f"ENV=test\n{functions}\nsigned_in_account"],  # noqa: S603, S607
+                         env=env, capture_output=True, text=True, check=False)
+    if signed_in:
+        assert out.returncode == 0, out.stderr
+        assert out.stdout.strip() == "111111111111"
+    else:
+        assert out.returncode == 1
+        assert out.stderr.startswith("Not signed in to AWS for 'test'. Run: aws sso login --")
+        assert "made-up" not in out.stdout + out.stderr
