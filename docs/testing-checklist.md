@@ -2956,3 +2956,45 @@ Nothing is changed except acknowledging old alerts.
   naming the refresh and its state ("By 08:00 Pacific, the refresh due then isn't updated or abandoned:
   pahma-<yesterday>-1 is <state>."), or, if no refresh started, "no refresh started since 08:00 Pacific on
   <yesterday>": follow the runbook's entry for the alert.
+
+## 66. A sign-out is caught before Terraform runs (3 minutes, on ucb-stage2's profile; from the pull request's branch)
+
+What it checks: after `aws sso logout`, `./serena aws` says you aren't signed in, instead of failing in Terraform.
+It used to check the sign-in only with `aws sts get-caller-identity`, which passes on the role credentials the AWS CLI
+keeps in `~/.aws/cli/cache` for up to an hour after you take the role (`serena-stage2-deploy` takes one through
+`source_profile`), even after a sign-out; Terraform doesn't read that cache, and stopped with "failed to read cached
+SSO token file … no such file or directory". It now also checks that the IAM Identity Center sign-in Terraform reads is
+there and unexpired. CI checks the cases against a made-up configuration
+(`test_signing_in_needs_the_sso_token_terraform_reads` in `backend/tests/test_deploy.py`); this checks it against your
+own `~/.aws/config`. Nothing in AWS is changed: `status` only reads.
+
+- [ ] **1. Sign in and take the role**, so that the AWS CLI caches the role's credentials:
+
+  ```bash
+  cd ~/dev/src/rtl/cspace-media-server && aws sso login --sso-session berkeley && ./serena aws status --env ucb-stage2
+  ```
+
+  Expected: the environment's status, with no sign-in message.
+- [ ] **2. Sign out, with the role's credentials still cached.** Right away, within the hour:
+
+  ```bash
+  cd ~/dev/src/rtl/cspace-media-server && aws sso logout && aws sts get-caller-identity --profile serena-stage2-deploy --query Arn --output text
+  ```
+
+  Expected: `aws sso logout` prints nothing, and the second command still prints the role's ARN: the CLI's cache
+  outlives the sign-out, which is the case this section is about.
+- [ ] **3. Ask for ucb-stage2's status.**
+
+  ```bash
+  cd ~/dev/src/rtl/cspace-media-server && ./serena aws status --env ucb-stage2
+  ```
+
+  Expected: `Not signed in to AWS for 'ucb-stage2'. Run: aws sso login --sso-session berkeley`, and no Terraform
+  output or "failed to read cached SSO token file" error.
+- [ ] **4. Sign in again.** Run the command step 3 named, sign in in the browser it opens, then ask for the status:
+
+  ```bash
+  cd ~/dev/src/rtl/cspace-media-server && aws sso login --sso-session berkeley && ./serena aws status --env ucb-stage2
+  ```
+
+  Expected: the environment's status, with no sign-in message.
