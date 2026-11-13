@@ -2968,6 +2968,10 @@ there and unexpired. CI checks the cases against a made-up configuration
 (`test_signing_in_needs_the_sso_token_terraform_reads` in `backend/tests/test_deploy.py`); this checks it against your
 own `~/.aws/config`. Nothing in AWS is changed: `status` only reads.
 
+Run the steps in a checkout of the pull request's branch that has your `deploy/environments/ucb-stage2.local.conf`
+(it isn't committed: copy it into a worktree first), or `status` stops before the sign-in check. The commands below
+assume that checkout is `~/dev/src/rtl/cspace-media-server`.
+
 - [ ] **1. Sign in and take the role**, so that the AWS CLI caches the role's credentials:
 
   ```bash
