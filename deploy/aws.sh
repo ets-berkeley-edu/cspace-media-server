@@ -112,15 +112,24 @@ load_env() {
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
   REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT="" ETL_READER_ROLE_ARNS="" ALLOW_SELF_REVIEW=""
+  PREPRODUCTION=""
   # shellcheck disable=SC1090
   . "$CONF"
   # shellcheck disable=SC1090
   [ -f "$LOCAL" ] && . "$LOCAL"
-  # D308: only the committed settings file may allow self-review, so allowing it is a reviewed change.
-  if [ -f "$LOCAL" ] && grep -q '^[[:space:]]*ALLOW_SELF_REVIEW=' "$LOCAL"; then
-    die "ALLOW_SELF_REVIEW goes only in $CONF, the committed file (D308): remove it from $LOCAL."
-  fi
+  # D308: only the committed settings file may allow self-review, so allowing it is a reviewed change. The same for
+  # PREPRODUCTION, which the deploy workflow reads from the committed file.
+  local only_committed
+  for only_committed in ALLOW_SELF_REVIEW PREPRODUCTION; do
+    if [ -f "$LOCAL" ] && grep -q "^[[:space:]]*$only_committed=" "$LOCAL"; then
+      die "$only_committed goes only in $CONF, the committed file: remove it from $LOCAL."
+    fi
+  done
   case "${ALLOW_SELF_REVIEW:=false}" in true|false) ;; *) die "ALLOW_SELF_REVIEW must be true or false ($CONF)." ;; esac
+  if [ -n "$PREPRODUCTION" ]; then
+    [ "$PREPRODUCTION" != "$ENV" ] && [ -f "$ENV_DIR/$PREPRODUCTION.conf" ] ||
+      die "PREPRODUCTION in $CONF must name another environment in $ENV_DIR, not '$PREPRODUCTION'."
+  fi
   : "${AWS_PROFILE:?set AWS_PROFILE in $CONF}" "${AWS_REGION:?set AWS_REGION in $CONF}" "${SERENA_ENV_NAME:?set SERENA_ENV_NAME in $CONF}"
   [ -z "${REHEARSAL_ADMIN_PROFILE:-}" ] || die "REHEARSAL_ADMIN_PROFILE is now ADMIN_PROFILE: rename it in $CONF or $LOCAL."
   NAME="serena-$SERENA_ENV_NAME"   # the cluster's name and the prefix of every resource
@@ -363,7 +372,7 @@ SSM_SETTINGS="ACCOUNT_ID ALLOWED_CIDRS ETL_CIDRS ADMIN_CIDRS SIMULATED_CSPACE SI
   OPEN_IMAGES WAF PROTECT_DATA WEB_COUNT ALERT_EMAIL TERRAFORM_ROOT APACHE_CIDRS VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS
   CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME REHEARSAL ETL_READER_ROLE_ARNS"
 # Always from the files: what says how to reach the account, and SETTINGS itself.
-FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME ADMIN_PROFILE SETTINGS ALLOW_SELF_REVIEW"
+FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME ADMIN_PROFILE SETTINGS ALLOW_SELF_REVIEW PREPRODUCTION"
 # In SSM only, written by ./serena aws pipeline (never by settings push, never by the build): the account the
 # administrator typed for an environment with real data (DP11).
 PIPELINE_SETTINGS="REAL_DATA_ACCOUNT"
