@@ -470,8 +470,16 @@ const verdict = computed<Verdict>(() => {
             why: `Serena has no cached copy${it.sizes.length === 1 ? ` of ${it.sizes[0].size}` : ''}, and a fetch would find the Media record ${how}.`,
             next: cs.value.next || ''}
   }
+  // A reason with no verdict of its own (issue #208): kind not served says why from the kind, and a reason without
+  // a sentence gets the failing check's outcome — the size's verdict ("not served") would repeat the heading.
+  const failing = it.steps.find(s => s.ok === false)
+  const why = first
+    ? (first.reason === 'kind_not_served'
+        ? `Serena doesn't serve ${kindWord(it.kind)} files yet: a request gets the unavailable image.`
+        : failing?.outcome || first.verdict)
+    : ''
   return {tone: 'not', head: `Not served: ${first ? reasonOf(first.reason!) : 'see the sizes'}`,
-          why: first ? first.verdict : '', next: cs.value.next || ''}
+          why, next: cs.value.next || ''}
 })
 
 watch(museum, () => {
