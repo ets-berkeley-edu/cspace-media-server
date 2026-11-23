@@ -1842,7 +1842,8 @@ their hashed names, with no CDN (D296).
     November 21, which Ops tried on its QA and were happy with): Ops mostly edit the values and want to see them
     together, so the settings are one String parameter, `/serena-<env>/settings/all`, with one `NAME="value"` line per
     setting and comments, edited in the AWS console; SSM keeps its versions and CloudTrail who saved them, and a
-    change still reaches AWS only through an approved pipeline run, whose plan is the review. It is read line by line
+    change still reaches AWS only through an approved pipeline run, whose plan is the review (why not SOPS, which Ops
+    first suggested: `deploy/ssm-not-sops.md`). It is read line by line
     as data, never sourced (Ops's text would otherwise run in the pipeline's build), and a line that isn't a known
     setting's `NAME="value"`, or a value with `"`, `$`, `` ` `` or `\`, stops every command with the line's number;
     a read that AWS refuses or throttles stops the command too, never counting as "no settings". `settings push` only
