@@ -50,12 +50,14 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 | `./serena aws pipeline [destroy]` | As the account's administrator (`ADMIN_PROFILE`), for an environment on the shared root with `SETTINGS=ssm`: makes (or deletes) its deploy pipeline, `terraform/pipeline`. Checks its GitHub environments first, asks for the account's number where there is real data, shows Terraform's plan and asks, then offers to set the GitHub environments' secrets with `gh`. See "The deploy pipeline". |
 | `./serena aws sim-secrets` | With the simulator, in an environment the pipeline deploys: sets what `deploy` sets itself from a laptop (the simulator's account, random ETL tokens and portal keys), where they aren't set. Nothing is shown. |
 | `./serena aws pipeline-plan` / `pipeline-apply` | Only in the pipeline's builds (`pipeline/`): they refuse to run anywhere else. |
-| `./serena aws settings push` / `set` / `pull` / `show` / `migrate` / `delete` | For an environment with `SETTINGS=ssm` (D273), where one SSM parameter, the settings document `/serena-<SERENA_ENV_NAME>/settings/all`, holds the settings: `push` adds the settings SSM doesn't have yet from its files (it shows them and asks); `set SETTING [VALUE]` changes one (no value removes it) in SSM and in the files here, after asking; `pull` brings the files here up to date with SSM; `show` lists them, marking any the files here disagree with; `migrate` moves an environment from one parameter per setting into the document; `delete`, once the environment is destroyed, deletes them (it asks for the environment's name). `push`, `set`, `migrate` and `delete` ask even with `SERENA_AWS_YES=1`. See "Settings in SSM Parameter Store". |
+| `./serena aws settings push` / `set` / `pull` / `show` / `migrate` / `delete` | For an environment with `SETTINGS=ssm` (D273), where one SSM parameter, the settings document `/serena-<SERENA_ENV_NAME>/settings/all`, holds the settings: `push` adds the settings SSM doesn't have yet from its files (it shows them and asks); `set SETTING [VALUE]` changes one (no value removes it) in SSM and in the files here, after asking; `pull` brings the files here up to date with SSM; `show` lists them, marking any the files here disagree with; `migrate` moves an environment from one parameter per setting into the document; `delete`, once the environment is destroyed, deletes them (it asks for the environment's name). `push`, `set`, `migrate` and `delete` ask even with `SERENA_AWS_YES=1`. See [Settings in SSM Parameter Store](#settings-in-ssm-parameter-store). |
 
 **Picking the environment.** Add `--env NAME`, or set `SERENA_AWS_ENV`. The default is `personal-dev`.
 `SERENA_AWS_YES=1` applies without Terraform's `yes` prompt.
 
-**Settings in SSM Parameter Store (D273, DP10).** With `SETTINGS=ssm` in the environment's `.conf` or `.local.conf`,
+### Settings in SSM Parameter Store
+
+With `SETTINGS=ssm` (D273, DP10) in the environment's `.conf` or `.local.conf`,
 `./serena aws` reads every setting below from SSM in the environment's account, from one String parameter, the
 settings document `/serena-<SERENA_ENV_NAME>/settings/all` (below), except `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and
 `ADMIN_PROFILE` (the account administrator's profile), which say how to reach the
