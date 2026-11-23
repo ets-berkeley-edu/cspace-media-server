@@ -50,14 +50,14 @@ and alarms (pull request 18). The simulated CollectionSpace and the fake ETL, as
 | `./serena aws pipeline [destroy]` | As the account's administrator (`ADMIN_PROFILE`), for an environment on the shared root with `SETTINGS=ssm`: makes (or deletes) its deploy pipeline, `terraform/pipeline`. Checks its GitHub environments first, asks for the account's number where there is real data, shows Terraform's plan and asks, then offers to set the GitHub environments' secrets with `gh`. See "The deploy pipeline". |
 | `./serena aws sim-secrets` | With the simulator, in an environment the pipeline deploys: sets what `deploy` sets itself from a laptop (the simulator's account, random ETL tokens and portal keys), where they aren't set. Nothing is shown. |
 | `./serena aws pipeline-plan` / `pipeline-apply` | Only in the pipeline's builds (`pipeline/`): they refuse to run anywhere else. |
-| `./serena aws settings push` / `set` / `pull` / `show` / `delete` | For an environment with `SETTINGS=ssm` (D273), where SSM Parameter Store holds the settings: `push` puts a new environment's there from its files, once (it shows them and asks); `set SETTING [VALUE]` changes one (no value removes it) in SSM and in the files here, after asking; `pull` brings the files here up to date with SSM; `show` lists them, marking any the files here disagree with; `delete`, once the environment is destroyed, deletes them (it asks for the environment's name). `push`, `set` and `delete` ask even with `SERENA_AWS_YES=1`. See "Settings in SSM Parameter Store". |
+| `./serena aws settings push` / `set` / `pull` / `show` / `migrate` / `delete` | For an environment with `SETTINGS=ssm` (D273), where one SSM parameter, the settings document `/serena-<SERENA_ENV_NAME>/settings/all`, holds the settings: `push` adds the settings SSM doesn't have yet from its files (it shows them and asks); `set SETTING [VALUE]` changes one (no value removes it) in SSM and in the files here, after asking; `pull` brings the files here up to date with SSM; `show` lists them, marking any the files here disagree with; `migrate` moves an environment from one parameter per setting into the document; `delete`, once the environment is destroyed, deletes them (it asks for the environment's name). `push`, `set`, `migrate` and `delete` ask even with `SERENA_AWS_YES=1`. See "Settings in SSM Parameter Store". |
 
 **Picking the environment.** Add `--env NAME`, or set `SERENA_AWS_ENV`. The default is `personal-dev`.
 `SERENA_AWS_YES=1` applies without Terraform's `yes` prompt.
 
 **Settings in SSM Parameter Store (D273, DP10).** With `SETTINGS=ssm` in the environment's `.conf` or `.local.conf`,
-`./serena aws` reads every setting below from SSM in the environment's account, one String parameter each under
-`/serena-<SERENA_ENV_NAME>/settings/`, except `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and
+`./serena aws` reads every setting below from SSM in the environment's account, from one String parameter, the
+settings document `/serena-<SERENA_ENV_NAME>/settings/all` (below), except `AWS_PROFILE`, `AWS_REGION`, `SERENA_ENV_NAME` and
 `ADMIN_PROFILE` (the account administrator's profile), which say how to reach the
 account. A command whose files disagree with SSM says so and uses SSM's.
 
@@ -65,19 +65,42 @@ SSM is then the settings' one copy, and a computer's files only a copy that may 
 change a setting in SSM, Ops too, in the AWS console or with `aws ssm put-parameter`, and nobody has to tell anyone
 (decided November 20, 2026).
 
-- **A new environment:** `./serena aws settings push --env <env>` puts its settings there from the `.conf` and
-  `.local.conf`, once. Once SSM has them it refuses, so out-of-date files can't undo someone's change.
+- **One document (decided November 22, 2026, as the BMU's).** The settings are one parameter,
+  `/serena-<SERENA_ENV_NAME>/settings/all`, so that Ops can see and change them all at once in the AWS console
+  (Systems Manager › Parameter Store › the parameter › Edit). One line per setting, `NAME="value"`, as in the `.conf`
+  files, and comments (`#`, at the start of a line or after a space), which stay. A line `NAME=""` sets the setting
+  to nothing, and `settings push` leaves it so. It is read as data, never run: a line that isn't a comment, a blank
+  or `NAME="value"` for a setting `./serena aws` reads, a setting given twice, or a value with `"`, `$`, `` ` ``, `\`,
+  `'` or a curly quote in it, stops every command (and the pipeline's plan, before Terraform) with the line's number.
+  A value read from SSM that could run in a `.local.conf` (from before the document too, or in `REAL_DATA_ACCOUNT`)
+  is refused before `pull` writes anything, and a read that AWS refuses or throttles stops the command; it never
+  counts as "no settings". SSM keeps each version of the document (the console's History tab), and CloudTrail
+  records who saved it. `REAL_DATA_ACCOUNT` stays a parameter of its own beside it, so that editing the document
+  can't change it. A standard parameter holds up to 4 KB; the settings are about 1 KB.
+- **A new environment:** `./serena aws settings push --env <env>` adds the settings SSM doesn't have yet from the
+  `.conf` and `.local.conf`, listing them and asking first. A setting SSM already has stays as SSM has it (push lists
+  any the files here disagree with, and names `set` and `pull`), so out-of-date files can't undo someone's change.
 - **Changing one:** `./serena aws settings set --env <env> ETL_CIDRS "<cidr>,<cidr>"` shows the old and new value,
-  asks, and writes that one setting to SSM and to the `.local.conf` here, nothing else. With no value it removes the
+  asks, and writes that one setting to SSM and to the `.local.conf` here, nothing else: it rewrites that setting's
+  line in the document and keeps every other line, comments included. If someone saved the document between its
+  read and its write, it stops, and changes nothing. (SSM has no conditional write, so a save in the instant between
+  that check and the write could still be replaced; the History tab keeps it.) With no value it removes the
   setting. It refuses `REAL_DATA_ACCOUNT`, `ACCOUNT_ID`, and a value the setting doesn't take (`true` or `false`, for
   example). Then deploy (or, with the pipeline, run it).
 - **Bringing the files here up to date:** `./serena aws settings pull --env <env>` writes each setting that differs
   from SSM into the `.local.conf` (one SSM no longer has, as empty), and lists them. It changes nothing in SSM.
+- **Looking at them:** `./serena aws settings show --env <env>` lists them with the document's version, marking any
+  the files here disagree with (then naming `pull`).
+- **From one parameter per setting to the document:** an environment set up before the document (`ucb-stage2`)
+  keeps working: every command reads its parameters as before, and `show` says so. `set` and `push` refuse until
+  `./serena aws settings migrate --env <env>` moves them: it shows the document it would write from SSM's values
+  (never the files'), asks, writes it, checks it reads back, and only then deletes the old parameters.
+  `REAL_DATA_ACCOUNT` stays as it is, and a parameter `./serena aws` doesn't read is left alone.
 
 Commands that save a setting (`rehearsal-vpc`, `allow-my-ip`) save it in SSM and in the `.local.conf`. `settings push`,
-`set` and `delete`, `rehearsal-vpc` and `pipeline` run as `ADMIN_PROFILE` where the environment has one, since they
+`set`, `migrate` and `delete`, `rehearsal-vpc` and `pipeline` run as `ADMIN_PROFILE` where the environment has one, since they
 come before the deployer role exists (or make it); `settings pull` and `show` only read, as the deployer.
-`REAL_DATA_ACCOUNT` is in SSM only: `./serena aws pipeline` writes it, and neither `settings push` nor `set` touches
+`REAL_DATA_ACCOUNT` is in SSM only, a parameter beside the document: `./serena aws pipeline` writes it, and neither `settings push` nor `set` touches
 it. The deploy pipeline's environments keep
 their settings this way (it reads them in the build); personal-dev keeps its files (D277).
 

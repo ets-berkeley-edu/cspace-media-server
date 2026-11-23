@@ -3091,7 +3091,11 @@ Run the commands from your clone of this repository, on `main`, after the pull r
   be deployed.`, and the plan and apply go on as before. (It passed, and the plan ran. The apply was held: the plan also
   turned HTTP/2 back on at the load balancer, which section 69 fixes.)
 
-## 68. SSM is the settings' one copy: settings set and pull, on ucb-stage2 (15 minutes; from the pull request's branch)
+## 68. SSM is the settings' one copy: settings set and pull, on ucb-stage2 (not run: replaced by section 71)
+
+Not run, and it can't be once section 71 has moved `ucb-stage2` to the settings document: its settings are then no
+longer one parameter each, and step 3's push now adds what SSM doesn't have instead of refusing. Section 71 checks
+show, pull and set against `ucb-stage2`'s document. Kept as written, for the record.
 
 What it checks: Ops may now change a setting of a pipeline environment in SSM Parameter Store (in the AWS console)
 without telling anyone (decided November 20, 2026). `./serena aws settings push` no longer copies a whole
@@ -3211,3 +3215,100 @@ deployed environment.
   file files").
 - [ ] **4. Nothing else changed.** Media look up for SERENA-TEST-001, a public image. Expected: the same verdict as
   before this pull request (**Served**, or **Served (cached sizes only)**), with its second line unchanged.
+
+## 71. The settings as one document, on ucb-stage2 (30 minutes, with Ops for step 3; after merging the pull request)
+
+What it checks: Ops mostly edit the settings' values and wanted to see and change them in one place, as they do now
+for the BMU's QA (its checklist section 41, November 22, 2026). So `ucb-stage2`'s settings move from about 20 SSM
+parameters into one, the settings document `/serena-stage2/settings/all`: one `NAME="value"` line per setting, with
+comments, edited in the AWS console. `REAL_DATA_ACCOUNT` stays a parameter of its own. CI checks it against a
+stand-in SSM (`backend/tests/test_deploy.py`, from `test_settings_push_writes_a_new_environments_settings_as_one_document`
+on); this moves `ucb-stage2` itself and checks the whole round: an edit in the console, `show` and `pull`, a mistake
+caught before Terraform, `set`, and a pipeline run reading the document. No IAM policy changes: the document's name
+is under `settings/*`, which the deployer and the build already read. Production needs no move: its first
+`settings push` writes the document.
+
+Run it after merging, not from the branch: the pipeline builds `main`, and `main` before this pull request can't read
+the document. Run the commands from a checkout of `main` that has your `deploy/environments/ucb-stage2.local.conf`.
+They run as the stage 2 deployer profile, `serena-stage2-deploy`, which may read and write Serena's settings (or as
+`ADMIN_PROFILE`, for `migrate` and `set`, if your `.local.conf` names one). Sign in first:
+
+```bash
+cd <your clone> && git switch main && git pull origin main && aws sso login --sso-session berkeley
+```
+
+- [ ] **0. The old layout still deploys.** Before moving anything, start the Deploy workflow for `ucb-stage2`, from
+  `main`:
+
+  ```bash
+  cd <your clone> && gh workflow run deploy.yml --ref main -f environment=ucb-stage2
+  ```
+
+  Expected: `Created workflow_dispatch event for deploy.yml at main`. The plan build reads the settings one parameter
+  each, as before, and plans no changes from the settings (an image change only if `main` moved since the last
+  deploy; approve it if so).
+- [ ] **1. Before: one parameter per setting.**
+
+  ```bash
+  cd <your clone> && ./serena aws settings show --env ucb-stage2
+  ```
+
+  Expected: `'ucb-stage2' in SSM, account …, one parameter per setting under /serena-stage2/settings/`, then `(from
+  before the settings document: ./serena aws settings migrate --env ucb-stage2 moves them into one):` and the
+  settings, `REAL_DATA_ACCOUNT=…   (set by ./serena aws pipeline)` among them. Keep this output to compare in step 2,
+  and note `ENV_LABEL`'s value. If any line ends `(the files here: …)`, run `./serena aws settings pull --env
+  ucb-stage2` first.
+- [ ] **2. Move them into the document.**
+
+  ```bash
+  cd <your clone> && ./serena aws settings migrate --env ucb-stage2
+  ```
+
+  Expected: `This moves the settings of 'ucb-stage2' (account …) into one document, /serena-stage2/settings/all:`, the
+  document (three comment lines starting `# Serena's settings for 'ucb-stage2'`, then one `NAME="value"` line per
+  setting, the same values as step 1's), `Then it deletes the parameters they came from. REAL_DATA_ACCOUNT stays as it
+  is.`, and `Go ahead? [y/N]`. Answer `y`: `Done. Edit it in the AWS console …`. Then run step 1's command again:
+  `'ucb-stage2' in SSM, account …, the document /serena-stage2/settings/all (version 1):` and the same settings as
+  before. In the console (us-west-2, Systems Manager › Parameter Store), under `/serena-stage2/settings/` there are now
+  two parameters: `all` and `REAL_DATA_ACCOUNT`.
+- [ ] **3. Ops edit it in the console.** With Ops, as they would: open `/serena-stage2/settings/all` › Edit. Add a
+  comment line at the end, `# Checklist 71: an Ops comment`, add ` (test)` at the end of `ENV_LABEL`'s value (inside
+  the quotes), and Save changes. Expected: the History tab shows version 2, saved by the person who edited it.
+- [ ] **4. Show and pull see the edit.**
+
+  ```bash
+  cd <your clone> && ./serena aws settings show --env ucb-stage2 && ./serena aws settings pull --env ucb-stage2
+  ```
+
+  Expected: `(version 2)`, `  ENV_LABEL=… (test)   (the files here: …)` and `To bring the files here up to date: …`;
+  then pull lists `  ENV_LABEL=… (test)   (was …)` and `Updated 1 setting(s) in …/ucb-stage2.local.conf from SSM
+  (/serena-stage2/settings/all).`
+- [ ] **5. A mistake stops before Terraform.** In the console, edit the document again and remove the closing `"`
+  from `ENV_LABEL`'s value; save. Then:
+
+  ```bash
+  cd <your clone> && ./serena aws plan --env ucb-stage2
+  ```
+
+  Expected: ``Line <n> of /serena-stage2/settings/all in SSM: ENV_LABEL's value must be in double quotes, without " $
+  ` or \ in it: …``, and no Terraform output. Put the `"` back in the console and save (version 4). Run the plan
+  again: the only change is the admin app's label gaining ` (test)` in the task definitions, so the console's edit
+  reaches Terraform; don't apply it.
+- [ ] **6. Set changes one line and keeps the comment.** Use `ENV_LABEL`'s value from step 1:
+
+  ```bash
+  cd <your clone> && ./serena aws settings set --env ucb-stage2 ENV_LABEL "<the value from step 1>"
+  ```
+
+  Expected: `In SSM, account …, the document /serena-stage2/settings/all:`, `  ~ ENV_LABEL=<the value from step 1>
+  (was … (test))` and `Write this to SSM? The next deploy uses it. [y/N]`; answer `y`, then `Done.` Then
+  `./serena aws plan --env ucb-stage2`: no changes. In the console, the document (version 5) still ends with
+  `# Checklist 71: an Ops comment`. Remove that line there if you like (version 6).
+- [ ] **7. The pipeline reads the document.** Start the Deploy workflow for `ucb-stage2` again:
+
+  ```bash
+  cd <your clone> && gh workflow run deploy.yml --ref main -f environment=ucb-stage2
+  ```
+
+  Expected: the plan job ends with no changes from the settings (nothing to approve), so the build read the same
+  values from the document as before.

@@ -535,38 +535,64 @@ def test_signing_in_needs_the_sso_token_terraform_reads(
         assert "made-up" not in out.stdout + out.stderr
 
 
-# ---- settings set, pull and push (SSM is the settings' one copy, decided November 20, 2026) -------------------------
-# The settings functions of deploy/aws.sh, run against a stand-in SSM: one file per parameter under $SSM_DIR (its name
-# is the path), writes logged in $SSM_DIR.log.
+# ---- settings set, pull and push (SSM is the settings' one copy, decided November 20, 2026), in one document
+# (decided November 22, 2026). The settings functions of deploy/aws.sh, run against a stand-in SSM: one file per
+# parameter under $SSM_DIR (its name is the path), versions under $SSM_DIR.version, writes logged in $SSM_DIR.log.
+# FAKE_SSM_FAIL=describe or value makes that read fail, as a refused or throttled one does.
 FAKE_SSM = r"""
+arg() {  # arg OPTION ARGS...: the value after OPTION
+  local want="$1"; shift
+  while [ $# -gt 0 ]; do [ "$1" != "$want" ] || { printf '%s' "$2"; return 0; }; shift; done
+}
 aws_() {
-  local a take=false
+  local a take=false first name
   case "$*" in
-    "ssm describe-parameters"*) local path="$*"; path="${path##*Values=}"; path="${path%% *}"
+    "ssm describe-parameters"*) [ "${FAKE_SSM_FAIL:-}" != describe ] || { echo "ThrottlingException" >&2; return 254; }
+      local path; path="$(arg --parameter-filters "$@")"; path="${path##*Values=}"
       ls "$SSM_DIR$path" 2>/dev/null | sed "s|^|$path/|" | paste -s -d '\t' - ;;
-    "ssm get-parameters"*)
-      for a in "$@"; do case "$a" in --names) take=true ;; --*) take=false ;;
-        *) [ "$take" = false ] || [ ! -f "$SSM_DIR$a" ] || printf '%s\t%s\n' "$a" "$(cat "$SSM_DIR$a")" ;; esac; done ;;
-    "ssm put-parameter"*) local name="$4" value="$8"; mkdir -p "$(dirname "$SSM_DIR$name")"
-      printf '%s' "$value" > "$SSM_DIR$name"; echo "put $name" >> "$SSM_DIR.log" ;;
-    "ssm delete-parameter"*) rm -f "$SSM_DIR$4"; echo "delete $4" >> "$SSM_DIR.log" ;;
-    "ssm add-tags-to-resource"*) ;;
+    "ssm get-parameters"*) first="$(arg --names "$@")"
+      case "$(arg --query "$@")" in
+        'Parameters[0].Value') [ "${FAKE_SSM_FAIL:-}" != value ] || { echo "ThrottlingException" >&2; return 254; }
+          if [ -f "$SSM_DIR$first" ]; then cat "$SSM_DIR$first"; echo; else echo None; fi ;;
+        'Parameters[0].Version') cat "$SSM_DIR.version$first" 2>/dev/null || echo None ;;
+        *) for a in "$@"; do case "$a" in --names) take=true ;; --*) take=false ;;
+             *) [ "$take" = false ] || [ ! -f "$SSM_DIR$a" ] || printf '%s\t%s\n' "$a" "$(cat "$SSM_DIR$a")" ;;
+           esac; done ;;
+      esac ;;
+    "ssm put-parameter"*) name="$(arg --name "$@")"
+      mkdir -p "$(dirname "$SSM_DIR$name")" "$(dirname "$SSM_DIR.version$name")"
+      printf '%s' "$(arg --value "$@")" > "$SSM_DIR$name"
+      echo $(( $(cat "$SSM_DIR.version$name" 2>/dev/null || echo 0) + 1 )) > "$SSM_DIR.version$name"
+      echo "put $name" >> "$SSM_DIR.log" ;;
+    "ssm delete-parameter"*) name="$(arg --name "$@")"; rm -f "$SSM_DIR$name"; echo "delete $name" >> "$SSM_DIR.log" ;;
+    "ssm add-tags-to-resource"*) echo "tag $(arg --resource-id "$@") $(arg --tags "$@")" >> "$SSM_DIR.log" ;;
     *) echo "unexpected: aws $*" >&2; return 1 ;;
   esac
 }
 die() { echo "$*" >&2; exit 1; }
+signed_in_account() { echo 111122223333; }
+signed_in_as() { echo "Profile p"; }
 """
-SETTINGS_FUNCTIONS = ("is_ssm_setting", "is_pipeline_setting", "settings_path", "ssm_settings", "setting_in",
-                      "put_setting", "save_local", "settings_in_files_only", "settings_set", "settings_pull",
-                      "settings_push", "settings_show")
+SETTINGS_FUNCTIONS = ("is_ssm_setting", "is_pipeline_setting", "settings_path", "settings_doc", "settings_home",
+                      "ssm_param_names", "not_pipeline_params", "settings_store", "settings_where", "read_settings_doc",
+                      "settings_doc_version", "settings_doc_lines", "read_param", "pipeline_settings_lines",
+                      "ssm_settings", "setting_in", "has_line", "write_settings_doc", "settings_doc_header",
+                      "set_in_settings_doc", "not_migrated", "put_setting", "save_local", "from_ssm",
+                      "settings_in_files_only", "settings_set", "settings_pull", "settings_push", "settings_migrate",
+                      "settings_show")
+DOC = "/serena-t/settings/all"
 
 
 def run_settings(tmp_path: Path, body: str, answers: str = "y\n", files: dict[str, str] | None = None,
-                 ssm_values: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    """body runs after the settings are loaded from the files (as load_env leaves them for ./serena aws settings)."""
+                 ssm_values: dict[str, str] | None = None, doc: str | None = None, fail: str = "",
+                 cmd: str = "settings") -> subprocess.CompletedProcess[str]:
+    """body runs after the settings are loaded from the files (as load_env leaves them for ./serena aws settings).
+    ssm_values are parameters of their own (one per setting, from before the document, or REAL_DATA_ACCOUNT); doc is
+    the settings document's text."""
     aws_sh = (DEPLOY / "aws.sh").read_text()
     lists = "".join(re.search(rf'^{v}="[^"]*"$', aws_sh, re.MULTILINE | re.DOTALL).group(0) + "\n"  # type: ignore[union-attr]
                     for v in ("SSM_SETTINGS", "FILE_SETTINGS", "PIPELINE_SETTINGS"))
+    lists += re.search(r"^SETTINGS_DOC_MAX=\d+", aws_sh, re.MULTILINE).group(0) + "\n"  # type: ignore[union-attr]
     functions = "\n".join(shell_function(aws_sh, name) for name in SETTINGS_FUNCTIONS)
     tmp_path.mkdir(parents=True, exist_ok=True)
     conf, local = tmp_path / "t.conf", tmp_path / "t.local.conf"
@@ -576,49 +602,106 @@ def run_settings(tmp_path: Path, body: str, answers: str = "y\n", files: dict[st
     for key, value in (ssm_values or {}).items():
         (ssm_dir / "serena-t" / "settings").mkdir(parents=True, exist_ok=True)
         (ssm_dir / "serena-t" / "settings" / key).write_text(value)
-    script = (FAKE_SSM + lists + functions + f'\nCONF="{conf}"; LOCAL="{local}"; ENV=t; NAME=serena-t; CMD=settings\n'
+    if doc is not None:
+        set_doc(tmp_path, doc)
+    script = (FAKE_SSM + lists + functions + f'\nCONF="{conf}"; LOCAL="{local}"; ENV=t; NAME=serena-t; CMD={cmd}\n'
               f'SETTINGS=ssm; ACCOUNT_ID=""; . "$CONF"; . "$LOCAL"\n' + body + "\n")
-    env = {**os.environ, "SSM_DIR": str(ssm_dir)}
+    env = {**os.environ, "SSM_DIR": str(ssm_dir), "FAKE_SSM_FAIL": fail}
     return subprocess.run(["bash", "-c", script], input=answers, env=env,  # noqa: S603, S607
                           capture_output=True, text=True, check=False)
 
 
+def set_doc(tmp_path: Path, text: str) -> None:
+    """Ops saves the settings document in the console: its text, and the version goes up."""
+    path = tmp_path / "ssm" / "serena-t" / "settings" / "all"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    version = tmp_path / "ssm.version" / "serena-t" / "settings" / "all"
+    version.parent.mkdir(parents=True, exist_ok=True)
+    version.write_text(str(int(version.read_text()) + 1 if version.exists() else 1) + "\n")
+
+
+def doc_text(tmp_path: Path) -> str:
+    return (tmp_path / "ssm" / "serena-t" / "settings" / "all").read_text()
+
+
+def doc_of(values: dict[str, str]) -> str:
+    return "# Serena's settings, written by a test\n" + "".join(f'{k}="{v}"\n' for k, v in values.items())
+
+
 def ssm_now(tmp_path: Path) -> dict[str, str]:
+    """The settings in the stand-in SSM: the document's lines, and the parameters beside it."""
     root = tmp_path / "ssm" / "serena-t" / "settings"
-    return {p.name: p.read_text() for p in root.iterdir()} if root.exists() else {}
+    if not root.exists():
+        return {}
+    settings = {p.name: p.read_text() for p in root.iterdir() if p.name != "all"}
+    if (root / "all").exists():
+        for line in doc_text(tmp_path).splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                settings[key.strip()] = value.strip().strip('"')
+    return settings
+
+
+def ssm_log(tmp_path: Path) -> list[str]:
+    log = tmp_path / "ssm.log"
+    return log.read_text().splitlines() if log.exists() else []
 
 
 IN_SSM = {"ACCOUNT_ID": "111122223333", "ALLOWED_CIDRS": "203.0.113.7/32", "ENV_LABEL": "Set by Ops", "WEB_COUNT": "2"}
 HERE = {"ACCOUNT_ID": "111122223333", "ALLOWED_CIDRS": "203.0.113.7/32", "ENV_LABEL": "Old label"}
 
 
-def test_settings_push_is_only_for_a_new_environment(tmp_path: Path) -> None:
-    """Once SSM holds the settings, a push from files that may be out of date would undo someone's change."""
-    result = run_settings(tmp_path, "settings_push", files=HERE, ssm_values=IN_SSM)
-    assert result.returncode == 1
-    assert "SSM already has the settings of 't'" in result.stderr
-    assert "settings set --env t SETTING VALUE" in result.stderr and "settings pull --env t" in result.stderr
-    assert ssm_now(tmp_path) == IN_SSM
-    result = run_settings(tmp_path / "new", "settings_push", files=HERE, ssm_values={"REAL_DATA_ACCOUNT": "1"})
-    assert result.returncode == 0, result.stderr  # only the pipeline's setting there: still a new environment
-    assert ssm_now(tmp_path / "new")["ENV_LABEL"] == "Old label"
+def test_settings_push_writes_a_new_environments_settings_as_one_document(tmp_path: Path) -> None:
+    result = run_settings(tmp_path, "settings_push", files=HERE, ssm_values={"REAL_DATA_ACCOUNT": "111122223333"})
+    assert result.returncode == 0, result.stderr
+    assert f"From {tmp_path}/t.conf and {tmp_path}/t.local.conf to {DOC}" in result.stdout
+    root = tmp_path / "ssm" / "serena-t" / "settings"
+    assert sorted(p.name for p in root.iterdir()) == ["REAL_DATA_ACCOUNT", "all"]
+    text = doc_text(tmp_path)
+    assert text.startswith("# Serena's settings for 't' (account 111122223333).")
+    assert 'ENV_LABEL="Old label"' in text.splitlines() and 'WEB_COUNT="2"' in text.splitlines()
+    assert ssm_log(tmp_path) == [f"put {DOC}", f"tag {DOC} Key=project,Value=serena"]
 
 
-def test_settings_set_changes_one_setting_and_leaves_the_others_alone(tmp_path: Path) -> None:
-    """Ops changed ENV_LABEL in SSM; a developer whose files still have the old one sets ALLOWED_CIDRS."""
-    result = run_settings(tmp_path, "settings_set ALLOWED_CIDRS 198.51.100.0/24", answers="n\n",
-                          files=HERE, ssm_values=IN_SSM)
-    assert result.returncode == 1 and ssm_now(tmp_path) == IN_SSM
+def test_settings_push_only_adds(tmp_path: Path) -> None:
+    """SSM is the settings' one copy (Ops may change one in the console): a push from files that may be out of date
+    adds what SSM doesn't have, and leaves what it has as it is, naming set and pull."""
+    result = run_settings(tmp_path, "settings_push", files={**HERE, "VPC_ID": "vpc-0abc"}, doc=doc_of(IN_SSM))
+    assert result.returncode == 0, result.stderr
+    assert "  ENV_LABEL=Set by Ops   (the files here: Old label)" in result.stdout
+    assert "settings set --env t" in result.stdout and "settings pull --env t" in result.stdout
+    assert "  + VPC_ID=vpc-0abc" in result.stdout and "ENV_LABEL=Old" not in result.stdout.split("+", 1)[1]
+    assert ssm_now(tmp_path) == {**IN_SSM, "VPC_ID": "vpc-0abc"}
+    again = run_settings(tmp_path, "settings_push", files={**HERE, "VPC_ID": "vpc-0abc"})
+    assert again.returncode == 0 and "Nothing to add" in again.stdout
+
+
+def test_settings_push_leaves_a_setting_set_to_nothing_on_purpose(tmp_path: Path) -> None:
+    """A line Ops set to "" is a value: push doesn't fill it in from the files here."""
+    result = run_settings(tmp_path, "settings_push", files=HERE, doc=doc_of({**IN_SSM, "ENV_LABEL": ""}))
+    assert result.returncode == 0, result.stderr
+    assert "  + ENV_LABEL" not in result.stdout and 'ENV_LABEL=""' in doc_text(tmp_path)
+
+
+def test_set_changes_one_line_and_keeps_the_comments(tmp_path: Path) -> None:
+    """Ops changed ENV_LABEL and added a comment; a developer whose files still have the old label sets
+    ALLOWED_CIDRS. Only that line changes, in SSM and in the files here, after asking."""
+    doc = doc_of(IN_SSM) + "# Ops: the VPN range is the second one\n"
+    result = run_settings(tmp_path, "settings_set ALLOWED_CIDRS 198.51.100.0/24", answers="n\n", files=HERE, doc=doc)
+    assert result.returncode == 1 and doc_text(tmp_path) == doc
+    assert f"In SSM, account 111122223333, the document {DOC}:" in result.stdout
     assert "  ~ ALLOWED_CIDRS=198.51.100.0/24 (was 203.0.113.7/32)" in result.stdout
     result = run_settings(tmp_path, "settings_set ALLOWED_CIDRS 198.51.100.0/24", files=HERE)
     assert result.returncode == 0, result.stderr
     assert ssm_now(tmp_path) == {**IN_SSM, "ALLOWED_CIDRS": "198.51.100.0/24"}
+    assert "# Ops: the VPN range is the second one" in doc_text(tmp_path)
     assert 'ALLOWED_CIDRS="198.51.100.0/24"' in (tmp_path / "t.local.conf").read_text()
-    assert (tmp_path / "ssm.log").read_text() == "put /serena-t/settings/ALLOWED_CIDRS\n"
+    assert ssm_log(tmp_path) == [f"put {DOC}", f"tag {DOC} Key=project,Value=serena"]
 
 
 def test_settings_set_with_no_value_removes_the_setting(tmp_path: Path) -> None:
-    result = run_settings(tmp_path, 'settings_set ENV_LABEL ""', files=HERE, ssm_values=IN_SSM)
+    result = run_settings(tmp_path, 'settings_set ENV_LABEL ""', files=HERE, doc=doc_of(IN_SSM))
     assert result.returncode == 0, result.stderr
     assert "  - ENV_LABEL (was Set by Ops)" in result.stdout
     assert "ENV_LABEL" not in ssm_now(tmp_path) and 'ENV_LABEL=""' in (tmp_path / "t.local.conf").read_text()
@@ -631,11 +714,12 @@ def test_settings_set_with_no_value_removes_the_setting(tmp_path: Path) -> None:
     ("PROTECT_DATA yes", "PROTECT_DATA must be true or false"),
     ("TERRAFORM_ROOT other", "TERRAFORM_ROOT must be personal or shared"),
     ("WEB_COUNT two", "WEB_COUNT must be a number"),
+    ("ENV_LABEL '$(whoami)'", "can't have"),
 ])
 def test_settings_set_refuses_what_it_cant_set(tmp_path: Path, args: str, message: str) -> None:
-    result = run_settings(tmp_path, f"settings_set {args}", files=HERE, ssm_values=IN_SSM)
+    result = run_settings(tmp_path, f"settings_set {args}", files=HERE, doc=doc_of(IN_SSM))
     assert result.returncode == 1 and message in result.stderr, result.stderr
-    assert ssm_now(tmp_path) == IN_SSM
+    assert ssm_now(tmp_path) == IN_SSM and "Write this" not in result.stdout
 
 
 def test_settings_set_needs_settings_pushed_first(tmp_path: Path) -> None:
@@ -643,26 +727,160 @@ def test_settings_set_needs_settings_pushed_first(tmp_path: Path) -> None:
     assert result.returncode == 1 and "settings push --env t" in result.stderr and ssm_now(tmp_path) == {}
 
 
+def test_set_stops_if_someone_saved_the_document_meanwhile(tmp_path: Path) -> None:
+    """set reads the document, then writes it back: if its version changed in between, it stops rather than undo
+    that change. Here the version goes up on every read of it, as if someone kept saving."""
+    body = ("eval \"$(declare -f aws_ | sed '1s/aws_/real_aws_/')\"\n"
+            "aws_() { case \"$*\" in *Version*) v=\"$SSM_DIR.version/serena-t/settings/all\"; "
+            "echo $(( $(cat \"$v\") + 1 )) > \"$v\" ;; esac; real_aws_ \"$@\"; }\n"
+            "settings_set ENV_LABEL x")
+    result = run_settings(tmp_path, body, files=HERE, doc=doc_of(IN_SSM))
+    assert result.returncode == 1 and f"Someone saved {DOC} just now" in result.stderr, result.stderr
+    assert doc_text(tmp_path) == doc_of(IN_SSM)
+
+
 def test_settings_pull_brings_the_files_here_up_to_date(tmp_path: Path) -> None:
     """Ops changed ENV_LABEL and removed ALLOWED_CIDRS: pull writes both into the .local.conf and changes nothing in
     SSM. WEB_COUNT, set in the committed file, matches; a setting in neither SSM nor the files isn't written."""
     in_ssm = {k: v for k, v in IN_SSM.items() if k != "ALLOWED_CIDRS"}
-    result = run_settings(tmp_path, "settings_pull", files=HERE, ssm_values=in_ssm)
+    result = run_settings(tmp_path, "settings_pull", files=HERE, doc=doc_of(in_ssm))
     assert result.returncode == 0, result.stderr
-    assert "  ENV_LABEL=Set by Ops   (was Old label)" in result.stdout and "Updated 2 setting(s)" in result.stdout
+    assert "  ENV_LABEL=Set by Ops   (was Old label)" in result.stdout
+    assert f"Updated 2 setting(s) in {tmp_path}/t.local.conf from SSM ({DOC})." in result.stdout
     local = (tmp_path / "t.local.conf").read_text()
     assert 'ENV_LABEL="Set by Ops"' in local and 'ALLOWED_CIDRS=""' in local and "WAF" not in local
-    assert ssm_now(tmp_path) == in_ssm and not (tmp_path / "ssm.log").exists()
+    assert ssm_now(tmp_path) == in_ssm and ssm_log(tmp_path) == []
     files_now = {line.split("=", 1)[0]: line.split("=", 1)[1].strip('"') for line in local.splitlines() if "=" in line}
     again = run_settings(tmp_path, "settings_pull", files=files_now)
-    assert "already match SSM" in again.stdout, again.stdout + again.stderr
+    assert f"already match SSM ({DOC})." in again.stdout, again.stdout + again.stderr
 
 
 def test_settings_show_names_pull_where_the_files_differ(tmp_path: Path) -> None:
-    result = run_settings(tmp_path, "settings_show", files=HERE, ssm_values=IN_SSM)
+    result = run_settings(tmp_path, "settings_show", files=HERE, doc=doc_of(IN_SSM),
+                          ssm_values={"REAL_DATA_ACCOUNT": "111122223333"})
     assert result.returncode == 0, result.stderr
+    assert f"the document {DOC} (version 1)" in result.stdout
     assert "  ENV_LABEL=Set by Ops   (the files here: Old label)" in result.stdout
+    assert "  REAL_DATA_ACCOUNT=111122223333   (set by ./serena aws pipeline)" in result.stdout
     assert "To bring the files here up to date: ./serena aws settings pull --env t" in result.stdout
+
+
+@pytest.mark.parametrize(("line", "message"), [
+    ('ALLOWED_CIDRS="203.0.113.7/32', "must be in double quotes"),
+    ("ALLOWED_CIDRS=203.0.113.7/32 198.51.100.0/24", "must be in double quotes"),
+    ('ENV_LABEL="$(touch PWNED)"', "must be in double quotes"),
+    ('ENV_LABEL="a`b`"', "must be in double quotes"),
+    ('OLD_SETTING="x"', "OLD_SETTING isn't a setting ./serena aws reads"),
+    ('REAL_DATA_ACCOUNT="111122223333"', "REAL_DATA_ACCOUNT isn't kept in the document"),
+    ('ALLOWED_CIDRS="198.51.100.0/24"', "ALLOWED_CIDRS is set twice"),
+    ("allowed_cidrs=x", "isn't NAME=\"value\""),
+    ("VPC_ID='vpc-1'", "must be in double quotes"),
+    ("ENV_LABEL=a#b", "must be in double quotes"),
+    ("VPC_ID=“vpc-1”", "has a curly quote in it"),
+])
+def test_a_mistake_in_the_document_stops_every_command_and_names_its_line(tmp_path: Path, line: str,
+                                                                          message: str) -> None:
+    """The document is data, never run, so a value can't run a command; a line that isn't NAME="value" for a setting
+    ./serena aws reads stops every command (from_ssm: the pipeline's build too), naming the line."""
+    values = dict(IN_SSM)
+    key = line.split("=", 1)[0]
+    if "twice" not in message:
+        values.pop(key, None)  # the line replaces the setting's own
+    doc = doc_of(values)
+    number = len(doc.splitlines()) + 1
+    result = run_settings(tmp_path, 'from_ssm; echo "read: $ENV_LABEL"', cmd="plan", files=HERE, doc=doc + line + "\n")
+    assert result.returncode == 1, result.stdout
+    assert f"Line {number} of {DOC} in SSM" in result.stderr and message in result.stderr, result.stderr
+    assert "read:" not in result.stdout and not (tmp_path / "PWNED").exists()
+
+
+def test_a_value_set_quoted_or_bare_with_a_comment_reads_the_same(tmp_path: Path) -> None:
+    others = {k: v for k, v in IN_SSM.items() if k != "ALLOWED_CIDRS"}
+    doc = doc_of(others) + "  ALLOWED_CIDRS=198.51.100.0/24   # the VPN\n"
+    result = run_settings(tmp_path, 'from_ssm; echo "read: $ALLOWED_CIDRS"', cmd="plan", files=HERE, doc=doc)
+    assert result.returncode == 0, result.stderr
+    assert "read: 198.51.100.0/24\n" in result.stdout
+
+
+LEGACY = {**IN_SSM, "REAL_DATA_ACCOUNT": "111122223333", "OLD_SETTING": "x"}
+
+
+def test_before_migrate_the_parameters_are_read_and_set_and_push_refuse(tmp_path: Path) -> None:
+    result = run_settings(tmp_path, 'from_ssm; echo "read: $ENV_LABEL"', cmd="plan", files=HERE, ssm_values=LEGACY)
+    assert result.returncode == 0, result.stderr
+    assert "read: Set by Ops" in result.stdout
+    result = run_settings(tmp_path, "settings_show", files=HERE)
+    assert "one parameter per setting" in result.stdout and "settings migrate --env t" in result.stdout
+    for body in ("settings_set ENV_LABEL x", "settings_push"):
+        result = run_settings(tmp_path, body, files=HERE)
+        assert result.returncode == 1 and "settings migrate --env t" in result.stderr, result.stderr
+        assert "Write th" not in result.stdout  # refused before it asks
+    assert ssm_now(tmp_path) == LEGACY and ssm_log(tmp_path) == []
+
+
+def test_migrate_moves_the_parameters_into_the_document_from_ssms_values(tmp_path: Path) -> None:
+    """From SSM's values, never the files'; REAL_DATA_ACCOUNT stays a parameter of its own; a parameter ./serena aws
+    doesn't read is left alone; the old parameters go only once the document reads back."""
+    files = {**HERE, "ALLOWED_CIDRS": "192.0.2.0/24"}  # SSM's 203.0.113.7/32 wins
+    result = run_settings(tmp_path, "settings_migrate", answers="n\n", files=files, ssm_values=LEGACY)
+    assert result.returncode == 1 and ssm_log(tmp_path) == []
+    assert 'ALLOWED_CIDRS="203.0.113.7/32"' in result.stdout
+    assert "Left alone, as ./serena aws doesn't read them: OLD_SETTING" in result.stdout
+    result = run_settings(tmp_path, "settings_migrate", files=files)
+    assert result.returncode == 0, result.stderr
+    root = tmp_path / "ssm" / "serena-t" / "settings"
+    assert sorted(p.name for p in root.iterdir()) == ["OLD_SETTING", "REAL_DATA_ACCOUNT", "all"]
+    assert ssm_now(tmp_path) == LEGACY
+    assert ssm_log(tmp_path)[:2] == [f"put {DOC}", f"tag {DOC} Key=project,Value=serena"]
+    assert sorted(ssm_log(tmp_path)[2:]) == [f"delete /serena-t/settings/{k}" for k in sorted(IN_SSM)]
+    again = run_settings(tmp_path, "settings_migrate", files=files)
+    assert "already keeps its settings in one document" in again.stdout
+
+
+@pytest.mark.parametrize("value", ['x"; touch PWNED; #', "first line\nENV_LABEL\tsecond"])
+def test_before_migrate_a_value_that_could_run_never_reaches_the_files_here(tmp_path: Path, value: str) -> None:
+    result = run_settings(tmp_path, "settings_pull", files=HERE, ssm_values={**LEGACY, "ENV_LABEL": value})
+    files = (tmp_path / "t.local.conf").read_text()
+    assert result.returncode == 1 and ("fix it in SSM first" in result.stderr or "line break" in result.stderr)
+    assert not (tmp_path / "PWNED").exists()
+    result = run_settings(tmp_path, "settings_migrate", files=HERE)
+    assert result.returncode == 1 and not (tmp_path / "ssm" / "serena-t" / "settings" / "all").exists()
+    assert (tmp_path / "t.local.conf").read_text() == files
+
+
+def test_a_line_break_in_real_data_account_cant_add_a_setting(tmp_path: Path) -> None:
+    """REAL_DATA_ACCOUNT is read on its own and checked, so a line break in it can't pass for a setting's line, which
+    pull would write into the sourced .local.conf."""
+    bad = {"REAL_DATA_ACCOUNT": '111122223333\nENV_LABEL\tx"; touch PWNED; #'}
+    for body in ("settings_pull", "from_ssm"):
+        result = run_settings(tmp_path, body, files=HERE, doc=doc_of(IN_SSM), ssm_values=bad)
+        assert result.returncode == 1, result.stdout
+        assert "/serena-t/settings/REAL_DATA_ACCOUNT in SSM isn't an account number" in result.stderr
+    assert 'ENV_LABEL="Old label"' in (tmp_path / "t.local.conf").read_text() and not (tmp_path / "PWNED").exists()
+
+
+@pytest.mark.parametrize("fail", ["describe", "value"])
+@pytest.mark.parametrize("body", ["settings_push", "settings_set ENV_LABEL x", "settings_pull", "settings_show",
+                                  "settings_migrate", "from_ssm"])
+def test_a_failed_ssm_read_stops_every_command_before_it_changes_anything(tmp_path: Path, fail: str,
+                                                                          body: str) -> None:
+    """A read refused or throttled by AWS must never pass for "no settings": push would then rewrite the document
+    from the files here, undoing Ops' changes."""
+    files = {**HERE, "VPC_ID": "vpc-0abc"}
+    result = run_settings(tmp_path, body, files=files, doc=doc_of(IN_SSM), fail=fail)
+    if body == "settings_migrate" and fail == "value":  # it needn't read the document to see it's there
+        assert "already keeps its settings in one document" in result.stdout
+    else:
+        assert result.returncode != 0, result.stdout
+        assert "Couldn't" in result.stderr, result.stderr
+    assert doc_text(tmp_path) == doc_of(IN_SSM) and ssm_log(tmp_path) == []
+    assert (tmp_path / "t.local.conf").read_text() == "".join(f'{k}="{v}"\n' for k, v in files.items())
+
+
+def test_save_local_refuses_a_value_that_would_run_in_the_files_here(tmp_path: Path) -> None:
+    result = run_settings(tmp_path, 'save_local ENV_LABEL "\\$(whoami)"', files=HERE)
+    assert result.returncode == 1 and "can't have" in result.stderr
+    assert 'ENV_LABEL="Old label"' in (tmp_path / "t.local.conf").read_text()
 
 
 @pytest.mark.parametrize(("sub", "admin"), [("pull", False), ("show", False), ("set", True), ("push", True)])
