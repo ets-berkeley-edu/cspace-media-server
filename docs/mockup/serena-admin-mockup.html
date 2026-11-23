@@ -399,6 +399,7 @@
   <div class="notes">
     <h2>Notes for reviewers</h2>
     <ul>
+      <li><strong>Version 61 (November 22, 2026, issue #208; in the app's pull request):</strong> <strong>Media look up says why a refusal refuses.</strong> Try "A video (a kind Serena doesn't serve)": the verdict is "Not served: kind not served", then "Serena doesn't serve videos yet: a request gets the unavailable image.", and the Kind check is marked as failing. Before, the app's second line repeated "not served" for every refusal without a verdict of its own. In the app, each of those reasons has its own sentence, from the Blob's kind and access and the size looked up: kind not served (audio and video, "yet"; any other kind named), restricted (a kind the museum doesn't allow signed links for, or an access that isn't public), original not served, no derivatives for kind, watermark not built and derivative not served. A reason without one shows the failing check's outcome. The mockup shows only the video; its other samples don't reach those reasons.</li>
       <li><strong>Version 60 (November 10, 2026; in the app's pull request):</strong> <strong>An evening refresh is due the next morning.</strong> The ETL job starts at 21:01 Pacific, so its refresh has that evening's refresh date. A refresh is now due by the first watchdog deadline at or after it started, so the ETL job's refresh is due the next morning. "Past the 08:00 Pacific deadline" beside a refresh still waiting or working, and the deadline alert, follow that. Before, the watchdog looked for a refresh dated the deadline's own day, which an evening refresh never is, so "Today's refresh isn't finished by the deadline" came every morning. The alert's title stays; its message says which refresh was due ("By 08:00 Pacific, the refresh due then isn't updated or abandoned: no refresh started since 08:00 Pacific on 2026-10-12." or "… : pahma-2026-10-12-1 is received.").</li>
       <li><strong>Version 59 (November 5, 2026; in the app's pull request):</strong> <strong>How far an update has got.</strong> While Serena applies an ETL list, the line beside the state says how many rows it has applied and how many there are, as of the worker's last heartbeat (every 30 seconds), in place of "usually a few minutes" ("Applying since 16:57 UTC (12 min): 120,000 of 969,351 rows applied."); until the worker has counted them, the line is as before. A first load of some 970,000 rows takes much longer than a few minutes. Try "being applied" in the dashed bar's Pending refresh.</li>
       <li><strong>Version 58 (November 3, 2026; proposed for the DevOps review, issue #189):</strong> <strong>Links from alerts to the recovery runbook.</strong> Each alert on <strong>Alerts</strong>, and the one the banner names, has a <strong>What to do ↗</strong> link that opens <code>docs/runbook.md</code> on GitHub, in a new tab, at the alert's section. A refresh alert's section is its <code>###</code> heading, which is the alert's title word for word; the admin-action notices (threshold overridden, setting changed, recalled, released, cancelled, recalls ended) share Notices of admin actions; "Recalled in Serena, but still public in CollectionSpace" has its own. The section names are for the review to settle (decided November 3, 2026), so the links stay in the mockup until then. <strong>For the app, after the review:</strong> the same link on Alerts and the banner, and a line "What to do: &lt;link&gt;" in the alert email; a test that every alert title has a runbook heading.</li>
@@ -486,6 +487,7 @@
   // How the admin app names each kind (D151): "file" only when the kind isn't known.
   const KIND_WORDS = {image: "image", card: "catalog card", pdf: "PDF", "3D": "3D model", audio: "audio file", video: "video"};
   const kindWord = kind => KIND_WORDS[kind] || "file";
+  const SERVED_KINDS = ["image", "card", "pdf", "3D"];  // audio and video, not yet (#157)
   const short = csid => csid.length > 20 ? csid.slice(0, 8) + "…" + csid.slice(-6) : csid;
   // A CSID (or path) shortened with an ellipsis always has a copy button that copies the whole of it (Richard, Oct 13).
   const copyBtn = full => `<button type="button" class="copy icon" data-copy="${esc(full)}" title="Copy ${esc(full)}" aria-label="Copy ${esc(full)}">⧉</button>`;
@@ -591,7 +593,8 @@
   const B1 = "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", BR = "855049af-600c-5140-b50a-b429566c8278", BK = "b3d1f0c2-7e44-4b9a-8d21-5a6c0e9f7b12",
     BN = "3e9a1b77-52d0-4c8f-a1e6-9f0b2d4c6e81", BX = "5e4d3c2b-1a09-4f8e-9d7c-6b5a4f3e2d1c", BD = "2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091",
     BT = "aa11bb22-cc33-4d44-9e55-ff6677889900", BO = "aa11bb22-cc33-4d44-9e55-ff6677880001", BE = "c4d5e6f7-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
-    BL = "d9e8f7a6-5b4c-4d3e-8f2a-1b0c9d8e7f6a", BF = "f0e1d2c3-b4a5-4968-8776-655443322110", BP = "7d4c2a10-9b8e-4f6d-a3c2-1e0f9d8c7b6a";
+    BL = "d9e8f7a6-5b4c-4d3e-8f2a-1b0c9d8e7f6a", BF = "f0e1d2c3-b4a5-4968-8776-655443322110", BP = "7d4c2a10-9b8e-4f6d-a3c2-1e0f9d8c7b6a",
+    BV = "e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5c";
   const BLOB = BR, MEDIA = "20349bfa-cad6-5f47-9acd-dcd34e3f0b98";
 
   // The Media records. `blobs`: the Blobs the ETL list has for the record (`until`: when a refresh dropped it).
@@ -633,6 +636,8 @@
     {ex: "A restricted PDF", input: `/cinefiles/imageserver/blobs/${BP}/content`, museum: "cinefiles", media: "c2b1a0f9-8e7d-4c6b-9a5f-4e3d2c1b0a99",
       blobs: [{blob: BP, kind: "pdf", access: "restricted"}],
       cs: {blob: BP, fields: [["Access code override (document)", "Glimmer readers only"]], updated: "2026-10-01T16:00:00Z"}},
+    {ex: "A video (a kind Serena doesn't serve)", input: BV, museum: "pahma", media: "b5c6d7e8-f9a0-4b1c-8d2e-3f4a5b6c7d8e",
+      blobs: [{blob: BV, kind: "video", access: "public"}], cs: {blob: BV, publish: "All", updated: "2026-09-18T20:10:00Z"}},
   ];
   const EXAMPLES = [...RECORDS.filter(r => r.ex).map(r => ({label: r.ex, input: r.input, museum: r.museum})),
     {label: "A path Serena refuses", input: `/pahma/imageserver/blobs/${B1}/derivatives/Thumbnial/content`, museum: "pahma"}];
@@ -657,7 +662,7 @@
 
   // ---- Serena's rules, as servability.decide and the fetch apply them
   // Each reason as the app shows it: Serena's reason with its underscores as spaces.
-  const REASON = {unknown_path: "unknown path", not_listed: "not listed", restricted: "restricted", no_derivatives: "no derivatives for kind", recalled: "recalled",
+  const REASON = {unknown_path: "unknown path", not_listed: "not listed", kind_not_served: "kind not served", restricted: "restricted", no_derivatives: "no derivatives for kind", recalled: "recalled",
     placeholder: "placeholder not set", media_deleted: "media deleted", bad_csid: "bad csid", unknown_size: "derivative not served"};
   const STORE = {};  // Blob CSID → size → {at, type, bytes}: Serena's cached copies (the cache index)
   RECORDS.forEach(r => Object.entries(r.stored || {}).forEach(([blob, sizes]) => Object.entries(sizes).forEach(([size, at]) => {
@@ -683,6 +688,7 @@
     if (!SIZES.includes(size)) return {reason: "unknown_size"};
     const [r, b] = findBlob(museum, csid);
     if (!b || !listedAt(b, t)) return {reason: "not_listed"};
+    if (!SERVED_KINDS.includes(b.kind)) return {reason: "kind_not_served", r, b};
     if (b.access !== "public" && !signed) return {reason: "restricted", r, b};
     if (size !== "original" && b.kind === "pdf") return {reason: "no_derivatives", r, b};
     if (recallAt(r, t)) return {reason: "recalled", r, b};
@@ -774,7 +780,7 @@
     });
     const checks = b.unlisted
       ? [["no", "In the ETL list", "Not listed"], ["skip", "Kind", "Not known"], ["skip", "Access", "Not known"], ["skip", "Recall", ended || "Not checked"]]
-      : [["ok", "In the ETL list", `Refresh ${lastRefresh()}`], ["ok", "Kind", kindWord(b.kind)],
+      : [["ok", "In the ETL list", `Refresh ${lastRefresh()}`], SERVED_KINDS.includes(b.kind) ? ["ok", "Kind", kindWord(b.kind)] : ["no", "Kind", `${kindWord(b.kind)}: not served`],
         b.access === "public" ? ["ok", "Access", "public"] : ["maybe", "Access", "restricted: signed link needed"],
         !r.media ? ["ok", "Recall", "No Media record"] : now ? ["no", "Recall", `Recalled by ${now.by}, ${plain(now.at)}`] : ["ok", "Recall", ended ? `None (${ended.toLowerCase()})` : "None"],
         ...(b.blob === PLACEHOLDER ? [S.placeholderMedia ? ["ok", "Placeholder image", `Served from Media record ${S.placeholderMedia}, named on the Settings page`] : ["no", "Placeholder image", "No Media record is named for it on the Settings page, so a request gets Serena's generic picture"]] : [])];
@@ -788,6 +794,10 @@
           ? "In CollectionSpace, its Media record isn't approved for web. A change there shows here after the next refresh."
           : "In CollectionSpace, it's on a Media record approved for web and changed after the last refresh, so the next refresh lists it."};
       if (rc && rc.ended) v.next += ` Its recall ended ${plain(rc.ended.at)} (${rc.ended.by}: ${rc.ended.why.toLowerCase()}).`;
+    } else if (!SERVED_KINDS.includes(b.kind)) {
+      // Version 61 (issue #208): the reason's own sentence, not the size's "not served" again.
+      v = {tone: "not", head: "Not served: kind not served", why: `Serena doesn't serve ${b.kind === "audio" ? "audio files" : "videos"} yet: a request gets the unavailable image.`,
+        next: "Nothing has changed in CollectionSpace since the last refresh."};
     } else if (b.access !== "public") {
       v = {tone: "depends", head: "Served only on a signed link", why: "This PDF is restricted: Serena serves it only to Glimmer readers, through a portal's valid signed link.",
         next: "A plain link (like this one, without a signature) gets the unavailable image."};
@@ -1080,7 +1090,7 @@
   }
 
   function signIn() {
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 56</span></div>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 61</span></div>
     <form class="login" id="loginForm">
       <h2>Sign in</h2>${S.timedOut ? `<div class="timeout">Your session timed out after 30 minutes without activity. Sign in again: you'll return to ${esc(S.page === "lookup" ? "Media look up" : S.page)}.</div>` : ""}<p class="secondary" style="margin:0 0 14px">With your own CollectionSpace account. You need the Serena admin role in the museum.</p>
       <div id="loginErr"></div>
@@ -1098,7 +1108,7 @@
 
   function frame() {
     const open = here(ALERTS).filter(a => !a.ack).length;
-    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 56</span><span class="spacer"></span>
+    return `<div class="topbar"><span class="brand">Serena</span><span class="env">Local · simulator · feature/admin-mockup · version 61</span><span class="spacer"></span>
       <button type="button" class="icon-btn bell" id="alertsBtn" data-go="alerts" ${open ? 'data-show="waiting"' : ""} aria-label="${open ? `Alerts: ${open} unacknowledged` : "Alerts"}" title="${open ? `${open} unacknowledged alert${open > 1 ? "s" : ""}` : "Alerts"}" ${S.page === "alerts" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>${open ? `<span class="badge" aria-hidden="true">${open > 99 ? "99+" : open}</span>` : ""}</button>
       <button type="button" class="icon-btn" id="settingsBtn" data-go="settings" aria-label="${esc(name())} settings" title="${esc(name())} settings" ${S.page === "settings" ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.49.49 0 0 0 13.9 2h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.49.49 0 0 0 .12.64l2.03 1.58c-.05.31-.08.63-.08.94s.02.63.07.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg></button>
       <div class="menu-wrap"><button type="button" id="museumBtn" aria-haspopup="menu" aria-expanded="${S.menu}">${esc(name())} · ${esc(S.user)} ▾</button>

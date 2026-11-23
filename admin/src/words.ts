@@ -251,6 +251,48 @@ export function reasonOf(reason: string): string {
   return reason.replace(/_/g, ' ')
 }
 
+/** Each kind in the plural, for a sentence about all files of that kind; "files" when the kind isn't known. */
+export const KIND_PLURALS: Record<string, string> = {
+  image: 'images', card: 'catalog cards', pdf: 'PDFs', '3D': '3D models', audio: 'audio files', video: 'videos'
+}
+
+export function kindPlural(kind: string | null | undefined): string {
+  return (kind && KIND_PLURALS[kind]) || 'files'
+}
+
+/**
+ * Why Media look up's verdict refuses a listed Blob, for the reasons with no verdict of their own (issue #208), from
+ * the Blob's kind and access and the size looked up (null for every size). Null for any other reason: the page then
+ * shows the failing check's outcome.
+ */
+export function refusalWhy(reason: string, kind: string | null, access: string | null,
+                           size: string | null): string | null {
+  const gets = 'a request gets the unavailable image.'
+  const theSize = size ? `the ${size} size` : 'these sizes'
+  switch (reason) {
+    case 'kind_not_served':
+      return kind === 'audio' || kind === 'video'
+        ? `Serena doesn't serve ${kindPlural(kind)} yet: ${gets}`
+        : `Serena doesn't serve files of this kind (${kind || 'not known'}): ${gets}`
+    case 'restricted':
+      return access === 'restricted'
+        ? `Its access is restricted, and the museum doesn't allow signed links for ${kindPlural(kind)}: ${gets}`
+        : `Its access is ${access || 'not known'}, not public: ${gets}`
+    case 'original_not_served':
+      return `The museum doesn't serve the original files of ${kindPlural(kind)}, only their derivatives: a request for `
+        + 'the original gets the unavailable image.'
+    case 'no_derivatives_for_kind':
+      return `A ${kindWord(kind)} is served only as its original file: a request for a derivative gets the unavailable `
+        + 'image.'
+    case 'watermark_not_built':
+      return `The museum watermarks ${theSize}, and Serena doesn't watermark files yet: ${gets}`
+    case 'derivative_not_served':
+      return `The museum doesn't serve ${theSize}: ${gets}`
+    default:
+      return null
+  }
+}
+
 export function stateOf(state: string): string {
   return STATES[state] || state
 }

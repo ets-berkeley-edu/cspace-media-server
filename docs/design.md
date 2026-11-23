@@ -1525,8 +1525,9 @@ their hashed names, with no CDN (D296).
     CollectionSpace), with the Media CSID beside it. Without a number (none, CollectionSpace can't be reached, or no
     such record): "Media <Media CSID>". The placeholder image: "Placeholder image". A file with no Media record at all
     (an unknown CSID) has no heading.
-  - **Serena's answer.** The verdict first (served; served only on a signed link; or the one reason it isn't), what to
-    do next, then each size: served or why not, the cached copy (content type, size), when Serena last served it and
+  - **Serena's answer.** The verdict first (served; served only on a signed link; or the one reason it isn't, with a
+    sentence saying why, from the Blob's kind and access and the size looked up, or else the failing check's outcome;
+    issue #208), what to do next, then each size: served or why not, the cached copy (content type, size), when Serena last served it and
     when it first cached it. Each step of the servability check, in order, is in the "In Serena" panel's Details: in
     the ETL list (and the refresh it came from), kind, access and signed access, recall, derivative allowed,
     watermarked size.

@@ -272,7 +272,7 @@ import type {ShownFile} from '@/components/FileDialog.vue'
 import LoadError from '@/components/LoadError.vue'
 import ShortCsid from '@/components/ShortCsid.vue'
 import SizesTable from '@/components/SizesTable.vue'
-import {kindWord, reasonOf, short, when} from '@/words'
+import {kindWord, reasonOf, refusalWhy, short, when} from '@/words'
 
 // Media look up, layout C from the UI review (decided October 13, 2026, D139 to D145): Serena's answer, with the file
 // in Serena and in CollectionSpace side by side.
@@ -470,8 +470,15 @@ const verdict = computed<Verdict>(() => {
             why: `Serena has no cached copy${it.sizes.length === 1 ? ` of ${it.sizes[0].size}` : ''}, and a fetch would find the Media record ${how}.`,
             next: cs.value.next || ''}
   }
+  // The size's verdict is only "not served", which would repeat the heading (issue #208): a sentence for the reason,
+  // else the failing check's outcome.
+  const failing = it.steps.find(s => s.ok === false)
+  const why = first
+    ? refusalWhy(first.reason!, it.kind, it.access, one ? one.size : null) || failing?.outcome
+      || 'A request gets the unavailable image.'
+    : ''
   return {tone: 'not', head: `Not served: ${first ? reasonOf(first.reason!) : 'see the sizes'}`,
-          why: first ? first.verdict : '', next: cs.value.next || ''}
+          why, next: cs.value.next || ''}
 })
 
 watch(museum, () => {

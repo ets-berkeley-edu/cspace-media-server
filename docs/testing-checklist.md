@@ -3186,3 +3186,28 @@ the plan; this checks the real load balancer and a real deploy.
   ```
 
   Expected: the plan job's summary says no changes, and the `apply` job is skipped, with nothing to approve.
+
+## 70. Media look up says why audio and video aren't served, on ucb-stage2 (5 minutes; after merging the pull request)
+
+What it checks: for a refusal without a verdict of its own, Media look up's verdict says why in its second line,
+instead of repeating "not served" (issue #208). Found on stage 2 with SERENA-TEST-046, a listed public MP4 (section
+63's records: 045 is a public WAV, 046 the MP4). The tests check every reason's sentence; this checks the page on a
+deployed environment.
+
+- [ ] **1. Deploy.** Start the Deploy workflow for `ucb-stage2`, from `main`:
+
+  ```bash
+  cd <your clone> && git switch main && git pull && gh workflow run deploy.yml --ref main -f environment=ucb-stage2
+  ```
+
+  Expected: `Created workflow_dispatch event for deploy.yml at main`. In the plan build's log, only the task
+  definitions replaced for the new image and the services updated. Approve the apply.
+- [ ] **2. The video.** In the admin app, signed in to PAHMA: Media look up for SERENA-TEST-046. Expected, in the
+  verdict box: **Not served: kind not served**, then "Serena doesn't serve videos yet: a request gets the unavailable
+  image." (before, the second line was "not served"). In the "In Serena" panel's Details, the Kind check is marked as
+  failing, "video: not served".
+- [ ] **3. The audio file.** Media look up for SERENA-TEST-045. Expected: **Not served: kind not served**, then
+  "Serena doesn't serve audio files yet: a request gets the unavailable image." (once "audio files", never "audio
+  file files").
+- [ ] **4. Nothing else changed.** Media look up for SERENA-TEST-001, a public image. Expected: the same verdict as
+  before this pull request (**Served**, or **Served (cached sizes only)**), with its second line unchanged.
