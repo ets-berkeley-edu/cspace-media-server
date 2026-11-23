@@ -3154,22 +3154,35 @@ cd <your clone> && git switch deploy/settings-pull-set && git pull && aws sso lo
   next deploy uses it. [y/N]`; answer `y`. Then `Done.` Run step 1 again: the same settings as at first, and no line
   ends `(the files here: …)`.
 
-## 69. HTTP/2 stays off at the load balancer, on ucb-stage2 (10 minutes; after merging the pull request)
+## 69. HTTP/2 stays off at the load balancer, on ucb-stage2 (10 minutes; after merging the pull request; done November 22, 2026)
 
 What it checks: `ucb-stage2`'s load balancer has HTTP/2 off, set outside Terraform, and `aws_lb.main` now says so
 (`enable_http2 = false`, D309), so a deploy no longer turns it back on. CI's `terraform` job checks the setting in
 the plan; this checks the real load balancer and a real deploy.
 
-- [ ] **1. The deploy changes nothing at the load balancer.** GitHub › Actions › Deploy › Run workflow, from `main`,
-  with `ucb-stage2`. Expected: in the plan build's log (the plan job's summary links to it), no `aws_lb.main` and no
-  `enable_http2`; only the task definitions replaced for the new image and the services updated. Approve the apply.
-- [ ] **2. Browsers get HTTP/1.1.** Replace `<domain>` with `DOMAIN_NAME` (in `ucb-stage2.local.conf`), from campus or
-  the VPN:
+- [x] **1. The deploy changes nothing at the load balancer.** Start the Deploy workflow for `ucb-stage2`, from `main`:
 
   ```bash
-  curl -sI --http2 https://<domain>/health | head -1
+  cd <your clone> && git switch main && git pull && gh workflow run deploy.yml --ref main -f environment=ucb-stage2
   ```
 
-  Expected: `HTTP/1.1 200 OK` (with HTTP/2 on, it would be `HTTP/2 200`).
-- [ ] **3. A deploy with no changes stays that way.** Run the Deploy workflow for `ucb-stage2` again. Expected: the
-  plan job's summary says no changes, and nothing to approve.
+  Expected: `Created workflow_dispatch event for deploy.yml at main`. Then, in the plan build's log (the plan job's
+  summary links to it), no `aws_lb.main` and no `enable_http2`; only the task definitions replaced for the new image
+  and the services updated. Approve the apply. (At the merge of pull request 232: 2 to add, 2 to change, 2 to destroy,
+  all task definitions and services.)
+- [x] **2. Browsers get HTTP/1.1.** Replace `<domain>` with `DOMAIN_NAME` (in `ucb-stage2.local.conf`), from campus or
+  the VPN. The command offers HTTP/2 and prints the HTTP version the load balancer chose and the status of a GET
+  (`/health` answers only GET: `curl -I` sends HEAD and gets 405):
+
+  ```bash
+  curl -s --http2 -o /dev/null -w '%{http_version} %{http_code}\n' https://<domain>/health
+  ```
+
+  Expected: `1.1 200` (with HTTP/2 on, it would be `2 200`).
+- [x] **3. A deploy with no changes stays that way.** Run the Deploy workflow for `ucb-stage2` again:
+
+  ```bash
+  cd <your clone> && gh workflow run deploy.yml --ref main -f environment=ucb-stage2
+  ```
+
+  Expected: the plan job's summary says no changes, and the `apply` job is skipped, with nothing to approve.
