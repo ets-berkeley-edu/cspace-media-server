@@ -73,6 +73,11 @@ run "the_split" {
   }
 
   assert {
+    condition     = aws_lb.main.enable_http2 == false
+    error_message = "The load balancer speaks HTTP/1.1 only, as Operations have it (D309)."
+  }
+
+  assert {
     condition     = aws_lb_listener.https.protocol == "HTTPS" && aws_lb_listener.https.port == 443 && aws_lb_listener.https.certificate_arn == var.certificate_arn
     error_message = "One HTTPS listener with the ACM certificate (D294); no port 80 (TQ5)."
   }

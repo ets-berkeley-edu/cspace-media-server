@@ -1680,7 +1680,10 @@ their hashed names, with no CDN (D296).
     from the Apache hosts' addresses are limited by `X-Forwarded-For`, everything else by source address (D306).
   - **The certificate** is requested by `deploy/terraform/registry` (applied first by `./serena aws deploy`), which
     prints its DNS validation record and stops while it isn't issued; once DevOps has added the record, the next deploy
-    goes on (TQ4). The load balancer takes HTTPS only (TQ5). Anyone its security group admits (the Apache hosts,
+    goes on (TQ4). The load balancer takes HTTPS only (TQ5), and HTTP/1.1 only (D309, decided November 22, 2026):
+    HTTP/2 had been turned off on `ucb-stage2`'s load balancer outside Terraform, as UC Berkeley's Operations did on
+    the BMU's, and the next deploy planned to turn it back on; `enable_http2 = false` keeps it off in every shared
+    environment. Apache and CloudFront speak HTTP/1.1 to it anyway. Anyone its security group admits (the Apache hosts,
     `APACHE_CIDRS`; the ETL servers; campus and VPN) reaches the image paths and `/health` (TQ6).
   - **The files and the unavailable images** stay on CloudFront: a distribution with only the file and SVG paths,
     signed URLs, origin access control and the static bucket, at its own `*.cloudfront.net` address (D293). It has no

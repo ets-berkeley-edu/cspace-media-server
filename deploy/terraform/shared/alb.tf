@@ -13,6 +13,9 @@ resource "aws_lb" "main" {
   # least as long.
   idle_timeout               = 300
   drop_invalid_header_fields = true
+  # HTTP/1.1 only (D309, November 22, 2026): HTTP/2 had been turned off on ucb-stage2's load balancer outside
+  # Terraform, as Operations did on the BMU's, and without this every deploy would turn it back on.
+  enable_http2 = false
 }
 
 resource "aws_lb_target_group" "web" {

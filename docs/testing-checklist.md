@@ -3047,7 +3047,7 @@ assume that checkout is `~/dev/src/rtl/cspace-media-server`.
 
   Expected: the environment's status, with no sign-in message.
 
-## 67. Production deploys only what QA deployed first (10 minutes; after merging the pull request that adds `ucb-prod`)
+## 67. Production deploys only what QA deployed first (10 minutes; after merging the pull request that adds `ucb-prod`; done November 22, 2026)
 
 What it checks: production's deploy pipeline takes only a commit that was already deployed to its pre-production
 environment. `deploy/environments/ucb-prod.conf` names that environment, `PREPRODUCTION=ucb-stage2` (the QA
@@ -3065,7 +3065,7 @@ deploy.
 You need the GitHub CLI (`gh`), signed in as a user who can run the repository's workflows. Nothing here uses AWS.
 Run the commands from your clone of this repository, on `main`, after the pull request is merged and pulled.
 
-- [ ] **1. Run a production deploy at a commit QA hasn't deployed.** Right after the merge, `main`'s latest commit is
+- [x] **1. Run a production deploy at a commit QA hasn't deployed.** Right after the merge, `main`'s latest commit is
   the merge, which isn't on QA yet. Start the Deploy workflow for `ucb-prod`:
 
   ```bash
@@ -3073,7 +3073,7 @@ Run the commands from your clone of this repository, on `main`, after the pull r
   ```
 
   Expected: `Created workflow_dispatch event for deploy.yml at main`.
-- [ ] **2. Watch it be refused.** Wait about a minute, then open the run:
+- [x] **2. Watch it be refused.** Wait about a minute, then open the run:
 
   ```bash
   cd <your clone> && gh run list --workflow deploy.yml --limit 1
@@ -3083,12 +3083,13 @@ Run the commands from your clone of this repository, on `main`, after the pull r
   with `Commit <the merge commit> hasn't been deployed to ucb-stage2 successfully (0 attempt(s) there).` and
   `Deploy it to ucb-stage2 first, then run this deploy again.`; the run's summary says
   ``Refused: commit `<first 12 characters>` hasn't been deployed to `ucb-stage2` first.``; the jobs `plan` and `apply`
-  were skipped.
-- [ ] **3. No production GitHub environment was made.** Settings › Environments: there is no `ucb-prod-plan` and no
+  were skipped. (Refused at the merge of pull request 231, as expected.)
+- [x] **3. No production GitHub environment was made.** Settings › Environments: there is no `ucb-prod-plan` and no
   `ucb-prod` (unless you created them yourself, with their rules, beforehand).
-- [ ] **4. QA isn't affected.** Deploy that commit to QA as usual (Actions › Deploy › Run workflow, `ucb-stage2`).
+- [x] **4. QA isn't affected.** Deploy that commit to QA as usual (Actions › Deploy › Run workflow, `ucb-stage2`).
   Expected: the job `preproduction` passes with `ucb-stage2 has no pre-production environment: any commit on main may
-  be deployed.`, and the plan and apply go on as before.
+  be deployed.`, and the plan and apply go on as before. (It passed, and the plan ran. The apply was held: the plan also
+  turned HTTP/2 back on at the load balancer, which section 69 fixes.)
 
 ## 68. SSM is the settings' one copy: settings set and pull, on ucb-stage2 (15 minutes; from the pull request's branch)
 
@@ -3152,3 +3153,23 @@ cd <your clone> && git switch deploy/settings-pull-set && git pull && aws sso lo
   Expected: `  ~ ENV_LABEL=<the value from step 1> (was <the value from step 1> (test))` and `Write this to SSM? The
   next deploy uses it. [y/N]`; answer `y`. Then `Done.` Run step 1 again: the same settings as at first, and no line
   ends `(the files here: …)`.
+
+## 69. HTTP/2 stays off at the load balancer, on ucb-stage2 (10 minutes; after merging the pull request)
+
+What it checks: `ucb-stage2`'s load balancer has HTTP/2 off, set outside Terraform, and `aws_lb.main` now says so
+(`enable_http2 = false`, D309), so a deploy no longer turns it back on. CI's `terraform` job checks the setting in
+the plan; this checks the real load balancer and a real deploy.
+
+- [ ] **1. The deploy changes nothing at the load balancer.** GitHub › Actions › Deploy › Run workflow, from `main`,
+  with `ucb-stage2`. Expected: in the plan build's log (the plan job's summary links to it), no `aws_lb.main` and no
+  `enable_http2`; only the task definitions replaced for the new image and the services updated. Approve the apply.
+- [ ] **2. Browsers get HTTP/1.1.** Replace `<domain>` with `DOMAIN_NAME` (in `ucb-stage2.local.conf`), from campus or
+  the VPN:
+
+  ```bash
+  curl -sI --http2 https://<domain>/health | head -1
+  ```
+
+  Expected: `HTTP/1.1 200 OK` (with HTTP/2 on, it would be `HTTP/2 200`).
+- [ ] **3. A deploy with no changes stays that way.** Run the Deploy workflow for `ucb-stage2` again. Expected: the
+  plan job's summary says no changes, and nothing to approve.
