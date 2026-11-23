@@ -1829,8 +1829,8 @@ their hashed names, with no CDN (D296).
     administrator applies its pipeline root, whose roles are what let a job into AWS.
   - **Settings and secrets.** An environment's non-secret settings (the museums, `ALLOWED_CIDRS`, `ETL_CIDRS`,
     `ADMIN_CIDRS`, `ALERT_EMAIL`, `WEB_COUNT` …) are in SSM Parameter Store in its account, not in the public
-    repository; changing one is an admin action that the next deploy picks up (D273). One parameter per setting,
-    under `/serena-<env>/settings/` (DP10): `./serena aws settings push` writes a new environment's from the `.conf`
+    repository; changing one is an admin action that the next deploy picks up (D273). At first one parameter per
+    setting, under `/serena-<env>/settings/` (DP10); now one document (below): `./serena aws settings push` writes a new environment's from the `.conf`
     and `.local.conf` on the admin's computer, showing them and asking first, `settings show` lists them and marks
     those the files there disagree with, and `settings delete` removes them once the environment is destroyed.
     **SSM is the one copy** (decided November 20, 2026): Ops wants to change a setting in the AWS console without
@@ -1838,7 +1838,19 @@ their hashed names, with no CDN (D296).
     has the environment's settings; `./serena aws settings set SETTING [VALUE]` changes one setting in SSM and in the
     `.local.conf` here, and nothing else; `./serena aws settings pull` brings the `.local.conf` here up to date with
     SSM. `pull` and `show` run as the deployer, which only reads; `push`, `set` and `delete` as `ADMIN_PROFILE` where
-    the environment has one (checklist section 68). An environment
+    the environment has one (checklist section 68). **One document** (decided November 22, 2026, as the BMU's of
+    November 21, which Ops tried on its QA and were happy with): Ops mostly edit the values and want to see them
+    together, so the settings are one String parameter, `/serena-<env>/settings/all`, with one `NAME="value"` line per
+    setting and comments, edited in the AWS console; SSM keeps its versions and CloudTrail who saved them, and a
+    change still reaches AWS only through an approved pipeline run, whose plan is the review. It is read line by line
+    as data, never sourced (Ops's text would otherwise run in the pipeline's build), and a line that isn't a known
+    setting's `NAME="value"`, or a value with `"`, `$`, `` ` `` or `\`, stops every command with the line's number;
+    a read that AWS refuses or throttles stops the command too, never counting as "no settings". `settings push` only
+    adds what SSM doesn't have; `set` rewrites one line, keeping the rest, and stops if the document's version
+    changed while it worked; `REAL_DATA_ACCOUNT` stays a parameter of its own. `settings migrate` moves an
+    environment from one parameter per setting (`ucb-stage2`), from SSM's values, deleting the old parameters only
+    once the document reads back. The name is under `settings/*`, so no IAM policy changes (checklist section 71).
+    An environment
     with `SETTINGS=ssm` (every pipeline environment says so in its `.conf`) has `./serena aws` read every setting
     from SSM but the profile, a rehearsal's administrator profile, the region and the name, in the build, a
     break-glass deploy and `status` alike; its files are then only a copy, which `settings pull` updates. Reading them needs only
