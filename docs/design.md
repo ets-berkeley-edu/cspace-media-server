@@ -2142,10 +2142,10 @@ The F numbers follow the team's list of follow-ups.
   which gives it the next refresh date and the ETL list's name. The watchdog's deadline no longer depends on the
   refresh date: a refresh is due by the first deadline after it starts (decided November 10, 2026, see Watchdog and
   alerts).
-- **Deploy pipeline prerequisites (D268 to D277).** From Ops: whether the production ETL server (cspace-prod-01)
-  has an EC2 instance profile, and in which AWS account (D275); the break-glass permission set (D276); whether the
-  account already has GitHub's OIDC provider (DP2); and a read-only permission set with which the second reviewer
-  reads the plan's build log (DP6). For the repository: a second person with reviewer rights on its GitHub
+- **Deploy pipeline prerequisites (D268 to D277).** From Ops: which AWS account the production ETL server's EC2
+  instance profile is in (the server has one, as the team's host inventory showed on November 20, 2026; D275); the
+  break-glass permission set (D276); whether the account already has GitHub's OIDC provider (DP2); and a read-only
+  permission set with which the second reviewer reads the plan's build log (DP6). For the repository: a second person with reviewer rights on its GitHub
   environments (D272).
 - **Audit retention policy (D99).** Before production, ask the campus information security office (and records
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
