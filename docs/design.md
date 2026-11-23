@@ -1815,7 +1815,12 @@ their hashed names, with no CDN (D296).
     "Prevent self-review" unchecked on `<env>`. Production never allows it. The plan job's summary in Actions shows only the counts (to add, change and destroy) and a link to the build
     in the AWS console, which has no account number in it; the reviewer signs in to AWS and reads the plan there before
     approving (DP6). The roles' ARNs are environment secrets, so the account number is masked in the logs. Production
-    takes only a commit already deployed to pre-production: its workflow checks GitHub's deployments first. GitHub
+    takes only a commit already deployed to pre-production: its workflow checks GitHub's deployments first. As built
+    (November 20, 2026): production (`ucb-prod`) names its pre-production environment with `PREPRODUCTION` in its
+    committed settings file (for now `ucb-stage2`, the QA environment; never in a `.local.conf`, so changing it is a
+    reviewed change), and the workflow's first job, with no GitHub environment and no AWS sign-in, refuses a commit
+    with no deployment there whose latest status is success (`deploy/pipeline/check-preproduction.sh`). GitHub records
+    that deployment when the pre-production run's approved apply job ends. GitHub
     makes an environment without rules the first time a job names it, so an environment's rules are set before the
     administrator applies its pipeline root, whose roles are what let a job into AWS.
   - **Settings and secrets.** An environment's non-secret settings (the museums, `ALLOWED_CIDRS`, `ETL_CIDRS`,

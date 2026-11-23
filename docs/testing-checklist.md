@@ -3047,6 +3047,49 @@ assume that checkout is `~/dev/src/rtl/cspace-media-server`.
 
   Expected: the environment's status, with no sign-in message.
 
+## 67. Production deploys only what QA deployed first (10 minutes; after merging the pull request that adds `ucb-prod`)
+
+What it checks: production's deploy pipeline takes only a commit that was already deployed to its pre-production
+environment. `deploy/environments/ucb-prod.conf` names that environment, `PREPRODUCTION=ucb-stage2` (the QA
+environment), and the Deploy workflow's first job, `preproduction`, refuses any other commit
+(`deploy/pipeline/check-preproduction.sh`). That job names no GitHub environment and doesn't sign in to AWS, so a
+refused run never reaches production. CI checks the job's logic against a fake GitHub API
+(`test_production_takes_only_a_commit_deployed_to_pre_production` in `backend/tests/test_deploy.py`); this checks it
+against GitHub's real deployments.
+
+Only the refusal is checked here. **Don't start a `ucb-prod` deploy at a commit QA has deployed until production's
+GitHub environments exist** (`ucb-prod-plan` and `ucb-prod`, with their rules): the check would pass, and GitHub would
+create `ucb-prod-plan` with no rules when the plan job names it. The accepted case is checked at production's first
+deploy.
+
+You need the GitHub CLI (`gh`), signed in as a user who can run the repository's workflows. Nothing here uses AWS.
+Run the commands from your clone of this repository, on `main`, after the pull request is merged and pulled.
+
+- [ ] **1. Run a production deploy at a commit QA hasn't deployed.** Right after the merge, `main`'s latest commit is
+  the merge, which isn't on QA yet. Start the Deploy workflow for `ucb-prod`:
+
+  ```bash
+  cd <your clone> && git switch main && git pull && gh workflow run deploy.yml --ref main -f environment=ucb-prod
+  ```
+
+  Expected: `Created workflow_dispatch event for deploy.yml at main`.
+- [ ] **2. Watch it be refused.** Wait about a minute, then open the run:
+
+  ```bash
+  cd <your clone> && gh run list --workflow deploy.yml --limit 1
+  ```
+
+  Expected: the run's status is `failure`. Open it (Actions › Deploy, the latest run). The job `preproduction` failed
+  with `Commit <the merge commit> hasn't been deployed to ucb-stage2 successfully (0 attempt(s) there).` and
+  `Deploy it to ucb-stage2 first, then run this deploy again.`; the run's summary says
+  ``Refused: commit `<first 12 characters>` hasn't been deployed to `ucb-stage2` first.``; the jobs `plan` and `apply`
+  were skipped.
+- [ ] **3. No production GitHub environment was made.** Settings › Environments: there is no `ucb-prod-plan` and no
+  `ucb-prod` (unless you created them yourself, with their rules, beforehand).
+- [ ] **4. QA isn't affected.** Deploy that commit to QA as usual (Actions › Deploy › Run workflow, `ucb-stage2`).
+  Expected: the job `preproduction` passes with `ucb-stage2 has no pre-production environment: any commit on main may
+  be deployed.`, and the plan and apply go on as before.
+
 ## 68. SSM is the settings' one copy: settings set and pull, on ucb-stage2 (15 minutes; from the pull request's branch)
 
 What it checks: Ops may now change a setting of a pipeline environment in SSM Parameter Store (in the AWS console)

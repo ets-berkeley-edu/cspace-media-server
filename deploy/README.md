@@ -97,6 +97,7 @@ their settings this way (it reads them in the build); personal-dev keeps its fil
 | `PROTECT_DATA` | `true` where the data matters (D192): see "Protecting data". |
 | `WEB_COUNT` | Web tasks: 1 in personal-dev, 2 elsewhere (D188). |
 | `ENV_LABEL` | Shown in the admin app's header. |
+| `PREPRODUCTION` | Production only (`ucb-prod.conf`): the environment whose successful deploy of a commit the deploy pipeline requires before it deploys that commit here. Only in the committed `.conf`. |
 | `ALERT_EMAIL` | Where alerts and alarms are emailed (D201). Only in the uncommitted `.local.conf`, so no address is in the repository: in personal-dev, your own; in QA and production, the team's mailing list. Empty: no email. After the deploy that subscribes it, `./serena aws confirm-alerts`. |
 
 **Once deployed, a museum's server never changes.** A museum's servability, recalls and cached files refer to the
@@ -257,7 +258,8 @@ no policy of its own; across accounts, on stage 2.
 
 ## A shared environment (stage 2, QA, production)
 
-`TERRAFORM_ROOT=shared` in the environment's settings (`deploy/environments/ucb-stage2.conf`). Its `.local.conf` holds
+`TERRAFORM_ROOT=shared` in the environment's settings (`deploy/environments/ucb-stage2.conf`, and production's
+`ucb-prod.conf`, whose comments list what its `.local.conf` needs). Its `.local.conf` holds
 what Ops and DevOps provide: `VPC_ID`, `APP_SUBNET_IDS` (private, behind the NAT gateway), `LB_SUBNET_IDS` (public),
 `CREATE_GATEWAY_ENDPOINTS`, `DOMAIN_NAME`, `APACHE_CIDRS`, `ETL_CIDRS` and `ADMIN_CIDRS` (D303, D293, D290, D291).
 
@@ -309,6 +311,9 @@ account, and Terraform runs only there, so its plans and logs never reach the pu
    A QA or dev environment may leave "Prevent self-review" unchecked if its committed `.conf` says
    `ALLOW_SELF_REVIEW=true` (D308; `ucb-stage2` does). Production never.
    They come first: the roles trust them, and GitHub makes an environment without rules the first time a job names it.
+   Production's committed `.conf` also names its pre-production environment, `PREPRODUCTION=ucb-stage2`: the
+   workflow's first job refuses a commit that hasn't been deployed there successfully, before any job names a GitHub
+   environment or signs in to AWS (`pipeline/check-preproduction.sh`).
 2. **Settings in SSM:** `SETTINGS=ssm` in the environment's files, then `./serena aws settings push --env <env>`.
 3. **The pipeline**, as the account's administrator: `./serena aws pipeline --env <env>`. It applies
    `terraform/pipeline` (state `serena/<SERENA_ENV_NAME>/pipeline.tfstate`): GitHub's OIDC provider, if the account

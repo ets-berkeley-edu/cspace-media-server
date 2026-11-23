@@ -250,6 +250,127 @@ def test_only_qa_and_dev_settings_files_allow_self_review() -> None:
     assert not {name for name in allowed if "prod" in name.lower()}
 
 
+def committed_setting(conf: Path, name: str) -> str | None:
+    values = re.findall(rf"^{name}=\"?([^\"\s#]*)", conf.read_text(), re.MULTILINE)
+    return values[-1] if values else None
+
+
+def test_production_is_protected_from_its_first_deploy() -> None:
+    """ucb-prod holds real data from its first deploy: the pipeline deploys it (settings in SSM), its data is protected,
+    and it takes only a commit already deployed to its pre-production environment, which exists."""
+    conf = ENVIRONMENTS / "ucb-prod.conf"
+    expected = {"SETTINGS": "ssm", "TERRAFORM_ROOT": "shared", "SIMULATED_CSPACE": "false", "PROTECT_DATA": "true",
+                "WAF": "true", "WEB_COUNT": "2", "ALLOW_SELF_REVIEW": None}
+    assert {name: committed_setting(conf, name) for name in expected} == expected
+    pre = committed_setting(conf, "PREPRODUCTION")
+    assert pre and pre != "ucb-prod" and (ENVIRONMENTS / f"{pre}.conf").is_file()
+
+
+def test_every_environment_the_deploy_workflow_offers_has_a_settings_file() -> None:
+    workflow = (DEPLOY.parent / ".github" / "workflows" / "deploy.yml").read_text()
+    options = re.search(r"^\s+options: \[([^\]]*)\]", workflow, re.MULTILINE)
+    assert options
+    offered = {name.strip() for name in options.group(1).split(",")}
+    assert "ucb-prod" in offered
+    assert offered <= {f.stem for f in committed_settings_files()}
+
+
+def test_the_deploy_workflow_checks_pre_production_before_anything_else() -> None:
+    """The check runs in a job with no GitHub environment and no AWS sign-in, and the plan job waits for it."""
+    workflow = (DEPLOY.parent / ".github" / "workflows" / "deploy.yml").read_text()
+    job = workflow[workflow.index("  preproduction:") : workflow.index("  plan:")]
+    assert "deploy/pipeline/check-preproduction.sh" in job
+    assert "environment:" not in job and "id-token" not in job and "configure-aws-credentials" not in job
+    plan = workflow[workflow.index("  plan:") : workflow.index("  apply:")]
+    assert re.search(r"^    needs: preproduction$", plan, re.MULTILINE)
+
+
+# A fake gh for check-preproduction.sh: the deployments' latest states in STATES (comma-separated, "-" for a
+# deployment with no status yet), its calls appended to CALLED.
+FAKE_GH = """#!/usr/bin/env bash
+echo "$*" >>"$CALLED"
+case "$2" in
+  repos/*/deployments\\?*) i=0; IFS=, read -ra states <<<"$STATES"
+    for s in "${states[@]}"; do [ -n "$s" ] && echo "https://api.example.test/statuses/$i/$s"; i=$((i + 1)); done ;;
+  https://api.example.test/statuses/*) s="${2%%\\?*}"; s="${s##*/}"; [ "$s" = - ] && echo "" || echo "$s" ;;
+  *) exit 1 ;;
+esac
+"""
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+def check_preproduction(tmp_path: Path, environment: str, states: str) -> subprocess.CompletedProcess[str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "gh").write_text(FAKE_GH)
+    (bin_dir / "gh").chmod(0o755)
+    env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "ENVIRONMENT": environment, "COMMIT": COMMIT,
+           "REPOSITORY": "owner/repo", "STATES": states, "CALLED": str(tmp_path / "called"),
+           "GITHUB_STEP_SUMMARY": str(tmp_path / "summary")}
+    # The program is this repository's own script, not outside input.
+    return subprocess.run([str(DEPLOY / "pipeline" / "check-preproduction.sh")],  # noqa: S603
+                          cwd=DEPLOY.parent, env=env, capture_output=True, text=True, check=False)
+
+
+@pytest.mark.parametrize(
+    ("states", "allowed"),
+    [
+        ("success", True),
+        ("failure,success", True),  # a later run at the same commit failed: it was still deployed once
+        ("", False),  # never deployed there
+        ("failure", False),
+        ("waiting,queued,-", False),  # waiting for its reviewer, or not started
+        ("in_progress", False),
+    ],
+)
+def test_production_takes_only_a_commit_deployed_to_pre_production(
+        tmp_path: Path, states: str, allowed: bool) -> None:
+    result = check_preproduction(tmp_path, "ucb-prod", states)
+    assert (result.returncode == 0) is allowed, result.stderr
+    pre = committed_setting(ENVIRONMENTS / "ucb-prod.conf", "PREPRODUCTION")
+    first_call = (tmp_path / "called").read_text().splitlines()[0]
+    assert f"sha={COMMIT}&environment={pre}&" in first_call
+    assert ("Refused" in (tmp_path / "summary").read_text()) is not allowed
+
+
+def test_an_environment_without_pre_production_takes_any_commit(tmp_path: Path) -> None:
+    result = check_preproduction(tmp_path, "ucb-stage2", "")
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "called").exists()
+
+
+@pytest.mark.parametrize(
+    ("committed", "local", "refusal"),
+    [
+        ("PREPRODUCTION=qa", "", None),
+        ("PREPRODUCTION=prod", "", "must name another environment"),  # itself
+        ("PREPRODUCTION=nowhere", "", "must name another environment"),
+        ("", "PREPRODUCTION=qa", "goes only in"),  # the workflow reads only the committed file
+    ],
+)
+def test_preproduction_is_another_environment_named_in_the_committed_file(
+        tmp_path: Path, committed: str, local: str, refusal: str | None) -> None:
+    (tmp_path / "qa.conf").write_text("AWS_PROFILE=p\nAWS_REGION=us-west-2\nSERENA_ENV_NAME=qa\n")
+    (tmp_path / "prod.conf").write_text(f"AWS_PROFILE=p\nAWS_REGION=us-west-2\nSERENA_ENV_NAME=prod\n{committed}\n")
+    if local:
+        (tmp_path / "prod.local.conf").write_text(local + "\n")
+    load_env = shell_function((DEPLOY / "aws.sh").read_text(), "load_env")
+    # Stops just after the PREPRODUCTION checks: the rest of load_env needs the account.
+    script = (f'die() {{ echo "die: $*"; exit 1; }}\nENV_DIR="{tmp_path}"; ENV=prod; CMD=settings\n'
+              + load_env.replace('  : "${AWS_PROFILE:?', '  echo checked; return 0\n  : "${AWS_PROFILE:?', 1)
+              + "\nload_env\n")
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)  # noqa: S603, S607
+    if refusal:
+        assert result.returncode == 1 and refusal in result.stdout
+    else:
+        assert result.returncode == 0 and "checked" in result.stdout, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("environment", ["../ucb-prod", "UCB-PROD", "no-such-environment"])
+def test_the_pre_production_check_refuses_a_name_that_isnt_an_environment(tmp_path: Path, environment: str) -> None:
+    assert check_preproduction(tmp_path, environment, "success").returncode != 0
+
+
 def shell_function(aws_sh: str, name: str) -> str:
     """One function of deploy/aws.sh, from its "name() {" line to the closing brace at the start of a line."""
     match = re.search(rf"^{name}\(\) {{.*?^}}$|^{name}\(\) {{[^\n]*}}$", aws_sh, re.MULTILINE | re.DOTALL)

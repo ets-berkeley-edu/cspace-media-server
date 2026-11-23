@@ -14,7 +14,7 @@ variable "region" {
 }
 
 variable "environment" {
-  description = "The ./serena aws environment (personal-stage2, ucb-stage2): the GitHub environments' names (<environment>-plan and <environment>) and the pipeline's (pipeline-<environment>-...)."
+  description = "The ./serena aws environment (personal-stage2, ucb-stage2, ucb-prod): the GitHub environments' names (<environment>-plan and <environment>) and the pipeline's (pipeline-<environment>-...)."
   type        = string
 
   validation {

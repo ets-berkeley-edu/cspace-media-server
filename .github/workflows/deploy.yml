@@ -15,7 +15,7 @@ on:
       environment:
         description: "The environment (deploy/environments/<name>.conf)"
         type: choice
-        options: [personal-stage2, ucb-stage2]
+        options: [personal-stage2, ucb-stage2, ucb-prod]
         required: true
 # Only the jobs that sign in to AWS get an OIDC token (id-token: write, below).
 permissions:
@@ -25,7 +25,26 @@ concurrency:
   group: deploy-${{ inputs.environment }}
   cancel-in-progress: false
 jobs:
+  preproduction:
+    # Production takes only a commit already deployed to its pre-production environment (PREPRODUCTION in its
+    # committed settings file). No GitHub environment and no AWS sign-in here, so a refused run touches neither.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, deployments: read }
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Check the commit was deployed to pre-production first
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          COMMIT: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: deploy/pipeline/check-preproduction.sh
+
   plan:
+    needs: preproduction
     # The environment <env>-plan takes only main, so a run from another branch never gets this far (DP9).
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
