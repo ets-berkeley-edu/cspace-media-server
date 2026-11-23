@@ -49,6 +49,7 @@ required) lists what runs today on the hosts of the legacy webapps, Solr, the ET
 | `backend/devtools/` | Local-only tools: seeding the AWS stand-in, and a fake ETL |
 | `docker-compose.yml`, `serena` | The local stack and its script (`./serena help`) |
 | `deploy/` | The AWS deployment: the production image, Terraform, `./serena aws` and the deploy pipeline's builds (`deploy/README.md`) |
+| `deploy/ssm-not-sops.md` | Why deployment settings are in SSM Parameter Store, not in the repository with SOPS |
 | `.github/workflows/` | CI (`ci.yml`), the weekly dependency audit (`audit.yml`) and the secret scan (`security.yml`) |
 
 ## Run it locally

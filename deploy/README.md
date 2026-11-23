@@ -106,6 +106,8 @@ come before the deployer role exists (or make it); `settings pull` and `show` on
 it. The deploy pipeline's environments keep
 their settings this way (it reads them in the build); personal-dev keeps its files (D277).
 
+Why SSM, and not a SOPS file in this repository as Ops first suggested: [Why SSM Parameter Store, not SOPS](ssm-not-sops.md).
+
 **Settings** (in `<env>.conf`, or in the uncommitted `<env>.local.conf`, which wins; with `SETTINGS=ssm`, in SSM):
 
 | Setting | What it is |
