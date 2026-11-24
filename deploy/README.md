@@ -290,6 +290,15 @@ no policy of its own; across accounts, on stage 2.
 what Ops and DevOps provide: `VPC_ID`, `APP_SUBNET_IDS` (private, behind the NAT gateway), `LB_SUBNET_IDS` (public),
 `CREATE_GATEWAY_ENDPOINTS`, `DOMAIN_NAME`, `APACHE_CIDRS`, `ETL_CIDRS` and `ADMIN_CIDRS` (D303, D293, D290, D291).
 
+Production's VPC is Ops's production VPC, the one the production webapps host is in (`docs/design.md`, Infrastructure
+and operations › Network), once Ops has added its two private subnets, NAT gateway and their route table:
+`APP_SUBNET_IDS` are those private subnets, `LB_SUBNET_IDS` its two public ones, and
+`CREATE_GATEWAY_ENDPOINTS=true`, since the VPC has a gateway endpoint for S3 but none for DynamoDB (a route table takes
+only one endpoint per service, so Ops leaves its S3 endpoint off the private route table). The production webapps
+host, Apache and the ETL server in one, is in a public subnet of that VPC with its own fixed public address: it
+reaches the load balancer from that address, not through the NAT gateway, so `APACHE_CIDRS` and `ETL_CIDRS` both list
+it. Change them with `settings set` (Settings in SSM Parameter Store, above); the next pipeline run applies them.
+
 1. `./serena aws deploy` makes the image repositories and the certificate for `DOMAIN_NAME`, prints the certificate's
    DNS validation record and stops (TQ4). DevOps adds the record in campus DNS once; ACM renews the certificate after.
 2. Once the certificate is issued, `./serena aws deploy` builds the rest and prints the load balancer's own name:
@@ -441,16 +450,17 @@ The shared root (`deploy/terraform/shared/`, D302): the split (D289 to D301). St
 environment (EN1), in Ops's VPC (D303). It starts with only the simulator museum, deployed by `./serena aws` as the
 stage 2 deployer (D300, TQ8; checklist section 50), and then gets PAHMA's QA records (Lyrasis's QA tenant) through the
 deploy pipeline (D268), with data protection on. Production has the same shape, with PAHMA's production CollectionSpace
-and the production ETL (Jira CSW-1027). Stage 1 (CS-9523) ran in the UC Berkeley test account from the personal root,
+and the production ETL (Jira CSW-1027), in Ops's production VPC beside the production webapps host (A shared
+environment, above). Stage 1 (CS-9523) ran in the UC Berkeley test account from the personal root,
 like the personal-dev diagram above, and was destroyed on October 31, 2026.
 
 ```mermaid
 flowchart LR
   subgraph callers["Callers"]
     visitors["Visitors: Glimmer pages and browsers"]
-    apache["Apache on webapps-qa: proxies the legacy image paths (APACHE_CIDRS)"]
+    apache["Apache on webapps-qa (production: the webapps host, from its own public address): proxies the legacy image paths (APACHE_CIDRS)"]
     testers["Testers and admins, on campus networks or the VPN (ADMIN_CIDRS)"]
-    etl["The ETL server (ETL_CIDRS)"]
+    etl["The ETL server (ETL_CIDRS; in production the same webapps host and address)"]
     deployer["./serena aws while only the simulator museum; then the deploy pipeline (D268); admins set secrets"]
   end
 
@@ -477,7 +487,7 @@ flowchart LR
         worker["ECS Fargate service: the worker"]
         sim["Simulated CollectionSpace and fake ETL: the simulator museum only (D300)"]
       end
-      gw["Gateway endpoints: S3, DynamoDB (Ops's, or Serena's if missing)"]
+      gw["Gateway endpoints: S3, DynamoDB (Serena's with CREATE_GATEWAY_ENDPOINTS=true, as in production; else Ops's)"]
     end
     subgraph data["Data: protected once it holds real records (PROTECT_DATA=true)"]
       ddb[("DynamoDB: nine tables")]
