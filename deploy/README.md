@@ -125,7 +125,7 @@ Why SSM, and not a SOPS file in this repository as Ops first suggested: [Why SSM
 | `WEB_COUNT` | Web tasks: 1 in personal-dev, 2 elsewhere (D188). |
 | `ENV_LABEL` | Shown in the admin app's header. |
 | `PREPRODUCTION` | Production only (`ucb-prod.conf`): the environment whose successful deploy of a commit the deploy pipeline requires before it deploys that commit here. Only in the committed `.conf`. |
-| `ALERT_EMAIL` | Where alerts and alarms are emailed (D201). Only in the uncommitted `.local.conf`, so no address is in the repository: in personal-dev, your own; in QA and production, the team's mailing list. Empty: no email. After the deploy that subscribes it, `./serena aws confirm-alerts`. |
+| `ALERT_EMAIL` | Where alerts and alarms are emailed (D201). Only in the uncommitted `.local.conf`, so no address is in the repository: in personal-dev, your own; in QA and production, Richard's until a team mailing list takes its place. Empty: no email. After the deploy that subscribes it, `./serena aws confirm-alerts`. |
 
 **Once deployed, a museum's server never changes.** A museum's servability, recalls and cached files refer to the
 records on the server it was deployed for. So `deploy`, `plan`, `pause`, `resume` and `allow-my-ip` stop before
@@ -538,7 +538,7 @@ and production by the shared root (D302); within a root, only the settings diffe
 | Data protection (`PROTECT_DATA`) | Off: throwaway | Off: destroyed when stage 1 passes | Off with the simulator only; on with real data |
 | App tasks (`WEB_COUNT`) | 1 | 2 | 2 (D188) |
 | Who can reach it | Richard's addresses (`ALLOWED_CIDRS`) | Campus networks and the VPN | The Apache hosts (`APACHE_CIDRS`), the ETL servers for `/etl/` (`ETL_CIDRS`), campus and VPN for `/admin` (`ADMIN_CIDRS`); all of them for the image paths (TQ6) |
-| Alerts (`ALERT_EMAIL`) | Richard | Richard | The team's mailing list |
+| Alerts (`ALERT_EMAIL`) | Richard | Richard | Richard, until a team mailing list takes his place |
 | Settings | `deploy/environments/personal-dev.conf` and `.local.conf` | `deploy/environments/ucb-stage1.conf` and `.local.conf` (`--env ucb-stage1`) | `deploy/environments/ucb-stage2.conf` and `.local.conf` (`--env ucb-stage2`); SSM Parameter Store with the pipeline (D273) |
 | Deployed by | `./serena aws` from Richard's Mac | `./serena aws`, no pipeline (D269) | `./serena aws` while it uses only the simulator; then the deploy pipeline (D268 to D272), or a break-glass deploy (D276) |
 
