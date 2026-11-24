@@ -6,8 +6,8 @@ Watchdog and alerts, Admin actions on refreshes, Infrastructure and operations);
 document wins.
 
 **Draft** (November 1, 2026, F2; brought up to date with the deploy pipeline, settings in SSM and the ETL's token
-read on November 3, 2026). To review with the DevOps team (F7). Still open: who is told (the Notifications list open
-question), and the break-glass permission set, which Operations hasn't made yet (D276).
+read on November 3, 2026; the ETL's token file and who is told on November 23, 2026). To review with the DevOps team
+and Operations (F7). Still open: the break-glass permission set, which Operations hasn't made yet (D276).
 
 ## The principle
 
@@ -31,15 +31,15 @@ file Serena couldn't check.
 - **The ETL job's report**, which the ETL team sees. It reports each refresh's outcome.
 - **People**: a curator or a portal user reporting a missing image.
 
-**Who is told:** the team's mailing list, once it exists (open question "Notifications list"; until then the alert
-email goes to Richard). Whoever acts on an alert acknowledges it on the Alerts page, so the others see it's handled.
+**Who is told:** Richard, in QA and production (each environment's `ALERT_EMAIL`; decided November 23, 2026), until a
+team mailing list takes his place. Whoever acts on an alert acknowledges it on the Alerts page, so the others see it's handled.
 
 ## First look
 
 - **Admin app**, Overview: each museum's current and pending refresh. Then the refresh's page (What went wrong, What
   admins did, the check's result), Alerts, and the Audit log for who did what.
 - **`./serena aws status --env <env>`**: the running tasks, the image, image delivery, the alert email's subscription,
-  the alarms and any firing, each museum's secrets (set or NOT SET) and the ETL server's role that reads its token,
+  the alarms and any firing, each museum's secrets (set or NOT SET) and the ETL server's role that reads its token (if one does),
   and whether the pipeline deploys the environment.
 - **`./serena aws settings show --env <env>`**: the environment's settings, which a pipeline environment reads from
   SSM Parameter Store, not from the files on your computer (D273). It marks any the files there disagree with.
@@ -69,7 +69,7 @@ read, apart from setting secrets and settings: never deploy from your computer t
   - Refused at the door (the ETL job's report shows a 403 "Not from this address"): the ETL server's address changed
     or isn't in `ETL_CIDRS`. Correct `ETL_CIDRS` with `./serena aws settings set --env <env> ETL_CIDRS "<cidr>,<cidr>"` (or in the AWS console, Systems Manager › Parameter Store), then run the deploy
     pipeline (Deploys, below).
-  - The ETL couldn't read its token: see The ETL can't read its token, below.
+  - The ETL's token was missing or refused: see The ETL's token is missing or refused, below.
 - **Escalate:** the ETL team, when the ETL job itself failed or can't reach Serena.
 
 ### An ETL list check failed
@@ -119,12 +119,40 @@ read, apart from setting secrets and settings: never deploy from your computer t
 - **Do:** on Settings, name the Media record that holds the placeholder image's Blob (Media look up finds it). For
   PAHMA, the record has to exist in CollectionSpace first (issue #166).
 
-### The ETL can't read its token
+### The ETL's token is missing or refused
 
-Where a museum's ETL server reads its token with its own role (D275; `deploy/README.md`, The ETL reads its token with
-its own role), a failed read stops the ETL's call to Serena, and the deadline alert follows.
+The ETL sends each museum's token from a file on the ETL server, `~/.serena/<museum>.token`, readable only by the
+ETL's user (cspace-solr-ucb's `utilities/README.md`, Serena token file). The ETL reads only a token file today, so
+that is how QA and production run. A token problem stops the ETL's call to Serena, never the Solr refresh, and the
+deadline alert follows.
 
-- **Means:** the ETL job's report shows an `AccessDenied` (or `AccessDeniedException`) from Secrets Manager or KMS.
+- **Means:** one of these in the ETL's Serena log (`<museum>.serena.log` in the ETL's Solr log folder) or in its
+  failure email ("PROBLEM <museum> Serena refresh failed", to the ETL's `SERENA_CONTACT`):
+  - `Serena <museum>: skipped (no SERENA_BASE_URL or no token file for <museum>)`: the step didn't run, and nothing
+    is emailed. The deadline alert is the first sign.
+  - `FAILED: ping: 401` with `Unknown token` (or `No token`): Serena doesn't know the token in the file. Most often
+    it was rotated twice since the file was last changed, or it's another environment's token.
+  - `FAILED: ping: the token belongs to '<other>'`: another museum's token.
+  - `must be readable only by its owner (mode 600)` or `is empty`: the file itself is wrong.
+- **Check:** `./serena aws status --env <env>`: is the museum's ETL token set? The Audit log: when it was last
+  rotated. Ask the ETL team for the log lines above and for `ls -l ~/.serena` on the ETL server (never the file's
+  contents).
+- **Do:**
+  - A token Serena doesn't know, or a missing, empty or wrongly readable file: `./serena aws etl-token <museum>
+    --env <env> --show` rotates the token and shows the new one. Hand it to the ETL team with a one-time secret link,
+    never in an email or a chat; they replace the file's contents as the Serena token file section says. The token
+    that was in the file before keeps working until the next rotation.
+  - `skipped (no SERENA_BASE_URL …)` with the token file in place: the ETL release on the server has an empty
+    `SERENA_BASE_URL` (redeploying an older release does this). The ETL team deploys a release that sets it.
+  - Then bring Serena up to date for the day it missed, as for a refresh that never reached Serena (above): the ETL
+    team reruns the job, an admin applies a list from the ETL list script on Manual refresh, or the next day's
+    refresh catches up.
+- **Escalate:** the ETL team, for the token file and the job.
+
+**If a museum's ETL reads its token with the ETL server's role instead** (D275; `deploy/README.md`, The ETL reads
+its token with its own role; this needs a change to the ETL first): the ETL job's report shows an `AccessDenied` (or
+`AccessDeniedException`) from Secrets Manager or KMS.
+
 - **Check:**
   - `./serena aws status --env <env>`: is the museum listed with the ETL server's role, and is that the role the
     server runs as (Ops knows)? If it isn't listed, the museum isn't in `ETL_READER_ROLE_ARNS` (`settings show`).
@@ -133,10 +161,8 @@ its own role), a failed read stops the ETL's call to Serena, and the deadline al
   - Was the role deleted and made again under the same name? A policy naming the old role no longer matches it. Run
     the deploy pipeline: its plan should show the secret's and the key's policies changing, and applying it names
     the role as it is now.
-- **Do:**
-  - Correct `ETL_READER_ROLE_ARNS` with `settings set`, then run the deploy pipeline.
-  - Until the read works, the ETL can use a token file, the fallback: `./serena aws etl-token <museum> --env <env>
-    --show` rotates the token and shows it; give it to the ETL team (CSW-1027), who switch the ETL's token source.
+- **Do:** correct `ETL_READER_ROLE_ARNS` with `settings set`, then run the deploy pipeline. Until the read works,
+  the ETL can go back to a token file, as above.
 - **A role that is to go:** remove its museum from `ETL_READER_ROLE_ARNS` and deploy before Ops deletes the role. AWS
   refuses a key policy naming a role that no longer exists, so if the role is already gone, every deploy fails until
   the setting is removed.
@@ -196,7 +222,7 @@ at its own pace.
 | Secret | When | Command, then |
 | --- | --- | --- |
 | A museum's CollectionSpace service account | Its password changed (the `cspace-refused` alarm), or it may have leaked | Ask Lyrasis and the museum to change it, then `./serena aws cspace-secret <museum>` |
-| A museum's ETL token | It may have leaked, or the ETL's token file changes | `./serena aws etl-token <museum>`. If the museum's ETL reads its token with its role, the token isn't shown and nothing more is needed: the ETL's next run uses it, and the Audit log shows its calls with `which_key` current. Otherwise `--show` shows it: give it to the ETL team (CSW-1027). Rotate twice to retire the old one at once |
+| A museum's ETL token | It may have leaked, or the ETL's token file was lost | `./serena aws etl-token <museum> --show`, then hand the new token to the ETL team with a one-time secret link; they replace the token file's contents (cspace-solr-ucb's `utilities/README.md`, Serena token file). If the museum's ETL reads its token with its role instead, leave out `--show`: nothing more is needed, the ETL's next run uses it, and the Audit log shows its calls with `which_key` current. Rotate twice to retire the old one at once |
 | A museum's portal signing key (Cinefiles) | It may have leaked | `./serena aws portal-key <museum>`; give the key and its ID to Glimmer's team. Rotate twice to retire the old one at once |
 | The CloudFront signing key | It may have leaked | `./serena aws cdn-key`. In a pipeline environment it makes the key and stops: run the deploy pipeline, so CloudFront trusts the new key, then `cdn-key` again, so the app signs with it. Rotate twice to retire the old one at once |
 

@@ -1024,7 +1024,8 @@ alerts, acknowledged or not (decided October 20, 2026, D207 to D218):
   row has a red bar, the banner's colour, down its left edge.
 
 An alert is logged, and is emailed by the worker through one Amazon SNS
-topic per environment (`SERENA_ALERT_TOPIC_ARN`, encrypted with Serena's key) to the team's mailing list, the same
+topic per environment (`SERENA_ALERT_TOPIC_ARN`, encrypted with Serena's key) to the environment's alert address (in
+QA and production, Richard's until a team mailing list takes its place; decided November 23, 2026), the same
 topic the alarms use (see Infrastructure and operations). The address is a deploy setting kept out of the repository,
 and `./serena aws confirm-alerts` confirms the subscription (decided October 20, 2026, D201). Besides the watchdog's alerts, an admin's
 override of the delta threshold raises one, and so does an admin's change to the delta threshold or the audit retention
@@ -1813,7 +1814,8 @@ their hashed names, with no CDN (D296).
     (checklist section 56).
   - **Approval.** GitHub environments with protection rules, two per AWS environment (D272, amended November 2, 2026,
     DP9): `<env>-plan`, deployments from `main` only, no reviewer; and `<env>`, from `main` only, with required
-    reviewers (Richard and one other person) and "prevent self-review", so whoever started the deploy can't approve
+    reviewers (Richard and one other person; for production, someone from Ops, decided November 23, 2026) and
+    "prevent self-review", so whoever started the deploy can't approve
     it. QA and dev environments may allow self-review (D308, decided November 5, 2026): `ALLOW_SELF_REVIEW=true` in
     the environment's committed settings file (never its `.local.conf`, so allowing it is a reviewed change), and
     "Prevent self-review" unchecked on `<env>`. Production never allows it. The plan job's summary in Actions shows only the counts (to add, change and destroy) and a link to the build
@@ -1869,6 +1871,9 @@ their hashed names, with no CDN (D296).
     Secrets Manager on each run (cross-account through the secret's resource policy and the KMS key's policy,
     read-only, that one secret), so no person sees or copies it and a rotation needs no change on the ETL server; a
     token file stays the fallback (D275). The ETL's side is decided in the CSpace ETL Process project (Jira CSW-1027).
+    As built (November 23, 2026), the ETL reads only a token file, so QA and production use one until the ETL can
+    read with its role. Production's ETL server is in Serena's AWS account, so its role would need no cross-account
+    access.
     Serena's side (decided November 2 and 3, 2026, DP15): on the shared root, the setting `ETL_READER_ROLE_ARNS`
     (SSM, like `CSPACE_TENANTS`: `"pahma=arn:aws:iam::<account>:role/<name> …"`) names each museum's ETL server's
     role, in Serena's account or another. For each museum named, its `etl-tokens` secret gets a resource policy
@@ -2060,9 +2065,10 @@ The F numbers follow the team's list of follow-ups.
   settings), and whether the unwatermarked copy of a watermarked size should be stored at all. To settle before
   watermarking is built.
 - **F2. Recovery runbook.** Drafted in `docs/runbook.md` (November 1, 2026; brought up to date with the deploy
-  pipeline, settings in SSM and the ETL's token read on November 3, 2026): what an admin does for each alert, each
-  alarm, a failed refresh, the ETL's failed token read, a failed deploy and the break-glass deploy. Still open: its review with the DevOps team (F7), who is told
-  (Notifications list), and links to it from the admin app's alerts.
+  pipeline, settings in SSM and the ETL's token read on November 3, 2026; the ETL's token file and who is told on
+  November 23, 2026): what an admin does for each alert, each alarm, a failed refresh, a missing or refused ETL token,
+  a failed deploy and the break-glass deploy. Still open: its review with the DevOps team and Operations (F7), and
+  links to it from the admin app's alerts.
 - **F3. "Fetch again now".** Whether the admin app could pick up a Media record's current image at once, and whether
   the rules deciding what is restricted could live in one place shared by Serena and the ETL. Possibly a dead end.
 - **F6. API documentation.** Whether the admin API is documented the same way as the ETL API.
@@ -2108,8 +2114,6 @@ The F numbers follow the team's list of follow-ups.
 - **Tighter signed URLs.** Single-use URLs were assessed and not adopted (October 20, 2026; see Signed URLs).
   Whether to shorten a signed URL's life (15 to 30 minutes today) and whether to tie it to the requester's IP
   address: to decide, weighing viewers whose address changes and the browser reuse that the 15-minute windows allow.
-- **Notifications list.** Which team mailing list receives alerts and alarms in QA and production (each environment's
-  `ALERT_EMAIL`; in personal-dev, Richard's address).
 - **How far a failed update got.** Serena records an update's counts only when it succeeds. Recording its progress as
   it goes ("deleted 120 of 120, written 9,000 of 27,341") would let a refresh's page and the ETL's report say how
   much of the new ETL list is served after an `update_failed` (October 28, 2026).
@@ -2119,9 +2123,9 @@ The F numbers follow the team's list of follow-ups.
   An end-to-end check (a few public and restricted files fetched after each update) is better as Serena's own
   monitoring than the ETL's (October 28, 2026).
 - **How the ETL job tells admins.** The daily sequence says the job "reports the outcome", but not where. Proposed:
-  the job's own log and email for everything, with Serena's notification list copied (it works when Serena is
+  the job's own log and email for everything, with Serena's alert address copied (it works when Serena is
   down), and an ETL API call that raises an alert in Serena for what only the ETL can see (a mismatch above). To
-  agree with the ETL team; it depends on the notifications list (October 28, 2026).
+  agree with the ETL team (October 28, 2026).
 - **ETL-side names.** With "ETL list" and "ETL list script" in the admin app and this document (the script's name
   decided October 28, 2026, Richard), proposed for the ETL team, on their timeline: the same name for the script in
   the ETL's own repository, and the file as `etl-list.<tenant>.<YYYY-MM-DD>.tsv`.
@@ -2142,11 +2146,9 @@ The F numbers follow the team's list of follow-ups.
   which gives it the next refresh date and the ETL list's name. The watchdog's deadline no longer depends on the
   refresh date: a refresh is due by the first deadline after it starts (decided November 10, 2026, see Watchdog and
   alerts).
-- **Deploy pipeline prerequisites (D268 to D277).** From Ops: which AWS account the production ETL server's EC2
-  instance profile is in (the server has one, as the team's host inventory showed on November 20, 2026; D275); the
-  break-glass permission set (D276); whether the account already has GitHub's OIDC provider (DP2); and a read-only
-  permission set with which the second reviewer reads the plan's build log (DP6). For the repository: a second person with reviewer rights on its GitHub
-  environments (D272).
+- **Deploy pipeline prerequisites (D268 to D277).** From Ops: the break-glass permission set (D276);
+  whether the account already has GitHub's OIDC provider (DP2); a read-only permission set with which the second
+  reviewer reads the plan's build log (DP6); and who from Ops is production's second reviewer (D272).
 - **Audit retention policy (D99).** Before production, ask the campus information security office (and records
   management, if needed) whether 90 days is long enough for an admin audit log; if not, raise the default and the
   lowest choice to match.
