@@ -3319,3 +3319,74 @@ cd <your clone> && git switch main && git pull origin main && aws sso login --ss
   Expected: the plan job ends with no changes from the settings (nothing to approve), so the build read the same
   values from the document as before. (November 23, 2026: the plan job ended with no changes and the apply job was
   skipped.)
+
+## 72. Production uses DevOps's wildcard certificate (30 minutes over two pipeline runs, with Ops as reviewers; after merging the pull request)
+
+What it checks: with `CERTIFICATE_ARN` (D310), the load balancer takes a certificate DevOps already has in ACM, their
+wildcard for the campus domain, instead of one Serena requests and DevOps validates with a DNS record. CI checks the
+script's side against a stand-in AWS CLI (`backend/tests/test_deploy.py`, from
+`test_the_certificate_must_cover_the_domain` on): the name check, a certificate that isn't issued, an ARN in another
+region or account, and when Serena's own certificate is deleted. This checks it in production, where Serena's own
+certificate was requested but never validated, so the first run deletes it and the second deploys with DevOps's.
+Stage 2 keeps its own certificate: its `DOMAIN_NAME` isn't a name the wildcard covers. No IAM policy changes: the
+deployer already reads every certificate (`acm:DescribeCertificate`), and deletes only those tagged `project=serena`.
+
+Run the commands from a checkout of `main` that has your `deploy/environments/ucb-prod.local.conf`, signed in:
+
+```bash
+cd <your clone> && git switch main && git pull origin main && aws sso login --sso-session berkeley
+```
+
+- [ ] **0. Stage 2 is unchanged.** Start the Deploy workflow for `ucb-stage2` from `main` (production deploys only a
+  commit stage 2 has deployed):
+
+  ```bash
+  cd <your clone> && gh workflow run deploy.yml --ref main -f environment=ucb-stage2
+  ```
+
+  Expected: "Image repositories and certificate: no changes", and in Serena's plan only the image change (the task
+  definitions, for the new commit), nothing on the load balancer's listener. Approve it.
+- [ ] **1. DevOps's certificate.** Ask Ops for the wildcard's ARN, then look at it:
+
+  ```bash
+  cd <your clone> && aws acm describe-certificate --profile serena-stage2-deploy --region us-west-2 --certificate-arn <the ARN> --query 'Certificate.[Status,Type,SubjectAlternativeNames]' --output text
+  ```
+
+  Expected: `ISSUED`, `AMAZON_ISSUED` (ACM renews it; `IMPORTED` would mean DevOps renew it by hand, so stop and ask
+  them) and the wildcard for the campus domain production's `DOMAIN_NAME` is in.
+- [ ] **2. A wrong value is refused.**
+
+  ```bash
+  cd <your clone> && ./serena aws settings set --env ucb-prod CERTIFICATE_ARN not-an-arn
+  ```
+
+  Expected: `CERTIFICATE_ARN must be a certificate's ARN in ACM (arn:aws:acm:<region>:<account>:certificate/<id>).`
+  and nothing written.
+- [ ] **3. Set it.**
+
+  ```bash
+  cd <your clone> && ./serena aws settings set --env ucb-prod CERTIFICATE_ARN <the ARN>
+  ```
+
+  Expected: `  + CERTIFICATE_ARN=arn:aws:acm:us-west-2:…` and `Write this to SSM? The next deploy uses it. [y/N]`;
+  answer `y`. Then `./serena aws settings show --env ucb-prod` lists it with no difference from the files here.
+- [ ] **4. The first run deletes Serena's own certificate.** Ops start the Deploy workflow for `ucb-prod` (from their
+  computer or the GitHub page, as before). Expected: "Image repositories and certificate: 0 to add, 0 to change, 1 to
+  destroy" (the certificate for production's campus name, still `PENDING_VALIDATION`, or failed if more than 72 hours
+  old) and "Serena: not planned this run". A reviewer approves; the apply job ends "The registry is applied. Run the
+  deploy again for the rest".
+- [ ] **5. The second run checks DevOps's certificate, and plans the rest.** Ops start the workflow again. Expected:
+  "Image repositories and certificate: no changes", no "waits for its DNS validation record", and Serena's first full
+  plan. In the plan, the HTTPS listener's `certificate_arn` is the ARN from step 1. A reviewer approves.
+- [ ] **6. HTTPS answers with the wildcard.** Once Ops have pointed the campus name's record at the load balancer
+  (the apply prints its name), from a campus or VPN address:
+
+  ```bash
+  cd <your clone> && echo | openssl s_client -connect <production's campus name>:443 -servername <production's campus name> 2>/dev/null | openssl x509 -noout -subject -issuer
+  ```
+
+  Expected: the wildcard as the subject and `O=Amazon` in the issuer. Then `curl -s https://<production's campus
+  name>/health` answers `ok`.
+- [ ] **7. Nothing left over.** `aws acm list-certificates --profile serena-stage2-deploy --region us-west-2 --query
+  'CertificateSummaryList[].[DomainName,Status]' --output text` lists no certificate for production's campus name of
+  its own, only stage 2's and DevOps's.

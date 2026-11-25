@@ -1671,7 +1671,8 @@ their hashed names, with no CDN (D296).
   URLs are the same for every web task within a window, so browsers reuse images; it serves HTTP/2 and HTTP/3; viewers'
   addresses never reach S3's logs and links don't show the account ID; and there is one signing path.
   - **The app** is behind an internet-facing load balancer on a campus domain from DevOps, one per environment, with
-    an ACM certificate validated by DNS and renewed by AWS (D293, D294). Apache on the museums' webapps hosts
+    an ACM certificate that AWS renews: its own, validated by DNS (D293, D294), or one DevOps already has in ACM
+    (D310). Apache on the museums' webapps hosts
     reverse-proxies the legacy paths to it over HTTPS, so the URLs and the portals don't change (D290).
   - **Address rules** are at the load balancer: its security group admits only the Apache hosts, the ETL server and
     campus and VPN ranges; listener rules with source-address conditions send `/etl/` only from `ETL_CIDRS` and
@@ -1682,7 +1683,15 @@ their hashed names, with no CDN (D296).
     from the Apache hosts' addresses are limited by `X-Forwarded-For`, everything else by source address (D306).
   - **The certificate** is requested by `deploy/terraform/registry` (applied first by `./serena aws deploy`), which
     prints its DNS validation record and stops while it isn't issued; once DevOps has added the record, the next deploy
-    goes on (TQ4). The load balancer takes HTTPS only (TQ5), and HTTP/1.1 only (D309, decided November 22, 2026):
+    goes on (TQ4). With `CERTIFICATE_ARN` (D310, decided November 25, 2026), the load balancer takes instead a
+    certificate already in ACM, in the environment's region and account: DevOps's wildcard for the campus domain,
+    which covers both QA's and production's campus names and saves a validation record per environment. Then the
+    registry requests none, and the deploy goes on only if that certificate is issued and names `DOMAIN_NAME`, exactly
+    or as a wildcard for it (one label). Serena never changes or deletes it: the deployer's ACM writes need the
+    `project=serena` tag, which it doesn't have. A certificate Serena had requested before is deleted once the load
+    balancer no longer uses it (ACM refuses to delete one in use): the deploy that moves the listener keeps it, the
+    next one deletes it. DevOps's certificate must be one ACM issued, not one imported, which ACM doesn't renew. The
+    load balancer takes HTTPS only (TQ5), and HTTP/1.1 only (D309, decided November 22, 2026):
     HTTP/2 had been turned off on `ucb-stage2`'s load balancer outside Terraform, as UC Berkeley's Operations did on
     the BMU's, and the next deploy planned to turn it back on; `enable_http2 = false` keeps it off in every shared
     environment. Apache and CloudFront speak HTTP/1.1 to it anyway. Anyone its security group admits (the Apache hosts,

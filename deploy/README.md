@@ -288,7 +288,8 @@ no policy of its own; across accounts, on stage 2.
 `TERRAFORM_ROOT=shared` in the environment's settings (`deploy/environments/ucb-stage2.conf`, and production's
 `ucb-prod.conf`, whose comments list what its `.local.conf` needs). Its `.local.conf` holds
 what Ops and DevOps provide: `VPC_ID`, `APP_SUBNET_IDS` (private, behind the NAT gateway), `LB_SUBNET_IDS` (public),
-`CREATE_GATEWAY_ENDPOINTS`, `DOMAIN_NAME`, `APACHE_CIDRS`, `ETL_CIDRS` and `ADMIN_CIDRS` (D303, D293, D290, D291).
+`CREATE_GATEWAY_ENDPOINTS`, `DOMAIN_NAME`, `CERTIFICATE_ARN` (optional), `APACHE_CIDRS`, `ETL_CIDRS` and `ADMIN_CIDRS`
+(D303, D293, D310, D290, D291).
 
 Production's VPC is Ops's production VPC, the one the production webapps host is in (`docs/design.md`, Infrastructure
 and operations › Network), once Ops has added its two private subnets, NAT gateway and their route table:
@@ -301,8 +302,21 @@ it. Change them with `settings set` (Settings in SSM Parameter Store, above); th
 
 1. `./serena aws deploy` makes the image repositories and the certificate for `DOMAIN_NAME`, prints the certificate's
    DNS validation record and stops (TQ4). DevOps adds the record in campus DNS once; ACM renews the certificate after.
+   With `CERTIFICATE_ARN`, there is no such step (below).
 2. Once the certificate is issued, `./serena aws deploy` builds the rest and prints the load balancer's own name:
    DevOps points `DOMAIN_NAME` at it.
+
+**A certificate DevOps already has (D310).** `CERTIFICATE_ARN` is the ARN of a certificate in ACM, in the
+environment's region and account, such as DevOps's wildcard for the campus domain: the load balancer takes it in place
+of Serena's own, and the registry requests none. The deploy (or the pipeline's plan) stops unless it is `ISSUED` and
+names `DOMAIN_NAME`, exactly or as a wildcard one label up. It must be one ACM issued (ACM renews it), not an imported
+one. Serena never changes or deletes it. Set it with `./serena aws settings set --env <env> CERTIFICATE_ARN <arn>`;
+the ARN goes only in SSM (and the `.local.conf`), never in a committed file. If the environment had its own certificate:
+- **Still on the load balancer** (stage 2): the next run moves the listener to `CERTIFICATE_ARN`'s and keeps Serena's
+  own, saying so, since ACM won't delete a certificate in use; the run after deletes it (in the pipeline, a run that
+  changes only the image repositories and certificate).
+- **Never used** (production's, requested but never validated): the next run deletes it (in the pipeline, that run
+  changes only the registry), and the one after deploys the rest.
 3. With the simulator, the fake ETL calls the campus name from the private subnets, so its calls come from the NAT
    gateway's outbound address: list it in `ETL_CIDRS`.
 
@@ -478,7 +492,7 @@ flowchart LR
   subgraph account["UC Berkeley AWS account, us-west-2"]
     subgraph vpc["Ops's VPC across two availability zones (D303)"]
       subgraph public["Public subnets"]
-        alb["Internet-facing load balancer: HTTPS only, ACM certificate; listener rules for /etl/ and /admin (D291)"]
+        alb["Internet-facing load balancer: HTTPS only, ACM certificate (DevOps's wildcard, D310); listener rules for /etl/ and /admin (D291)"]
         waf["Regional WAF web ACL (D292, D306)"]
         nat["Ops's NAT gateway"]
       end

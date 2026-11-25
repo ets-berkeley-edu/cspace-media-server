@@ -714,6 +714,7 @@ def test_settings_set_with_no_value_removes_the_setting(tmp_path: Path) -> None:
     ("PROTECT_DATA yes", "PROTECT_DATA must be true or false"),
     ("TERRAFORM_ROOT other", "TERRAFORM_ROOT must be personal or shared"),
     ("WEB_COUNT two", "WEB_COUNT must be a number"),
+    ("CERTIFICATE_ARN media.museum.example.edu", "CERTIFICATE_ARN must be a certificate's ARN"),
     ("ENV_LABEL '$(whoami)'", "can't have"),
 ])
 def test_settings_set_refuses_what_it_cant_set(tmp_path: Path, args: str, message: str) -> None:
@@ -893,3 +894,98 @@ def test_settings_pull_and_show_run_as_the_deployer(sub: str, admin: bool) -> No
               'echo "$AWS_PROFILE"')
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)  # noqa: S603, S607
     assert result.stdout.strip() == ("admin" if admin else "deployer")
+
+
+# D310: a shared environment may use a certificate already in ACM (DevOps's) in place of the one ../registry requests.
+CERT_ARN = "arn:aws:acm:us-west-2:123456789012:certificate/0a1b2c3d-0000-4000-8000-000000000000"
+OWN_ARN = "arn:aws:acm:us-west-2:123456789012:certificate/99999999-0000-4000-8000-000000000000"
+CERT_FUNCTIONS = ("check_certificate_arn", "certificate_covers", "certificate_issued", "own_certificate_arn",
+                  "certificate_arn", "registry_domain")
+# A stand-in AWS CLI and Terraform: describe-certificate answers from STATUS, NAMES and IN_USE; the registry's state
+# holds OWN (empty: no certificate of its own).
+CERT_FAKES = """set -euo pipefail
+die() { echo "STOPPED: $*" >&2; exit 3; }
+settings_home() { echo SSM; }
+tf_init() { :; }
+tf() { [ -n "$OWN" ] && echo "$OWN" || return 1; }
+aws_() {
+  case "$*" in
+    *"--query Certificate.Status"*) [ "$STATUS" != missing ] || return 254; echo "$STATUS" ;;
+    *SubjectAlternativeNames*) echo "$NAMES" ;;
+    *InUseBy*) echo "$IN_USE" ;;
+    *) echo "unexpected: aws $*" >&2; return 1 ;;
+  esac
+}
+"""
+
+
+def run_certificate(body: str, **env: str) -> subprocess.CompletedProcess[str]:
+    aws_sh = (DEPLOY / "aws.sh").read_text()
+    functions = "\n".join(shell_function(aws_sh, name) for name in CERT_FUNCTIONS)
+    values = {"CERTIFICATE_ARN": CERT_ARN, "DOMAIN_NAME": "media.museum.example.edu", "AWS_REGION": "us-west-2",
+              "ACCOUNT_ID": "123456789012", "STATUS": "ISSUED", "NAMES": "*.museum.example.edu", "IN_USE": "0",
+              "OWN": "", **env}
+    # The functions are this repository's own deploy/aws.sh, not outside input; run where a file named like a
+    # certificate's name would show a wildcard being expanded.
+    return subprocess.run(["bash", "-c", f"{CERT_FAKES}{functions}\n{body}"], env={**os.environ, **values},  # noqa: S603, S607
+                          capture_output=True, text=True)
+
+
+@pytest.mark.parametrize(("names", "covers"), [
+    ("media.museum.example.edu", True),
+    ("*.museum.example.edu", True),
+    ("other.museum.example.edu\t*.museum.example.edu", True),
+    ("*.example.edu", False),  # a wildcard covers one label only
+    ("*.other.example.net", False),
+    ("museum.example.edu", False),
+    ("", False),
+])
+def test_the_certificate_must_cover_the_domain(names: str, covers: bool) -> None:
+    result = run_certificate("certificate_issued && echo USED", NAMES=names)
+    assert ("USED" in result.stdout) is covers, result.stderr
+    if not covers:
+        assert "not media.museum.example.edu" in result.stderr
+
+
+def test_a_wildcard_name_is_never_expanded_as_a_file_name(tmp_path: Path) -> None:
+    (tmp_path / "x.example.edu").write_text("")
+    result = run_certificate(f'cd "{tmp_path}"; certificate_issued && echo USED', NAMES="*.example.edu")
+    assert "USED" not in result.stdout and "for *.example.edu, not" in result.stderr
+
+
+@pytest.mark.parametrize("status", ["PENDING_VALIDATION", "EXPIRED", "missing"])
+def test_a_certificate_not_issued_stops_the_deploy(status: str) -> None:
+    result = run_certificate("certificate_issued; echo GOES_ON", STATUS=status)
+    assert result.returncode == 3 and "GOES_ON" not in result.stdout
+
+
+@pytest.mark.parametrize(("arn", "message"), [
+    ("", None),
+    (CERT_ARN, None),
+    ("*.museum.example.edu", "must be a certificate's ARN"),
+    (CERT_ARN.replace("us-west-2", "us-east-1"), "only one in us-west-2"),
+    (CERT_ARN.replace("123456789012", "210987654321"), "another account"),
+])
+def test_certificate_arn_is_a_certificate_in_the_environments_region_and_account(arn: str, message: str | None) -> None:
+    result = run_certificate("check_certificate_arn && echo OK", CERTIFICATE_ARN=arn)
+    if message is None:
+        assert "OK" in result.stdout, result.stderr
+    else:
+        assert result.returncode == 3 and message in result.stderr
+
+
+@pytest.mark.parametrize(("arn", "own", "in_use", "domain", "note"), [
+    ("", "", "0", "media.museum.example.edu", False),  # Serena's own certificate, requested as before
+    ("", OWN_ARN, "1", "media.museum.example.edu", False),
+    (CERT_ARN, "", "0", "", False),  # none of its own: none requested
+    (CERT_ARN, OWN_ARN, "0", "", False),  # its own, unused (production's, never validated): deleted
+    (CERT_ARN, OWN_ARN, "1", "media.museum.example.edu", True),  # still on the listener: kept this time
+])
+def test_the_registrys_own_certificate_goes_only_once_unused(arn: str, own: str, in_use: str, domain: str,
+                                                              note: bool) -> None:
+    result = run_certificate('echo "domain=$(registry_domain)"; echo "listener=$(certificate_arn)"',
+                             CERTIFICATE_ARN=arn, OWN=own, IN_USE=in_use)
+    assert result.returncode == 0, result.stderr
+    assert f"domain={domain}\n" in result.stdout
+    assert f"listener={arn or own}\n" in result.stdout  # the listener always takes CERTIFICATE_ARN when it's set
+    assert ("next deploy deletes Serena's own" in result.stderr) is note
