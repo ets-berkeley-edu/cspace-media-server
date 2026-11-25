@@ -1715,10 +1715,12 @@ their hashed names, with no CDN (D296).
   its subnets (`VPC_ID`, `APP_SUBNET_IDS`, `LB_SUBNET_IDS`), and Terraform checks that the subnets are in the VPC: the
   tasks run in the private subnets behind the NAT gateway, the load balancer is in the public subnets. With
   `CREATE_GATEWAY_ENDPOINTS=true`, Terraform adds S3 and DynamoDB gateway endpoints to the private subnets' route
-  tables; with `false`, the VPC's own endpoints must already be on them. A route table can have only one endpoint
-  route per service, so where the VPC already has an endpoint for one of the two but not the other (production's has
-  one for S3 only), Serena makes both, and the VPC's own stays off the private subnets' route table. Serena's deployer
-  then needs no VPC, subnet, route or gateway changes (D303).
+  tables; with `false`, it adds none and uses the VPC's own where they're on those route tables (stage 2), and
+  traffic to a service with none goes through the NAT gateway, which charges for it by the gigabyte. The setting
+  covers both services, and a route table can have only one endpoint route per service, so where the VPC has an
+  endpoint for one of the two but not the other (production's has one for S3 only), Serena makes both, and the VPC's
+  own stays off the private subnets' route table. Serena's deployer then needs no VPC, subnet, route or gateway
+  changes (D303).
   - **The webapps host in the same VPC.** The production webapps host, which runs both the Apache that proxies the
     image paths and the ETL, is in a public subnet of Serena's VPC with a fixed public address of its own. It calls
     Serena by its campus name, which resolves to the internet-facing load balancer, so its requests arrive from that

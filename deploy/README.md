@@ -686,6 +686,10 @@ recovery runbook, `docs/runbook.md`.
 - **`./serena aws etl` fails.** Its output is the fake ETL's log. "is the worker running?" means the refresh waited
   past its timeout: check `./serena aws logs worker`. A delta-threshold failure means the last updated refresh had
   a different `--rows`.
+- **Creating a gateway endpoint fails because the route table already has a route to S3 or DynamoDB.** With
+  `CREATE_GATEWAY_ENDPOINTS=true`, the private subnets' route table already has the VPC's own endpoint for that
+  service, and a route table takes only one per service. Either Ops removes theirs from that route table, or, if the
+  VPC's own endpoints for both services are on it, `settings set CREATE_GATEWAY_ENDPOINTS false`; then deploy again.
 - **`destroy` stops at the VPC.** CloudFront removes its VPC origin's network interfaces in the background: run
   `./serena aws destroy` again a few minutes later.
 - **"Error acquiring the state lock".** An earlier run was interrupted. Check nothing else is running, then
