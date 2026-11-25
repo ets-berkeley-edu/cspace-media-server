@@ -1727,9 +1727,10 @@ their hashed names, with no CDN (D296).
   tables; with `false`, it adds none and uses the VPC's own where they're on those route tables (stage 2), and
   traffic to a service with none goes through the NAT gateway, which charges for it by the gigabyte. The setting
   covers both services, and a route table can have only one endpoint route per service, so where the VPC has an
-  endpoint for one of the two but not the other (production's has one for S3 only), Serena makes both, and the VPC's
-  own stays off the private subnets' route table. Serena's deployer then needs no VPC, subnet, route or gateway
-  changes (D303).
+  endpoint for one of the two but not the other, either Serena makes both and the VPC's own stays off the private
+  subnets' route table, or Operations adds the missing one. Production's VPC had one for S3 only, and Operations added
+  one for DynamoDB on the private subnets' route table, so production uses `false`, as stage 2 does (November 25,
+  2026). Serena's deployer then needs no VPC, subnet, route or gateway changes (D303).
   - **The webapps host in the same VPC.** The production webapps host, which runs both the Apache that proxies the
     image paths and the ETL, is in a public subnet of Serena's VPC with a fixed public address of its own. It calls
     Serena by its campus name, which resolves to the internet-facing load balancer, so its requests arrive from that
