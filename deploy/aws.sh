@@ -114,7 +114,7 @@ load_env() {
   ACCOUNT_ID="" ALLOWED_CIDRS="" ETL_CIDRS="" ADMIN_CIDRS="" SIMULATED_CSPACE="" SIMULATED_MUSEUMS="" ENV_LABEL=""
   CSPACE_TENANTS="" OPEN_IMAGES="" WAF="" PROTECT_DATA="" WEB_COUNT="" ALERT_EMAIL=""
   TERRAFORM_ROOT="" APACHE_CIDRS="" VPC_ID="" APP_SUBNET_IDS="" LB_SUBNET_IDS="" CREATE_GATEWAY_ENDPOINTS="" DOMAIN_NAME=""
-  REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT="" ETL_READER_ROLE_ARNS="" ALLOW_SELF_REVIEW=""
+  CERTIFICATE_ARN="" REHEARSAL="" ADMIN_PROFILE="" SETTINGS="" REAL_DATA_ACCOUNT="" ETL_READER_ROLE_ARNS="" ALLOW_SELF_REVIEW=""
   PREPRODUCTION=""
   # shellcheck disable=SC1090
   . "$CONF"
@@ -152,14 +152,15 @@ load_env() {
   [ "$SETTINGS" = files ] || [ "$CMD" = settings ] || from_ssm   # settings compares the files with SSM itself
   ROOT="${TERRAFORM_ROOT:-personal}"
   case "$ROOT" in
-    personal) ;;
+    personal) [ -z "$CERTIFICATE_ARN" ] || die "CERTIFICATE_ARN is only for the shared root: remove it from $(settings_home)." ;;
     shared)
       local need needs="VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS DOMAIN_NAME"
       # rehearsal-vpc makes the VPC and the subnets, and saves them; the settings commands may come before it
       [ "$CMD" != rehearsal-vpc ] && [ "$CMD" != settings ] || needs=""
       for need in $needs; do
         [ -n "$(eval echo "\$$need")" ] || die "'$ENV' is on the shared root: set $need in $(settings_home) (D303, D293)."
-      done ;;
+      done
+      check_certificate_arn ;;
     *) die "TERRAFORM_ROOT must be personal or shared ($CONF)." ;;
   esac
   [ "$ROOT" = shared ] && : "${WAF:=true}"
@@ -379,7 +380,7 @@ remove_local() {  # remove_local KEY: remove one setting from the environment's 
 # (before the document) is read as before; settings migrate moves it.
 SSM_SETTINGS="ACCOUNT_ID ALLOWED_CIDRS ETL_CIDRS ADMIN_CIDRS SIMULATED_CSPACE SIMULATED_MUSEUMS ENV_LABEL CSPACE_TENANTS
   OPEN_IMAGES WAF PROTECT_DATA WEB_COUNT ALERT_EMAIL TERRAFORM_ROOT APACHE_CIDRS VPC_ID APP_SUBNET_IDS LB_SUBNET_IDS
-  CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME REHEARSAL ETL_READER_ROLE_ARNS"
+  CREATE_GATEWAY_ENDPOINTS DOMAIN_NAME CERTIFICATE_ARN REHEARSAL ETL_READER_ROLE_ARNS"
 # Always from the files: what says how to reach the account, and SETTINGS itself.
 FILE_SETTINGS="AWS_PROFILE AWS_REGION SERENA_ENV_NAME ADMIN_PROFILE SETTINGS ALLOW_SELF_REVIEW PREPRODUCTION"
 # In SSM only, a parameter of its own beside the document, written by ./serena aws pipeline (never by settings push,
@@ -733,6 +734,8 @@ settings_set() {  # settings_set SETTING VALUE
       case "$value" in true|false|"") ;; *) die "$key must be true or false." ;; esac ;;
     TERRAFORM_ROOT) case "$value" in personal|shared|"") ;; *) die "TERRAFORM_ROOT must be personal or shared." ;; esac ;;
     WEB_COUNT) case "$value" in [1-9]|[1-9][0-9]|"") ;; *) die "WEB_COUNT must be a number of web tasks, such as 2." ;; esac ;;
+    CERTIFICATE_ARN) case "$value" in arn:aws:acm:*:*:certificate/*|"") ;;
+      *) die "CERTIFICATE_ARN must be a certificate's ARN in ACM (arn:aws:acm:<region>:<account>:certificate/<id>)." ;; esac ;;
   esac
   case "$value" in *[\"\$\`\\]*|*$'\n'*) die "$key's value can't have \" \$ \` \\ or a line break in it." ;; esac
   store="$(settings_store)" || exit 1
@@ -957,17 +960,58 @@ app_vars() {
   fi
 }
 
-# The shared root's certificate (D294) is made by ../registry; its ARN, or empty.
+# The shared root's certificate: CERTIFICATE_ARN, one already in ACM (DevOps's, D310), or else the one ../registry
+# requests (D294); its ARN, or empty.
 certificate_arn() {
+  [ -z "$CERTIFICATE_ARN" ] || { echo "$CERTIFICATE_ARN"; return 0; }
   tf_init registry
+  own_certificate_arn
+}
+
+own_certificate_arn() {  # the certificate ../registry requested, from its state (initialized); empty if none
   tf registry output -raw certificate_arn 2>/dev/null || true
 }
 
+# CERTIFICATE_ARN (D310): a certificate in ACM in this environment's region and account, since a load balancer takes
+# only one of its own. Whether it's issued and covers DOMAIN_NAME, certificate_issued checks in ACM.
+check_certificate_arn() {
+  [ -n "$CERTIFICATE_ARN" ] || return 0
+  [[ "$CERTIFICATE_ARN" =~ ^arn:aws:acm:([a-z0-9-]+):([0-9]{12}):certificate/[0-9a-f-]+$ ]] ||
+    die "CERTIFICATE_ARN must be a certificate's ARN in ACM (arn:aws:acm:<region>:<account>:certificate/<id>), in $(settings_home)."
+  [ "${BASH_REMATCH[1]}" = "$AWS_REGION" ] ||
+    die "CERTIFICATE_ARN is a certificate in ${BASH_REMATCH[1]}: the load balancer takes only one in $AWS_REGION."
+  [ -z "$ACCOUNT_ID" ] || [ "${BASH_REMATCH[2]}" = "$ACCOUNT_ID" ] ||
+    die "CERTIFICATE_ARN is a certificate in another account: the load balancer takes only one in its own ($ACCOUNT_ID)."
+}
+
+certificate_covers() {  # certificate_covers NAME CERTIFICATE_NAME...: one of the names is NAME, or a wildcard for it
+  local name="$1" one
+  shift
+  for one in "$@"; do
+    [ "$one" != "$name" ] || return 0
+    # A wildcard covers one label: *.example.edu covers media.example.edu, not a.media.example.edu
+    case "$one" in '*.'*) [ "$name" = "${name#*.}" ] || [ "${one#\*.}" != "${name#*.}" ] || return 0 ;; esac
+  done
+  return 1
+}
+
 # A shared environment's certificate is issued only once DevOps has added its validation record (D294, TQ4). Until
-# then, say which record, and stop before the shared root.
+# then, say which record, and stop before the shared root. CERTIFICATE_ARN's must already be issued, for DOMAIN_NAME.
 certificate_issued() {  # fails, after printing its validation record, while the certificate isn't issued
-  local arn status
-  arn="$(tf registry output -raw certificate_arn 2>/dev/null || true)"
+  local arn status names
+  if [ -n "$CERTIFICATE_ARN" ]; then
+    status="$(aws_ acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" --query Certificate.Status --output text)" ||
+      die "Couldn't read the certificate CERTIFICATE_ARN names (above): is it in ACM in $AWS_REGION, in this account?"
+    [ "$status" = ISSUED ] ||
+      die "The certificate CERTIFICATE_ARN names is $status, not ISSUED: DevOps, whose certificate it is, can say why."
+    # read -a, not $(...) unquoted: a wildcard's * must not be expanded as a file name
+    read -r -a names <<< "$(aws_ acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" \
+      --query 'Certificate.SubjectAlternativeNames' --output text)"
+    certificate_covers "$DOMAIN_NAME" ${names[@]+"${names[@]}"} ||
+      die "The certificate CERTIFICATE_ARN names is for ${names[*]:-no name}, not $DOMAIN_NAME (DOMAIN_NAME)."
+    return 0
+  fi
+  arn="$(own_certificate_arn)"
   [ -n "$arn" ] || die "No certificate for $DOMAIN_NAME in ../registry's state. Run the deploy again."
   status="$(aws_ acm describe-certificate --certificate-arn "$arn" --query Certificate.Status --output text)"
   [ "$status" = ISSUED ] && return 0
@@ -1001,9 +1045,28 @@ need_break_glass() {
   [ "$typed" = "break glass" ] || die "Stopped; nothing was deployed."
 }
 
-registry_vars() {
+registry_vars() {  # after tf_init registry
+  local domain
   REGISTRY_VARS=(-var "account_id=$ACCOUNT_ID" -var "region=$AWS_REGION" -var "env_name=$SERENA_ENV_NAME" -var "simulated_cspace=$SIMULATED_CSPACE")
-  [ "$ROOT" != shared ] || REGISTRY_VARS+=(-var "domain_name=$DOMAIN_NAME")
+  [ "$ROOT" = shared ] || return 0
+  domain="$(registry_domain)" || exit 1
+  REGISTRY_VARS+=(-var "domain_name=$domain")
+}
+
+# The name ../registry requests a certificate for: DOMAIN_NAME, or none with CERTIFICATE_ARN (D310). Its own is then
+# deleted, but only once the load balancer no longer uses it, since ACM refuses to delete a certificate in use: the
+# deploy that moves the listener to CERTIFICATE_ARN keeps it, and the next deploy deletes it.
+registry_domain() {
+  local own in_use
+  [ -n "$CERTIFICATE_ARN" ] || { echo "$DOMAIN_NAME"; return 0; }
+  own="$(own_certificate_arn)"
+  [ -n "$own" ] || return 0
+  in_use="$(aws_ acm describe-certificate --certificate-arn "$own" --query 'length(Certificate.InUseBy)' --output text)" ||
+    in_use=0   # gone, or unreadable: if it is still in use, ACM refuses the delete and the apply stops
+  [ "$in_use" != 0 ] || return 0
+  echo "Note: the load balancer still uses Serena's own certificate. This deploy moves it to CERTIFICATE_ARN's, and the" >&2
+  echo "next deploy deletes Serena's own (D310)." >&2
+  echo "$DOMAIN_NAME"
 }
 
 approve() { [ "${SERENA_AWS_YES:-}" = 1 ] && echo "-auto-approve" || true; }
@@ -1389,8 +1452,8 @@ deploy() {
   tag="$tag-$(date -u +%Y%m%d%H%M%S)"
 
   echo "== 1/3 Image repositories"
-  registry_vars
   tf_init registry
+  registry_vars
   tf registry apply -input=false -auto-approve "${REGISTRY_VARS[@]}"
   repo="$(tf registry output -raw repository_url)"
   [ "$ROOT" != shared ] || need_certificate
@@ -1996,7 +2059,7 @@ pipeline_plan() {
   result PLAN_ID "$id"; result REGISTRY_CHANGES "no changes"; result ROOT_CHANGES ""; result REMOVED_MUSEUMS ""
 
   echo "== The registry: image repositories and the certificate"
-  registry_vars; tf_init registry
+  tf_init registry; registry_vars
   code=0
   tf registry plan -input=false -detailed-exitcode -out="$dir/registry.tfplan" "${REGISTRY_VARS[@]}" || code=$?
   case "$code" in 0) rm -f "$dir/registry.tfplan" ;; 2) ;; *) die "The registry's plan failed (above)." ;; esac
