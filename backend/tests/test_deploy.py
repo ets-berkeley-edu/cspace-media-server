@@ -989,3 +989,14 @@ def test_the_registrys_own_certificate_goes_only_once_unused(arn: str, own: str,
     assert f"domain={domain}\n" in result.stdout
     assert f"listener={arn or own}\n" in result.stdout  # the listener always takes CERTIFICATE_ARN when it's set
     assert ("next deploy deletes Serena's own" in result.stderr) is note
+
+
+def test_waf_descriptions_are_ones_waf_accepts() -> None:
+    """WAF refuses a description outside this pattern (no parentheses, for one) only at apply time, which neither
+    terraform validate nor a plan catches: production's first apply failed on "(D290)"."""
+    allowed = re.compile(r"^[\w+=:#@/\-,.][\w+=:#@/\-,.\s]+[\w+=:#@/\-,.]$")
+    for tf in (DEPLOY / "terraform").rglob("*.tf"):
+        blocks = re.findall(r'^resource "aws_wafv2_[^"]+" "[^"]+" \{.*?^\}$', tf.read_text(), re.MULTILINE | re.DOTALL)
+        for block in blocks:
+            for description in re.findall(r'^  description\s*=\s*"([^"]*)"', block, re.MULTILINE):
+                assert allowed.match(description), f"{tf.name}: {description!r}"
