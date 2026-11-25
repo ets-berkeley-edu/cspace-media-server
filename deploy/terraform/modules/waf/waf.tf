@@ -17,7 +17,7 @@ locals {
 resource "aws_wafv2_ip_set" "apache" {
   count              = local.apache ? 1 : 0
   name               = "${var.name}-apache"
-  description        = "The Apache hosts that proxy the legacy image paths to Serena (D290)"
+  description        = "The Apache hosts that proxy the legacy image paths to Serena, D290"
   scope              = var.scope
   ip_address_version = "IPV4"
   addresses          = var.apache_cidrs
