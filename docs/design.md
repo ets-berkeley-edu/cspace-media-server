@@ -1708,11 +1708,24 @@ their hashed names, with no CDN (D296).
 - **Network (D187).** The BMU's: a VPC across two zones, the tasks in public subnets with public addresses and no
   NAT gateway (their security groups take traffic only from the load balancer), the load balancer in private
   subnets, and gateway endpoints for S3 and DynamoDB. No fixed outbound addresses: Lyrasis doesn't restrict callers
-  by address. That is the personal root's network. In QA and production Serena uses the VPC Operations provides
-  (for QA, its development and QA VPC): the environment's settings name the VPC, Terraform finds its subnets, the tasks
-  run in private subnets behind its NAT gateway, the load balancer is in its public subnets, and Terraform adds the
-  S3 and DynamoDB gateway endpoints only if they're missing. Serena's deployer then needs no VPC, subnet, route or
-  gateway changes (D303).
+  by address. That is the personal root's network. In QA and production Serena uses a VPC Operations provides
+  (D303): for QA, its development and QA VPC; for production, its production VPC, the one the production webapps
+  host is in (decided November 24, 2026). That VPC had only public subnets, so Operations adds two private subnets in
+  two zones, a NAT gateway and a route table for them, as the QA VPC has. The environment's settings name the VPC and
+  its subnets (`VPC_ID`, `APP_SUBNET_IDS`, `LB_SUBNET_IDS`), and Terraform checks that the subnets are in the VPC: the
+  tasks run in the private subnets behind the NAT gateway, the load balancer is in the public subnets. With
+  `CREATE_GATEWAY_ENDPOINTS=true`, Terraform adds S3 and DynamoDB gateway endpoints to the private subnets' route
+  tables; with `false`, it adds none and uses the VPC's own where they're on those route tables (stage 2), and
+  traffic to a service with none goes through the NAT gateway, which charges for it by the gigabyte. The setting
+  covers both services, and a route table can have only one endpoint route per service, so where the VPC has an
+  endpoint for one of the two but not the other (production's has one for S3 only), Serena makes both, and the VPC's
+  own stays off the private subnets' route table. Serena's deployer then needs no VPC, subnet, route or gateway
+  changes (D303).
+  - **The webapps host in the same VPC.** The production webapps host, which runs both the Apache that proxies the
+    image paths and the ETL, is in a public subnet of Serena's VPC with a fixed public address of its own. It calls
+    Serena by its campus name, which resolves to the internet-facing load balancer, so its requests arrive from that
+    public address, not through the NAT gateway: that address is what `APACHE_CIDRS` and `ETL_CIDRS` list. The NAT
+    gateway carries only Serena's own outbound calls (CollectionSpace, and AWS services without a gateway endpoint).
 - **Routing.** The legacy imageserver's paths on each museum's webapps host are sent on to Serena, one museum at a
   time: reverse-proxied by Apache to the load balancer in QA and production (D290).
 - **Infrastructure as code.** Terraform, in `deploy/terraform/` (the image repositories, then the app), with state
