@@ -3320,7 +3320,7 @@ cd <your clone> && git switch main && git pull origin main && aws sso login --ss
   values from the document as before. (November 23, 2026: the plan job ended with no changes and the apply job was
   skipped.)
 
-## 72. Production uses DevOps's wildcard certificate (30 minutes over two pipeline runs, with Ops as reviewers; after merging the pull request)
+## 72. Production uses DevOps's wildcard certificate (30 minutes over two pipeline runs, with Ops as reviewers; after merging the pull request; done November 25, 2026, but for steps 1, 2 and 7)
 
 What it checks: with `CERTIFICATE_ARN` (D310), the load balancer takes a certificate DevOps already has in ACM, their
 wildcard for the campus domain, instead of one Serena requests and DevOps validates with a DNS record. CI checks the
@@ -3337,7 +3337,7 @@ Run the commands from a checkout of `main` that has your `deploy/environments/uc
 cd <your clone> && git switch main && git pull origin main && aws sso login --sso-session berkeley
 ```
 
-- [ ] **0. Stage 2 is unchanged.** Start the Deploy workflow for `ucb-stage2` from `main` (production deploys only a
+- [x] **0. Stage 2 is unchanged.** Start the Deploy workflow for `ucb-stage2` from `main` (production deploys only a
   commit stage 2 has deployed):
 
   ```bash
@@ -3345,7 +3345,8 @@ cd <your clone> && git switch main && git pull origin main && aws sso login --ss
   ```
 
   Expected: "Image repositories and certificate: no changes", and in Serena's plan only the image change (the task
-  definitions, for the new commit), nothing on the load balancer's listener. Approve it.
+  definitions, for the new commit), nothing on the load balancer's listener. Approve it. (November 25, 2026: as
+  expected.)
 - [ ] **1. DevOps's certificate.** Ask Ops for the wildcard's ARN, then look at it:
 
   ```bash
@@ -3362,7 +3363,7 @@ cd <your clone> && git switch main && git pull origin main && aws sso login --ss
 
   Expected: `CERTIFICATE_ARN must be a certificate's ARN in ACM (arn:aws:acm:<region>:<account>:certificate/<id>).`
   and nothing written.
-- [ ] **3. Set it.**
+- [x] **3. Set it.**
 
   ```bash
   cd <your clone> && ./serena aws settings set --env ucb-prod CERTIFICATE_ARN <the ARN>
@@ -3370,15 +3371,20 @@ cd <your clone> && git switch main && git pull origin main && aws sso login --ss
 
   Expected: `  + CERTIFICATE_ARN=arn:aws:acm:us-west-2:…` and `Write this to SSM? The next deploy uses it. [y/N]`;
   answer `y`. Then `./serena aws settings show --env ucb-prod` lists it with no difference from the files here.
-- [ ] **4. The first run deletes Serena's own certificate.** Ops start the Deploy workflow for `ucb-prod` (from their
+- [x] **4. The first run deletes Serena's own certificate.** Ops start the Deploy workflow for `ucb-prod` (from their
   computer or the GitHub page, as before). Expected: "Image repositories and certificate: 0 to add, 0 to change, 1 to
   destroy" (the certificate for production's campus name, still `PENDING_VALIDATION`, or failed if more than 72 hours
   old) and "Serena: not planned this run". A reviewer approves; the apply job ends "The registry is applied. Run the
-  deploy again for the rest".
-- [ ] **5. The second run checks DevOps's certificate, and plans the rest.** Ops start the workflow again. Expected:
+  deploy again for the rest". (November 25, 2026: as expected.)
+- [x] **5. The second run checks DevOps's certificate, and plans the rest.** Ops start the workflow again. Expected:
   "Image repositories and certificate: no changes", no "waits for its DNS validation record", and Serena's first full
   plan. In the plan, the HTTPS listener's `certificate_arn` is the ARN from step 1. A reviewer approves.
-- [ ] **6. HTTPS answers with the wildcard.** Once Ops have pointed the campus name's record at the load balancer
+  (November 25, 2026: the plan was as expected, but the apply stopped partway, after creating most of the resources:
+  WAF refused the parentheses in the Apache address list's description, which only an environment with
+  `APACHE_CIDRS` creates, so stage 2 had never tried it. Pull request 248 changed the description and added a test
+  that checks every WAF description against WAF's pattern. Production's pipeline then refused that commit until stage
+  2 had deployed it, as it should. After stage 2's deploy, production's rerun created the rest, the WAF included.)
+- [x] **6. HTTPS answers with the wildcard.** Once Ops have pointed the campus name's record at the load balancer
   (the apply prints its name), from a campus or VPN address:
 
   ```bash
@@ -3386,7 +3392,9 @@ cd <your clone> && git switch main && git pull origin main && aws sso login --ss
   ```
 
   Expected: the wildcard as the subject and `O=Amazon` in the issuer. Then `curl -s https://<production's campus
-  name>/health` answers `ok`.
+  name>/health` answers `ok`. (November 25, 2026: as expected. For about 15 minutes after Ops added the record, the
+  campus DNS servers still answered that the name didn't exist, from a cached answer; until then, `curl --resolve
+  <production's campus name>:443:<the load balancer's address>` checks the same thing.)
 - [ ] **7. Nothing left over.** `aws acm list-certificates --profile serena-stage2-deploy --region us-west-2 --query
   'CertificateSummaryList[].[DomainName,Status]' --output text` lists no certificate for production's campus name of
   its own, only stage 2's and DevOps's.
